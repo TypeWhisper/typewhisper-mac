@@ -34,7 +34,11 @@ struct DictationLatencyTrace: Sendable, Equatable {
 
     let requestUptimeNanoseconds: UInt64
     var inputTransport: String?
-    var engineReadyAtStart: Bool?
+    /// Whether `readinessEngine` had its model ready when recording started. Nil when the
+    /// transcript came from another engine, e.g. after a website workflow or a recovery
+    /// fallback switched it, since that engine's state was not sampled.
+    private(set) var engineReadyAtStart: Bool?
+    private(set) var readinessEngine: String?
     /// For Bluetooth input, when the stream was confirmed ready. Buffers staged before that
     /// are kept, but the start cue waits for readiness, so that is when dictation can begin.
     var firstAudioBufferUptimeNanoseconds: UInt64?
@@ -57,6 +61,18 @@ struct DictationLatencyTrace: Sendable, Equatable {
 
     init(requestUptimeNanoseconds: UInt64) {
         self.requestUptimeNanoseconds = requestUptimeNanoseconds
+    }
+
+    mutating func recordEngineReadiness(_ isReady: Bool, engine: String?) {
+        engineReadyAtStart = isReady
+        readinessEngine = engine
+    }
+
+    mutating func recordFinalEngine(_ finalEngine: String) {
+        engine = finalEngine
+        if readinessEngine != finalEngine {
+            engineReadyAtStart = nil
+        }
     }
 
     mutating func recordInsertion(

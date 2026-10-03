@@ -2117,7 +2117,10 @@ final class DictationViewModel: ObservableObject {
         refreshIncrementalWorkflowPostProcessing(forceRestart: true)
         // Cold and warm starts are reported separately, so read readiness before the prewarm.
         let engineReadyAtStart = modelManager.isTranscriptionEngineReady(engineOverrideId: effectiveEngineOverrideId)
-        updateLatencyTrace(sessionID: sessionID) { $0.engineReadyAtStart = engineReadyAtStart }
+        let readinessEngine = effectiveEngineOverrideId ?? modelManager.selectedProviderId
+        updateLatencyTrace(sessionID: sessionID) {
+            $0.recordEngineReadiness(engineReadyAtStart, engine: readinessEngine)
+        }
         // A pending website workflow can still switch the engine; the URL resolution
         // prewarms once the workflow is settled.
         if !hiddenLiveSessionAwaitsWebsiteWorkflow {
@@ -2572,6 +2575,7 @@ final class DictationViewModel: ObservableObject {
 
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = rawDuration }
         if previewFollowedDictationEngine,
            !streamingPreviewWasHidden,
            !hasConfirmedTranscriptionResultText(liveSessionResult),
@@ -2642,7 +2646,6 @@ final class DictationViewModel: ObservableObject {
         let audioSamplesForHistory: [Float]? = saveAudio ? samples : nil
 
         let audioDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
-        updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = rawDuration }
         EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(
             durationSeconds: audioDuration
         )))
@@ -2730,7 +2733,7 @@ final class DictationViewModel: ObservableObject {
                 let diagnostics = result.diagnosticSummary(audioDuration: audioDuration)
                 updateLatencyTrace(sessionID: sessionID) { trace in
                     trace.finalTranscriptUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
-                    trace.engine = result.engineUsed
+                    trace.recordFinalEngine(result.engineUsed)
                     trace.model = transcription.modelId
                     trace.usedLiveResult = usedLiveSessionResult
                 }

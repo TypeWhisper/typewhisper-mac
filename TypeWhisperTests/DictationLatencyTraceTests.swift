@@ -73,6 +73,19 @@ final class DictationLatencyTraceTests: XCTestCase {
         XCTAssertTrue(trace.logDescription.contains("stopToVerifiedInsertionMs=nil"))
     }
 
+    func testReadinessOnlyDescribesTheEngineItWasSampledFor() {
+        var sameEngine = trace()
+        sameEngine.recordEngineReadiness(false, engine: "parakeet")
+        sameEngine.recordFinalEngine("parakeet")
+        XCTAssertEqual(sameEngine.engineReadyAtStart, false)
+
+        var switchedEngine = trace()
+        switchedEngine.recordEngineReadiness(true, engine: "groq")
+        switchedEngine.recordFinalEngine("parakeet")
+        XCTAssertEqual(switchedEngine.engine, "parakeet")
+        XCTAssertNil(switchedEngine.engineReadyAtStart)
+    }
+
     func testMissingOrReversedTimestampsYieldNoDuration() {
         var trace = DictationLatencyTrace(requestUptimeNanoseconds: 2_000_000_000)
         trace.firstAudioBufferUptimeNanoseconds = 1_000_000_000
