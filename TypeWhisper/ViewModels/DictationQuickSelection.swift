@@ -41,8 +41,8 @@ struct DictationQuickSelectionEngine {
     /// Local engines load model weights from disk and may download them on selection.
     let managesLocalModels: Bool
     let selectedModelId: String?
-    /// The engine's own selected model can be restored from installed assets.
-    let canRestoreSelectedModel: Bool
+    /// The model the engine last loaded and restores from installed assets.
+    let restorableModelId: String?
     let models: [PluginModelInfo]
 }
 
@@ -75,7 +75,8 @@ enum DictationQuickSelection {
     /// Selections are locked while a recording is captured or transcribed. Changing the
     /// model then could unload the model the running session uses, and a microphone or
     /// language change would only partially apply to the current session.
-    /// `isTranscribingElsewhere` covers recorder retranscription and file transcription.
+    /// `isTranscribingElsewhere` covers recorder retranscription, file transcription and
+    /// recovered recordings.
     static func isLocked(
         dictationState: DictationViewModel.State,
         recorderState: AudioRecorderViewModel.RecorderState,
@@ -321,7 +322,10 @@ enum DictationQuickSelection {
         if model.loaded == true || model.downloaded == true {
             return nil
         }
-        if model.id == engine.selectedModelId, engine.isConfigured || engine.canRestoreSelectedModel {
+        // A failed switch can leave the selection on a model that was never loaded, so the
+        // selection is only restorable when it matches the model the engine restores.
+        if model.id == engine.selectedModelId,
+           engine.isConfigured || model.id == engine.restorableModelId {
             return nil
         }
         if model.downloaded == false {
@@ -330,10 +334,11 @@ enum DictationQuickSelection {
         return localizedAppText("load in Settings", de: "in den Einstellungen laden")
     }
 
-    /// Plugins built before the lifecycle protocol (e.g. older Parakeet releases) can still
-    /// download on selection, so every engine not declared as cloud counts as local.
-    static func managesLocalModels(isLifecycleAware: Bool, hosting: PluginHosting?) -> Bool {
-        isLifecycleAware || hosting != .cloud
+    /// Uses the manifest's declared hosting only: remote engines such as Cloudflare ASR or
+    /// OpenAI-compatible servers declare neither hosting nor an API key, and the resolved
+    /// fallback would count them as local.
+    static func managesLocalModels(isLifecycleAware: Bool, declaredHosting: PluginHosting?) -> Bool {
+        isLifecycleAware || declaredHosting == .local
     }
 
     private static func titleWithDetail(_ title: String, detail: String?) -> String {
@@ -353,6 +358,12 @@ enum DictationQuickSelection {
     }
 
     // MARK: Workflow overrides
+
+    /// Dictation fails instead of falling back when a workflow names an engine that is
+    /// disabled, uninstalled or lacks access, so the menu says so.
+    static func unavailableEngineSummary(engineName: String) -> String {
+        localizedAppText("\(engineName) (unavailable)", de: "\(engineName) (nicht verfügbar)")
+    }
 
     static func workflowNote(workflowName: String, summary: String) -> String {
         localizedAppText(
@@ -438,6 +449,7 @@ final class DictationQuickSelectionModel: ObservableObject {
             isTranscribingElsewhere: recorder.isTranscribing
                 || recorder.retranscribingRecordingURL != nil
                 || FileTranscriptionViewModel.shared.batchState == .processing
+                || DictationRecoveryViewModel.shared.recoveries.contains(where: \.isProcessing)
         )
     }
 
@@ -458,6 +470,7 @@ final class DictationQuickSelectionModel: ObservableObject {
             AudioRecorderViewModel.shared.$isTranscribing.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$retranscribingRecordingURL.map { _ in () }.eraseToAnyPublisher(),
             FileTranscriptionViewModel.shared.$batchState.map { _ in () }.eraseToAnyPublisher(),
+            DictationRecoveryViewModel.shared.$recoveries.map { _ in () }.eraseToAnyPublisher(),
             // The effective workflow depends on the app that receives the next dictation.
             NSWorkspace.shared.notificationCenter
                 .publisher(for: NSWorkspace.didActivateApplicationNotification)
@@ -571,16 +584,24 @@ final class DictationQuickSelectionModel: ObservableObject {
         var effectiveEngine = globalEngine
         var effectiveModelId: String?
         if let workflow,
-           let engineId = DictationTranscriptionOverrideResolver.engineId(for: workflow),
-           let overrideEngine = engines.first(where: { $0.providerId == engineId }) {
-            let modelId = DictationTranscriptionOverrideResolver.modelId(for: workflow)
-            let modelName = modelManager.resolvedModelDisplayName(
-                engineOverrideId: engineId,
-                cloudModelOverride: modelId
-            ) ?? overrideEngine.providerDisplayName
-            let summary = DictationQuickSelection.modelLabel(engine: overrideEngine.providerDisplayName, model: modelName)
-            effectiveEngine = overrideEngine
-            effectiveModelId = modelId
+           let engineId = DictationTranscriptionOverrideResolver.engineId(for: workflow) {
+            let overrideEngine = engines.first { $0.providerId == engineId }
+            let summary: String
+            if let overrideEngine, modelManager.canUseForTranscription(overrideEngine) {
+                let modelId = DictationTranscriptionOverrideResolver.modelId(for: workflow)
+                let modelName = modelManager.resolvedModelDisplayName(
+                    engineOverrideId: engineId,
+                    cloudModelOverride: modelId
+                ) ?? overrideEngine.providerDisplayName
+                summary = DictationQuickSelection.modelLabel(engine: overrideEngine.providerDisplayName, model: modelName)
+                effectiveEngine = overrideEngine
+                effectiveModelId = modelId
+            } else {
+                summary = DictationQuickSelection.unavailableEngineSummary(
+                    engineName: overrideEngine?.providerDisplayName ?? Self.engineName(for: engineId)
+                )
+                effectiveEngine = nil
+            }
             if summary != globalModelSummary {
                 next.modelSummary = summary
                 next.modelWorkflowNote = DictationQuickSelection.workflowNote(
@@ -622,6 +643,21 @@ final class DictationQuickSelectionModel: ObservableObject {
         }
     }
 
+    /// Names an engine whose plugin is disabled, falling back to its ID once uninstalled.
+    private static func engineName(for providerId: String) -> String {
+        for plugin in PluginManager.shared?.loadedPlugins ?? [] {
+            var engines = (plugin.instance as? AdditionalTranscriptionEnginesProviding)?
+                .additionalTranscriptionEngines ?? []
+            if let engine = plugin.instance as? TranscriptionEnginePlugin {
+                engines.append(engine)
+            }
+            if let match = engines.first(where: { $0.providerId == providerId }) {
+                return match.providerDisplayName
+            }
+        }
+        return providerId
+    }
+
     private func quickSelectionEngine(
         for engine: TranscriptionEnginePlugin,
         modelManager: ModelManagerService
@@ -635,12 +671,12 @@ final class DictationQuickSelectionModel: ObservableObject {
             isConfigured: engine.isConfigured,
             managesLocalModels: DictationQuickSelection.managesLocalModels(
                 isLifecycleAware: engine is HostModelLifecyclePolicyAwarePlugin,
-                hosting: manifest?.resolvedHosting
+                declaredHosting: manifest?.hosting
             ),
             selectedModelId: engine.selectedModelId,
-            canRestoreSelectedModel: pluginId.map {
-                TranscriptionEngineReadiness.hasPersistedRestorableModel(pluginId: $0)
-            } ?? false,
+            restorableModelId: pluginId.flatMap {
+                TranscriptionEngineReadiness.persistedRestorableModelId(pluginId: $0)
+            },
             models: engine.modelCatalog
         )
     }

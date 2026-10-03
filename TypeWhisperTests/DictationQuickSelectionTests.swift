@@ -186,7 +186,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: true,
             managesLocalModels: true,
             selectedModelId: "large",
-            canRestoreSelectedModel: true,
+            restorableModelId: "large",
             models: [
                 PluginModelInfo(id: "large", displayName: "Large", downloaded: true, loaded: true),
                 PluginModelInfo(id: "small", displayName: "Small", downloaded: true, loaded: false),
@@ -214,7 +214,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: false,
             managesLocalModels: true,
             selectedModelId: "v3",
-            canRestoreSelectedModel: true,
+            restorableModelId: "v3",
             models: [
                 PluginModelInfo(id: "v2", displayName: "Parakeet v2"),
                 PluginModelInfo(id: "v3", displayName: "Parakeet v3"),
@@ -236,7 +236,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: false,
             managesLocalModels: true,
             selectedModelId: "v3",
-            canRestoreSelectedModel: false,
+            restorableModelId: nil,
             models: [PluginModelInfo(id: "v3", displayName: "Parakeet v3")]
         )
 
@@ -255,7 +255,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: true,
             managesLocalModels: false,
             selectedModelId: "whisper-large-v3",
-            canRestoreSelectedModel: false,
+            restorableModelId: nil,
             models: [
                 PluginModelInfo(id: "whisper-large-v3", displayName: "Whisper Large v3"),
                 PluginModelInfo(id: "whisper-large-v3-turbo", displayName: "Whisper Large v3 Turbo"),
@@ -268,7 +268,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: false,
             managesLocalModels: false,
             selectedModelId: nil,
-            canRestoreSelectedModel: false,
+            restorableModelId: nil,
             models: [PluginModelInfo(id: "whisper-1", displayName: "Whisper")]
         )
         let unavailable = DictationQuickSelectionEngine(
@@ -278,7 +278,7 @@ final class DictationQuickSelectionTests: XCTestCase {
             isConfigured: true,
             managesLocalModels: false,
             selectedModelId: nil,
-            canRestoreSelectedModel: false,
+            restorableModelId: nil,
             models: [PluginModelInfo(id: "default", displayName: "Default")]
         )
 
@@ -299,14 +299,67 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertFalse(groups[2].options[0].isEnabled)
     }
 
-    func testEnginesCountAsLocalUnlessDeclaredCloud() {
-        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: true, hosting: .cloud))
-        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: .local))
-        XCTAssertTrue(
-            DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: nil),
-            "an older local plugin without the lifecycle protocol must not offer downloads"
+    func testLocalEngineDoesNotRestoreASelectionThatNeverLoaded() {
+        // A v3-to-v2 switch failed: the selection moved to v2, but the engine restores v3.
+        let engine = DictationQuickSelectionEngine(
+            providerId: "parakeet",
+            displayName: "Parakeet",
+            isAuthAvailable: true,
+            isConfigured: false,
+            managesLocalModels: true,
+            selectedModelId: "v2",
+            restorableModelId: "v3",
+            models: [
+                PluginModelInfo(id: "v2", displayName: "Parakeet v2"),
+                PluginModelInfo(id: "v3", displayName: "Parakeet v3"),
+            ]
         )
-        XCTAssertFalse(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: .cloud))
+
+        let group = DictationQuickSelection.modelGroups(engines: [engine], selectedProviderId: "groq")[0]
+
+        XCTAssertTrue(group.options.isEmpty)
+        XCTAssertEqual(group.setupRequiredOptions.map(\.id), ["parakeet/v2", "parakeet/v3"])
+    }
+
+    func testOnlyLifecycleAwareOrDeclaredLocalEnginesManageLocalModels() {
+        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: true, declaredHosting: nil))
+        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, declaredHosting: .local))
+        XCTAssertFalse(
+            DictationQuickSelection.managesLocalModels(isLifecycleAware: false, declaredHosting: nil),
+            "remote engines like Cloudflare ASR declare no hosting"
+        )
+        XCTAssertFalse(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, declaredHosting: .cloud))
+    }
+
+    func testRemoteEngineWithoutHostingMetadataKeepsFetchedModelsSelectable() {
+        let engine = DictationQuickSelectionEngine(
+            providerId: "cloudflare-asr",
+            displayName: "Cloudflare ASR",
+            isAuthAvailable: true,
+            isConfigured: true,
+            managesLocalModels: DictationQuickSelection.managesLocalModels(
+                isLifecycleAware: false,
+                declaredHosting: nil
+            ),
+            selectedModelId: "whisper-large-v3",
+            restorableModelId: nil,
+            models: [
+                PluginModelInfo(id: "whisper-large-v3", displayName: "Whisper Large v3"),
+                PluginModelInfo(id: "whisper-small", displayName: "Whisper Small"),
+            ]
+        )
+
+        let group = DictationQuickSelection.modelGroups(engines: [engine], selectedProviderId: "cloudflare-asr")[0]
+
+        XCTAssertEqual(group.options.map(\.id), ["cloudflare-asr/whisper-large-v3", "cloudflare-asr/whisper-small"])
+        XCTAssertTrue(group.options.allSatisfy(\.isEnabled))
+        XCTAssertTrue(group.setupRequiredOptions.isEmpty)
+    }
+
+    func testUnavailableWorkflowEngineIsNamed() {
+        let summary = DictationQuickSelection.unavailableEngineSummary(engineName: "Groq")
+        XCTAssertTrue(summary.hasPrefix("Groq"))
+        XCTAssertNotEqual(summary, "Groq")
     }
 
     func testModelLabelSkipsRedundantProviderPrefix() {
