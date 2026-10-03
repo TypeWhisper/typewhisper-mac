@@ -5,21 +5,21 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.8.0-daily.20261003</title>
+      <pubDate>Sat, 03 Oct 2026 10:12:46 +0000</pubDate>
+      <sparkle:version>1338</sparkle:version>
+      <sparkle:shortVersionString>1.8.0-daily.20261003</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>daily</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.8.0-daily.20261003/TypeWhisper-v1.8.0-daily.20261003.zip" sparkle:edSignature="YgsJTFhMMH8Jbzh2G2ED1UgB/qBPNey71LHG9PsAanSZHDpC+k0RY2UBLlk8iEJI9YvgQHnqvtjvCWwkRvcuCQ==" length="14747046" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.7.0</title>
       <pubDate>Fri, 02 Oct 2026 11:58:42 +0000</pubDate>
       <sparkle:version>1323</sparkle:version>
       <sparkle:shortVersionString>1.7.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.7.0/TypeWhisper-v1.7.0.zip" sparkle:edSignature="031fbwe3zqWFQTWAvF6nr+ozCsxLJfQ2YWHXUfFzypAlUYjnfiKJ4ze1etaJSj2m9SYwCDH6OWp+hsiUYbzWDg==" length="14534661" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.7.0-daily.20261002</title>
-      <pubDate>Fri, 02 Oct 2026 09:01:07 +0000</pubDate>
-      <sparkle:version>1322</sparkle:version>
-      <sparkle:shortVersionString>1.7.0-daily.20261002</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.7.0-daily.20261002/TypeWhisper-v1.7.0-daily.20261002.zip" sparkle:edSignature="duT6QHmnuCP/kOPXfe1wcpc3IhNQW9YcP4mlMfcDfZHneiA0IBaUY+R+UW8A+n0MKkCZv5rDxlThTNkfHSoABQ==" length="14534771" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.7.0-rc2</title>
