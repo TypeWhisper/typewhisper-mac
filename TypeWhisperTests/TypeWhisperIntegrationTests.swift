@@ -14377,8 +14377,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
-    func testTestBundleRestoresTheDevAppEngineSelection() {
+    func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {
         XCTAssertTrue(Bundle(for: TestHostDefaultsGuard.self).principalClass == TestHostDefaultsGuard.self)
+
+        let suiteName = "TestHostDefaultsGuardTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("parakeet", forKey: UserDefaultsKeys.selectedEngine)
+        let defaultsGuard = TestHostDefaultsGuard(defaults: defaults)
+
+        defaults.set("mock-restore-after-unload", forKey: UserDefaultsKeys.selectedEngine)
+        defaults.set("tiny", forKey: UserDefaultsKeys.selectedModelId)
+        defaultsGuard.testCaseDidFinish(self)
+
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.selectedEngine), "parakeet")
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.selectedModelId))
     }
 
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {

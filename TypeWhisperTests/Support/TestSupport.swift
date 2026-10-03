@@ -155,15 +155,20 @@ final class TestHostDefaultsGuard: NSObject, XCTestObservation {
         UserDefaultsKeys.selectedModelId,
     ]
 
+    private let defaults: UserDefaults
     private var savedValues: [String: Any] = [:]
 
-    override init() {
+    override convenience init() {
+        self.init(defaults: .standard)
+        XCTestObservationCenter.shared.addTestObserver(self)
+    }
+
+    init(defaults: UserDefaults) {
+        self.defaults = defaults
         super.init()
-        let defaults = UserDefaults.standard
         for key in Self.preservedKeys {
             savedValues[key] = defaults.object(forKey: key)
         }
-        XCTestObservationCenter.shared.addTestObserver(self)
     }
 
     func testCaseDidFinish(_ testCase: XCTestCase) {
@@ -175,7 +180,6 @@ final class TestHostDefaultsGuard: NSObject, XCTestObservation {
     }
 
     private func restoreSavedValues() {
-        let defaults = UserDefaults.standard
         for key in Self.preservedKeys {
             let saved = savedValues[key]
             let current = defaults.object(forKey: key)
