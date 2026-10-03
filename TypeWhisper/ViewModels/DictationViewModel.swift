@@ -1258,7 +1258,11 @@ final class DictationViewModel: ObservableObject {
         storeDictationSession(DictationSessionSnapshot(id: id, status: .failed, transcription: nil, error: error))
         if dictationLatencyTraces[id]?.isComplete == false {
             dictationLatencyTraces[id]?.failed = true
-            finishLatencyTrace(sessionID: id)
+            // Once text was inserted, `finishLatencyTraceAfterInsertion` completes the trace
+            // after the paste verification and clipboard restore resolved.
+            if dictationLatencyTraces[id]?.insertion == nil {
+                finishLatencyTrace(sessionID: id)
+            }
         }
         if activeDictationSessionID == id {
             activeDictationSessionID = nil
