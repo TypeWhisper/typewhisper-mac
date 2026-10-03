@@ -1096,18 +1096,21 @@ final class PluginManager: ObservableObject {
     /// files then abort the app.
     func removeUninstalledBundle(at bundleURL: URL, codeIsLoaded: Bool) {
         let fm = FileManager.default
-        if codeIsLoaded {
-            let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
-            if fm.createFile(atPath: markerURL.path, contents: nil) {
-                bundlesRemovedAfterRelaunch.insert(bundleURL.standardizedFileURL)
-                logger.info("Deferring removal of loaded plugin bundle until relaunch: \(bundleURL.path, privacy: .public)")
-                return
-            }
-            logger.error("Failed to mark loaded plugin bundle for removal, removing it now: \(bundleURL.path, privacy: .public)")
+        guard codeIsLoaded else {
+            logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
+            try? fm.removeItem(at: bundleURL)
+            return
         }
 
-        logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
-        try? fm.removeItem(at: bundleURL)
+        bundlesRemovedAfterRelaunch.insert(bundleURL.standardizedFileURL)
+        let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
+        if fm.createFile(atPath: markerURL.path, contents: nil) {
+            logger.info("Deferring removal of loaded plugin bundle until relaunch: \(bundleURL.path, privacy: .public)")
+        } else {
+            // Keeping the files is safer than deleting them under running code; the
+            // bundle then loads again on the next launch.
+            logger.error("Failed to mark loaded plugin bundle for removal, keeping it: \(bundleURL.path, privacy: .public)")
+        }
     }
 
     static let pendingRemovalMarkerName = ".typewhisper-pending-removal"
