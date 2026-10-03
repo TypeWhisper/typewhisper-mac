@@ -322,14 +322,16 @@ enum DictationQuickSelection {
         if model.loaded == true || model.downloaded == true {
             return nil
         }
+        // Model files can be gone while the persisted IDs remain, e.g. after reinstalling
+        // a plugin without its data, and restoring would then download the model.
+        if model.downloaded == false {
+            return localizedAppText("not downloaded", de: "nicht heruntergeladen")
+        }
         // A failed switch can leave the selection on a model that was never loaded, so the
         // selection is only restorable when it matches the model the engine restores.
         if model.id == engine.selectedModelId,
            engine.isConfigured || model.id == engine.restorableModelId {
             return nil
-        }
-        if model.downloaded == false {
-            return localizedAppText("not downloaded", de: "nicht heruntergeladen")
         }
         return localizedAppText("load in Settings", de: "in den Einstellungen laden")
     }

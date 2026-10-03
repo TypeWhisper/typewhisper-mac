@@ -321,6 +321,25 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertEqual(group.setupRequiredOptions.map(\.id), ["parakeet/v2", "parakeet/v3"])
     }
 
+    func testLocalEngineDoesNotRestoreAModelWhoseFilesAreGone() {
+        // The plugin was reinstalled without its data, but the persisted IDs remain.
+        let engine = DictationQuickSelectionEngine(
+            providerId: "whisperkit",
+            displayName: "WhisperKit",
+            isAuthAvailable: true,
+            isConfigured: false,
+            managesLocalModels: true,
+            selectedModelId: "large",
+            restorableModelId: "large",
+            models: [PluginModelInfo(id: "large", displayName: "Large", downloaded: false, loaded: false)]
+        )
+
+        let group = DictationQuickSelection.modelGroups(engines: [engine], selectedProviderId: "groq")[0]
+
+        XCTAssertTrue(group.options.isEmpty)
+        XCTAssertEqual(group.setupRequiredOptions.map(\.id), ["whisperkit/large"])
+    }
+
     func testOnlyLifecycleAwareOrDeclaredLocalEnginesManageLocalModels() {
         XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: true, declaredHosting: nil))
         XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, declaredHosting: .local))
