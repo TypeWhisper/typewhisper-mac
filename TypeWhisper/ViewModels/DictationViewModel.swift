@@ -2507,7 +2507,7 @@ final class DictationViewModel: ObservableObject {
             streamingHandler.stop()
             lastStreamingParams = nil
             stopRecordingTimer()
-            _ = await audioRecordingService.stopRecording(
+            let discardedSamples = await audioRecordingService.stopRecording(
                 policy: .immediate,
                 bluetoothBehavior: bluetoothStopBehavior
             )
@@ -2515,6 +2515,8 @@ final class DictationViewModel: ObservableObject {
             audioRecordingService.discardActiveRecoveryRecording()
             guard !Task.isCancelled else { return }
             if let sessionID {
+                let discardedDuration = Double(discardedSamples.count) / AudioRecordingService.targetSampleRate
+                updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = discardedDuration }
                 failDictationSession(id: sessionID, error: discardMessage)
             }
             showNotchFeedback(
