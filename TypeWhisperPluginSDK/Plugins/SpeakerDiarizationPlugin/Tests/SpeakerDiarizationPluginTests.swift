@@ -1,3 +1,4 @@
+import FluidAudio
 import Foundation
 import TypeWhisperPluginSDK
 import TypeWhisperPluginSDKTesting
@@ -43,6 +44,30 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
         } catch let error as PluginDiarizationError {
             XCTAssertEqual(error, .unsupportedSpeakerCount(1))
         }
+    }
+
+    func testTurnsLeaveOutSegmentsWithoutSpeakerEvidence() {
+        func segment(_ speaker: String, _ start: Float, _ end: Float, quality: Float) -> TimedSpeakerSegment {
+            TimedSpeakerSegment(
+                speakerId: speaker,
+                embedding: [],
+                startTimeSeconds: start,
+                endTimeSeconds: end,
+                qualityScore: quality
+            )
+        }
+
+        let turns = SpeakerDiarizationPlugin.turns(from: [
+            segment("S1", 0, 4, quality: 1),
+            segment("S2", 5, 60, quality: 1),
+            // A reply nothing voted for; the diarizer gave it to S1 as a tie-break.
+            segment("S1", 60.5, 62, quality: 0),
+            segment("S2", 62.5, 90, quality: 0.9),
+        ])
+
+        XCTAssertEqual(turns.map(\.speakerLabel), ["S1", "S2", "S2"])
+        XCTAssertEqual(turns.map(\.start), [0, 5, 62.5])
+        XCTAssertEqual(turns.map(\.end), [4, 60, 90])
     }
 
     func testModelsExistFindsRequiredFilesInNestedFolders() throws {

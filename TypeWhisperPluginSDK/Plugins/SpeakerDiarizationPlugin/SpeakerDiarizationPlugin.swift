@@ -15,6 +15,24 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
     /// same; 0.775 merges two speakers of EN2002a into one. iOS uses 0.7 as
     /// well.
     static let clusteringThreshold = 0.7
+
+    /// The diarizer's segments as turns, without those no speaker evidence
+    /// backs. A stretch no embedding voted for gets a quality of 0 and goes to
+    /// the first speaker as a tie-break, so a short reply such as "See you"
+    /// showed up as the jingle voice that opened the recording. Without such a
+    /// turn the app gives the text to the nearest speaker. On five AMI
+    /// meetings this leaves the error rate unchanged.
+    static func turns(from segments: [TimedSpeakerSegment]) -> [PluginSpeakerTurn] {
+        segments
+            .filter { $0.qualityScore > 0 }
+            .map {
+                PluginSpeakerTurn(
+                    speakerLabel: $0.speakerId,
+                    start: Double($0.startTimeSeconds),
+                    end: Double($0.endTimeSeconds)
+                )
+            }
+    }
     private static let logger = Logger(subsystem: "com.typewhisper.speaker-diarization", category: "Plugin")
 
     private let state = OSAllocatedUnfairLock<State>(initialState: State())
@@ -169,15 +187,11 @@ private actor DiarizationRunner {
         }
         try Task.checkCancellation()
 
+        let turns = SpeakerDiarizationPlugin.turns(from: result.segments)
+        let speakers = Set(turns.map(\.speakerLabel))
         return PluginDiarizationResult(
-            turns: result.segments.map {
-                PluginSpeakerTurn(
-                    speakerLabel: $0.speakerId,
-                    start: Double($0.startTimeSeconds),
-                    end: Double($0.endTimeSeconds)
-                )
-            },
-            speakerEmbeddings: result.speakerDatabase ?? [:],
+            turns: turns,
+            speakerEmbeddings: (result.speakerDatabase ?? [:]).filter { speakers.contains($0.key) },
             engine: SpeakerDiarizationPlugin.engineIdentifier
         )
     }
