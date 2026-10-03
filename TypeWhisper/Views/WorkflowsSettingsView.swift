@@ -3393,7 +3393,7 @@ private func workflowOutputRouteSentence(targetActionPluginId: String?) -> Strin
     )
 }
 
-private func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
+func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
     switch selection {
     case .inheritGlobal:
         return localizedAppText("Global Setting", de: "Globale Einstellung")

@@ -348,6 +348,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return inputDevices.first(where: { $0.uid == selectedDeviceUID })
     }
 
+    /// Name of the macOS default input, which recording uses when no microphone is selected.
+    var systemDefaultInputDeviceName: String? {
+        guard let deviceID = defaultInputDeviceController.defaultInputDeviceID() else { return nil }
+        return inputDevices.first(where: { $0.deviceID == deviceID })?.name ?? Self.deviceName(for: deviceID)
+    }
+
     var selectedDeviceCompatibility: AudioInputDeviceCompatibility? {
         selectedDevice?.compatibility
     }

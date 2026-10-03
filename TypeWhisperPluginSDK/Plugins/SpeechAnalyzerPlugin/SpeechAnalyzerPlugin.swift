@@ -654,6 +654,7 @@ private struct SpeechAnalyzerSettingsView: View {
     @State private var models: [SpeechModelDef] = []
     @State private var modelState: SpeechModelState = .notLoaded
     @State private var loadedModelId: String?
+    @State private var onDemandModelId: String?
     @State private var searchText = ""
     @State private var isPolling = false
 
@@ -747,7 +748,13 @@ private struct SpeechAnalyzerSettingsView: View {
             syncState()
         }
         .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
+            onDemandModelId = plugin.host?.modelIdLoadedOnDemand
+            guard isPolling else {
+                // The host may unload the model while the settings stay open.
+                modelState = plugin.modelState
+                loadedModelId = plugin.loadedModelId
+                return
+            }
             let pluginState = plugin.modelState
             if pluginState != .notLoaded {
                 modelState = pluginState
@@ -762,6 +769,7 @@ private struct SpeechAnalyzerSettingsView: View {
         models = plugin.cachedModels
         modelState = plugin.modelState
         loadedModelId = plugin.loadedModelId
+        onDemandModelId = plugin.host?.modelIdLoadedOnDemand
     }
 
     @ViewBuilder
@@ -776,6 +784,8 @@ private struct SpeechAnalyzerSettingsView: View {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.green)
                     .font(.caption)
+            } else if modelDef.id == onDemandModelId, modelState == .notLoaded {
+                PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
                 Button(String(localized: "Select", bundle: bundle)) {
                     modelState = .downloading

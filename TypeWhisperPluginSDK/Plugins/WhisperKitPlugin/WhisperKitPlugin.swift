@@ -1283,6 +1283,7 @@ private struct WhisperKitSettingsView: View {
     @State private var activeModelId: String?
     @State private var downloadedModelIds: Set<String> = []
     @State private var isPolling = false
+    @State private var onDemandModelId: String?
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -1450,6 +1451,7 @@ private struct WhisperKitSettingsView: View {
             }
         }
         .onReceive(pollTimer) { _ in
+            onDemandModelId = plugin.host?.modelIdLoadedOnDemand
             let updatedState = WhisperKitSettingsPollState(
                 modelState: modelState,
                 downloadProgress: downloadProgress,
@@ -1556,26 +1558,30 @@ private struct WhisperKitSettingsView: View {
             }
         } else {
             HStack(spacing: 8) {
-                Button(
-                    isDownloaded
-                        ? String(localized: "Load", bundle: bundle)
-                        : String(localized: "Download & Load", bundle: bundle)
-                ) {
-                    activeModelId = modelDef.id
-                    modelState = .downloading
-                    downloadProgress = 0.05
-                    isPolling = true
-                    Task {
-                        await plugin.loadModel(modelDef)
-                        isPolling = false
-                        modelState = plugin.modelState
-                        downloadProgress = plugin.downloadProgress
-                        activeModelId = plugin._selectedModelId
+                if isDownloaded, modelDef.id == onDemandModelId, modelState == .notLoaded {
+                    PluginModelLoadsOnDemandStatus(bundle: bundle)
+                } else {
+                    Button(
+                        isDownloaded
+                            ? String(localized: "Load", bundle: bundle)
+                            : String(localized: "Download & Load", bundle: bundle)
+                    ) {
+                        activeModelId = modelDef.id
+                        modelState = .downloading
+                        downloadProgress = 0.05
+                        isPolling = true
+                        Task {
+                            await plugin.loadModel(modelDef)
+                            isPolling = false
+                            modelState = plugin.modelState
+                            downloadProgress = plugin.downloadProgress
+                            activeModelId = plugin._selectedModelId
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(viewState.isBusy)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(viewState.isBusy)
 
                 if isDownloaded {
                     Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
@@ -1594,6 +1600,7 @@ private struct WhisperKitSettingsView: View {
         downloadProgress = plugin.downloadProgress
         activeModelId = plugin._selectedModelId
         downloadedModelIds = Set(plugin.downloadedModels.map(\.id))
+        onDemandModelId = plugin.host?.modelIdLoadedOnDemand
         isPolling = false
     }
 

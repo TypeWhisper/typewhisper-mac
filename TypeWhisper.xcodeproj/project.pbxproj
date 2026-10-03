@@ -135,6 +135,7 @@
 		C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		C23000000000000000000010 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
+		A17C69E6B6A43880D94B24FF /* DictationQuickSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
@@ -394,6 +395,7 @@
 		AA00000000000000000182 /* StreamingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000172 /* StreamingHandler.swift */; };
 		AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000173 /* PromptPaletteHandler.swift */; };
 		AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000174 /* DictationSettingsHandler.swift */; };
+		BEEB1B96C554D7A639E56CFA /* DictationQuickSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E6EB12C3CB1F88B36EFA3F /* DictationQuickSelection.swift */; };
 		AA00000000000000000185 /* OpenAICompatiblePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000176 /* OpenAICompatiblePlugin.swift */; };
 		A1B2C3D4E5F60718293A4B5C /* OpenAIRealtimeTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C60718293A4B5C /* OpenAIRealtimeTranscription.swift */; };
 		AA00000000000000000186 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000177 /* manifest.json */; };
@@ -1050,6 +1052,7 @@
 		BB00000000000000000172 /* StreamingHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingHandler.swift; sourceTree = "<group>"; };
 		BB00000000000000000173 /* PromptPaletteHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptPaletteHandler.swift; sourceTree = "<group>"; };
 		BB00000000000000000174 /* DictationSettingsHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSettingsHandler.swift; sourceTree = "<group>"; };
+		C5E6EB12C3CB1F88B36EFA3F /* DictationQuickSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationQuickSelection.swift; sourceTree = "<group>"; };
 		BB00000000000000000175 /* OpenAICompatiblePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAICompatiblePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000176 /* OpenAICompatiblePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatiblePlugin.swift; sourceTree = "<group>"; };
 		D1E2F3A4B5C60718293A4B5C /* OpenAIRealtimeTranscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRealtimeTranscription.swift; sourceTree = "<group>"; };
@@ -1239,6 +1242,7 @@
 		E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TypeWhisperIntegrationTests.swift; sourceTree = "<group>"; };
 		E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeWhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationViewModelIndicatorSettingsTests.swift; sourceTree = "<group>"; };
+		836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationQuickSelectionTests.swift; sourceTree = "<group>"; };
 		2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IndicatorTranscriptPreviewSizingTests.swift; sourceTree = "<group>"; };
 		6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelSpacePolicyTests.swift; sourceTree = "<group>"; };
 		2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardComposerTests.swift; sourceTree = "<group>"; };
@@ -2140,6 +2144,7 @@
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				B91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
+				C5E6EB12C3CB1F88B36EFA3F /* DictationQuickSelection.swift */,
 				BB00000000000000000239 /* AudioRecorderViewModel.swift */,
 				BB00000000000000000242 /* WatchFolderViewModel.swift */,
 			);
@@ -3040,6 +3045,7 @@
 				FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */,
 				C1F000000000000000000006 /* CloudFolderSyncTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */,
+				836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */,
 				2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */,
 					6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */,
 					E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
@@ -5007,6 +5013,7 @@
 				C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */,
 				A40500000000000000000101 /* CLIClient.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */,
+				A17C69E6B6A43880D94B24FF /* DictationQuickSelectionTests.swift in Sources */,
 				2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */,
 					7B8C9D0E1F22334455667790 /* FloatingPanelSpacePolicyTests.swift in Sources */,
 					E5A1B2C3D4F5061728394A5D /* NotchIndicatorLayoutTests.swift in Sources */,
@@ -5160,6 +5167,7 @@
 				AA000000000000000A1236F1 /* IndicatorPreviewSession.swift in Sources */,
 				6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */,
 				AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */,
+				BEEB1B96C554D7A639E56CFA /* DictationQuickSelection.swift in Sources */,
 				AA00000000000000000040 /* HTTPResponse.swift in Sources */,
 				AA00000000000000000041 /* HTTPRequestParser.swift in Sources */,
 				AA00000000000000000042 /* APIRouter.swift in Sources */,

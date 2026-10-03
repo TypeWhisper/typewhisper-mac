@@ -34918,6 +34918,29 @@
         }
       }
     },
+    "Text may not have been inserted" : {
+      "comment" : "Text shown in a toast notification when a paste left the readable focused text field unchanged.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text wurde möglicherweise nicht eingefügt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストが挿入されなかった可能性があります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本可能未插入"
+          }
+        }
+      }
+    },
     "Text replaced" : {
       "localizations" : {
         "de" : {

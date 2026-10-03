@@ -786,7 +786,9 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(service.availableUpdatesCount, 0)
         XCTAssertTrue(service.availableUpdatePlugins().isEmpty)
         XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: bundleURL.appendingPathComponent(PluginManager.pendingRemovalMarkerName).path
+        ))
         XCTAssertNil(PluginSettingsWindowManager.shared.managedWindow(for: pluginId))
 
         var installerWasCalled = false
@@ -796,6 +798,113 @@ final class PluginRegistryServiceTests: XCTestCase {
         }
         XCTAssertEqual(result, .empty)
         XCTAssertFalse(installerWasCalled)
+    }
+
+    @MainActor
+    func testUninstallingLoadedPluginKeepsBundleUntilNextLaunch() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDeferredUninstall")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDeferredUninstallCache")
+        let pluginId = "com.typewhisper.deferred-uninstall"
+        let enabledKey = "plugin.\(pluginId).enabled"
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: enabledKey)
+        }
+        // A scan that wrongly picked the bundle up would register it without mapping code.
+        UserDefaults.standard.set(false, forKey: enabledKey)
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let bundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("DeferredUninstallPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: bundleURL,
+            pluginId: pluginId,
+            pluginName: "Deferred Uninstall Plugin",
+            version: "1.0.0"
+        )
+        pluginManager.loadedPlugins = [
+            Self.makeLoadedPlugin(
+                id: pluginId,
+                name: "Deferred Uninstall Plugin",
+                version: "1.0.0",
+                sourceURL: bundleURL
+            ),
+        ]
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            deleteCredentials: { _ in },
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        try service.uninstallPlugin(pluginId)
+
+        // Plugin work that outlives deactivate() may still read the bundle's resources.
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
+
+        pluginManager.scanAndLoadPlugins()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertFalse(pluginManager.loadedPlugins.contains { $0.manifest.id == pluginId })
+
+        let relaunchedPluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        relaunchedPluginManager.scanAndLoadPlugins()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertFalse(relaunchedPluginManager.loadedPlugins.contains { $0.manifest.id == pluginId })
+    }
+
+    @MainActor
+    func testUninstallingPluginWhoseCodeNeverLoadedRemovesBundleImmediately() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUnloadedUninstall")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUnloadedUninstallCache")
+        let pluginId = "com.typewhisper.unloaded-uninstall"
+        let enabledKey = "plugin.\(pluginId).enabled"
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: enabledKey)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let bundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("UnloadedUninstallPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: bundleURL,
+            pluginId: pluginId,
+            pluginName: "Unloaded Uninstall Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.registerUnloadedPlugin(
+            manifest: PluginManifest(
+                id: pluginId,
+                name: "Unloaded Uninstall Plugin",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
+            ),
+            sourceURL: bundleURL,
+            isEnabled: false
+        )
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            deleteCredentials: { _ in },
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        try service.uninstallPlugin(pluginId)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
     }
 
     @MainActor
@@ -1021,6 +1130,81 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(registeredPlugin.sourceURL, existingURL)
         XCTAssertTrue(registeredPlugin.isEnabled)
         XCTAssertFalse(registeredPlugin.isRuntimeLoaded)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: pluginManager.pluginsDirectory.path),
+            ["RuntimeUpdatePlugin.bundle"]
+        )
+    }
+
+    @MainActor
+    func testFailedUpdateRestoresExistingBundleInPlace() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginFailedUpdate")
+        let incomingDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginFailedUpdateIncoming")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginFailedUpdateCache")
+        let pluginId = "com.typewhisper.failed-update"
+        let enabledKey = "plugin.\(pluginId).enabled"
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(incomingDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: enabledKey)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let existingURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("FailedUpdatePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: existingURL,
+            pluginId: pluginId,
+            pluginName: "Failed Update Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.registerUnloadedPlugin(
+            manifest: PluginManifest(
+                id: pluginId,
+                name: "Failed Update Plugin",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
+            ),
+            sourceURL: existingURL,
+            isEnabled: false
+        )
+
+        // Loading the new bundle fails after it has been swapped into place.
+        let incomingURL = incomingDirectory
+            .appendingPathComponent("FailedUpdatePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incomingURL,
+            pluginId: pluginId,
+            pluginName: "Failed Update Plugin",
+            version: "1.0.1",
+            minHostVersion: "999.0"
+        )
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        do {
+            _ = try await service.installFromFile(incomingURL)
+            XCTFail("Expected install to fail")
+        } catch {}
+
+        let manifestData = try Data(contentsOf: existingURL.appendingPathComponent("Contents/Resources/manifest.json"))
+        XCTAssertEqual(try JSONDecoder().decode(PluginManifest.self, from: manifestData).version, "1.0.0")
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: pluginManager.pluginsDirectory.path),
+            ["FailedUpdatePlugin.bundle"]
+        )
+        let registeredPlugin = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.manifest.id == pluginId })
+        XCTAssertEqual(registeredPlugin.manifest.version, "1.0.0")
     }
 
     @MainActor
@@ -1856,7 +2040,8 @@ final class PluginRegistryServiceTests: XCTestCase {
         pluginId: String,
         pluginName: String,
         version: String,
-        sdkCompatibilityVersion: String? = PluginSDKCompatibility.currentVersion
+        sdkCompatibilityVersion: String? = PluginSDKCompatibility.currentVersion,
+        minHostVersion: String? = nil
     ) throws {
         let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
         let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
@@ -1880,6 +2065,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             id: pluginId,
             name: pluginName,
             version: version,
+            minHostVersion: minHostVersion,
             sdkCompatibilityVersion: sdkCompatibilityVersion,
             principalClass: "RuntimeUpdatePlugin"
         )

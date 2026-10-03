@@ -55,9 +55,27 @@ public protocol HostModelLifecyclePolicyProviding: Sendable {
     var shouldRestoreLoadedModelsPassively: Bool { get }
 }
 
+/// Hosts that unload local models right after each use report it here, so a
+/// plugin's settings can show that a model loads on demand instead of offering
+/// a Load button whose result is unloaded again a moment later.
+public protocol HostModelAutoUnloadPolicyProviding: Sendable {
+    var unloadsModelsImmediatelyAfterUse: Bool { get }
+}
+
 public extension HostServices {
     var shouldRestoreLoadedModelsPassively: Bool {
         (self as? any HostModelLifecyclePolicyProviding)?.shouldRestoreLoadedModelsPassively ?? true
+    }
+
+    var unloadsModelsImmediatelyAfterUse: Bool {
+        (self as? any HostModelAutoUnloadPolicyProviding)?.unloadsModelsImmediatelyAfterUse ?? false
+    }
+
+    /// The model the host loads on demand for this plugin while it unloads
+    /// models right after each use; nil under every other unload policy.
+    var modelIdLoadedOnDemand: String? {
+        guard unloadsModelsImmediatelyAfterUse else { return nil }
+        return userDefault(forKey: "loadedModel") as? String
     }
 
     var availableWorkflows: [PluginWorkflowInfo] { [] }

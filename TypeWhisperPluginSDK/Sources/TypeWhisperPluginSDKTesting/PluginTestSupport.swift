@@ -37,7 +37,7 @@ public final class PluginTestEventBus: EventBusProtocol, @unchecked Sendable {
     }
 }
 
-public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, @unchecked Sendable {
     private struct AnySendable: @unchecked Sendable {
         let value: Any
     }
@@ -62,6 +62,7 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
     public var availableRuleNames: [String]
     public var availableWorkflows: [PluginWorkflowInfo]
     public var shouldRestoreLoadedModelsPassively: Bool
+    public var unloadsModelsImmediatelyAfterUse: Bool
 
     public init(
         defaults: [String: Any] = [:],
@@ -72,7 +73,8 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         activeAppName: String? = nil,
         availableRuleNames: [String] = [],
         availableWorkflows: [PluginWorkflowInfo] = [],
-        shouldRestoreLoadedModelsPassively: Bool = true
+        shouldRestoreLoadedModelsPassively: Bool = true,
+        unloadsModelsImmediatelyAfterUse: Bool = false
     ) throws {
         self.state = State(
             defaults: defaults.mapValues(AnySendable.init(value:)),
@@ -84,6 +86,7 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         self.availableRuleNames = availableRuleNames
         self.availableWorkflows = availableWorkflows
         self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
+        self.unloadsModelsImmediatelyAfterUse = unloadsModelsImmediatelyAfterUse
 
         if let pluginDataDirectory {
             self.pluginDataDirectory = pluginDataDirectory

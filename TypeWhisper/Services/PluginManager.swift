@@ -300,6 +300,8 @@ final class PluginManager: ObservableObject {
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
     private var deletingModelPluginIds = Set<String>()
+    /// Uninstalled bundles whose code is still mapped into this process.
+    private var bundlesRemovedAfterRelaunch = Set<URL>()
     private var registryNotificationBatchDepth = 0
     private var registryChangedDuringBatch = false
 
@@ -601,7 +603,7 @@ final class PluginManager: ObservableObject {
         }
 
         let bundles = sortedPluginBundleURLs(
-            contents.filter { $0.pathExtension == "bundle" },
+            contents.filter { $0.pathExtension == "bundle" && !isPendingRemoval($0) },
             isBundledSource: false
         )
         logger.info("Found \(bundles.count) plugin bundle(s)")
@@ -1092,6 +1094,42 @@ final class PluginManager: ObservableObject {
         }
         loadedPlugins.remove(at: index)
         logger.info("Removed plugin from runtime registry: \(pluginId)")
+    }
+
+    /// Removes the files of an uninstalled bundle, or defers that to the next launch when
+    /// the bundle's code already ran in this process. Plugin work can outlive `deactivate()`
+    /// and still read bundle resources (MLX looks up its Metal library lazily), and missing
+    /// files then abort the app.
+    func removeUninstalledBundle(at bundleURL: URL, codeIsLoaded: Bool) {
+        let fm = FileManager.default
+        guard codeIsLoaded else {
+            logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
+            try? fm.removeItem(at: bundleURL)
+            return
+        }
+
+        bundlesRemovedAfterRelaunch.insert(bundleURL.standardizedFileURL)
+        let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
+        if fm.createFile(atPath: markerURL.path, contents: nil) {
+            logger.info("Deferring removal of loaded plugin bundle until relaunch: \(bundleURL.path, privacy: .public)")
+        } else {
+            // Keeping the files is safer than deleting them under running code; the
+            // bundle then loads again on the next launch.
+            logger.error("Failed to mark loaded plugin bundle for removal, keeping it: \(bundleURL.path, privacy: .public)")
+        }
+    }
+
+    static let pendingRemovalMarkerName = ".typewhisper-pending-removal"
+
+    /// Deletes bundles marked by a previous session and skips those marked in this one.
+    private func isPendingRemoval(_ bundleURL: URL) -> Bool {
+        let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
+        guard FileManager.default.fileExists(atPath: markerURL.path) else { return false }
+        guard !bundlesRemovedAfterRelaunch.contains(bundleURL.standardizedFileURL) else { return true }
+
+        logger.info("Removing plugin bundle uninstalled in a previous session: \(bundleURL.path, privacy: .public)")
+        try? FileManager.default.removeItem(at: bundleURL)
+        return true
     }
 
     func bundleURL(for pluginId: String) -> URL? {

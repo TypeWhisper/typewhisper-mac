@@ -276,6 +276,12 @@ final class TextInsertionService {
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
         case pasted(verification: PasteVerification)
+
+        /// The focused field was readable and still unchanged after the paste. Unreadable fields
+        /// (common in Electron apps) do not count, so they never produce a false failure.
+        var leftFocusedTextUnchanged: Bool {
+            self == .pasted(verification: .unverified(.focusedTextUnchanged))
+        }
     }
 
     enum PasteVerification: Equatable {
@@ -411,6 +417,11 @@ final class TextInsertionService {
         let value: String?
         let selectedText: String?
         let selectedRange: NSRange?
+
+        /// False when the element exposes none of its text attributes.
+        var hasReadableText: Bool {
+            value != nil || selectedText != nil || selectedRange != nil
+        }
 
         static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
             lhs.element == rhs.element &&
@@ -1261,9 +1272,15 @@ final class TextInsertionService {
             try? await Task.sleep(for: pasteVerificationPollingDelay)
         }
 
-        return canRestoreClipboard(afterPasteUsing: state)
-            ? .verified
-            : .unverified(.focusedTextUnchanged)
+        if canRestoreClipboard(afterPasteUsing: state) {
+            return .verified
+        }
+        // Only a field readable before and after the paste proves that the paste missed it.
+        guard let initialState = state.focusedTextState, initialState.hasReadableText,
+              captureFocusedTextState(for: initialState.element)?.hasReadableText == true else {
+            return .unverified(.focusedTextStateUnavailable)
+        }
+        return .unverified(.focusedTextUnchanged)
     }
 
     private func logPasteVerification(_ verification: PasteVerification, bundleId: String?) {
@@ -1330,6 +1347,8 @@ final class TextInsertionService {
     }
 
     nonisolated static let simulatedReturnEventMarker: Int64 = 0x545752455455524E
+    /// Marks the synthetic Cmd+V and Cmd+C so the hotkey handling lets them pass.
+    nonisolated static let simulatedClipboardShortcutEventMarker: Int64 = 0x5457434C49504244
 
     func simulateReturn() {
         if let returnSimulatorOverride {
@@ -1357,10 +1376,12 @@ final class TextInsertionService {
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
+        keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyDown?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
+        keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cgSessionEventTap)
     }
@@ -1372,10 +1393,12 @@ final class TextInsertionService {
         }
         let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
+        keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyDown?.flags = .maskCommand
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: false)
+        keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyUp?.flags = .maskCommand
         keyUp?.post(tap: .cgSessionEventTap)
     }

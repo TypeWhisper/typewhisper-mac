@@ -882,13 +882,13 @@ final class PluginRegistryService: ObservableObject {
     // MARK: - Uninstall
 
     func uninstallPlugin(_ pluginId: String, deleteData: Bool = false) throws {
-        guard let bundleURL = PluginManager.shared.bundleURL(for: pluginId) else { return }
+        guard let plugin = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == pluginId }) else { return }
+        // Disabled plugins keep their mapped code behind an unloaded placeholder.
+        let codeIsLoaded = plugin.isRuntimeLoaded || plugin.bundle.isLoaded
 
         PluginManager.shared.unloadPlugin(pluginId)
         PluginManager.shared.clearIncompatibleExternalBundle(pluginId)
-
-        logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
-        try? FileManager.default.removeItem(at: bundleURL)
+        PluginManager.shared.removeUninstalledBundle(at: plugin.sourceURL, codeIsLoaded: codeIsLoaded)
 
         let keychainError = clearPluginPersistence(
             pluginId,
@@ -1049,22 +1049,32 @@ final class PluginRegistryService: ObservableObject {
 
         let backupURL = destinationURL.deletingLastPathComponent()
             .appendingPathComponent("\(destinationURL.lastPathComponent).backup-\(UUID().uuidString)")
+        let stagingURL = destinationURL.deletingLastPathComponent()
+            .appendingPathComponent("\(destinationURL.lastPathComponent).staging-\(UUID().uuidString)")
         let hadExistingBundle = fm.fileExists(atPath: destinationURL.path)
+        // An existing bundle is swapped in one step: its code may still be mapped and
+        // read resources by path, so the destination must never be missing.
+        let incomingURL = hadExistingBundle ? stagingURL : destinationURL
 
         do {
             PluginManager.shared.unloadPlugin(manifest.id)
 
-            if hadExistingBundle {
-                logger.info("Moving existing plugin bundle to backup: \(destinationURL.path, privacy: .public) -> \(backupURL.path, privacy: .public)")
-                try fm.moveItem(at: destinationURL, to: backupURL)
+            if copyBundle {
+                logger.info("Copying plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(incomingURL.path, privacy: .public)")
+                try fm.copyItem(at: bundleURL, to: incomingURL)
+            } else {
+                logger.info("Moving plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(incomingURL.path, privacy: .public)")
+                try fm.moveItem(at: bundleURL, to: incomingURL)
             }
 
-            if copyBundle {
-                logger.info("Copying plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
-                try fm.copyItem(at: bundleURL, to: destinationURL)
-            } else {
-                logger.info("Moving plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
-                try fm.moveItem(at: bundleURL, to: destinationURL)
+            if hadExistingBundle {
+                logger.info("Swapping in plugin bundle, keeping backup: \(destinationURL.path, privacy: .public) -> \(backupURL.path, privacy: .public)")
+                _ = try fm.replaceItemAt(
+                    destinationURL,
+                    withItemAt: stagingURL,
+                    backupItemName: backupURL.lastPathComponent,
+                    options: [.usingNewMetadataOnly, .withoutDeletingBackupItem]
+                )
             }
 
             if replacingRuntimeLoadedPlugin {
@@ -1085,17 +1095,21 @@ final class PluginRegistryService: ObservableObject {
             }
         } catch {
             logger.error("Plugin install rollback for \(manifest.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            if fm.fileExists(atPath: destinationURL.path) {
+            if fm.fileExists(atPath: stagingURL.path) {
+                try? fm.removeItem(at: stagingURL)
+            }
+            if hadExistingBundle {
+                if fm.fileExists(atPath: backupURL.path) {
+                    logger.info("Restoring plugin backup: \(backupURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
+                    _ = try? fm.replaceItemAt(destinationURL, withItemAt: backupURL, options: .usingNewMetadataOnly)
+                }
+            } else if fm.fileExists(atPath: destinationURL.path) {
                 logger.info("Removing failed plugin install at \(destinationURL.path, privacy: .public)")
                 try? fm.removeItem(at: destinationURL)
             }
-            if hadExistingBundle, fm.fileExists(atPath: backupURL.path) {
-                logger.info("Restoring plugin backup: \(backupURL.path, privacy: .public) -> \(destinationURL.path, privacy: .public)")
-                try? fm.moveItem(at: backupURL, to: destinationURL)
-                try? PluginManager.shared.loadPlugin(at: destinationURL)
-            } else if let existingLoadedBundleURL {
-                logger.info("Reloading previously loaded plugin from \(existingLoadedBundleURL.path, privacy: .public)")
-                try? PluginManager.shared.loadPlugin(at: existingLoadedBundleURL)
+            if let reloadURL = existingLoadedBundleURL ?? (hadExistingBundle ? destinationURL : nil) {
+                logger.info("Reloading previous plugin bundle from \(reloadURL.path, privacy: .public)")
+                try? PluginManager.shared.loadPlugin(at: reloadURL)
             }
             throw error
         }
@@ -1159,6 +1173,9 @@ final class PluginRegistryService: ObservableObject {
         }
 
         for url in bundleURLs {
+            // Bundles awaiting removal may still be mapped; the next launch deletes them.
+            let markerURL = url.appendingPathComponent(PluginManager.pendingRemovalMarkerName)
+            guard !fm.fileExists(atPath: markerURL.path) else { continue }
             guard let manifest = try? readManifest(at: url), manifest.id == pluginId else { continue }
             logger.info("Removing duplicate plugin bundle at \(url.path, privacy: .public), keeping \(keptURL.path, privacy: .public)")
             try fm.removeItem(at: url)

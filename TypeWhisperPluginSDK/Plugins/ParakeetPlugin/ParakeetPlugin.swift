@@ -1184,6 +1184,7 @@ private struct ParakeetSettingsView: View {
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var downloadedVersions: Set<ParakeetVersion> = []
+    @State private var onDemandModelId: String?
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -1355,16 +1356,20 @@ private struct ParakeetSettingsView: View {
         // The plugin holds one model at a time; its state belongs to the selected version.
         switch version == selectedVersion ? modelState : .notLoaded {
         case .notLoaded:
-            Button(
-                downloadedVersions.contains(version)
-                    ? String(localized: "Load", bundle: bundle)
-                    : String(localized: "Download & Load", bundle: bundle)
-            ) {
-                load(version)
+            if version.modelDef.id == onDemandModelId, downloadedVersions.contains(version) {
+                PluginModelLoadsOnDemandStatus(bundle: bundle)
+            } else {
+                Button(
+                    downloadedVersions.contains(version)
+                        ? String(localized: "Load", bundle: bundle)
+                        : String(localized: "Download & Load", bundle: bundle)
+                ) {
+                    load(version)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(modelState == .downloading)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
-            .disabled(modelState == .downloading)
 
         case .downloading:
             HStack(spacing: 8) {
@@ -1509,6 +1514,7 @@ private struct ParakeetSettingsView: View {
         modelState = plugin.modelState
         downloadProgress = plugin.downloadProgress
         downloadedVersions = Set(ParakeetVersion.allCases.filter(plugin.isModelDownloaded(version:)))
+        onDemandModelId = plugin.host?.modelIdLoadedOnDemand
         boostingEnabled = plugin.vocabularyBoostingEnabled
         ctcModelState = plugin.ctcModelState
         boostingTermCount = plugin.lastBoostingTermCount

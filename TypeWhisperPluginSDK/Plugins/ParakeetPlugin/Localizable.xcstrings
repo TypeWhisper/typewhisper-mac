@@ -522,6 +522,50 @@
           }
         }
       }
+    },
+    "Loads on demand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird bei Bedarf geladen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必要時に読み込み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需加载"
+          }
+        }
+      }
+    },
+    "Auto-unload model is set to Immediate.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Modell automatisch entladen“ steht auf „Sofort“."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「モデルを自動でアンロード」が「すぐに」に設定されています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“自动卸载模型”已设为“立即”。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -175,28 +175,16 @@ private final class MenuBarState: ObservableObject {
     }
 
     private static func idleModelStatus(from modelManager: ModelManagerService) -> (text: String, image: String) {
-        guard let name = modelManager.activeModelName else {
+        guard modelManager.activeModelName != nil else {
             return (String(localized: "No model loaded"), "exclamationmark.triangle.fill")
         }
 
-        let label = activeModelLabel(engine: modelManager.activeEngineName, model: name)
-
+        // The model itself is named by the Model quick selector below the status line.
         if modelManager.isModelReady {
-            return (String(localized: "\(label) ready"), "checkmark.circle.fill")
+            return (String(localized: "Ready"), "checkmark.circle.fill")
         }
 
-        return (String(localized: "\(label) selected"), "clock.fill")
-    }
-
-    /// Prefixes the model name with its provider/engine (e.g. "Groq • whisper-large-v3") so the
-    /// menu bar shows which provider handles transcription. Skips the prefix when it would be
-    /// redundant — e.g. local engines whose model name already contains the provider ("Parakeet").
-    static func activeModelLabel(engine: String?, model: String) -> String {
-        guard let engine, !engine.isEmpty, engine != model,
-              !model.localizedCaseInsensitiveContains(engine) else {
-            return model
-        }
-        return "\(engine) • \(model)"
+        return (localizedAppText("Model selected", de: "Modell ausgewählt"), "clock.fill")
     }
 
     private func refreshCopyAvailability() {
@@ -356,6 +344,7 @@ struct PluginAppCommands: Commands {
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
+    @StateObject private var quickSelection = DictationQuickSelectionModel()
     @ObservedObject private var pluginManager: PluginManager
 
     init(pluginManager: PluginManager = PluginManager.shared) {
@@ -375,6 +364,12 @@ struct MenuBarView: View {
             menuItem(for: .toggleRecorder)
 
             Divider()
+
+            Section(localizedAppText("Dictation", de: "Diktat")) {
+                microphoneQuickSelector
+                languageQuickSelector
+                modelQuickSelector
+            }
 
             ForEach(MenuBarMenuSection.allCases, id: \.self) { section in
                 Section(String(localized: section.titleResource)) {
@@ -532,6 +527,123 @@ struct MenuBarView: View {
         }
     }
 
+    // MARK: Dictation quick selectors
+
+    private var microphoneQuickSelector: some View {
+        let snapshot = quickSelection.snapshot
+        return Menu {
+            ForEach(snapshot.microphoneOptions) { option in
+                quickSelectionItem(option, select: quickSelection.selectMicrophone)
+            }
+            Divider()
+            dictationSettingsButton
+        } label: {
+            Label(
+                localizedAppText(
+                    "Microphone: \(snapshot.microphoneSummary)",
+                    de: "Mikrofon: \(snapshot.microphoneSummary)"
+                ),
+                systemImage: "mic"
+            )
+        }
+        .quickSelectorLock(snapshot.isLocked)
+    }
+
+    private var languageQuickSelector: some View {
+        let snapshot = quickSelection.snapshot
+        return Menu {
+            if let note = snapshot.languageWorkflowNote {
+                Text(verbatim: note)
+                Divider()
+            }
+            ForEach(snapshot.languageOptions) { option in
+                quickSelectionItem(option, select: quickSelection.selectLanguage)
+            }
+            if !snapshot.moreLanguageOptions.isEmpty {
+                Menu(localizedAppText("More Languages", de: "Weitere Sprachen")) {
+                    ForEach(snapshot.moreLanguageOptions) { option in
+                        quickSelectionItem(option, select: quickSelection.selectLanguage)
+                    }
+                }
+            }
+            Divider()
+            dictationSettingsButton
+        } label: {
+            Label(
+                localizedAppText(
+                    "Language: \(snapshot.languageSummary)",
+                    de: "Sprache: \(snapshot.languageSummary)"
+                ),
+                systemImage: "globe"
+            )
+        }
+        .quickSelectorLock(snapshot.isLocked)
+    }
+
+    private var modelQuickSelector: some View {
+        let snapshot = quickSelection.snapshot
+        return Menu {
+            if let note = snapshot.modelWorkflowNote {
+                Text(verbatim: note)
+                Divider()
+            }
+            ForEach(snapshot.modelGroups) { group in
+                if group.options.count == 1, let option = group.options.first, option.value.modelId == nil {
+                    quickSelectionItem(option, select: quickSelection.selectModel)
+                } else {
+                    Section(group.title) {
+                        ForEach(group.options) { option in
+                            quickSelectionItem(option, select: quickSelection.selectModel)
+                        }
+                        if !group.setupRequiredOptions.isEmpty {
+                            let count = group.setupRequiredOptions.count
+                            Menu(localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))")) {
+                                ForEach(group.setupRequiredOptions) { option in
+                                    quickSelectionItem(option, select: quickSelection.selectModel)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Divider()
+            dictationSettingsButton
+        } label: {
+            Label(
+                localizedAppText(
+                    "Model: \(snapshot.modelSummary)",
+                    de: "Modell: \(snapshot.modelSummary)"
+                ),
+                systemImage: "waveform"
+            )
+        }
+        .quickSelectorLock(snapshot.isLocked)
+    }
+
+    /// A checkmark menu item. Choosing the selected entry again does nothing, so it cannot
+    /// reset state such as the microphone priority list.
+    private func quickSelectionItem<Value: Hashable>(
+        _ option: DictationQuickSelectionOption<Value>,
+        select: @escaping (Value) -> Void
+    ) -> some View {
+        Toggle(isOn: Binding(
+            get: { option.isSelected },
+            set: { _ in
+                guard !option.isSelected else { return }
+                select(option.value)
+            }
+        )) {
+            Text(verbatim: option.title)
+        }
+        .disabled(!option.isEnabled)
+    }
+
+    private var dictationSettingsButton: some View {
+        Button(localizedAppText("Dictation Settings...", de: "Diktat-Einstellungen …")) {
+            quickSelection.openDictationSettings()
+        }
+    }
+
     // These are factored out so the "Last Transcription" submenu can reuse them
     // without menuItem(for:) recursively referencing its own opaque return type.
     @ViewBuilder
@@ -660,5 +772,19 @@ struct MenuBarView: View {
         if flags.contains(.shift) { modifiers.insert(.shift) }
         if flags.contains(.function) { modifiers.insert(EventModifiers(rawValue: 1 << 23)) }
         return modifiers
+    }
+}
+
+private extension View {
+    /// Selections stay visible but cannot change while a recording or transcription
+    /// runs, so the running session is never interrupted.
+    func quickSelectorLock(_ isLocked: Bool) -> some View {
+        disabled(isLocked)
+            .help(isLocked
+                ? localizedAppText(
+                    "Available when the current recording or transcription has finished",
+                    de: "Verfügbar, sobald die aktuelle Aufnahme oder Transkription beendet ist"
+                )
+                : "")
     }
 }

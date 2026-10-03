@@ -14094,6 +14094,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testModelAutoUnloadPolicyReportsImmediateUnloadOnlyForImmediatePolicy() throws {
+        let suiteName = "ModelAutoUnloadPolicyTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        XCTAssertFalse(ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults))
+
+        defaults.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        XCTAssertTrue(ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults))
+
+        for otherPolicySeconds in [0, 120, 300, 600, 1800, 3600] {
+            defaults.set(otherPolicySeconds, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            XCTAssertFalse(
+                ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults),
+                "Policy \(otherPolicySeconds) keeps a loaded model in memory"
+            )
+        }
+    }
+
+    @MainActor
     func testHostServicesSuppressesInheritedPassiveLoadedModelRestoreForLegacyPluginActivation() async throws {
         let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
         let pluginId = "com.typewhisper.tests.legacy.\(UUID().uuidString)"
@@ -14309,6 +14332,20 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertTrue(fixture.files(pluginId: "com.typewhisper.groq").isEmpty)
             XCTAssertTrue(fixture.defaults(pluginId: "com.typewhisper.groq").isEmpty)
         }
+    }
+
+    func testTestHostDoesNotUseTheDevAppDataDirectory() {
+        let savedOverride = AppConstants.testAppSupportDirectoryOverride
+        AppConstants.testAppSupportDirectoryOverride = nil
+        defer { AppConstants.testAppSupportDirectoryOverride = savedOverride }
+
+        XCTAssertTrue(AppConstants.isRunningTests)
+        XCTAssertEqual(AppConstants.appSupportDirectory, AppConstants.testHostAppSupportDirectory)
+        XCTAssertNotEqual(AppConstants.appSupportDirectory, AppConstants.defaultAppSupportDirectory)
+        XCTAssertTrue(
+            AppConstants.appSupportDirectory.standardizedFileURL.path
+                .hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path)
+        )
     }
 
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
@@ -17231,6 +17268,57 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             service.processGlobalEventForTesting(try XCTUnwrap(NSEvent(cgEvent: cgEvent)))
         }
         XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testSyntheticClipboardShortcutPassesWhileHotkeyOnSameKeyIsHeld() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x09,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            isFn: false
+        )
+        service.setHotkeyForTesting(hotkey, for: .pasteLastTranscription)
+        var pasteCount = 0
+        service.onPasteLastTranscription = { pasteCount += 1 }
+
+        let down = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(pasteCount, 1)
+
+        for keyDown in [true, false] {
+            let cgEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: keyDown))
+            cgEvent.setIntegerValueField(
+                .eventSourceUserData,
+                value: TextInsertionService.simulatedClipboardShortcutEventMarker
+            )
+            cgEvent.flags = .maskCommand
+            let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
+            XCTAssertFalse(service.processEventForTesting(event, source: .eventTap))
+        }
+
+        // The physical key is still held, so only its own release ends the press.
+        let up = try makeKeyboardEvent(keyCode: 0x09, keyDown: false, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(pasteCount, 1)
+    }
+
+    @MainActor
+    func testUnmarkedCommandVIsSwallowedWhileHotkeyOnSameKeyIsHeld() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x09,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            isFn: false
+        )
+        service.setHotkeyForTesting(hotkey, for: .pasteLastTranscription)
+        let down = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        let commandV = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: .maskCommand)
+        XCTAssertTrue(service.processEventForTesting(commandV, source: .eventTap))
     }
 
     @MainActor

@@ -96,6 +96,23 @@ private struct PolicyAwareMockHostServices: HostServices, HostModelLifecyclePoli
     func setStreamingDisplayActive(_ active: Bool) {}
 }
 
+private struct AutoUnloadPolicyMockHostServices: HostServices, HostModelAutoUnloadPolicyProviding {
+    let pluginDataDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let activeAppBundleId: String? = nil
+    let activeAppName: String? = nil
+    let eventBus: EventBusProtocol = MockEventBus()
+    let availableRuleNames: [String] = []
+    let unloadsModelsImmediatelyAfterUse: Bool
+    let loadedModel: String?
+
+    func storeSecret(key: String, value: String) throws {}
+    func loadSecret(key: String) -> String? { nil }
+    func userDefault(forKey key: String) -> Any? { key == "loadedModel" ? loadedModel : nil }
+    func setUserDefault(_ value: Any?, forKey key: String) {}
+    func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
+}
+
 @objc(MockTranscriptionPlugin)
 private final class MockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.transcription"
@@ -636,6 +653,30 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableRuleNames, ["Work", "Docs"])
         XCTAssertEqual(host.availableProfileNames, ["Work", "Docs"])
         XCTAssertEqual(host.activeAppName, "Notes")
+    }
+
+    func testHostServicesReportOnDemandModelOnlyWhileModelsUnloadImmediately() {
+        let legacyHost = MockHostServices(eventBus: MockEventBus(), availableRuleNames: [])
+        XCTAssertFalse(legacyHost.unloadsModelsImmediatelyAfterUse)
+        XCTAssertNil(legacyHost.modelIdLoadedOnDemand)
+
+        let retainingHost = AutoUnloadPolicyMockHostServices(
+            unloadsModelsImmediatelyAfterUse: false,
+            loadedModel: "model-a"
+        )
+        XCTAssertNil(retainingHost.modelIdLoadedOnDemand)
+
+        let immediateHost = AutoUnloadPolicyMockHostServices(
+            unloadsModelsImmediatelyAfterUse: true,
+            loadedModel: "model-a"
+        )
+        XCTAssertEqual(immediateHost.modelIdLoadedOnDemand, "model-a")
+
+        let immediateHostWithoutModel = AutoUnloadPolicyMockHostServices(
+            unloadsModelsImmediatelyAfterUse: true,
+            loadedModel: nil
+        )
+        XCTAssertNil(immediateHostWithoutModel.modelIdLoadedOnDemand)
     }
 
     func testHostServicesPassiveRestorePolicyDefaultsForLegacyHosts() {

@@ -14,7 +14,7 @@ enum LanguageSelectionMode: String, Sendable {
     case multiple
 }
 
-enum LanguageSelection: Equatable, Sendable {
+enum LanguageSelection: Hashable, Sendable {
     case inheritGlobal
     case auto
     case exact(String)

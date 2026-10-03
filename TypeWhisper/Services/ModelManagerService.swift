@@ -109,6 +109,10 @@ enum ModelAutoUnloadPolicy {
         effectiveSeconds(defaults: defaults) == 0
     }
 
+    static func unloadsModelsImmediatelyAfterUse(defaults: UserDefaults = .standard) -> Bool {
+        effectiveSeconds(defaults: defaults) == -1
+    }
+
     static func policyName(seconds: Int) -> String {
         switch seconds {
         case 0:
@@ -130,6 +134,14 @@ enum TranscriptionEngineReadiness {
         defaults: UserDefaults = .standard
     ) -> Bool {
         defaults.object(forKey: "plugin.\(pluginId).loadedModel") != nil
+    }
+
+    /// The model ID local plugins persist after a successful load and restore from.
+    static func persistedRestorableModelId(
+        pluginId: String,
+        defaults: UserDefaults = .standard
+    ) -> String? {
+        defaults.string(forKey: "plugin.\(pluginId).loadedModel")
     }
 
     /// A selected engine is actionable when authentication is available and it
