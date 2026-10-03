@@ -1131,7 +1131,7 @@ final class ModelManagerService: ObservableObject {
             _ = nsPlugin.perform(restoreSelector)
         }
 
-        monitorDictationModelLoad(of: plugin, key: key)
+        monitorDictationModelLoad(of: plugin, key: key, followsModelOverride: cloudModelOverride != nil)
     }
 
     func endDictationModelPrewarm() {
@@ -1146,14 +1146,21 @@ final class ModelManagerService: ObservableObject {
     /// Follows the protected engine until its model is ready. A load can start with the
     /// prewarm above or later with the transcription, and plugins only report it through
     /// their settings activity, which has no change notification. Loads that finish within
-    /// the reveal delay are never reported.
-    private func monitorDictationModelLoad(of plugin: any TranscriptionEnginePlugin, key: ObjectIdentifier) {
-        guard !plugin.isConfigured else { return }
+    /// the reveal delay are never reported. A model override switches models at transcription
+    /// time while the engine still reports the previous model as configured, so its monitor
+    /// follows the whole session.
+    private func monitorDictationModelLoad(
+        of plugin: any TranscriptionEnginePlugin,
+        key: ObjectIdentifier,
+        followsModelOverride: Bool
+    ) {
+        guard followsModelOverride || !plugin.isConfigured else { return }
         dictationModelLoadMonitor = Task { @MainActor [weak self] in
             var loadingSince: ContinuousClock.Instant?
             while !Task.isCancelled {
                 guard let self, self.dictationPrewarm?.key == key else { return }
-                if self.isDictationPrewarmInFlight(for: plugin) && !plugin.isConfigured {
+                if self.isDictationPrewarmInFlight(for: plugin)
+                    && (followsModelOverride || !plugin.isConfigured) {
                     loadingSince = loadingSince ?? .now
                 } else {
                     loadingSince = nil
@@ -1164,7 +1171,7 @@ final class ModelManagerService: ObservableObject {
                 if self.isDictationModelLoading != isLoading {
                     self.isDictationModelLoading = isLoading
                 }
-                if plugin.isConfigured { return }
+                if plugin.isConfigured && !followsModelOverride { return }
                 do {
                     try await Task.sleep(for: self.pluginConfiguredPollInterval)
                 } catch {

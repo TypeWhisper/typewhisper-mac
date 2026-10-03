@@ -290,6 +290,36 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ContinuousClock.now - started, .milliseconds(400))
     }
 
+    func testDictationPrewarmReportsModelOverrideLoadOfConfiguredEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: true,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(20)
+        )
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.zero)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm(cloudModelOverride: "large")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(modelManager.isDictationModelLoading)
+
+        plugin.setModelSwitchInFlight(true)
+        try await waitUntil { modelManager.isDictationModelLoading }
+
+        plugin.setModelSwitchInFlight(false)
+        try await waitUntil { !modelManager.isDictationModelLoading }
+        XCTAssertEqual(plugin.restoreCount, 0, "the override keeps its on-demand load path")
+    }
+
     func testDictationPrewarmDoesNotReportLoadingForLoadedEngine() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -477,6 +507,11 @@ private final class RestoreAfterUnloadMockPlugin: NSObject, TranscriptionEngineP
     var supportedLanguages: [String] { ["en"] }
 
     var restoreCount: Int { lock.withLock { _restoreCount } }
+
+    /// Reports a model switch the way plugins do while selectModel() loads another model.
+    func setModelSwitchInFlight(_ inFlight: Bool) {
+        lock.withLock { _restoreInFlight = inFlight }
+    }
 
     func activate(host: HostServices) {}
     func deactivate() {}

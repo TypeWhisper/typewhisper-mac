@@ -90,12 +90,11 @@ struct NotchIndicatorView: View {
         presentation.state == .processing && presentation.processingPhase != nil
     }
 
-    /// The model still loads while the recording runs and no transcript is visible yet.
+    /// The model still loads while the recording runs. A visible transcript stays below the label.
     private var hasModelLoadingStatus: Bool {
         presentation.state == .recording
             && !presentation.isPreparingMicrophone
             && presentation.modelLoadingLabel != nil
-            && !transcriptBodyVisible
     }
 
     private var showTranscriptPreview: Bool {
@@ -154,7 +153,7 @@ struct NotchIndicatorView: View {
             return feedbackBodyHeight
         }
         if hasModelLoadingStatus {
-            return processingBodyHeight
+            return processingBodyHeight + transcriptBodyHeight
         }
         if hasTranscriptSection {
             return transcriptBodyHeight
@@ -371,16 +370,14 @@ struct NotchIndicatorView: View {
                 contentPadding: contentPadding
             )
         } else if hasModelLoadingStatus {
-            statusLine(presentation.modelLoadingLabel ?? "")
+            VStack(spacing: 0) {
+                statusLine(presentation.modelLoadingLabel ?? "")
+                if transcriptBodyVisible {
+                    transcriptText
+                }
+            }
         } else if hasTranscriptSection {
-            IndicatorExpandableText(
-                text: presentation.partialText,
-                fontSize: transcriptFontSize,
-                expandedHeight: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
-                expanded: true,
-                contentPadding: 34
-            )
-            .opacity(textExpanded ? 1 : 0.72)
+            transcriptText
         } else if hasProcessingPhase {
             statusLine(presentation.processingPhase ?? "")
         } else if hasActionFeedback {
@@ -401,6 +398,17 @@ struct NotchIndicatorView: View {
         } else {
             Color.clear
         }
+    }
+
+    private var transcriptText: some View {
+        IndicatorExpandableText(
+            text: presentation.partialText,
+            fontSize: transcriptFontSize,
+            expandedHeight: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
+            expanded: true,
+            contentPadding: 34
+        )
+        .opacity(textExpanded ? 1 : 0.72)
     }
 
     private func statusLine(_ text: String) -> some View {
