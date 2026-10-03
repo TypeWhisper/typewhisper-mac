@@ -33,6 +33,28 @@ final class PremiumICloudBridgeService: NSObject, PremiumICloudBridgeXPCProtocol
         })
     }
 
+    /// Removes the record from the mirror and from iCloud; the mirror would
+    /// otherwise copy it back on the next pass.
+    func removeDevice(_ deviceID: String, reply: @escaping (String?) -> Void) {
+        reply(operationLock.withLock {
+            do {
+                let roots = try bridgeRoots()
+                for root in [roots.local, roots.remote] {
+                    try PremiumSyncDeviceRemoval.removeRecords(
+                        of: deviceID,
+                        inPackage: root.appendingPathComponent(
+                            PremiumICloudBridgeConstants.packageDirectoryName,
+                            isDirectory: true
+                        )
+                    )
+                }
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        })
+    }
+
     private func bridgeRoots() throws -> (local: URL, remote: URL) {
         guard let local = PremiumICloudBridgeConstants.localRootURL() else {
             throw PremiumICloudBridgeError.appGroupUnavailable

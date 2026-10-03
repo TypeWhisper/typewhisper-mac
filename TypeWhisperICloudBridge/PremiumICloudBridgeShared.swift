@@ -98,6 +98,7 @@ enum PremiumICloudBridgeConstants {
 protocol PremiumICloudBridgeXPCProtocol: NSObjectProtocol {
     func synchronize(reply: @escaping (String?) -> Void)
     func deleteRemotePackage(reply: @escaping (String?) -> Void)
+    func removeDevice(_ deviceID: String, reply: @escaping (String?) -> Void)
 }
 
 enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
@@ -310,5 +311,88 @@ enum PremiumICloudBridgeFileMirror {
                 ofItemAtPath: destination.path
             )
         }
+    }
+}
+
+/// Removes a device from the sync list: its record and the older records of
+/// the same installation, which share its history origin. Synced entries stay.
+enum PremiumSyncDeviceRemoval {
+    private struct Record: Decodable {
+        let deviceId: String
+        let historyOriginDeviceID: String?
+    }
+
+    enum Failure: LocalizedError, Equatable {
+        case invalidIdentifier
+
+        var errorDescription: String? {
+            "The synchronized device identifier is invalid."
+        }
+    }
+
+    static func isSafeIdentifier(_ deviceID: String) -> Bool {
+        !deviceID.isEmpty
+            && deviceID == URL(fileURLWithPath: deviceID).lastPathComponent
+            && !deviceID.contains("/")
+            && !deviceID.contains("\\")
+    }
+
+    /// - Parameter packageURL: The `typewhisper-sync` folder.
+    static func removeRecords(
+        of deviceID: String,
+        inPackage packageURL: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        guard isSafeIdentifier(deviceID) else { throw Failure.invalidIdentifier }
+        let devicesURL = packageURL.appendingPathComponent("devices", isDirectory: true)
+        guard fileManager.fileExists(atPath: devicesURL.path) else { return }
+
+        var accessorError: (any Error)?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            writingItemAt: devicesURL,
+            options: .forMerging,
+            error: &coordinationError
+        ) { coordinatedDevicesURL in
+            do {
+                let targetURL = coordinatedDevicesURL.appendingPathComponent("\(deviceID).json")
+                guard let target = record(at: targetURL) else { return }
+                let targetOrigin = normalized(target.historyOriginDeviceID)
+                let files = (try? fileManager.contentsOfDirectory(
+                    at: coordinatedDevicesURL,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )) ?? []
+                for file in files where file.pathExtension == "json" {
+                    guard let candidate = record(at: file) else { continue }
+                    let matches = targetOrigin.map { normalized(candidate.historyOriginDeviceID) == $0 }
+                        ?? (candidate.deviceId == target.deviceId)
+                    if matches {
+                        try fileManager.removeItem(at: file)
+                    }
+                }
+            } catch {
+                accessorError = error
+            }
+        }
+        if let accessorError { throw accessorError }
+        if let coordinationError { throw coordinationError }
+    }
+
+    private static func record(at file: URL) -> Record? {
+        guard let data = try? Data(contentsOf: file),
+              let record = try? JSONDecoder().decode(Record.self, from: data),
+              file.deletingPathExtension().lastPathComponent == record.deviceId else {
+            return nil
+        }
+        return record
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

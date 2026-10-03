@@ -282,9 +282,11 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
     private let lock = NSLock()
     private var storedSynchronizeCount = 0
     private var storedDeleteCount = 0
+    private var storedRemovedDeviceIDs: [String] = []
 
     var synchronizeCount: Int { lock.withLock { storedSynchronizeCount } }
     var deleteCount: Int { lock.withLock { storedDeleteCount } }
+    var removedDeviceIDs: [String] { lock.withLock { storedRemovedDeviceIDs } }
 
     init(localFolderURL: URL) {
         self.localFolderURL = localFolderURL
@@ -296,6 +298,10 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
 
     func deleteRemotePackage() async throws {
         lock.withLock { storedDeleteCount += 1 }
+    }
+
+    func removeDevice(_ deviceID: String) async throws {
+        lock.withLock { storedRemovedDeviceIDs.append(deviceID) }
     }
 }
 
@@ -1035,6 +1041,96 @@ final class CloudFolderSyncTests: XCTestCase {
             atPath: CloudFolderSyncEngine.packageURL(for: folder).path
         ))
         XCTAssertNil(controller.errorMessage)
+    }
+
+    func testDeviceRemovalRemovesTheRecordsOfOneInstallationOnly() throws {
+        let package = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemoval")
+        defer { TestSupport.remove(package) }
+        let devices = package.appendingPathComponent("devices", isDirectory: true)
+        try FileManager.default.createDirectory(at: devices, withIntermediateDirectories: true)
+        func write(_ deviceID: String, origin: String?) throws {
+            var record: [String: Any] = ["deviceId": deviceID, "platform": "iOS", "appVersion": "1.2"]
+            if let origin { record["historyOriginDeviceID"] = origin }
+            try JSONSerialization.data(withJSONObject: record)
+                .write(to: devices.appendingPathComponent("\(deviceID).json"))
+        }
+        try write("phone-new", origin: "phone-origin")
+        try write("phone-old", origin: " phone-origin ")
+        try write("ipad", origin: "ipad-origin")
+        try write("mac", origin: nil)
+        func remaining() throws -> Set<String> {
+            Set(try FileManager.default.contentsOfDirectory(atPath: devices.path))
+        }
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackage: package)
+        XCTAssertEqual(try remaining(), ["ipad.json", "mac.json"])
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "mac", inPackage: package)
+        XCTAssertEqual(try remaining(), ["ipad.json"])
+
+        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "../ipad", inPackage: package))
+        XCTAssertNoThrow(try PremiumSyncDeviceRemoval.removeRecords(of: "unknown", inPackage: package))
+        XCTAssertEqual(try remaining(), ["ipad.json"])
+    }
+
+    @MainActor
+    func testAutomaticSyncRemovesOtherDevicesThroughTheBridge() async throws {
+        let suiteName = "PremiumSyncRemoveDevice-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncRemoveDevice")
+        defer { TestSupport.remove(folder) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        defaults.set(
+            try Self.entitlementEncoder.encode(Self.signedEntitlement(privateKey: privateKey)),
+            forKey: "premium.account.cachedEntitlement"
+        )
+        defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: InMemoryUserDataSyncStore(),
+            defaults: defaults,
+            automaticICloudBridge: bridge,
+            automaticICloudAvailable: true
+        )
+        defer { controller.deactivate() }
+        await controller.setMode(.automaticICloud)
+
+        let phone = CloudFolderSyncDeviceRecord(
+            deviceId: "phone",
+            historyOriginDeviceID: "phone-origin",
+            platform: "iOS",
+            appVersion: "1.2",
+            updatedAt: Self.date(20),
+            name: "iPhone"
+        )
+        let devicesURL = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("devices", isDirectory: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(phone).write(to: devicesURL.appendingPathComponent("phone.json"))
+        await controller.syncNow()
+
+        let mac = try XCTUnwrap(controller.devices.first { $0.platform == "macOS" })
+        XCTAssertTrue(controller.isCurrentDevice(mac))
+        XCTAssertFalse(controller.isCurrentDevice(phone))
+
+        await controller.removeDevice(mac)
+        XCTAssertEqual(bridge.removedDeviceIDs, [])
+
+        await controller.removeDevice(phone)
+        XCTAssertEqual(bridge.removedDeviceIDs, ["phone"])
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertFalse(controller.isSyncing)
     }
 
     @MainActor
