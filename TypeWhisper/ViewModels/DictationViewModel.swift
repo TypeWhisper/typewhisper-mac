@@ -4159,11 +4159,11 @@ final class DictationViewModel: ObservableObject {
                 }
                 let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
                 return { text in
-                    modelPostProcessingRan?.withLock { $0 = true }
                     guard let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) else {
                         logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
                         return text
                     }
+                    modelPostProcessingRan?.withLock { $0 = true }
                     if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
                         logger.info("Translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
                     }
