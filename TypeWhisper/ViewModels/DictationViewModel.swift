@@ -2768,13 +2768,17 @@ final class DictationViewModel: ObservableObject {
                     logger.info("Detected terminal spoken Enter command")
                 }
 
+                // A workflow can skip its model for short dictations, so the trace reports
+                // whether the model ran rather than whether a handler exists.
+                let modelPostProcessingRan = OSAllocatedUnfairLock(initialState: false)
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
                     configuredLanguage: language,
                     resolvedOutputFormat: resolvedOutputFormat,
                     incrementalPostProcessing: incrementalPostProcessing,
-                    stopTimingStart: stopStart
+                    stopTimingStart: stopStart,
+                    modelPostProcessingRan: modelPostProcessingRan
                 )
 
                 guard !Task.isCancelled else { return }
@@ -2838,7 +2842,7 @@ final class DictationViewModel: ObservableObject {
                 logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 updateLatencyTrace(sessionID: sessionID) { trace in
                     trace.postProcessingDoneUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
-                    trace.llmPostProcessing = llmHandler != nil
+                    trace.llmPostProcessing = modelPostProcessingRan.withLock { $0 }
                 }
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
@@ -4124,7 +4128,8 @@ final class DictationViewModel: ObservableObject {
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
         incrementalPostProcessing: WorkflowIncrementalPostProcessingSession? = nil,
-        stopTimingStart: CFAbsoluteTime? = nil
+        stopTimingStart: CFAbsoluteTime? = nil,
+        modelPostProcessingRan: OSAllocatedUnfairLock<Bool>? = nil
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
@@ -4132,7 +4137,8 @@ final class DictationViewModel: ObservableObject {
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: resolvedOutputFormat,
             incrementalPostProcessing: incrementalPostProcessing,
-            stopTimingStart: stopTimingStart
+            stopTimingStart: stopTimingStart,
+            modelPostProcessingRan: modelPostProcessingRan
         ) {
             return workflowHandler
         }
@@ -4153,6 +4159,7 @@ final class DictationViewModel: ObservableObject {
                 }
                 let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
                 return { text in
+                    modelPostProcessingRan?.withLock { $0 = true }
                     guard let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) else {
                         logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
                         return text
@@ -4176,7 +4183,8 @@ final class DictationViewModel: ObservableObject {
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
         incrementalPostProcessing: WorkflowIncrementalPostProcessingSession?,
-        stopTimingStart: CFAbsoluteTime?
+        stopTimingStart: CFAbsoluteTime?,
+        modelPostProcessingRan: OSAllocatedUnfairLock<Bool>?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
@@ -4219,6 +4227,7 @@ final class DictationViewModel: ObservableObject {
                 logger.info("Skipping workflow AI processing for short dictation")
                 return text
             }
+            modelPostProcessingRan?.withLock { $0 = true }
 
             guard let segmentedRequest else {
                 incrementalPostProcessing?.cancel()
