@@ -4207,6 +4207,36 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(insertion?.id.uuidString, startID)
         XCTAssertEqual(insertion?.providerId, workflowPlugin.providerId)
         XCTAssertEqual(insertion?.modelId, "beta")
+
+        var latency: [String: Any]?
+        for _ in 0..<60 {
+            let response = try Self.jsonObject(
+                await router.route(HTTPRequest(
+                    method: "GET",
+                    path: "/v1/dictation/transcription",
+                    queryParams: ["id": startID],
+                    headers: [:],
+                    body: Data()
+                ))
+            )
+            latency = response["latency"] as? [String: Any]
+            if latency?["complete"] as? Bool == true { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let completedLatency = try XCTUnwrap(latency)
+        XCTAssertEqual(completedLatency["complete"] as? Bool, true)
+        XCTAssertEqual(completedLatency["failed"] as? Bool, false)
+        XCTAssertEqual(completedLatency["engine"] as? String, workflowPlugin.providerId)
+        XCTAssertEqual(completedLatency["model"] as? String, "beta")
+        XCTAssertEqual(completedLatency["insertion"] as? String, "paste")
+        XCTAssertEqual(completedLatency["llm_post_processing"] as? Bool, false)
+        XCTAssertEqual(completedLatency["recording_seconds"] as? Double, 1)
+        XCTAssertNotNil(completedLatency["paste_verification"] as? String)
+        let stopToTranscript = try XCTUnwrap(completedLatency["stop_to_final_transcript_ms"] as? Double)
+        let stopToInsertion = try XCTUnwrap(completedLatency["stop_to_insertion_ms"] as? Double)
+        XCTAssertGreaterThanOrEqual(stopToInsertion, stopToTranscript)
+        // Latency measurements never carry transcript content.
+        XCTAssertFalse(completedLatency.values.contains { $0 as? String == "transcribed" })
     }
 
     func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {

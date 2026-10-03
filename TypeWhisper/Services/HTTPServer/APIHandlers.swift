@@ -1450,11 +1450,33 @@ final class APIHandlers: @unchecked Sendable {
                 let words_count: Int
             }
 
+            struct DictationLatencyPayload: Encodable {
+                let complete: Bool
+                let failed: Bool
+                let engine_ready_at_start: Bool?
+                let input_transport: String?
+                let request_to_first_audio_buffer_ms: Double?
+                let recording_seconds: Double?
+                let stop_to_final_transcript_ms: Double?
+                let post_processing_ms: Double?
+                let llm_post_processing: Bool?
+                let stop_to_insertion_ms: Double?
+                let insertion: String?
+                let paste_verification: String?
+                let paste_verification_failure: String?
+                let stop_to_verified_insertion_ms: Double?
+                let stop_to_clipboard_restored_ms: Double?
+                let engine: String?
+                let model: String?
+                let used_live_result: Bool?
+            }
+
             struct DictationTranscriptionResponse: Encodable {
                 let id: String
                 let status: String
                 let transcription: DictationTranscriptionPayload?
                 let error: String?
+                let latency: DictationLatencyPayload?
             }
 
             let transcription = session.transcription.map {
@@ -1473,11 +1495,40 @@ final class APIHandlers: @unchecked Sendable {
                 )
             }
 
+            let latency = dictationViewModel.apiDictationLatency(id: uuid).map { trace in
+                let pasteVerificationFailure: String? = if case .unverified(let reason)? = trace.pasteVerification {
+                    reason
+                } else {
+                    nil
+                }
+                return DictationLatencyPayload(
+                    complete: trace.isComplete,
+                    failed: trace.failed,
+                    engine_ready_at_start: trace.engineReadyAtStart,
+                    input_transport: trace.inputTransport,
+                    request_to_first_audio_buffer_ms: trace.requestToFirstAudioBufferMs,
+                    recording_seconds: trace.recordingSeconds,
+                    stop_to_final_transcript_ms: trace.stopToFinalTranscriptMs,
+                    post_processing_ms: trace.postProcessingMs,
+                    llm_post_processing: trace.llmPostProcessing,
+                    stop_to_insertion_ms: trace.stopToInsertionMs,
+                    insertion: trace.insertion?.rawValue,
+                    paste_verification: trace.pasteVerification?.name,
+                    paste_verification_failure: pasteVerificationFailure,
+                    stop_to_verified_insertion_ms: trace.stopToVerifiedInsertionMs,
+                    stop_to_clipboard_restored_ms: trace.stopToClipboardRestoredMs,
+                    engine: trace.engine,
+                    model: trace.model,
+                    used_live_result: trace.usedLiveResult
+                )
+            }
+
             return .json(DictationTranscriptionResponse(
                 id: session.id.uuidString,
                 status: session.status.rawValue,
                 transcription: transcription,
-                error: session.error
+                error: session.error,
+                latency: latency
             ))
         }
     }

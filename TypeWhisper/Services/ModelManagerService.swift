@@ -266,7 +266,12 @@ final class ModelManagerService: ObservableObject {
     // MARK: - Public API
 
     var isModelReady: Bool {
-        guard let providerId = selectedProviderId else { return false }
+        isTranscriptionEngineReady(engineOverrideId: nil)
+    }
+
+    /// Whether the engine a dictation uses is ready without restoring its model first.
+    func isTranscriptionEngineReady(engineOverrideId: String?) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId else { return false }
         return PluginManager.shared.transcriptionEngine(for: providerId)?.isConfigured ?? false
     }
 

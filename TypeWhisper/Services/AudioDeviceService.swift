@@ -1604,6 +1604,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         transportResolver.transportType(for: deviceID)
     }
 
+    /// Transport name of the device a recording uses: the resolved device, or the system
+    /// default input when none is selected. Reported with dictation latency measurements.
+    func recordingInputTransportName(for selection: ResolvedRecordingInputSelection) -> String? {
+        guard let deviceID = selection.deviceID ?? defaultInputDeviceController.defaultInputDeviceID(),
+              let transport = transportType(for: deviceID) else {
+            return nil
+        }
+        return Self.transportTypeName(transport)
+    }
+
     static func isBluetoothTransportType(_ transportType: UInt32) -> Bool {
         transportType == kAudioDeviceTransportTypeBluetooth
             || transportType == kAudioDeviceTransportTypeBluetoothLE

@@ -161,6 +161,7 @@
 			533C00000000000000000004 /* DictationRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000003 /* DictationRecoveryView.swift */; };
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		D99900000000000000000002 /* DictationUndoServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99900000000000000000001 /* DictationUndoServiceTests.swift */; };
+		D13370000000000000000002 /* DictationLatencyTraceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13370000000000000000001 /* DictationLatencyTraceTests.swift */; };
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
 		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
@@ -247,6 +248,7 @@
 		AA00000000000000000078 /* TermPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000078 /* TermPack.swift */; };
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
 		AA00000000000000000999 /* DictationUndoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000999 /* DictationUndoService.swift */; };
+		AA00000000000000001337 /* DictationLatencyTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000001337 /* DictationLatencyTrace.swift */; };
 		A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000001 /* DictionaryTrainingService.swift */; };
 		A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
@@ -768,6 +770,7 @@
 			5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerLiveSessionModelOverrideTests.swift; sourceTree = "<group>"; };
 			3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
 			D99900000000000000000001 /* DictationUndoServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationUndoServiceTests.swift; sourceTree = "<group>"; };
+			D13370000000000000000001 /* DictationLatencyTraceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationLatencyTraceTests.swift; sourceTree = "<group>"; };
 		BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UsageStatisticsServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
 		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
@@ -873,6 +876,7 @@
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000999 /* DictationUndoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationUndoService.swift; sourceTree = "<group>"; };
+		BB00000000000000001337 /* DictationLatencyTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLatencyTrace.swift; sourceTree = "<group>"; };
 		B87000000000000000000001 /* DictionaryTrainingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingService.swift; sourceTree = "<group>"; };
 		B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingServiceTests.swift; sourceTree = "<group>"; };
 		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
@@ -1966,6 +1970,7 @@
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
 				BB00000000000000000999 /* DictationUndoService.swift */,
+				BB00000000000000001337 /* DictationLatencyTrace.swift */,
 				B87000000000000000000001 /* DictionaryTrainingService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				712206232DC54730919D4B8B /* WisprFlowImportReader.swift */,
@@ -2969,6 +2974,7 @@
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				D99900000000000000000001 /* DictationUndoServiceTests.swift */,
+				D13370000000000000000001 /* DictationLatencyTraceTests.swift */,
 				BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */,
 				B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */,
 				B91F00000000000000000006 /* PromptPaletteControllerTests.swift */,
@@ -4902,6 +4908,7 @@
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				D99900000000000000000002 /* DictationUndoServiceTests.swift in Sources */,
+				D13370000000000000000002 /* DictationLatencyTraceTests.swift in Sources */,
 				AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */,
@@ -5079,6 +5086,7 @@
 				AA00000000000000000078 /* TermPack.swift in Sources */,
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
 				AA00000000000000000999 /* DictationUndoService.swift in Sources */,
+				AA00000000000000001337 /* DictationLatencyTrace.swift in Sources */,
 				A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,

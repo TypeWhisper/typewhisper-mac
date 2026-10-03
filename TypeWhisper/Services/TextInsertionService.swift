@@ -656,6 +656,15 @@ final class TextInsertionService {
         return await task.value
     }
 
+    /// The verification and restore of the pending clipboard restore, taken together so a
+    /// caller can time both without picking up the restore of a later insertion.
+    func pendingClipboardRestoreTasks() -> (
+        verification: Task<PasteVerification, Never>,
+        restore: Task<PasteVerification, Never>
+    )? {
+        pendingClipboardRestore.map { ($0.verification, $0.task) }
+    }
+
     /// Waits for the paste verification of the pending clipboard restore, not for the restore.
     @discardableResult
     func waitForPendingPasteVerification() async -> PasteVerification? {
