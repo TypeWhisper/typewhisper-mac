@@ -8,8 +8,11 @@ import Foundation
 final class SpeakerPlaybackController: ObservableObject {
     static let rates: [Float] = [0.5, 0.75, 1, 1.25, 1.5, 2, 3]
 
+    /// The position changes 20 times a second; only views that show it
+    /// observe the clock, the rest observe the controller.
+    let clock = SpeakerPlaybackClock()
+
     @Published private(set) var isPlaying = false
-    @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var rate: Float = 1
     @Published var volume: Float = 1 {
@@ -20,6 +23,8 @@ final class SpeakerPlaybackController: ObservableObject {
     var ranges: [ClosedRange<TimeInterval>] = [] {
         didSet { excerptEnd = nil }
     }
+
+    var currentTime: TimeInterval { clock.time }
 
     private var player: AVPlayer?
     private var loadedURL: URL?
@@ -70,7 +75,7 @@ final class SpeakerPlaybackController: ObservableObject {
         player = nil
         loadedURL = nil
         isPlaying = false
-        currentTime = 0
+        clock.time = 0
         duration = 0
         excerptEnd = nil
     }
@@ -114,7 +119,7 @@ final class SpeakerPlaybackController: ObservableObject {
 
     func seek(to time: TimeInterval) {
         let target = min(max(0, time), duration > 0 ? duration : time)
-        currentTime = target
+        clock.time = target
         player?.seek(
             to: CMTime(seconds: target, preferredTimescale: 600),
             toleranceBefore: .zero,
@@ -143,7 +148,7 @@ final class SpeakerPlaybackController: ObservableObject {
 
     private func tick(_ time: TimeInterval) {
         guard time.isFinite else { return }
-        currentTime = time
+        clock.time = time
         guard isPlaying else { return }
         if let excerptEnd {
             if time >= excerptEnd { pause() }
@@ -162,4 +167,9 @@ final class SpeakerPlaybackController: ObservableObject {
         excerptEnd = nil
         seek(to: 0)
     }
+}
+
+@MainActor
+final class SpeakerPlaybackClock: ObservableObject {
+    @Published fileprivate(set) var time: TimeInterval = 0
 }

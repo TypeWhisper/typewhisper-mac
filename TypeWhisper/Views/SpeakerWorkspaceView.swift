@@ -161,13 +161,20 @@ struct SpeakerWorkspaceView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(isActive ? Color.accentColor : .secondary)
                     .frame(width: 46, alignment: .trailing)
-                SpeakerParagraphWords(
-                    words: model.words(of: paragraph),
-                    activeIndex: isActive ? model.activeWordIndex : nil,
-                    isActive: isActive,
-                    isPlayable: audioURL != nil
-                ) { word in
-                    if !selectWithModifiers(paragraph) { model.play(from: word) }
+                Group {
+                    if isActive {
+                        ActiveParagraphWords(
+                            highlight: model.wordHighlight,
+                            words: model.words(of: paragraph),
+                            isPlayable: audioURL != nil
+                        ) { play(paragraph, from: $0) }
+                    } else {
+                        SpeakerParagraphWords(
+                            words: model.words(of: paragraph),
+                            activeIndex: nil,
+                            isPlayable: audioURL != nil
+                        ) { play(paragraph, from: $0) }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -179,12 +186,7 @@ struct SpeakerWorkspaceView: View {
             )
             .contentShape(Rectangle())
             // Clicks beside the words: the time and the empty rest of a line.
-            .onTapGesture {
-                if !selectWithModifiers(paragraph), audioURL != nil {
-                    model.followsPlayback = true
-                    model.playback.play(from: paragraph.start)
-                }
-            }
+            .onTapGesture { play(paragraph, from: nil) }
             .popover(isPresented: Binding(
                 get: { editedParagraph?.id == paragraph.id },
                 set: { if !$0 { editedParagraph = nil } }
@@ -203,6 +205,18 @@ struct SpeakerWorkspaceView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(model.name(of: paragraph.speakerID)), \(SpeakerTranscriptPresentation.timestamp(paragraph.start)), \(paragraph.text)")
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Plays from the clicked word, or from the paragraph's start for a click
+    /// beside the words.
+    private func play(_ paragraph: SpeakerParagraph, from word: SpeakerWorkspaceModel.WordToken?) {
+        guard !selectWithModifiers(paragraph), audioURL != nil else { return }
+        if let word {
+            model.play(from: word)
+        } else {
+            model.followsPlayback = true
+            model.playback.play(from: paragraph.start)
+        }
     }
 
     /// Command- and Shift-clicks select the turn instead of playing.
@@ -700,117 +714,224 @@ private struct SpeakerInspectorRow: View {
 
 // MARK: - Words
 
+/// The paragraph being spoken: the only one that redraws for each new word.
+private struct ActiveParagraphWords: View {
+    @ObservedObject var highlight: SpeakerWordHighlight
+    let words: [SpeakerWorkspaceModel.WordToken]
+    let isPlayable: Bool
+    let onTap: (SpeakerWorkspaceModel.WordToken?) -> Void
+
+    var body: some View {
+        SpeakerParagraphWords(words: words, activeIndex: highlight.index, isPlayable: isPlayable, onTap: onTap)
+    }
+}
+
 /// A paragraph as words that can be played from, with the spoken word marked.
-private struct SpeakerParagraphWords: View {
+/// One AppKit view draws the whole paragraph: a long recording has many
+/// thousand words, and a SwiftUI view for each makes scrolling stutter.
+private struct SpeakerParagraphWords: NSViewRepresentable {
     let words: [SpeakerWorkspaceModel.WordToken]
     /// The word being spoken; nil in every paragraph but the active one.
     let activeIndex: Int?
-    let isActive: Bool
     let isPlayable: Bool
-    let onPlay: (SpeakerWorkspaceModel.WordToken) -> Void
+    /// Gets the clicked word, or nil for a click beside the words.
+    let onTap: (SpeakerWorkspaceModel.WordToken?) -> Void
 
-    var body: some View {
-        SpeakerWordFlow(lineSpacing: 1) {
-            ForEach(words) { word in
-                SpeakerWordView(
-                    word: word,
-                    phase: phase(of: word),
-                    isPlayable: isPlayable,
-                    onPlay: onPlay
+    func makeNSView(context: Context) -> SpeakerParagraphTextView {
+        SpeakerParagraphTextView()
+    }
+
+    func updateNSView(_ view: SpeakerParagraphTextView, context: Context) {
+        view.onTap = { index in onTap(index.map { words[$0] }) }
+        view.update(words: words, activeIndex: activeIndex, isPlayable: isPlayable)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView view: SpeakerParagraphTextView, context: Context) -> CGSize? {
+        view.size(forWidth: proposal.width ?? .greatestFiniteMagnitude)
+    }
+}
+
+private final class SpeakerParagraphTextView: NSView {
+    var onTap: ((Int?) -> Void)?
+
+    private let storage = NSTextStorage()
+    private let layoutManager = NSLayoutManager()
+    private let container = NSTextContainer(size: .zero)
+    private var words: [SpeakerWorkspaceModel.WordToken] = []
+    /// Each word's characters, with the space after it.
+    private var wordRanges: [NSRange] = []
+    private var activeIndex: Int?
+    private var hoveredIndex: Int? {
+        didSet { if hoveredIndex != oldValue { needsDisplay = true } }
+    }
+    private var isPlayable = false
+
+    private static let font = NSFont.preferredFont(forTextStyle: .body)
+    /// Room around a marked word, as the space between words.
+    private static let markInset = CGSize(width: 1.6, height: 1)
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        container.lineFragmentPadding = 0
+        layoutManager.addTextContainer(container)
+        storage.addLayoutManager(layoutManager)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var isFlipped: Bool { true }
+
+    func update(words: [SpeakerWorkspaceModel.WordToken], activeIndex: Int?, isPlayable: Bool) {
+        self.isPlayable = isPlayable
+        if !isPlayable { hoveredIndex = nil }
+        if words != self.words {
+            self.words = words
+            setText()
+        } else if activeIndex == self.activeIndex {
+            return
+        }
+        self.activeIndex = activeIndex
+        applyColors()
+        needsDisplay = true
+    }
+
+    func size(forWidth width: CGFloat) -> CGSize {
+        let width = width.isFinite ? width : 100_000
+        if container.size.width != width {
+            container.size = CGSize(width: width, height: .greatestFiniteMagnitude)
+        }
+        layoutManager.ensureLayout(for: container)
+        let used = layoutManager.usedRect(for: container)
+        return CGSize(width: width.isFinite && width < 100_000 ? width : ceil(used.width), height: ceil(used.height))
+    }
+
+    private func setText() {
+        let style = NSMutableParagraphStyle()
+        style.lineSpacing = 3
+        var text = ""
+        var ranges: [NSRange] = []
+        for word in words {
+            let start = (text as NSString).length
+            text += word.text
+            if word.isFollowedBySpace { text += " " }
+            ranges.append(NSRange(location: start, length: (text as NSString).length - start))
+        }
+        wordRanges = ranges
+        storage.setAttributedString(NSAttributedString(string: text, attributes: [
+            .font: Self.font,
+            .paragraphStyle: style,
+        ]))
+    }
+
+    private func applyColors() {
+        let whole = NSRange(location: 0, length: storage.length)
+        storage.beginEditing()
+        storage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: whole)
+        if let activeIndex, wordRanges.indices.contains(activeIndex) {
+            let current = wordRanges[activeIndex]
+            let upcoming = current.upperBound
+            if upcoming < storage.length {
+                storage.addAttribute(
+                    .foregroundColor,
+                    value: NSColor.secondaryLabelColor,
+                    range: NSRange(location: upcoming, length: storage.length - upcoming)
                 )
             }
+            storage.addAttribute(.foregroundColor, value: NSColor.white, range: current)
+        }
+        storage.endEditing()
+    }
+
+    override func layout() {
+        super.layout()
+        _ = size(forWidth: bounds.width)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        if let activeIndex {
+            fillMark(of: activeIndex, with: .controlAccentColor)
+        }
+        if let hoveredIndex, hoveredIndex != activeIndex {
+            fillMark(of: hoveredIndex, with: NSColor.labelColor.withAlphaComponent(0.12))
+        }
+        let glyphs = layoutManager.glyphRange(for: container)
+        layoutManager.drawGlyphs(forGlyphRange: glyphs, at: .zero)
+    }
+
+    private func fillMark(of index: Int, with color: NSColor) {
+        guard wordRanges.indices.contains(index) else { return }
+        var range = wordRanges[index]
+        if words[index].isFollowedBySpace { range.length -= 1 }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        color.setFill()
+        // A word broken over two lines gets a mark on each.
+        layoutManager.enumerateEnclosingRects(
+            forGlyphRange: glyphs,
+            withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+            in: container
+        ) { rect, _ in
+            var mark = rect.insetBy(dx: -Self.markInset.width, dy: -Self.markInset.height)
+            mark.size.height = min(mark.height, Self.font.boundingRectForFont.height + 2 * Self.markInset.height)
+            NSBezierPath(roundedRect: mark, xRadius: 4, yRadius: 4).fill()
         }
     }
 
-    private func phase(of word: SpeakerWorkspaceModel.WordToken) -> SpeakerWordView.Phase {
-        guard isActive, let activeIndex else { return .idle }
-        if word.id == activeIndex { return .current }
-        return word.id < activeIndex ? .spoken : .upcoming
-    }
-}
-
-private struct SpeakerWordView: View {
-    enum Phase {
-        case idle, spoken, current, upcoming
-    }
-
-    let word: SpeakerWorkspaceModel.WordToken
-    let phase: Phase
-    let isPlayable: Bool
-    let onPlay: (SpeakerWorkspaceModel.WordToken) -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Text(word.text)
-            .font(.body)
-            .foregroundStyle(foreground)
-            // The padding makes room for the mark and stands in for the space.
-            .padding(.horizontal, word.isFollowedBySpace ? 1.6 : 0)
-            .padding(.vertical, 1)
-            .background(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(background)
-            )
-            .contentShape(Rectangle())
-            .onHover { isHovered = isPlayable && $0 }
-            .onTapGesture { onPlay(word) }
-            .animation(.easeOut(duration: 0.12), value: phase)
+    /// The word under `point`, or nil beside the words.
+    private func wordIndex(at point: NSPoint) -> Int? {
+        guard storage.length > 0 else { return nil }
+        let glyph = layoutManager.glyphIndex(for: point, in: container)
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container)
+            .insetBy(dx: -Self.markInset.width, dy: -Self.markInset.height)
+        guard glyphRect.contains(point) else { return nil }
+        let character = layoutManager.characterIndexForGlyph(at: glyph)
+        return wordRanges.firstIndex { NSLocationInRange(character, $0) }
     }
 
-    private var foreground: Color {
-        switch phase {
-        case .current: .white
-        case .upcoming: .secondary
-        case .idle, .spoken: .primary
+    // MARK: Mouse
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        hoveredIndex = isPlayable ? wordIndex(at: convert(event.locationInWindow, from: nil)) : nil
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoveredIndex = nil
+    }
+
+    override func mouseDown(with event: NSEvent) {}
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return }
+        onTap?(wordIndex(at: point))
+    }
+
+    /// The paragraph's context menu comes from SwiftUI; the hosting view
+    /// builds it for the clicked location.
+    override func menu(for event: NSEvent) -> NSMenu? {
+        var ancestor = superview
+        while let view = ancestor {
+            if let menu = view.menu(for: event), !menu.items.isEmpty { return menu }
+            ancestor = view.superview
         }
+        return nil
     }
 
-    private var background: Color {
-        if phase == .current { return .accentColor }
-        return isHovered ? Color.primary.opacity(0.12) : .clear
-    }
-}
-
-/// Wraps words like running text.
-private struct SpeakerWordFlow: Layout {
-    let lineSpacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let lines = arrange(subviews, width: proposal.width ?? .infinity)
-        return CGSize(width: proposal.width ?? lines.width, height: lines.height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let lines = arrange(subviews, width: bounds.width)
-        for (subview, origin) in zip(subviews, lines.origins) {
-            subview.place(
-                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
-                anchor: .topLeading,
-                proposal: .unspecified
-            )
-        }
-    }
-
-    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], width: CGFloat, height: CGFloat) {
-        var origins: [CGPoint] = []
-        var x: CGFloat = 0
-        var y: CGFloat = 0
-        var lineHeight: CGFloat = 0
-        var widest: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x > 0, x + size.width > width {
-                y += lineHeight + lineSpacing
-                x = 0
-                lineHeight = 0
-            }
-            origins.append(CGPoint(x: x, y: y))
-            x += size.width
-            lineHeight = max(lineHeight, size.height)
-            widest = max(widest, x)
-        }
-        return (origins, widest, y + lineHeight)
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
 
@@ -917,15 +1038,7 @@ private struct SpeakerPlayerBar: View {
                 button("forward.end.fill", help: "speakers.playback.nextTurn") { model.playTurn(offset: 1) }
             }
 
-            HStack(spacing: 8) {
-                Text(SpeakerTranscriptPresentation.timestamp(playback.currentTime))
-                    .frame(width: 46, alignment: .trailing)
-                SpeakerScrubber(model: model, playback: playback)
-                Text("-" + SpeakerTranscriptPresentation.timestamp(max(0, playback.duration - playback.currentTime)))
-                    .frame(width: 50, alignment: .leading)
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.secondary)
+            SpeakerTimeline(model: model, playback: playback, clock: playback.clock)
         }
     }
 
@@ -1011,11 +1124,32 @@ private struct SpeakerPlayerBar: View {
     }
 }
 
+/// Elapsed time, scrubber and remaining time: the part of the player that
+/// follows the playback position.
+private struct SpeakerTimeline: View {
+    @ObservedObject var model: SpeakerWorkspaceModel
+    @ObservedObject var playback: SpeakerPlaybackController
+    @ObservedObject var clock: SpeakerPlaybackClock
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(SpeakerTranscriptPresentation.timestamp(clock.time))
+                .frame(width: 46, alignment: .trailing)
+            SpeakerScrubber(model: model, playback: playback, time: clock.time)
+            Text("-" + SpeakerTranscriptPresentation.timestamp(max(0, playback.duration - clock.time)))
+                .frame(width: 50, alignment: .leading)
+        }
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.secondary)
+    }
+}
+
 /// The playback position over the whole recording. Each turn has its
 /// speaker's colour; what has played is filled in.
 private struct SpeakerScrubber: View {
     @ObservedObject var model: SpeakerWorkspaceModel
     @ObservedObject var playback: SpeakerPlaybackController
+    let time: TimeInterval
 
     @State private var hoverX: CGFloat?
     @State private var isDragging = false
@@ -1024,7 +1158,7 @@ private struct SpeakerScrubber: View {
         GeometryReader { geometry in
             let width = geometry.size.width
             let duration = max(playback.duration, model.turns.last?.end ?? 0, 0.001)
-            let progress = min(max(playback.currentTime / duration, 0), 1)
+            let progress = min(max(time / duration, 0), 1)
             let isExpanded = hoverX != nil || isDragging
 
             ZStack(alignment: .leading) {
@@ -1096,7 +1230,7 @@ private struct SpeakerScrubber: View {
         .frame(height: 16)
         .accessibilityElement()
         .accessibilityLabel(String(localized: "speakers.timeline.title"))
-        .accessibilityValue(SpeakerTranscriptPresentation.timestamp(playback.currentTime))
+        .accessibilityValue(SpeakerTranscriptPresentation.timestamp(time))
         .accessibilityAdjustableAction { direction in
             playback.skip(by: direction == .increment ? 5 : -5)
         }

@@ -29,7 +29,9 @@ final class SpeakerWorkspaceModel: ObservableObject {
     @Published private(set) var activeTurnIndex: Int?
     @Published private(set) var activeParagraphID: Int?
     /// The word being spoken, as an index into the active paragraph's words.
-    @Published private(set) var activeWordIndex: Int?
+    /// Kept apart so a new word redraws only the active paragraph.
+    let wordHighlight = SpeakerWordHighlight()
+    var activeWordIndex: Int? { wordHighlight.index }
 
     @Published var selectedTurns: Set<Int> = []
     @Published var soloedSpeakers: Set<String> = [] { didSet { updatePlaybackPlan() } }
@@ -52,7 +54,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         self.recordID = recordID
         self.historyService = historyService
         self.voices = voices
-        playback.$currentTime
+        playback.clock.$time
             .sink { [weak self] time in self?.updateActivePosition(at: time) }
             .store(in: &cancellables)
         playback.$duration
@@ -154,7 +156,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
                 words(of: row.paragraph).lastIndex { $0.start <= time + 0.05 }
             }
         }
-        if word != activeWordIndex { activeWordIndex = word }
+        if word != wordHighlight.index { wordHighlight.index = word }
     }
 
     private func words(from start: TimeInterval, until end: TimeInterval) -> [TranscriptionWord] {
@@ -436,4 +438,9 @@ final class SpeakerWorkspaceModel: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         SubtitleExporter.writeContent(content, to: url, suggestedName: baseName)
     }
+}
+
+@MainActor
+final class SpeakerWordHighlight: ObservableObject {
+    @Published fileprivate(set) var index: Int?
 }
