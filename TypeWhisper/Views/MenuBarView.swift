@@ -776,14 +776,14 @@ struct MenuBarView: View {
 }
 
 private extension View {
-    /// Selections stay visible but cannot change while a recording is captured or
-    /// transcribed, so the running session is never interrupted.
+    /// Selections stay visible but cannot change while a recording or transcription
+    /// runs, so the running session is never interrupted.
     func quickSelectorLock(_ isLocked: Bool) -> some View {
         disabled(isLocked)
             .help(isLocked
                 ? localizedAppText(
-                    "Available when the current recording has finished",
-                    de: "Verfügbar, sobald die aktuelle Aufnahme beendet ist"
+                    "Available when the current recording or transcription has finished",
+                    de: "Verfügbar, sobald die aktuelle Aufnahme oder Transkription beendet ist"
                 )
                 : "")
     }

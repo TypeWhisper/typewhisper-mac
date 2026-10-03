@@ -75,9 +75,11 @@ enum DictationQuickSelection {
     /// Selections are locked while a recording is captured or transcribed. Changing the
     /// model then could unload the model the running session uses, and a microphone or
     /// language change would only partially apply to the current session.
+    /// `isTranscribingElsewhere` covers recorder retranscription and file transcription.
     static func isLocked(
         dictationState: DictationViewModel.State,
-        recorderState: AudioRecorderViewModel.RecorderState
+        recorderState: AudioRecorderViewModel.RecorderState,
+        isTranscribingElsewhere: Bool = false
     ) -> Bool {
         switch dictationState {
         case .recording, .processing, .inserting, .promptProcessing:
@@ -85,7 +87,7 @@ enum DictationQuickSelection {
         case .idle, .promptSelection, .error:
             break
         }
-        return recorderState != .idle
+        return recorderState != .idle || isTranscribingElsewhere
     }
 
     // MARK: Microphone
@@ -93,6 +95,7 @@ enum DictationQuickSelection {
     static func microphoneOptions(
         devices: [AudioInputDevice],
         deviceTitle: (AudioInputDevice) -> String,
+        isDeviceAvailable: (AudioInputDevice) -> Bool = { _ in true },
         priorityList: [AudioInputDevicePriorityItem],
         selectedDeviceUID: String?,
         systemDefaultName: String?
@@ -107,11 +110,20 @@ enum DictationQuickSelection {
         ]
 
         for device in devices {
+            // Recording skips devices it cannot use, such as the built-in microphone
+            // with the lid closed, so choosing one would only reset the priority list.
+            let isAvailable = isDeviceAvailable(device)
             options.append(DictationQuickSelectionOption(
                 id: device.uid,
                 value: .device(uid: device.uid),
-                title: deviceTitle(device),
-                isSelected: device.uid == selectedDeviceUID
+                title: isAvailable
+                    ? deviceTitle(device)
+                    : localizedAppText(
+                        "\(deviceTitle(device)) (unavailable)",
+                        de: "\(deviceTitle(device)) (nicht verfügbar)"
+                    ),
+                isSelected: device.uid == selectedDeviceUID,
+                isEnabled: isAvailable
             ))
         }
 
@@ -318,6 +330,12 @@ enum DictationQuickSelection {
         return localizedAppText("load in Settings", de: "in den Einstellungen laden")
     }
 
+    /// Plugins built before the lifecycle protocol (e.g. older Parakeet releases) can still
+    /// download on selection, so every engine not declared as cloud counts as local.
+    static func managesLocalModels(isLifecycleAware: Bool, hosting: PluginHosting?) -> Bool {
+        isLifecycleAware || hosting != .cloud
+    }
+
     private static func titleWithDetail(_ title: String, detail: String?) -> String {
         guard let detail else { return title }
         return "\(title) (\(detail))"
@@ -351,6 +369,9 @@ final class DictationQuickSelectionModel: ObservableObject {
     @Published private(set) var snapshot = DictationQuickSelectionSnapshot()
 
     private var cancellables = Set<AnyCancellable>()
+    /// Browser URL of the frontmost app, needed to match website workflows.
+    private var frontmostBrowserURL: (bundleId: String, url: String?)?
+    private var browserURLTask: (bundleId: String, task: Task<Void, Never>)?
 
     init() {
         rebuild()
@@ -366,7 +387,8 @@ final class DictationQuickSelectionModel: ObservableObject {
         case .systemDefault:
             audioDeviceService.clearInputDevicePriorityList()
         case .device(let uid):
-            guard audioDeviceService.inputDevices.contains(where: { $0.uid == uid }) else { return }
+            guard let device = audioDeviceService.inputDevices.first(where: { $0.uid == uid }),
+                  Self.isAvailable(device, in: audioDeviceService) else { return }
             audioDeviceService.selectInputDeviceAsPrimary(uid)
         }
     }
@@ -402,10 +424,20 @@ final class DictationQuickSelectionModel: ObservableObject {
 
     // MARK: State
 
+    private static func isAvailable(_ device: AudioInputDevice, in audioDeviceService: AudioDeviceService) -> Bool {
+        audioDeviceService.isInputDevicePriorityItemAvailable(
+            AudioInputDevicePriorityItem(uid: device.uid, name: device.name)
+        )
+    }
+
     private var isLockedNow: Bool {
-        DictationQuickSelection.isLocked(
+        let recorder = AudioRecorderViewModel.shared
+        return DictationQuickSelection.isLocked(
             dictationState: DictationViewModel.shared.state,
-            recorderState: AudioRecorderViewModel.shared.state
+            recorderState: recorder.state,
+            isTranscribingElsewhere: recorder.isTranscribing
+                || recorder.retranscribingRecordingURL != nil
+                || FileTranscriptionViewModel.shared.batchState == .processing
         )
     }
 
@@ -423,6 +455,9 @@ final class DictationQuickSelectionModel: ObservableObject {
             container.workflowService.$workflows.map { _ in () }.eraseToAnyPublisher(),
             DictationViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
+            AudioRecorderViewModel.shared.$isTranscribing.map { _ in () }.eraseToAnyPublisher(),
+            AudioRecorderViewModel.shared.$retranscribingRecordingURL.map { _ in () }.eraseToAnyPublisher(),
+            FileTranscriptionViewModel.shared.$batchState.map { _ in () }.eraseToAnyPublisher(),
             // The effective workflow depends on the app that receives the next dictation.
             NSWorkspace.shared.notificationCenter
                 .publisher(for: NSWorkspace.didActivateApplicationNotification)
@@ -440,14 +475,53 @@ final class DictationQuickSelectionModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        NSWorkspace.shared.notificationCenter
+            .publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshFrontmostBrowserURL()
+            }
+            .store(in: &cancellables)
+
         // Download and device state can change without a published signal; refresh
         // whenever a menu opens so the selectors never show stale availability.
         NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.rebuild()
+                self?.refreshFrontmostBrowserURL()
             }
             .store(in: &cancellables)
+    }
+
+    /// Resolves the frontmost browser's URL the same way dictation does, so website
+    /// workflows show up in the menu. Only runs when such workflows exist, because
+    /// it asks the browser through AppleScript.
+    private func refreshFrontmostBrowserURL() {
+        let container = ServiceContainer.shared
+        guard let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+              container.workflowService.workflows.contains(where: { workflow in
+                  workflow.isEnabled && workflow.trigger?.websitePatterns.isEmpty == false
+              }) else {
+            browserURLTask?.task.cancel()
+            browserURLTask = nil
+            frontmostBrowserURL = nil
+            return
+        }
+        guard browserURLTask?.bundleId != bundleId else { return }
+
+        browserURLTask?.task.cancel()
+        let task = Task { [weak self] in
+            let url = await container.textInsertionService.resolveBrowserURL(bundleId: bundleId)
+            guard let self, !Task.isCancelled else { return }
+            self.browserURLTask = nil
+            guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == bundleId else { return }
+            if self.frontmostBrowserURL?.bundleId != bundleId || self.frontmostBrowserURL?.url != url {
+                self.frontmostBrowserURL = (bundleId, url)
+                self.rebuild()
+            }
+        }
+        browserURLTask = (bundleId, task)
     }
 
     private func rebuild() {
@@ -457,8 +531,10 @@ final class DictationQuickSelectionModel: ObservableObject {
         let settings = SettingsViewModel.shared
         let engines = PluginManager.shared?.transcriptionEngines ?? []
 
+        let frontmostBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         let workflow = container.workflowService.matchWorkflow(
-            bundleIdentifier: NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+            bundleIdentifier: frontmostBundleId,
+            url: frontmostBrowserURL?.bundleId == frontmostBundleId ? frontmostBrowserURL?.url : nil
         )?.workflow
 
         var next = DictationQuickSelectionSnapshot()
@@ -469,6 +545,7 @@ final class DictationQuickSelectionModel: ObservableObject {
         next.microphoneOptions = DictationQuickSelection.microphoneOptions(
             devices: audioDeviceService.inputDevices,
             deviceTitle: { audioDeviceService.displayName(for: $0) },
+            isDeviceAvailable: { Self.isAvailable($0, in: audioDeviceService) },
             priorityList: audioDeviceService.inputDevicePriorityList,
             selectedDeviceUID: audioDeviceService.selectedDeviceUID,
             systemDefaultName: systemDefaultName
@@ -549,13 +626,17 @@ final class DictationQuickSelectionModel: ObservableObject {
         for engine: TranscriptionEnginePlugin,
         modelManager: ModelManagerService
     ) -> DictationQuickSelectionEngine {
-        let pluginId = PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.manifest.id
+        let manifest = PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.manifest
+        let pluginId = manifest?.id
         return DictationQuickSelectionEngine(
             providerId: engine.providerId,
             displayName: engine.providerDisplayName,
             isAuthAvailable: modelManager.canUseForTranscription(engine),
             isConfigured: engine.isConfigured,
-            managesLocalModels: engine is HostModelLifecyclePolicyAwarePlugin,
+            managesLocalModels: DictationQuickSelection.managesLocalModels(
+                isLifecycleAware: engine is HostModelLifecyclePolicyAwarePlugin,
+                hosting: manifest?.resolvedHosting
+            ),
             selectedModelId: engine.selectedModelId,
             canRestoreSelectedModel: pluginId.map {
                 TranscriptionEngineReadiness.hasPersistedRestorableModel(pluginId: $0)

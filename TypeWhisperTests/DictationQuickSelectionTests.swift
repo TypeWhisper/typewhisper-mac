@@ -27,6 +27,19 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertTrue(DictationQuickSelection.isLocked(dictationState: .idle, recorderState: .finalizing))
     }
 
+    func testSelectionsLockWhileAnotherTranscriptionRuns() {
+        XCTAssertTrue(DictationQuickSelection.isLocked(
+            dictationState: .idle,
+            recorderState: .idle,
+            isTranscribingElsewhere: true
+        ))
+        XCTAssertFalse(DictationQuickSelection.isLocked(
+            dictationState: .idle,
+            recorderState: .idle,
+            isTranscribingElsewhere: false
+        ))
+    }
+
     // MARK: Microphone
 
     func testMicrophoneOptionsMarkSelectionAndListDisconnectedPriorityDevices() {
@@ -49,6 +62,25 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertEqual(options.filter { !$0.isEnabled }.map(\.id), ["headset"])
         XCTAssertTrue(options[0].title.contains("MacBook Pro Microphone"))
         XCTAssertTrue(options[3].title.contains("Headset"))
+    }
+
+    func testMicrophoneOptionsDisableDevicesRecordingCannotUse() {
+        let options = DictationQuickSelection.microphoneOptions(
+            devices: [
+                AudioInputDevice(deviceID: AudioDeviceID(1), name: "MacBook Pro Microphone", uid: "built-in"),
+                AudioInputDevice(deviceID: AudioDeviceID(2), name: "USB Mic", uid: "usb"),
+            ],
+            deviceTitle: \.name,
+            isDeviceAvailable: { $0.uid != "built-in" },
+            priorityList: [],
+            selectedDeviceUID: "usb",
+            systemDefaultName: nil
+        )
+
+        let builtIn = options.first { $0.id == "built-in" }
+        XCTAssertEqual(builtIn?.isEnabled, false)
+        XCTAssertNotEqual(builtIn?.title, "MacBook Pro Microphone", "the reason is shown")
+        XCTAssertEqual(options.first { $0.id == "usb" }?.isEnabled, true)
     }
 
     func testMicrophoneOptionsSelectSystemDefaultWithoutExplicitDevice() {
@@ -265,6 +297,16 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertEqual(groups[2].options.count, 1)
         XCTAssertNil(groups[2].options[0].value.modelId)
         XCTAssertFalse(groups[2].options[0].isEnabled)
+    }
+
+    func testEnginesCountAsLocalUnlessDeclaredCloud() {
+        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: true, hosting: .cloud))
+        XCTAssertTrue(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: .local))
+        XCTAssertTrue(
+            DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: nil),
+            "an older local plugin without the lifecycle protocol must not offer downloads"
+        )
+        XCTAssertFalse(DictationQuickSelection.managesLocalModels(isLifecycleAware: false, hosting: .cloud))
     }
 
     func testModelLabelSkipsRedundantProviderPrefix() {
