@@ -14377,6 +14377,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    func testTestBundleRestoresTheDevAppEngineSelection() {
+        XCTAssertTrue(Bundle(for: TestHostDefaultsGuard.self).principalClass == TestHostDefaultsGuard.self)
+    }
+
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
         let temporaryDirectory = URL(fileURLWithPath: "/tmp/typewhisper-screenshot-root", isDirectory: true)
         let fallback = temporaryDirectory.appendingPathComponent(

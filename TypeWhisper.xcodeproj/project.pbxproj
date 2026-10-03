@@ -5753,6 +5753,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				INFOPLIST_KEY_NSPrincipalClass = TypeWhisperTests.TestHostDefaultsGuard;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -5776,6 +5777,7 @@
 					"@loader_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				INFOPLIST_KEY_NSPrincipalClass = TypeWhisperTests.TestHostDefaultsGuard;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;

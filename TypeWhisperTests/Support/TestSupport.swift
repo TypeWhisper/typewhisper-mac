@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+@testable import TypeWhisper
 
 enum TestSupport {
     static let repoRoot: URL = URL(fileURLWithPath: #filePath)
@@ -141,5 +142,49 @@ enum TestSupport {
 
         append("en")
         return candidates
+    }
+}
+
+/// Principal class of the test bundle. The test host runs with the dev app's bundle
+/// identifier, so a test that selects an engine also changes the engine the dev app
+/// uses. After every test the engine and model selection are set back to the values
+/// from before the run.
+final class TestHostDefaultsGuard: NSObject, XCTestObservation {
+    private static let preservedKeys = [
+        UserDefaultsKeys.selectedEngine,
+        UserDefaultsKeys.selectedModelId,
+    ]
+
+    private var savedValues: [String: Any] = [:]
+
+    override init() {
+        super.init()
+        let defaults = UserDefaults.standard
+        for key in Self.preservedKeys {
+            savedValues[key] = defaults.object(forKey: key)
+        }
+        XCTestObservationCenter.shared.addTestObserver(self)
+    }
+
+    func testCaseDidFinish(_ testCase: XCTestCase) {
+        restoreSavedValues()
+    }
+
+    func testBundleDidFinish(_ testBundle: Bundle) {
+        restoreSavedValues()
+    }
+
+    private func restoreSavedValues() {
+        let defaults = UserDefaults.standard
+        for key in Self.preservedKeys {
+            let saved = savedValues[key]
+            let current = defaults.object(forKey: key)
+            guard (saved as? NSObject) != (current as? NSObject) else { continue }
+            if let saved {
+                defaults.set(saved, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
+        }
     }
 }
