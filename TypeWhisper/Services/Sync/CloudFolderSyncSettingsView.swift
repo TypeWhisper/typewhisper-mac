@@ -1757,7 +1757,9 @@ private struct PremiumSyncDeviceDetailView: View {
                     Button(String(localized: "Remove Device"), role: .destructive) {
                         confirmingRemoval = true
                     }
-                    .disabled(controller.isSyncing)
+                    // With sync off the list still shows the last known devices, but
+                    // there is no folder to remove them from.
+                    .disabled(controller.isSyncing || controller.mode == .off)
                 } footer: {
                     Text(String(localized: "This keeps all synchronized entries. If the device syncs again, it will reappear in the list."))
                 }

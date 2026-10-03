@@ -385,13 +385,14 @@ enum PremiumSyncDeviceRemoval {
         fileManager: FileManager = .default
     ) throws {
         let devicesURL = devicesURL(in: package)
-        guard let files = try? fileManager.contentsOfDirectory(
+        // A package without devices has nothing to remove; an unreadable
+        // folder must fail, or a record would stay and be reported removed.
+        guard fileManager.fileExists(atPath: devicesURL.path) else { return }
+        let files = try fileManager.contentsOfDirectory(
             at: devicesURL,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
-        ) else {
-            return
-        }
+        )
         let matching = files.filter { file in
             guard file.pathExtension == "json" else { return false }
             if file.deletingPathExtension().lastPathComponent == installation.deviceID { return true }
