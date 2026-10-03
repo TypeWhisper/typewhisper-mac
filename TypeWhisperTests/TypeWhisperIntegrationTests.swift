@@ -14257,6 +14257,20 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testTestHostDoesNotUseTheDevAppDataDirectory() {
+        let savedOverride = AppConstants.testAppSupportDirectoryOverride
+        AppConstants.testAppSupportDirectoryOverride = nil
+        defer { AppConstants.testAppSupportDirectoryOverride = savedOverride }
+
+        XCTAssertTrue(AppConstants.isRunningTests)
+        XCTAssertEqual(AppConstants.appSupportDirectory, AppConstants.testHostAppSupportDirectory)
+        XCTAssertNotEqual(AppConstants.appSupportDirectory, AppConstants.defaultAppSupportDirectory)
+        XCTAssertTrue(
+            AppConstants.appSupportDirectory.standardizedFileURL.path
+                .hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path)
+        )
+    }
+
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
         let temporaryDirectory = URL(fileURLWithPath: "/tmp/typewhisper-screenshot-root", isDirectory: true)
         let fallback = temporaryDirectory.appendingPathComponent(
