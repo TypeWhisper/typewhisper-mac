@@ -177,8 +177,20 @@ enum AppConstants {
         if isScreenshotAutomation {
             return screenshotAppSupportDirectory
         }
+        if isRunningTests {
+            return testHostAppSupportDirectory
+        }
         return defaultAppSupportDirectory
     }
+
+    /// The test host app is a Debug build and would otherwise open the dev
+    /// app's stores. A test run from an older checkout then migrates them to
+    /// its schema while the dev app is running.
+    static let testHostAppSupportDirectory: URL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(
+            "TypeWhisper-Tests-\(ProcessInfo.processInfo.processIdentifier)",
+            isDirectory: true
+        )
 
     private static let screenshotAppSupportDirectory: URL =
         resolveScreenshotAppSupportDirectory(
