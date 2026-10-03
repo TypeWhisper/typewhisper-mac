@@ -1442,7 +1442,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このモデルをインポートするには、連携で%@プラグインをインストールまたは有効にしてください。"
+            "value" : "このモデルを取り込むには、「プラグイン」で%@プラグインをインストールまたは有効にしてください。"
           }
         },
         "zh-Hans" : {
@@ -1618,7 +1618,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声入力設定でエンジンを選択し、連携でモデルを管理できます。"
+            "value" : "音声入力設定でエンジンを選択し、「プラグイン」でモデルを管理できます。"
           }
         },
         "zh-Hans" : {
@@ -1767,6 +1767,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有集成命令"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラグインのコマンドがありません"
           }
         }
       }
@@ -5343,7 +5349,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "APIキーが必要です - 統合設定で構成してください"
+            "value" : "APIキーが必要です。「プラグイン」で設定してください。"
           }
         },
         "zh-Hans" : {
@@ -8768,7 +8774,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「統合」でプロバイダーを設定してください。"
+            "value" : "「プラグイン」でプロバイダーを設定してください。"
           }
         },
         "zh-Hans" : {
@@ -14041,7 +14047,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "統合へ"
+            "value" : "プラグインを開く"
           }
         },
         "zh-Hans" : {
@@ -15399,7 +15405,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ワークフローエンジンの上書きを使用する前に、「統合」で文字起こしエンジンをインストールしてください。"
+            "value" : "ワークフローで別のエンジンを指定するには、先に「プラグイン」で文字起こしエンジンをインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -15443,7 +15449,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「統合」タブで他のLLMプロバイダーをインストールしてください。"
+            "value" : "「プラグイン」で他のLLMプロバイダーをインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -15459,7 +15465,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ワークフローの上書きを使用する前に、「統合」でLLMプロバイダをインストールしてください。"
+            "value" : "ワークフローで別のプロバイダーを指定するには、先に「プラグイン」でLLMプロバイダーをインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -15806,7 +15812,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "統合"
+            "value" : "プラグイン"
           }
         },
         "zh-Hans" : {
@@ -17330,7 +17336,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "統合で管理"
+            "value" : "プラグインで管理"
           }
         },
         "zh-Hans" : {
@@ -19511,7 +19517,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "アクティブなメモリ保存プラグインがありません。統合から1つを有効にしてください。"
+            "value" : "メモリ保存用のプラグインが有効になっていません。「プラグイン」で有効にしてください。"
           }
         },
         "zh-Hans" : {
@@ -20009,7 +20015,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "インストールされた文字起こしエンジンがありません。統合からエンジンをインストールしてください。"
+            "value" : "文字起こしエンジンがインストールされていません。「プラグイン」でインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -20850,7 +20856,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "統合を開く"
+            "value" : "プラグインを開く"
           }
         },
         "zh-Hans" : {
@@ -25230,7 +25236,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ライブテキストウィンドウを使用するには、統合からライブテキストプラグインをインストールしてください。"
+            "value" : "録音中の文字起こしを表示するには、「プラグイン」でLive Transcriptをインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -32383,7 +32389,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロバイダの準備がまだ完了していません。このワークフローで使用するには、先に「統合」でセットアップを完了してください。"
+            "value" : "このプロバイダーの設定がまだ完了していません。ワークフローで使うには、先に「プラグイン」で設定を完了してください。"
           }
         },
         "zh-Hans" : {
@@ -32889,7 +32895,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AIプロンプトを使用するには、セットアップ後に「統合」タブからLLMプロバイダー（例: Groq、OpenAI）をインストールしてください。"
+            "value" : "AIプロンプトを使うには、初期設定後に「プラグイン」でLLMプロバイダー（Groq、OpenAIなど）をインストールしてください。"
           }
         },
         "zh-Hans" : {
@@ -37596,7 +37602,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定後、『統合』タブで他のエンジンをインストールできます。"
+            "value" : "初期設定後に「プラグイン」で他のエンジンをインストールできます。"
           }
         },
         "zh-Hans" : {
@@ -37634,7 +37640,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定後、『プロンプト』および『統合』タブでプロンプトを管理し、他のプロバイダーをインストールできます。"
+            "value" : "初期設定後に「プロンプト」でプロンプトを管理し、「プラグイン」で他のプロバイダーをインストールできます。"
           }
         },
         "zh-Hans" : {
@@ -43184,8 +43190,8 @@
     "Save Changes?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Änderungen speichern?"}},"ja":{"stringUnit":{"state":"translated","value":"変更を保存しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"保存更改？"}}}},
     "Save or discard your changes before leaving this entry." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Speichere oder verwirf deine Änderungen, bevor du diesen Eintrag verlässt."}},"ja":{"stringUnit":{"state":"translated","value":"この項目を離れる前に変更を保存または破棄してください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"离开此条目前，请保存或放弃更改。"}}}},
     "Smart Mailboxes" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Intelligente Postfächer"}},"ja":{"stringUnit":{"state":"translated","value":"スマートメールボックス"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"智能邮箱"}}}},
-    "Enable the integration to open this page." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktiviere die Integration, um diese Seite zu öffnen."}},"ja":{"stringUnit":{"state":"translated","value":"このページを開くにはインテグレーションを有効にしてください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"启用集成后即可打开此页面。"}}}},
-    "Integration Unavailable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Integration nicht verfügbar"}},"ja":{"stringUnit":{"state":"translated","value":"インテグレーションを利用できません"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"集成不可用"}}}},
+    "Enable the integration to open this page." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktiviere die Integration, um diese Seite zu öffnen."}},"ja":{"stringUnit":{"state":"translated","value":"このページを開くには、プラグインを有効にしてください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"启用集成后即可打开此页面。"}}}},
+    "Integration Unavailable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Integration nicht verfügbar"}},"ja":{"stringUnit":{"state":"translated","value":"プラグインを利用できません"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"集成不可用"}}}},
     "calendarMeeting.settings.howItWorks" : {
       "localizations" : {
         "de" : {

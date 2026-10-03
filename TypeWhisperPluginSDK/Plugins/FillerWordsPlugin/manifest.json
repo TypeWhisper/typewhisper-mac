@@ -8,7 +8,8 @@
   "author": "TypeWhisper",
   "description": "Removes filler words like \"um\" and \"uh\" from transcribed text.",
   "descriptions": {
-    "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text."
+    "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text.",
+    "ja": "文字起こし結果から「um」「uh」などのつなぎ言葉を取り除きます。"
   },
   "principalClass": "FillerWordsPlugin",
   "requiresAPIKey": false,

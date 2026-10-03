@@ -8,7 +8,8 @@
   "author": "TypeWhisper",
   "description": "Downloads audio from supported web links with yt-dlp and ffmpeg for transcription in TypeWhisper.",
   "descriptions": {
-    "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter."
+    "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter.",
+    "ja": "対応するWebリンクからyt-dlpとffmpegで音声をダウンロードし、TypeWhisperで文字起こしします。"
   },
   "principalClass": "WebLinkPlugin",
   "requiresAPIKey": false,

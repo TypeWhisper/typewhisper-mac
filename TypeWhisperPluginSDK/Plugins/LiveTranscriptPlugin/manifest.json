@@ -9,7 +9,7 @@
     "description": "Show a floating live transcript window during recording.",
     "descriptions": {
         "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme.",
-        "ja": "録音中にフローティングのライブ文字起こしウィンドウを表示します。"
+        "ja": "録音中の文字起こしを、他のウィンドウに重ねて表示します。"
     },
     "category": "utility",
     "iconSystemName": "text.bubble",

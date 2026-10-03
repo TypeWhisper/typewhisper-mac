@@ -9,7 +9,8 @@
     "author": "MemPalace",
     "description": "Store and search memories in MemPalace Cloud or a self-hosted MemPalace instance. Memories are filed into a user-chosen wing and room, with shared knowledge-graph tunneling on the server.",
     "descriptions": {
-        "de": "Speichert und durchsucht Erinnerungen in MemPalace Cloud oder einer selbstgehosteten MemPalace-Instanz. Memories werden in einen ausgewaehlten Wing und Room einsortiert, mit Knowledge-Graph-Tunneling auf dem Server."
+        "de": "Speichert und durchsucht Erinnerungen in MemPalace Cloud oder einer selbstgehosteten MemPalace-Instanz. Memories werden in einen ausgewaehlten Wing und Room einsortiert, mit Knowledge-Graph-Tunneling auf dem Server.",
+      "ja": "MemPalace Cloudまたは自分で運用するMemPalaceサーバーにメモリを保存・検索します。メモリは指定したWingとRoomに分類され、サーバー上の共有ナレッジグラフを通じて関連情報をたどれます。"
     },
     "category": "memory",
     "hosting": "cloud",
