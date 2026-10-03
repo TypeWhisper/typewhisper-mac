@@ -505,7 +505,7 @@ curl "http://localhost:8978/v1/dictation/transcription?id=<uuid>"
 
 Dictation control records microphone audio for system-wide insertion. A completed dictation session returns text that TypeWhisper can paste back into the active app.
 
-The transcription response also contains a `latency` object with the timings of each dictation phase, from the start request to verified insertion and clipboard restoration. It never contains transcript text, audio or app content.
+For the last 100 dictations since the app started, the transcription response also contains a `latency` object with the timings of each dictation phase, from the start request to verified insertion and clipboard restoration. It never contains transcript text, audio or app content. Other sessions return `latency: null`.
 
 ### Recorder Control
 

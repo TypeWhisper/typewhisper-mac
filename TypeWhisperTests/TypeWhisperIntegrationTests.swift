@@ -5520,6 +5520,82 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testAwaitedPasteTimingExcludesVerificationWaitAndAutoEnterDelay() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        service.autoEnterDelay = .milliseconds(150)
+        service.returnSimulatorOverride = {}
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+        service.focusedTextStateOverride = { _ in
+            pasteCount == 0
+                ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                : (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await service.insertText("Hello", preserveClipboard: true, autoEnter: true)
+        let returnedUptime = DispatchTime.now().uptimeNanoseconds
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        let timing = try XCTUnwrap(service.lastInsertionTiming)
+        let verifiedUptime = try XCTUnwrap(timing.verifiedUptimeNanoseconds)
+        XCTAssertLessThanOrEqual(timing.insertedUptimeNanoseconds, verifiedUptime)
+        // The Auto Enter delay runs after verification and counts toward neither time.
+        XCTAssertGreaterThanOrEqual(returnedUptime - verifiedUptime, 150_000_000)
+    }
+
+    @MainActor
+    func testClipboardRestoreReportsSkippedRestoreWhenClipboardChanged() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(30)
+        service.pasteSimulatorOverride = {}
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("Hello", preserveClipboard: true)
+        let pending = try XCTUnwrap(service.pendingClipboardRestoreTasks())
+        pasteboard.clearContents()
+        pasteboard.setString("Copied meanwhile", forType: .string)
+
+        let outcome = await pending.restore.value
+        XCTAssertFalse(outcome.restored)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Copied meanwhile")
+    }
+
+    @MainActor
+    func testClipboardRestoreReportsRestoredSnapshot() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(30)
+        service.pasteSimulatorOverride = {}
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("Hello", preserveClipboard: true)
+        let pending = try XCTUnwrap(service.pendingClipboardRestoreTasks())
+
+        let outcome = await pending.restore.value
+        XCTAssertTrue(outcome.restored)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testDeferredCopySelectionRestoresOriginalClipboardAfterVerifiedPaste() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()

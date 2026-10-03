@@ -11,6 +11,10 @@ final class DictationLatencyTraceTests: XCTestCase {
         return trace
     }
 
+    private func timing(inserted: UInt64, verified: UInt64? = nil) -> TextInsertionService.InsertionTiming {
+        TextInsertionService.InsertionTiming(insertedUptimeNanoseconds: inserted, verifiedUptimeNanoseconds: verified)
+    }
+
     func testPhasesAreMeasuredFromTheirStartEvents() {
         let trace = trace()
 
@@ -23,7 +27,7 @@ final class DictationLatencyTraceTests: XCTestCase {
 
     func testAccessibilityInsertionCountsAsVerifiedWhenItReturns() {
         var trace = trace()
-        trace.recordInsertion(.insertedViaAccessibility, at: 5_450_000_000)
+        trace.recordInsertion(.insertedViaAccessibility, timing: timing(inserted: 5_450_000_000, verified: 5_450_000_000))
 
         XCTAssertEqual(trace.insertion, .accessibility)
         XCTAssertEqual(trace.stopToInsertionMs, 450)
@@ -33,7 +37,7 @@ final class DictationLatencyTraceTests: XCTestCase {
 
     func testUnawaitedPasteStaysUnverifiedUntilItsVerificationResolves() {
         var trace = trace()
-        trace.recordInsertion(.pasted(verification: .notAwaited), at: 5_420_000_000)
+        trace.recordInsertion(.pasted(verification: .notAwaited), timing: timing(inserted: 5_420_000_000))
 
         XCTAssertEqual(trace.insertion, .paste)
         XCTAssertEqual(trace.pasteVerification, .notChecked)
@@ -45,9 +49,21 @@ final class DictationLatencyTraceTests: XCTestCase {
         XCTAssertEqual(trace.stopToVerifiedInsertionMs, 520)
     }
 
+    func testAwaitedPasteKeepsPostAndVerificationTimesApart() {
+        var trace = trace()
+        trace.recordInsertion(.pasted(verification: .verified), timing: timing(inserted: 5_420_000_000, verified: 5_510_000_000))
+
+        XCTAssertEqual(trace.pasteVerification, .verified)
+        XCTAssertEqual(trace.stopToInsertionMs, 420)
+        XCTAssertEqual(trace.stopToVerifiedInsertionMs, 510)
+    }
+
     func testFailedPasteVerificationKeepsItsReasonAndNoVerifiedTime() {
         var trace = trace()
-        trace.recordInsertion(.pasted(verification: .unverified(.focusedTextUnchanged)), at: 5_900_000_000)
+        trace.recordInsertion(
+            .pasted(verification: .unverified(.focusedTextUnchanged)),
+            timing: timing(inserted: 5_900_000_000)
+        )
 
         XCTAssertEqual(trace.pasteVerification, .unverified("focused-text-unchanged"))
         XCTAssertEqual(trace.pasteVerification?.name, "unverified")

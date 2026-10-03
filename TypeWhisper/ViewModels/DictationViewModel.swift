@@ -1459,9 +1459,10 @@ final class DictationViewModel: ObservableObject {
                     trace.recordPasteVerification(verification, at: DispatchTime.now().uptimeNanoseconds)
                 }
             }
-            _ = await pending.restore.value
-            self?.updateLatencyTrace(sessionID: sessionID) { trace in
-                trace.clipboardRestoredUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+            if await pending.restore.value.restored {
+                self?.updateLatencyTrace(sessionID: sessionID) { trace in
+                    trace.clipboardRestoredUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+                }
             }
             self?.finishLatencyTrace(sessionID: sessionID)
         }
@@ -2975,8 +2976,13 @@ final class DictationViewModel: ObservableObject {
                             awaitPasteVerification: learningPreInsertionObservation != nil
                         )
                         if let insertionResult {
+                            let timing = textInsertionService.lastInsertionTiming
+                                ?? TextInsertionService.InsertionTiming(
+                                    insertedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
+                                    verifiedUptimeNanoseconds: nil
+                                )
                             updateLatencyTrace(sessionID: sessionID) { trace in
-                                trace.recordInsertion(insertionResult, at: DispatchTime.now().uptimeNanoseconds)
+                                trace.recordInsertion(insertionResult, timing: timing)
                             }
                         }
                         if case .pasted(.unverified(let reason))? = insertionResult {

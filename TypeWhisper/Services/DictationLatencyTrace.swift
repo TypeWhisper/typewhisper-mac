@@ -35,6 +35,8 @@ struct DictationLatencyTrace: Sendable, Equatable {
     let requestUptimeNanoseconds: UInt64
     var inputTransport: String?
     var engineReadyAtStart: Bool?
+    /// For Bluetooth input, when the stream was confirmed ready. Buffers staged before that
+    /// are kept, but the start cue waits for readiness, so that is when dictation can begin.
     var firstAudioBufferUptimeNanoseconds: UInt64?
     var stopUptimeNanoseconds: UInt64?
     var recordingSeconds: Double?
@@ -59,16 +61,17 @@ struct DictationLatencyTrace: Sendable, Equatable {
 
     mutating func recordInsertion(
         _ result: TextInsertionService.InsertionResult,
-        at uptimeNanoseconds: UInt64
+        timing: TextInsertionService.InsertionTiming
     ) {
-        insertionUptimeNanoseconds = uptimeNanoseconds
+        insertionUptimeNanoseconds = timing.insertedUptimeNanoseconds
+        let verifiedUptime = timing.verifiedUptimeNanoseconds ?? timing.insertedUptimeNanoseconds
         switch result {
         case .insertedViaAccessibility:
             insertion = .accessibility
-            verifiedInsertionUptimeNanoseconds = uptimeNanoseconds
+            verifiedInsertionUptimeNanoseconds = verifiedUptime
         case .pasted(let verification):
             insertion = .paste
-            recordPasteVerification(verification, at: uptimeNanoseconds)
+            recordPasteVerification(verification, at: verifiedUptime)
         }
     }
 
