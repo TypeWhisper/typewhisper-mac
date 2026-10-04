@@ -60,6 +60,7 @@ final class GeminiPlugin: NSObject,
         var llmTemperatureValue = 0.3
         var fetchedLLMModels: [GeminiFetchedModel] = []
         var fetchedTranscriptionModels: [GeminiFetchedTranscriptionModel] = []
+        var liveSessionPool: GeminiLiveSessionPool? = GeminiLiveSessionPool()
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -139,6 +140,7 @@ final class GeminiPlugin: NSObject,
             host: host
         )
         normalizeSelectedModel()
+        resetLiveSessionPool()
         refreshModelCatalogIfNeeded()
     }
 
@@ -146,6 +148,7 @@ final class GeminiPlugin: NSObject,
         modelCatalogRefreshTask?.cancel()
         modelCatalogRefreshTask = nil
         host = nil
+        resetLiveSessionPool()
     }
 
     // MARK: - LLMProviderPlugin
@@ -298,7 +301,9 @@ final class GeminiPlugin: NSObject,
         let resolvedModelId = supportedIds.contains(trimmedModelId)
             ? trimmedModelId
             : Self.defaultTranscriptionModelId
+        let modelChanged = selectedModelId != resolvedModelId
         _selectedTranscriptionModelId = resolvedModelId
+        if modelChanged { resetLiveSessionPool() }
         host?.setUserDefault(resolvedModelId, forKey: Self.selectedTranscriptionModelKey)
         host?.notifyCapabilitiesChanged()
     }
@@ -310,7 +315,12 @@ final class GeminiPlugin: NSObject,
     }
 
     func setTranscriptionMode(_ mode: GeminiTranscriptionMode) {
-        state.withLock { $0.transcriptionMode = mode }
+        let changed = state.withLock {
+            let changed = $0.transcriptionMode != mode
+            $0.transcriptionMode = mode
+            return changed
+        }
+        if changed { resetLiveSessionPool() }
         host?.setUserDefault(mode.rawValue, forKey: Self.transcriptionModeKey)
     }
 
@@ -475,14 +485,17 @@ final class GeminiPlugin: NSObject,
             budget: dictionaryTermsBudget
         ).map(\.text)
 
-        return try await GeminiLiveTranscriptionSession.connect(
+        let configuration = GeminiLiveConfiguration(
             apiKey: apiKey,
             modelId: liveModelId,
             mode: transcriptionMode,
             languageCodes: Self.resolvedLanguageCodes(from: languageSelection),
-            customVocabulary: vocabulary,
-            onProgress: onProgress
+            customVocabulary: vocabulary
         )
+        guard let pool = state.withLock({ $0.liveSessionPool }) else {
+            throw CancellationError()
+        }
+        return try await pool.checkout(configuration: configuration, onProgress: onProgress)
     }
 
     nonisolated static func resolvedLanguageCodes(
@@ -816,7 +829,9 @@ final class GeminiPlugin: NSObject,
 
     // Internal methods for settings
     func setApiKey(_ key: String) {
+        let changed = _apiKey != key
         _apiKey = key
+        if changed { resetLiveSessionPool() }
         if let host {
             do {
                 try host.storeSecret(key: "api-key", value: key)
@@ -829,6 +844,7 @@ final class GeminiPlugin: NSObject,
 
     func removeApiKey() {
         _apiKey = nil
+        resetLiveSessionPool()
         if let host {
             do {
                 try host.storeSecret(key: "api-key", value: "")
@@ -850,6 +866,15 @@ final class GeminiPlugin: NSObject,
         } catch {
             return false
         }
+    }
+
+    private func resetLiveSessionPool() {
+        let previous = state.withLock {
+            let previous = $0.liveSessionPool
+            $0.liveSessionPool = $0.host == nil ? nil : GeminiLiveSessionPool()
+            return previous
+        }
+        Task { await previous?.shutdown() }
     }
 
     fileprivate func setFetchedLLMModels(_ models: [GeminiFetchedModel]) {
@@ -1066,32 +1091,210 @@ final class GeminiPlugin: NSObject,
 
 // MARK: - Gemini Live Transcription
 
+protocol GeminiLiveWebSocket: Sendable {
+    func resume()
+    func send(_ message: URLSessionWebSocketTask.Message) async throws
+    func receive() async throws -> URLSessionWebSocketTask.Message
+    func ping() async throws
+    func close(code: URLSessionWebSocketTask.CloseCode)
+}
+
+private final class GeminiURLSessionWebSocket: GeminiLiveWebSocket, @unchecked Sendable {
+    private let session: URLSession
+    private let socket: URLSessionWebSocketTask
+
+    init(url: URL) {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 600
+        session = URLSession(configuration: configuration)
+        socket = session.webSocketTask(with: url)
+    }
+
+    func resume() { socket.resume() }
+    func send(_ message: URLSessionWebSocketTask.Message) async throws { try await socket.send(message) }
+    func receive() async throws -> URLSessionWebSocketTask.Message { try await socket.receive() }
+    func ping() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            socket.sendPing { error in
+                if let error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
+                }
+            }
+        }
+    }
+    func close(code: URLSessionWebSocketTask.CloseCode) {
+        socket.cancel(with: code, reason: nil)
+        session.invalidateAndCancel()
+    }
+}
+
+struct GeminiLiveConfiguration: Equatable, Sendable {
+    let apiKey: String
+    let modelId: String
+    let mode: GeminiTranscriptionMode
+    let languageCodes: [String]
+    let customVocabulary: [String]
+}
+
+/// Keeps one unused connection ready. A consumed session is never reused: its
+/// server-side transcript must not become context for the next dictation.
+actor GeminiLiveSessionPool {
+    typealias Factory = @Sendable (GeminiLiveConfiguration) async throws -> GeminiLiveTranscriptionSession
+    private struct Standby {
+        let configuration: GeminiLiveConfiguration
+        let task: Task<GeminiLiveTranscriptionSession, Error>
+    }
+
+    private let factory: Factory
+    private let idleTimeout: Duration
+    private let pingInterval: Duration
+    private var standby: Standby?
+    private var stopped = false
+
+    init(
+        idleTimeout: Duration = .seconds(300),
+        pingInterval: Duration = .seconds(15),
+        factory: @escaping Factory = { configuration in
+            try await GeminiLiveTranscriptionSession.connect(
+                apiKey: configuration.apiKey, modelId: configuration.modelId,
+                mode: configuration.mode, languageCodes: configuration.languageCodes,
+                customVocabulary: configuration.customVocabulary
+            )
+        }
+    ) {
+        self.factory = factory
+        self.idleTimeout = idleTimeout
+        self.pingInterval = pingInterval
+    }
+
+    func checkout(
+        configuration: GeminiLiveConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> GeminiLiveTranscriptionSession {
+        try Task.checkCancellation()
+        guard !stopped else { throw CancellationError() }
+        // Claim before suspending so concurrent dictations cannot share a socket.
+        let candidate = standby
+        standby = nil
+        if let candidate {
+            if candidate.configuration == configuration {
+                do {
+                    let session = try await withTaskCancellationHandler {
+                        try await candidate.task.value
+                    } onCancel: {
+                        Self.discard(candidate)
+                    }
+                    if try await claim(session, configuration: configuration, onProgress: onProgress) {
+                        return session
+                    }
+                } catch {
+                    try Task.checkCancellation()
+                    guard !stopped else { throw CancellationError() }
+                    // A failed or expired warm connection must not fail a new dictation.
+                }
+            } else {
+                Self.discard(candidate)
+            }
+        }
+
+        let session = try await factory(configuration)
+        guard try await claim(session, configuration: configuration, onProgress: onProgress) else {
+            throw PluginTranscriptionError.networkError("Gemini Live connection closed before dictation started.")
+        }
+        return session
+    }
+
+    private func claim(
+        _ session: GeminiLiveTranscriptionSession,
+        configuration: GeminiLiveConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> Bool {
+        guard !stopped, !Task.isCancelled else {
+            await session.cancel()
+            throw CancellationError()
+        }
+        let claimed = await session.claim(onProgress: onProgress, onFinished: { [weak self] in
+            await self?.prewarm(configuration: configuration)
+        })
+        guard !stopped, !Task.isCancelled else {
+            await session.cancel()
+            throw CancellationError()
+        }
+        return claimed
+    }
+
+    func prewarm(configuration: GeminiLiveConfiguration) {
+        guard !stopped else { return }
+        if standby?.configuration == configuration { return }
+        if let standby { Self.discard(standby) }
+        let factory = factory
+        let idleTimeout = idleTimeout
+        let pingInterval = pingInterval
+        standby = Standby(configuration: configuration, task: Task {
+            let session = try await factory(configuration)
+            guard !Task.isCancelled else {
+                await session.cancel()
+                throw CancellationError()
+            }
+            await session.prepareStandby(idleTimeout: idleTimeout, pingInterval: pingInterval)
+            return session
+        })
+    }
+
+    func shutdown() {
+        stopped = true
+        if let standby { Self.discard(standby) }
+        standby = nil
+    }
+
+    private nonisolated static func discard(_ standby: Standby) {
+        standby.task.cancel()
+        Task {
+            if let session = try? await standby.task.value { await session.cancel() }
+        }
+    }
+}
+
 actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private static let webSocketEndpoint =
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     private static let pcmChunkSampleCount = 1_600
     private static let setupTimeout: Duration = .seconds(10)
-    private static let finishTimeout: Duration = .seconds(10)
-
-    private let urlSession: URLSession
-    private let webSocketTask: URLSessionWebSocketTask
-    private let onProgress: @Sendable (String) -> Bool
+    private let finishTimeout: Duration
+    private let completionSettleTime: Duration
+    private let socket: any GeminiLiveWebSocket
+    private var onProgress: (@Sendable (String) -> Bool)?
+    private var onFinished: (@Sendable () async -> Void)?
     private var receiveTask: Task<Void, Never>?
+    private var finishTask: Task<PluginTranscriptionResult, Error>?
+    private var expiryTask: Task<Void, Never>?
+    private var keepAliveTask: Task<Void, Never>?
+    private var idleDeadline: ContinuousClock.Instant?
     private var collector = GeminiLiveTranscriptCollector()
     private var setupComplete = false
-    private var finalRevision = 0
-    private var turnCompleteRevision = 0
+    private var claimed = false
+    private var audioRevision = 0
+    private var completionAudioRevision: Int?
+    private var completionReceivedAt: ContinuousClock.Instant?
+    private var lastTranscriptAt: ContinuousClock.Instant?
     private var latestError: String?
-    private var finished = false
+    private var socketClosed = false
+    private var serverClosing = false
     private var cancelled = false
+    private var endSignalSent = false
 
     private init(
-        urlSession: URLSession,
-        webSocketTask: URLSessionWebSocketTask,
-        onProgress: @Sendable @escaping (String) -> Bool
+        socket: any GeminiLiveWebSocket,
+        finishTimeout: Duration,
+        completionSettleTime: Duration,
+        onProgress: (@Sendable (String) -> Bool)?
     ) {
-        self.urlSession = urlSession
-        self.webSocketTask = webSocketTask
+        self.socket = socket
+        self.finishTimeout = finishTimeout
+        self.completionSettleTime = completionSettleTime
         self.onProgress = onProgress
     }
 
@@ -1101,7 +1304,10 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         mode: GeminiTranscriptionMode,
         languageCodes: [String],
         customVocabulary: [String],
-        onProgress: @Sendable @escaping (String) -> Bool
+        socket suppliedSocket: (any GeminiLiveWebSocket)? = nil,
+        finishTimeout: Duration = .seconds(3),
+        completionSettleTime: Duration = .milliseconds(200),
+        onProgress: (@Sendable (String) -> Bool)? = nil
     ) async throws -> GeminiLiveTranscriptionSession {
         try ensureNetworkAccessIsAllowed()
         guard var components = URLComponents(string: webSocketEndpoint) else {
@@ -1112,28 +1318,26 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             throw PluginTranscriptionError.apiError("Invalid Gemini Live API URL.")
         }
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 600
-        let urlSession = URLSession(configuration: configuration)
-        let webSocketTask = urlSession.webSocketTask(with: url)
         let session = GeminiLiveTranscriptionSession(
-            urlSession: urlSession,
-            webSocketTask: webSocketTask,
+            socket: suppliedSocket ?? GeminiURLSessionWebSocket(url: url),
+            finishTimeout: finishTimeout,
+            completionSettleTime: completionSettleTime,
             onProgress: onProgress
         )
-
-        do {
-            try await session.start(
-                modelId: modelId,
-                mode: mode,
-                languageCodes: languageCodes,
-                customVocabulary: customVocabulary
-            )
-            return session
-        } catch {
-            await session.cancel()
-            throw error
+        return try await withTaskCancellationHandler {
+            do {
+                try await session.start(
+                    modelId: modelId, mode: mode,
+                    languageCodes: languageCodes, customVocabulary: customVocabulary
+                )
+                try Task.checkCancellation()
+                return session
+            } catch {
+                await session.cancel()
+                throw error
+            }
+        } onCancel: {
+            Task { await session.cancel() }
         }
     }
 
@@ -1143,35 +1347,91 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         languageCodes: [String],
         customVocabulary: [String]
     ) async throws {
-        webSocketTask.resume()
+        socket.resume()
         receiveTask = Task { [weak self] in
-            guard let self else { return }
-            await self.receiveLoop()
+            await self?.receiveLoop()
         }
-
         let setupMessage = try Self.makeSetupMessage(
-            modelId: modelId,
-            mode: mode,
-            languageCodes: languageCodes,
-            customVocabulary: customVocabulary
+            modelId: modelId, mode: mode,
+            languageCodes: languageCodes, customVocabulary: customVocabulary
         )
-        try await webSocketTask.send(.string(setupMessage))
+        try await socket.send(.string(setupMessage))
         try await waitForSetup()
     }
 
-    func appendAudio(samples: [Float]) async throws {
-        guard !finished, !cancelled else { return }
-        if let latestError {
-            throw PluginTranscriptionError.apiError(latestError)
+    func prepareStandby(idleTimeout: Duration, pingInterval: Duration) {
+        guard !claimed, !socketClosed else { return }
+        idleDeadline = .now.advanced(by: idleTimeout)
+        expiryTask = Task { [weak self] in
+            do { try await Task.sleep(for: idleTimeout) } catch { return }
+            await self?.expireStandby()
         }
+        keepAliveTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: pingInterval) } catch { return }
+                guard await self?.pingStandby() == true else { return }
+            }
+        }
+    }
 
+    func claim(
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onFinished: @Sendable @escaping () async -> Void
+    ) -> Bool {
+        guard !claimed, !socketClosed, !serverClosing, !cancelled, latestError == nil,
+              finishTask == nil, audioRevision == 0,
+              idleDeadline.map({ ContinuousClock.now < $0 }) ?? true else {
+            closeSocket(code: .goingAway)
+            return false
+        }
+        claimed = true
+        stopStandbyMaintenance()
+        self.onProgress = onProgress
+        self.onFinished = onFinished
+        return true
+    }
+
+    private func expireStandby() {
+        guard idleDeadline != nil else { return }
+        closeSocket(code: .goingAway)
+    }
+
+    private func pingStandby() async -> Bool {
+        guard idleDeadline != nil, !socketClosed else { return false }
+        do {
+            try await socket.ping()
+            return idleDeadline != nil && !socketClosed
+        } catch {
+            if idleDeadline != nil { closeSocket(code: .abnormalClosure) }
+            return false
+        }
+    }
+
+    private func stopStandbyMaintenance() {
+        idleDeadline = nil
+        expiryTask?.cancel()
+        expiryTask = nil
+        keepAliveTask?.cancel()
+        keepAliveTask = nil
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try Task.checkCancellation()
+        guard finishTask == nil, !cancelled else { return }
+        if let latestError { throw PluginTranscriptionError.apiError(latestError) }
+        guard !socketClosed else { throw PluginTranscriptionError.networkError("Gemini Live connection closed.") }
+        guard !samples.isEmpty else { return }
         var offset = 0
         while offset < samples.count {
+            try Task.checkCancellation()
+            guard finishTask == nil, !cancelled else { return }
             let end = min(offset + Self.pcmChunkSampleCount, samples.count)
-            let pcmData = Self.pcm16Data(from: samples[offset..<end])
-            let message = try Self.makeRealtimeAudioMessage(pcmData)
+            let message = try Self.makeRealtimeAudioMessage(Self.pcm16Data(from: samples[offset..<end]))
+            // Invalidate earlier completion for every chunk, including events
+            // received while an earlier chunk in this append was being sent.
+            audioRevision += 1
             do {
-                try await webSocketTask.send(.string(message))
+                try await socket.send(.string(message))
             } catch {
                 latestError = error.localizedDescription
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
@@ -1181,58 +1441,81 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     func finish() async throws -> PluginTranscriptionResult {
-        if finished {
-            return try finalResult()
+        try Task.checkCancellation()
+        guard !cancelled else { throw CancellationError() }
+        let task: Task<PluginTranscriptionResult, Error>
+        if let finishTask {
+            task = finishTask
+        } else {
+            task = Task { try await self.performFinish() }
+            finishTask = task
         }
-        finished = true
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+            Task { await self.cancel() }
+        }
+    }
 
-        let revisionBeforeFinish = finalRevision
-        let turnCompleteRevisionBeforeFinish = turnCompleteRevision
-        do {
-            try await webSocketTask.send(.string(Self.audioStreamEndMessage))
-        } catch {
-            if collector.resultText.isEmpty {
-                closeSocket(code: .abnormalClosure)
-                throw PluginTranscriptionError.networkError(error.localizedDescription)
+    private func performFinish() async throws -> PluginTranscriptionResult {
+        // Include a stalled audioStreamEnd send in the total release budget.
+        let deadline = ContinuousClock.now.advanced(by: finishTimeout)
+        let endSignal = Task {
+            do {
+                try await socket.send(.string(Self.audioStreamEndMessage))
+                endSignalSent = true
+            } catch {
+                if !socketClosed { latestError = error.localizedDescription }
             }
         }
-
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: Self.finishTimeout)
-        while finalRevision == revisionBeforeFinish,
-              turnCompleteRevision == turnCompleteRevisionBeforeFinish,
-              latestError == nil,
-              clock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(25))
+        defer {
+            endSignal.cancel()
+            closeSocket(code: .normalClosure)
         }
-
+        while latestError == nil, !socketClosed, ContinuousClock.now < deadline {
+            try Task.checkCancellation()
+            if endSignalSent, hasSettledCompletion { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        try Task.checkCancellation()
+        guard !cancelled else { throw CancellationError() }
+        // The best available committed + interim text is preferable to discarding
+        // the dictation when Gemini omits a completion or the connection drops.
+        let result = try finalResult()
         closeSocket(code: .normalClosure)
-        if finalRevision == revisionBeforeFinish,
-           collector.hasUncommittedInterimText {
-            throw PluginTranscriptionError.networkError(
-                "Timed out while finalizing Gemini Live transcription."
-            )
-        }
-        return try finalResult()
+        let callback = onFinished
+        onFinished = nil
+        await callback?()
+        try Task.checkCancellation()
+        return result
+    }
+
+    private var hasSettledCompletion: Bool {
+        guard completionAudioRevision == audioRevision,
+              let completionReceivedAt,
+              !collector.hasUncommittedInterimText, !collector.resultText.isEmpty else { return false }
+        // Input transcription and generation completion have no guaranteed order.
+        let lastUpdate = max(completionReceivedAt, lastTranscriptAt ?? completionReceivedAt)
+        return ContinuousClock.now >= lastUpdate.advanced(by: completionSettleTime)
     }
 
     func cancel() async {
         guard !cancelled else { return }
         cancelled = true
+        finishTask?.cancel()
+        onFinished = nil
         closeSocket(code: .goingAway)
     }
 
     private func waitForSetup() async throws {
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: Self.setupTimeout)
-        while !setupComplete, latestError == nil, clock.now < deadline {
+        let deadline = ContinuousClock.now.advanced(by: Self.setupTimeout)
+        while !setupComplete, latestError == nil, !socketClosed, ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(25))
         }
-
-        if let latestError {
-            throw PluginTranscriptionError.apiError(latestError)
-        }
-        guard setupComplete else {
+        try Task.checkCancellation()
+        if let latestError { throw PluginTranscriptionError.apiError(latestError) }
+        guard setupComplete, !socketClosed else {
             throw PluginTranscriptionError.networkError("Timed out while connecting to Gemini Live transcription.")
         }
     }
@@ -1240,59 +1523,54 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private func receiveLoop() async {
         while !Task.isCancelled {
             do {
-                let message = try await webSocketTask.receive()
-                try handle(message)
-            } catch is CancellationError {
-                return
+                try handle(try await socket.receive())
             } catch {
-                guard !cancelled, !finished else { return }
+                guard !socketClosed, !cancelled else { return }
                 latestError = error.localizedDescription
+                closeSocket(code: .abnormalClosure)
                 return
             }
         }
     }
 
-    private func handle(_ message: URLSessionWebSocketTask.Message) throws {
+    func handle(_ message: URLSessionWebSocketTask.Message) throws {
+        guard !socketClosed else { return }
         let data: Data
         switch message {
-        case .data(let messageData):
-            data = messageData
-        case .string(let text):
-            data = Data(text.utf8)
-        @unknown default:
-            return
+        case .data(let messageData): data = messageData
+        case .string(let text): data = Data(text.utf8)
+        @unknown default: return
         }
-
         let response = try JSONDecoder().decode(GeminiLiveResponse.self, from: data)
-        if response.setupComplete != nil {
-            setupComplete = true
-        }
+        if response.setupComplete != nil { setupComplete = true }
         if let message = response.error?.message, !message.isEmpty {
             latestError = message
+            closeSocket(code: .abnormalClosure)
+            return
         }
-
-        guard let serverContent = response.serverContent else { return }
-        let finalText = serverContent.inputTranscription?.text
+        if response.goAway != nil {
+            serverClosing = true
+            if !claimed {
+                closeSocket(code: .goingAway)
+                return
+            }
+        }
+        guard let content = response.serverContent else { return }
         let preview = collector.apply(
-            interimText: serverContent.interimInputTranscription?.text,
-            finalText: finalText
+            interimText: content.interimInputTranscription?.text,
+            finalText: content.inputTranscription?.text
         )
-        if finalText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
-            finalRevision += 1
+        if preview != nil { lastTranscriptAt = .now }
+        if content.generationComplete == true || content.turnComplete == true {
+            completionAudioRevision = audioRevision
+            completionReceivedAt = .now
         }
-        if serverContent.turnComplete == true {
-            turnCompleteRevision += 1
-        }
-        if let preview, !preview.isEmpty {
-            _ = onProgress(preview)
-        }
+        if let preview, !preview.isEmpty { _ = onProgress?(preview) }
     }
 
     private func finalResult() throws -> PluginTranscriptionResult {
         let text = collector.resultText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty, let latestError {
-            throw PluginTranscriptionError.apiError(latestError)
-        }
+        if text.isEmpty, let latestError { throw PluginTranscriptionError.apiError(latestError) }
         guard !text.isEmpty else {
             throw PluginTranscriptionError.apiError("Gemini Live transcription returned no text.")
         }
@@ -1300,10 +1578,12 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     private func closeSocket(code: URLSessionWebSocketTask.CloseCode) {
+        guard !socketClosed else { return }
+        socketClosed = true
+        stopStandbyMaintenance()
         receiveTask?.cancel()
         receiveTask = nil
-        webSocketTask.cancel(with: code, reason: nil)
-        urlSession.finishTasksAndInvalidate()
+        socket.close(code: code)
     }
 
     static func makeSetupMessage(
@@ -1427,6 +1707,7 @@ struct GeminiLiveTranscriptCollector: Sendable {
 
 private struct GeminiLiveResponse: Decodable, Sendable {
     let setupComplete: EmptyObject?
+    let goAway: EmptyObject?
     let serverContent: ServerContent?
     let error: APIError?
 
@@ -1436,6 +1717,7 @@ private struct GeminiLiveResponse: Decodable, Sendable {
         let interimInputTranscription: Transcription?
         let inputTranscription: Transcription?
         let turnComplete: Bool?
+        let generationComplete: Bool?
     }
 
     struct Transcription: Decodable, Sendable {
