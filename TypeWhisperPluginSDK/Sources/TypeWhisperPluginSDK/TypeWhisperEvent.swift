@@ -19,9 +19,73 @@ public enum TypeWhisperEvent: Sendable {
     case textCorrectionCommitted(TextCorrectionCommittedPayload)
     case actionCompleted(ActionCompletedPayload)
     case partialTranscriptionUpdate(PartialTranscriptionPayload)
+    /// A Recorder transcript and its completion receipt have been saved successfully.
+    case recorderTranscriptReady(RecorderTranscriptReadyPayload)
 }
 
 // MARK: - Payloads
+
+/// Recorder automation is independent of dictation and its post-processing pipeline.
+/// `recordingID` survives retranscription; `completionID` identifies one successful save.
+public struct RecorderTranscriptReadyPayload: Sendable, Codable, Equatable {
+    public let recordingID: UUID
+    public let completionID: UUID
+    public let completedAt: Date
+    public let text: String
+    public let audioFilePath: String
+    public let transcriptFilePath: String
+    public let markdownFilePath: String?
+
+    public init(
+        recordingID: UUID,
+        completionID: UUID = UUID(),
+        completedAt: Date = Date(),
+        text: String,
+        audioFilePath: String,
+        transcriptFilePath: String,
+        markdownFilePath: String? = nil
+    ) {
+        self.recordingID = recordingID
+        self.completionID = completionID
+        // Normalize to the wire representation so an emitted completion equals its persisted copy.
+        self.completedAt = Date(timeIntervalSince1970: completedAt.timeIntervalSince1970)
+        self.text = text
+        self.audioFilePath = audioFilePath
+        self.transcriptFilePath = transcriptFilePath
+        self.markdownFilePath = markdownFilePath
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case recordingID = "recording_id", completionID = "completion_id"
+        case completedAt = "completed_at", text, source
+        case audioFilePath = "audio_file", transcriptFilePath = "transcript_file"
+        case markdownFilePath = "markdown_file"
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        recordingID = try values.decode(UUID.self, forKey: .recordingID)
+        completionID = try values.decode(UUID.self, forKey: .completionID)
+        completedAt = Date(timeIntervalSince1970: try values.decode(Double.self, forKey: .completedAt))
+        text = try values.decode(String.self, forKey: .text)
+        audioFilePath = try values.decode(String.self, forKey: .audioFilePath)
+        transcriptFilePath = try values.decode(String.self, forKey: .transcriptFilePath)
+        markdownFilePath = try values.decodeIfPresent(String.self, forKey: .markdownFilePath)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(recordingID, forKey: .recordingID)
+        try values.encode(completionID, forKey: .completionID)
+        // Unix seconds retain subsecond precision, independently of the encoder's date strategy.
+        try values.encode(completedAt.timeIntervalSince1970, forKey: .completedAt)
+        try values.encode("recorder", forKey: .source)
+        try values.encode(text, forKey: .text)
+        try values.encode(audioFilePath, forKey: .audioFilePath)
+        try values.encode(transcriptFilePath, forKey: .transcriptFilePath)
+        try values.encodeIfPresent(markdownFilePath, forKey: .markdownFilePath)
+    }
+}
 
 public struct RecordingStartedPayload: Sendable, Codable {
     public let timestamp: Date

@@ -71,6 +71,56 @@ private func recorderAudioHasAudibleTail(
     return false
 }
 
+// File-system scans run away from the main actor. The caller validates a generation
+// afterwards, discarding reads that overlapped a transcript save or deletion.
+private func readRecorderTranscriptCompletions(
+    from directory: URL, since: Date?
+) throws -> [RecorderTranscriptReadyPayload] {
+    let files: [URL]
+    do {
+        files = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )
+    } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+        return []
+    }
+    return try files.filter { $0.lastPathComponent.hasSuffix(".transcript-ready.json") }
+        .compactMap { receiptURL -> RecorderTranscriptReadyPayload? in
+            let saved = try JSONDecoder().decode(
+                RecorderTranscriptReadyPayload.self, from: Data(contentsOf: receiptURL)
+            )
+            if let since, saved.completedAt < since { return nil }
+            // Derive current paths from the receipt rather than retaining obsolete absolute paths
+            // when a user moves the recordings folder together with its sidecars.
+            let audioURL = receiptURL.deletingPathExtension().deletingPathExtension().resolvingSymlinksInPath()
+            let txtURL = audioURL.deletingPathExtension().appendingPathExtension("txt")
+            guard try isRegularRecorderAutomationFile(audioURL), try isRegularRecorderAutomationFile(txtURL) else { return nil }
+            let markdownURL = audioURL.deletingPathExtension().appendingPathExtension("transcript.md")
+            let hasMarkdown = try saved.markdownFilePath != nil && isRegularRecorderAutomationFile(markdownURL)
+            return RecorderTranscriptReadyPayload(
+                recordingID: saved.recordingID,
+                completionID: saved.completionID,
+                completedAt: saved.completedAt,
+                text: saved.text,
+                audioFilePath: audioURL.path,
+                transcriptFilePath: txtURL.path,
+                markdownFilePath: hasMarkdown ? markdownURL.path : nil
+            )
+        }
+        .sorted {
+            if $0.completedAt == $1.completedAt { return $0.completionID.uuidString < $1.completionID.uuidString }
+            return $0.completedAt < $1.completedAt
+        }
+}
+
+private func isRegularRecorderAutomationFile(_ url: URL) throws -> Bool {
+    do {
+        return try url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true
+    } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+        return false
+    }
+}
+
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
     typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
@@ -78,6 +128,7 @@ final class AudioRecorderViewModel: ObservableObject {
         URL,
         [String: RecordingTranscriptionFailure]
     ) -> [RecordingItem]
+    typealias RecorderCompletionsLoader = @Sendable (URL, Date?) throws -> [RecorderTranscriptReadyPayload]
 
     nonisolated(unsafe) static var _shared: AudioRecorderViewModel?
     static var shared: AudioRecorderViewModel {
@@ -320,6 +371,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let dictionaryService: DictionaryService
     private let audioSamplesLoader: AudioSamplesLoader
     private let recordingsLoader: RecordingsLoader
+    private let recorderCompletionsLoader: RecorderCompletionsLoader
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
@@ -344,6 +396,7 @@ final class AudioRecorderViewModel: ObservableObject {
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         recordingsLoader: RecordingsLoader? = nil,
+        recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
     ) {
         self.recorderService = recorderService
@@ -356,6 +409,7 @@ final class AudioRecorderViewModel: ObservableObject {
         self.recordingsLoader = recordingsLoader ?? { directory, transientFailures in
             Self.readRecordings(from: directory, transientFailures: transientFailures)
         }
+        self.recorderCompletionsLoader = recorderCompletionsLoader ?? readRecorderTranscriptCompletions
         self.defaults = defaults
         self.livePreviewStartObserver = livePreviewStartObserver
         self.streamingHandler = StreamingHandler(
@@ -828,6 +882,24 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderAPISessions[id]
     }
 
+    private var recorderTranscriptGeneration = 0
+
+    /// Reads durable completion receipts, including manual and calendar recordings.
+    func apiRecorderRecordings(since: Date? = nil) async throws -> [RecorderTranscriptReadyPayload] {
+        let directory = recorderService.recordingsDirectory
+        let loader = recorderCompletionsLoader
+        for _ in 0..<3 {
+            let generation = recorderTranscriptGeneration
+            let result = await Task.detached(priority: .utility) {
+                Result { try loader(directory, since) }
+            }.value
+            try Task.checkCancellation()
+            guard generation == recorderTranscriptGeneration else { continue }
+            return try result.get()
+        }
+        throw CocoaError(.fileReadUnknown)
+    }
+
     // MARK: - Calendar Meeting Automation
 
     func startCalendarMeetingRecording(
@@ -907,11 +979,13 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func deleteRecording(_ item: RecordingItem) {
         guard !isRetranscribing(item) else { return }
+        defer { recorderTranscriptGeneration &+= 1 }
 
         let sidecarURLs = [
             transcriptURL(for: item.url),
             transcriptMarkdownURL(for: item.url),
             transcriptDocumentURL(for: item.url),
+            transcriptReadyURL(for: item.url),
             transcriptionFailureURL(for: item.url)
         ]
 
@@ -1462,21 +1536,40 @@ final class AudioRecorderViewModel: ObservableObject {
         _ text: String,
         for audioURL: URL,
         calendarEvent: CalendarMeetingTranscriptMetadata?
-    ) throws {
+    ) throws -> RecorderTranscriptReadyPayload {
+        defer { recorderTranscriptGeneration &+= 1 }
+        let audioURL = audioURL.resolvingSymlinksInPath()
         let txtURL = transcriptURL(for: audioURL)
+        guard try isRegularRecorderAutomationFile(audioURL) else {
+            throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: audioURL.path])
+        }
+        let receiptURL = transcriptReadyURL(for: audioURL)
+        let previous = try FileManager.default.fileExists(atPath: receiptURL.path)
+            ? JSONDecoder().decode(RecorderTranscriptReadyPayload.self, from: Data(contentsOf: receiptURL))
+            : nil
+        let payload = RecorderTranscriptReadyPayload(
+            recordingID: previous?.recordingID ?? UUID(),
+            text: text,
+            audioFilePath: audioURL.path,
+            transcriptFilePath: txtURL.path,
+            markdownFilePath: calendarEvent == nil ? nil : transcriptMarkdownURL(for: audioURL).path
+        )
+        var writes = [RecordingFileWrite(url: txtURL, data: Data(text.utf8))]
         if let calendarEvent {
-            let documentWrites = try transcriptDocumentWrites(
+            writes += try transcriptDocumentWrites(
                 text: text,
                 calendarEvent: calendarEvent,
                 for: audioURL
             )
-            try writeRecordingFilesTransactionally([
-                RecordingFileWrite(url: txtURL, data: Data(text.utf8))
-            ] + documentWrites)
-        } else {
-            try text.write(to: txtURL, atomically: true, encoding: .utf8)
         }
+        writes.append(RecordingFileWrite(url: receiptURL, data: try JSONEncoder().encode(payload)))
+        try writeRecordingFilesTransactionally(writes)
         clearTranscriptionFailure(for: audioURL)
+        return payload
+    }
+
+    private func transcriptReadyURL(for audioURL: URL) -> URL {
+        audioURL.appendingPathExtension("transcript-ready.json")
     }
 
     private func transcriptDocumentURL(for audioURL: URL) -> URL {
@@ -1612,11 +1705,12 @@ final class AudioRecorderViewModel: ObservableObject {
         request: FinalTranscriptionRequest
     ) -> FinalTranscriptionOutcome {
         do {
-            try saveTranscript(
+            let payload = try saveTranscript(
                 text,
                 for: audioURL,
                 calendarEvent: request.calendarEvent
             )
+            EventBus.shared.emit(.recorderTranscriptReady(payload))
             return .transcriptSaved
         } catch {
             logger.error("Failed to save transcript: \(error.localizedDescription)")

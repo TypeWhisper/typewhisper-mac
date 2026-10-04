@@ -1,3 +1,4 @@
 # Unreleased
 
 - Gemini plugin: Choose Verbatim or Smart transcription for live dictation and audio files. Verbatim is now the default and preserves fillers, repetitions, and spoken corrections; select Smart to keep the previous cleanup and formatting behavior.
+- Recorder automation: Send successfully saved transcripts to Webhook Notifications or Script Runner with a separate, default-off option for each destination. The local API can retrieve completed manual, calendar, and API recordings after a restart, including retranscriptions. Webhook and Script Runner 1.2.0 require TypeWhisper 1.8.0.

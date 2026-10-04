@@ -394,16 +394,32 @@ func activate(host: HostServices) {
             print("Recording started at \(payload.timestamp)")
         case .recordingStopped(let payload):
             print("Duration: \(payload.durationSeconds)s")
+        case .recorderTranscriptReady(let payload):
+            print("Saved Recorder transcript: \(payload.transcriptFilePath)")
+            print("Completion: \(payload.completionID)")
         case .textInserted(let payload):
             print("Inserted: \(payload.text)")
         case .actionCompleted(let payload):
             print("Action \(payload.actionId): \(payload.message)")
         case .transcriptionFailed(let payload):
             print("Error: \(payload.error)")
+        default:
+            break
         }
     }
 }
 ```
+
+`recorderTranscriptReady` requires TypeWhisper 1.8.0 or later. It is separate from
+`transcriptionCompleted`, so existing dictation subscribers do not receive meetings.
+Subscribe only with an explicit Recorder opt-in. The payload contains the saved text,
+stable `recordingID`, per-save `completionID`, `completedAt`, `audioFilePath`,
+`transcriptFilePath`, and an optional `markdownFilePath`. It is emitted after a
+successful save, including retranscription, regardless of live-preview settings.
+Its JSON uses snake_case keys, `source: "recorder"`, and Unix seconds for `completed_at`.
+Delivery is best effort; `/v1/recorder/recordings?since=...` provides the latest durable
+completion per recording for catch-up. Retain the subscription ID and unsubscribe
+when deactivating your plugin.
 
 ---
 

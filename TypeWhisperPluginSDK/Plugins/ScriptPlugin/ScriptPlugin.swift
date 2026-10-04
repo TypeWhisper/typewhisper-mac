@@ -15,6 +15,7 @@ final class ScriptPlugin: NSObject, PostProcessorPlugin, @unchecked Sendable {
 
     private var host: HostServices?
     private var service: ScriptService?
+    private var subscriptionId: UUID?
 
     required override init() {
         super.init()
@@ -22,10 +23,18 @@ final class ScriptPlugin: NSObject, PostProcessorPlugin, @unchecked Sendable {
 
     func activate(host: HostServices) {
         self.host = host
-        self.service = ScriptService(dataDirectory: host.pluginDataDirectory, host: host)
+        let service = ScriptService(dataDirectory: host.pluginDataDirectory, host: host)
+        self.service = service
+        subscriptionId = host.eventBus.subscribe { [weak service] event in
+            if case .recorderTranscriptReady(let payload) = event {
+                await service?.processRecorderTranscript(payload)
+            }
+        }
     }
 
     func deactivate() {
+        if let subscriptionId { host?.eventBus.unsubscribe(id: subscriptionId) }
+        subscriptionId = nil
         host = nil
         service = nil
     }
@@ -64,13 +73,29 @@ struct ScriptConfig: Codable, Identifiable {
     var command: String
     var isEnabled: Bool
     var profileFilter: [String]
+    var includesRecordings: Bool
 
-    init(name: String = "", command: String = "", isEnabled: Bool = true, profileFilter: [String] = []) {
+    init(name: String = "", command: String = "", isEnabled: Bool = true, profileFilter: [String] = [], includesRecordings: Bool = false) {
         self.id = UUID()
         self.name = name
         self.command = command
         self.isEnabled = isEnabled
         self.profileFilter = profileFilter
+        self.includesRecordings = includesRecordings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, command, isEnabled, profileFilter, includesRecordings
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        command = try values.decode(String.self, forKey: .command)
+        isEnabled = try values.decode(Bool.self, forKey: .isEnabled)
+        profileFilter = try values.decode([String].self, forKey: .profileFilter)
+        includesRecordings = try values.decodeIfPresent(Bool.self, forKey: .includesRecordings) ?? false
     }
 }
 
@@ -149,11 +174,23 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Execution
 
-    func executeScript(_ script: ScriptConfig, input: String, context: PostProcessingContext) async -> String {
+    @MainActor
+    func processRecorderTranscript(_ payload: RecorderTranscriptReadyPayload) async {
+        let selectedScripts = scripts.filter { $0.isEnabled && $0.includesRecordings }
+        for script in selectedScripts {
+            // Each export receives the saved original. Its stdout must not rewrite the transcript.
+            _ = await executeScript(script, input: payload.text, context: PostProcessingContext(), recorder: payload)
+        }
+    }
+
+    func executeScript(
+        _ script: ScriptConfig, input: String, context: PostProcessingContext,
+        recorder: RecorderTranscriptReadyPayload? = nil
+    ) async -> String {
         let start = Date()
 
         do {
-            let output = try await runProcess(command: script.command, input: input, context: context)
+            let output = try await runProcess(command: script.command, input: input, context: context, recorder: recorder)
             let durationMs = Int(Date().timeIntervalSince(start) * 1000)
             addLog(ExecutionLogEntry(scriptName: script.name, success: true, durationMs: durationMs, errorMessage: nil))
             return output
@@ -164,7 +201,10 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func runProcess(command: String, input: String, context: PostProcessingContext) async throws -> String {
+    private func runProcess(
+        command: String, input: String, context: PostProcessingContext,
+        recorder: RecorderTranscriptReadyPayload?
+    ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
@@ -186,6 +226,20 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                     env["TYPEWHISPER_PROFILE"] = ruleName
                 }
                 if let selectedText = context.selectedText { env["TYPEWHISPER_SELECTED_TEXT"] = selectedText }
+                for key in ["TYPEWHISPER_SOURCE", "TYPEWHISPER_RECORDING_ID", "TYPEWHISPER_COMPLETION_ID",
+                            "TYPEWHISPER_COMPLETED_AT", "TYPEWHISPER_AUDIO_FILE", "TYPEWHISPER_TRANSCRIPT_FILE",
+                            "TYPEWHISPER_MARKDOWN_FILE"] {
+                    env.removeValue(forKey: key)
+                }
+                if let recorder {
+                    env["TYPEWHISPER_SOURCE"] = "recorder"
+                    env["TYPEWHISPER_RECORDING_ID"] = recorder.recordingID.uuidString
+                    env["TYPEWHISPER_COMPLETION_ID"] = recorder.completionID.uuidString
+                    env["TYPEWHISPER_COMPLETED_AT"] = String(recorder.completedAt.timeIntervalSince1970)
+                    env["TYPEWHISPER_AUDIO_FILE"] = recorder.audioFilePath
+                    env["TYPEWHISPER_TRANSCRIPT_FILE"] = recorder.transcriptFilePath
+                    env["TYPEWHISPER_MARKDOWN_FILE"] = recorder.markdownFilePath
+                }
                 process.environment = env
 
                 let stdinPipe = Pipe()
@@ -194,6 +248,13 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                 process.standardInput = stdinPipe
                 process.standardOutput = stdoutPipe
                 process.standardError = stderrPipe
+
+                var recorderInputURL: URL?
+                var recorderInputFile: FileHandle?
+                defer {
+                    try? recorderInputFile?.close()
+                    if let recorderInputURL { try? FileManager.default.removeItem(at: recorderInputURL) }
+                }
 
                 // Read stdout/stderr incrementally to prevent pipe deadlocks
                 let stdoutData = OSAllocatedUnfairLock(initialState: Data())
@@ -217,12 +278,26 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                 DispatchQueue.global().asyncAfter(deadline: .now() + 5, execute: timeoutWork)
 
                 do {
+                    if recorder != nil {
+                        // Exports may use only file paths and never read stdin. A private temporary
+                        // file avoids filling a pipe or raising a broken-pipe exception for long meetings.
+                        let url = FileManager.default.temporaryDirectory
+                            .appendingPathComponent("typewhisper-recorder-script-\(UUID().uuidString).txt")
+                        guard FileManager.default.createFile(
+                            atPath: url.path, contents: Data(input.utf8), attributes: [.posixPermissions: 0o600]
+                        ) else { throw CocoaError(.fileWriteUnknown) }
+                        recorderInputURL = url
+                        recorderInputFile = try FileHandle(forReadingFrom: url)
+                        process.standardInput = recorderInputFile
+                    }
                     try process.run()
 
                     // Write input to stdin
-                    let inputData = input.data(using: .utf8) ?? Data()
-                    stdinPipe.fileHandleForWriting.write(inputData)
-                    stdinPipe.fileHandleForWriting.closeFile()
+                    if recorder == nil {
+                        let inputData = input.data(using: .utf8) ?? Data()
+                        stdinPipe.fileHandleForWriting.write(inputData)
+                        stdinPipe.fileHandleForWriting.closeFile()
+                    }
 
                     process.waitUntilExit()
                     timeoutWork.cancel()
@@ -250,6 +325,12 @@ final class ScriptService: ObservableObject, @unchecked Sendable {
                             code: process.terminationStatus,
                             stderr: stderrStr
                         ))
+                        return
+                    }
+
+                    if recorder != nil {
+                        // Export commands commonly produce no stdout; exit status is their result.
+                        continuation.resume(returning: input)
                         return
                     }
 
@@ -537,6 +618,15 @@ private struct ScriptEditView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section(String(localized: "Recordings", bundle: bundle)) {
+                    Toggle(isOn: $script.includesRecordings) {
+                        Text("Also run for completed Recorder transcripts", bundle: bundle)
+                    }
+                    Text("Runs after saving, including retranscriptions. Receives the transcript via stdin and file paths via environment variables. Output does not change the saved transcript. Independent of rule filters.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Rules") {
                     if availableProfiles.isEmpty {
                         Text("No rules configured.")
@@ -581,6 +671,6 @@ private struct ScriptEditView: View {
             }
             .padding()
         }
-        .frame(width: 480, height: 460)
+        .frame(width: 480, height: 580)
     }
 }

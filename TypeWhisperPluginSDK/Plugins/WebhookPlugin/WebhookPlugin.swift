@@ -42,6 +42,8 @@ final class WebhookPlugin: NSObject, TypeWhisperPlugin, @unchecked Sendable {
             switch event {
             case .transcriptionCompleted(let payload):
                 await svc?.sendWebhooks(for: payload)
+            case .recorderTranscriptReady(let payload):
+                await svc?.sendWebhooks(for: payload)
             default:
                 break
             }
@@ -78,11 +80,12 @@ struct ExampleWebhookConfig: Codable, Identifiable {
     var secretHeaderNames: [String]
     var isEnabled: Bool
     var workflowFilter: [String]  // Empty = all transcriptions
+    var includesRecordings: Bool
 
     init(name: String = "", url: String = "", httpMethod: String = "POST",
          headers: [String: String] = ["Content-Type": "application/json"],
          secretHeaderNames: [String] = [],
-         isEnabled: Bool = true, workflowFilter: [String] = []) {
+         isEnabled: Bool = true, workflowFilter: [String] = [], includesRecordings: Bool = false) {
         self.id = UUID()
         self.name = name
         self.url = url
@@ -91,6 +94,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         self.secretHeaderNames = secretHeaderNames
         self.isEnabled = isEnabled
         self.workflowFilter = workflowFilter
+        self.includesRecordings = includesRecordings
     }
 
     var isUnmodifiedDefaultDraft: Bool {
@@ -101,6 +105,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
             && secretHeaderNames.isEmpty
             && isEnabled
             && workflowFilter.isEmpty
+            && !includesRecordings
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -112,6 +117,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         case secretHeaderNames
         case isEnabled
         case workflowFilter = "profileFilter"
+        case includesRecordings
     }
 
     init(from decoder: Decoder) throws {
@@ -124,6 +130,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         secretHeaderNames = try container.decodeIfPresent([String].self, forKey: .secretHeaderNames) ?? []
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         workflowFilter = try container.decode([String].self, forKey: .workflowFilter)
+        includesRecordings = try container.decodeIfPresent(Bool.self, forKey: .includesRecordings) ?? false
     }
 
     func encode(to encoder: Encoder) throws {
@@ -136,6 +143,7 @@ struct ExampleWebhookConfig: Codable, Identifiable {
         try container.encode(secretHeaderNames, forKey: .secretHeaderNames)
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encode(workflowFilter, forKey: .workflowFilter)
+        try container.encode(includesRecordings, forKey: .includesRecordings)
     }
 }
 
@@ -380,7 +388,17 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func sendSingle(_ webhook: ExampleWebhookConfig, payload: TranscriptionCompletedPayload, isRetry: Bool = false) async {
+    @MainActor
+    func sendWebhooks(for payload: RecorderTranscriptReadyPayload) async {
+        // Recorder opt-in is independent of dictation workflow filters.
+        for webhook in webhooks where webhook.isEnabled && webhook.includesRecordings {
+            await sendSingle(webhook, payload: payload)
+        }
+    }
+
+    private func sendSingle<Payload: Encodable & Sendable>(
+        _ webhook: ExampleWebhookConfig, payload: Payload, isRetry: Bool = false
+    ) async {
         guard let url = URL(string: webhook.url) else {
             addLog(ExampleDeliveryLogEntry(webhookName: webhook.name, url: webhook.url,
                                            statusCode: nil, error: "Invalid URL", success: false))
@@ -739,6 +757,15 @@ private struct ExampleWebhookEditView: View {
                             Text("POST", bundle: bundle).tag("POST")
                             Text("PUT", bundle: bundle).tag("PUT")
                         }
+                    }
+
+                    Section(String(localized: "Recordings", bundle: bundle)) {
+                        Toggle(isOn: $editorState.webhook.includesRecordings) {
+                            Text("Also send completed Recorder transcripts", bundle: bundle)
+                        }
+                        Text("Sends saved transcripts from manual, calendar, and API recordings, including retranscriptions. Independent of workflow filters.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Section(String(localized: "Workflows", bundle: bundle)) {

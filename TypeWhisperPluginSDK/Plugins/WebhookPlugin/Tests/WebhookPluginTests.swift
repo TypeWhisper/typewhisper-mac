@@ -5,6 +5,52 @@ import XCTest
 @testable import WebhookPlugin
 
 final class WebhookPluginTests: XCTestCase {
+    func testLegacyWebhookDoesNotOptIntoRecordings() throws {
+        let legacy = Data("""
+        {"id":"11111111-1111-4111-8111-111111111111","name":"Legacy","url":"https://example.com/hook","httpMethod":"POST","headers":{},"isEnabled":true,"profileFilter":[]}
+        """.utf8)
+        XCTAssertFalse(try JSONDecoder().decode(ExampleWebhookConfig.self, from: legacy).includesRecordings)
+        XCTAssertFalse(ExampleWebhookConfig().includesRecordings)
+    }
+
+    func testRecorderSubscriptionDeliversOnlyToOptedInEnabledWebhooks() async throws {
+        let bus = PluginTestEventBus()
+        let host = try PluginTestHostServices(eventBus: bus)
+        let webhooks = [
+            ExampleWebhookConfig(name: "Opted in", url: "https://example.com/recorder",
+                                 workflowFilter: ["Unrelated workflow"], includesRecordings: true),
+            ExampleWebhookConfig(name: "Default", url: "https://example.com/default"),
+            ExampleWebhookConfig(name: "Disabled", url: "https://example.com/disabled",
+                                 isEnabled: false, includesRecordings: true)
+        ]
+        try JSONEncoder().encode(webhooks).write(to: configURL(for: host))
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.com/recorder")!, statusCode: 204, httpVersion: nil, headerFields: nil
+        ))
+        let sessions = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            sessions.makeSession(outcomes: [.success(Data(), response)])
+        }
+        let plugin = WebhookPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        XCTAssertEqual(bus.subscriberCount, 1)
+        let payload = RecorderTranscriptReadyPayload(
+            recordingID: UUID(), text: "Meeting transcript", audioFilePath: "/recordings/meeting.wav",
+            transcriptFilePath: "/recordings/meeting.txt", markdownFilePath: "/recordings/meeting.transcript.md"
+        )
+        await bus.emit(.recorderTranscriptReady(payload))
+
+        let requests = sessions.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(request.url?.path, "/recorder")
+        XCTAssertEqual(try JSONDecoder().decode(RecorderTranscriptReadyPayload.self,
+                                               from: XCTUnwrap(request.httpBody)), payload)
+        plugin.deactivate()
+        XCTAssertEqual(bus.subscriberCount, 0)
+    }
+
     override func tearDown() {
         PluginHTTPClientTestHarness.reset()
         super.tearDown()

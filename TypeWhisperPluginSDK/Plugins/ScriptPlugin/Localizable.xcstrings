@@ -418,6 +418,75 @@
           }
         }
       }
+    },
+    "Also run for completed Recorder transcripts": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auch für fertige Recorder-Transkripte ausführen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーの完成した文字起こしにも実行"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时对录音器已完成的转录执行"
+          }
+        }
+      }
+    },
+    "Recordings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahmen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音"
+          }
+        }
+      }
+    },
+    "Runs after saving, including retranscriptions. Receives the transcript via stdin and file paths via environment variables. Output does not change the saved transcript. Independent of rule filters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird nach dem Speichern ausgeführt, auch bei erneuter Transkription. Erhält das Transkript über stdin und Dateipfade über Umgebungsvariablen. Die Ausgabe verändert das gespeicherte Transkript nicht. Unabhängig von Regelfiltern."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存後に実行します。再文字起こしも対象です。文字起こしは標準入力、ファイルパスは環境変数で渡されます。出力は保存済み文字起こしを変更しません。ルールフィルターとは独立しています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存后执行，包括重新转录。通过标准输入接收转录文本，通过环境变量接收文件路径。输出不会更改已保存的转录。不受规则筛选条件影响。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
