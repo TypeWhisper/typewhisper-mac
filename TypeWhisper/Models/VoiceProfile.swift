@@ -41,12 +41,16 @@ struct RecordingSpeakerEmbeddings: Codable, Equatable, Sendable {
 
 /// Matching rules for voice profiles.
 ///
-/// Values come from the on-device identification benchmark in
-/// `the iOS spec `2026-09-26-meeting-speaker-diarization-design.md``: correct
-/// profiles scored 0.796–0.968, other people at most 0.788, so a name is only
-/// suggested above 0.80 and with a clear lead over the next profile.
+/// Values come from a cross-meeting benchmark of the diarizer's embeddings:
+/// 16 AMI participants recorded in four meetings each and three German
+/// podcast episodes, profiles from one meeting matched against the others.
+/// With a meeting's worth of speech the right person scored at least 0.74,
+/// even on another microphone, and other people at most 0.66; no one got a
+/// wrong name above 0.63. 0.80 missed many speakers with little speech or a
+/// different microphone that 0.70 recognizes. A cluster that merged two
+/// voices is the main risk for a wrong name, so names stay suggestions.
 enum VoiceProfileMatching {
-    static let recognitionThreshold: Float = 0.80
+    static let recognitionThreshold: Float = 0.70
     static let minimumLead: Float = 0.10
     /// Shorter speech gives unreliable embeddings, for matching and enrolling.
     static let minimumSpeechSeconds: TimeInterval = 20
