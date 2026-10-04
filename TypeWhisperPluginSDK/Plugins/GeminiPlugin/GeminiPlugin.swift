@@ -3,6 +3,11 @@ import os
 import SwiftUI
 import TypeWhisperPluginSDK
 
+enum GeminiTranscriptionMode: String, Sendable {
+    case verbatim
+    case smart
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(GeminiPlugin)
@@ -24,6 +29,7 @@ final class GeminiPlugin: NSObject,
     private static let legacyCachedLLMModelsKey = "fetchedLLMModels"
     private static let selectedLLMModelKey = "selectedLLMModel"
     private static let selectedTranscriptionModelKey = "selectedModel"
+    private static let transcriptionModeKey = "transcriptionMode"
     private static let modelsEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
     private static let transcriptionRequestTimeout: TimeInterval = 60
     private static let dedicatedTranscriptionRequestTimeout: TimeInterval = 900
@@ -49,6 +55,7 @@ final class GeminiPlugin: NSObject,
         var apiKey: String?
         var selectedLLMModelId: String?
         var selectedTranscriptionModelId: String?
+        var transcriptionMode: GeminiTranscriptionMode = .verbatim
         var llmTemperatureModeRaw = PluginLLMTemperatureMode.providerDefault.rawValue
         var llmTemperatureValue = 0.3
         var fetchedLLMModels: [GeminiFetchedModel] = []
@@ -121,6 +128,11 @@ final class GeminiPlugin: NSObject,
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        let storedTranscriptionMode = host.userDefault(forKey: Self.transcriptionModeKey) as? String
+        state.withLock {
+            $0.transcriptionMode = storedTranscriptionMode.flatMap(GeminiTranscriptionMode.init(rawValue:))
+                ?? .verbatim
+        }
         _selectedTranscriptionModelId = Self.resolvedTranscriptionModelId(
             host.userDefault(forKey: Self.selectedTranscriptionModelKey) as? String,
             availableModels: resolvedTranscriptionModels,
@@ -292,6 +304,16 @@ final class GeminiPlugin: NSObject,
     }
 
     var supportsTranslation: Bool { false }
+
+    var transcriptionMode: GeminiTranscriptionMode {
+        state.withLock { $0.transcriptionMode }
+    }
+
+    func setTranscriptionMode(_ mode: GeminiTranscriptionMode) {
+        state.withLock { $0.transcriptionMode = mode }
+        host?.setUserDefault(mode.rawValue, forKey: Self.transcriptionModeKey)
+    }
+
     var supportsStreaming: Bool {
         liveTranscriptionModelId(for: selectedModelId) != nil
     }
@@ -361,6 +383,7 @@ final class GeminiPlugin: NSObject,
             audio: audio,
             apiKey: apiKey,
             modelId: modelId,
+            mode: transcriptionMode,
             language: language,
             prompt: prompt
         )
@@ -455,6 +478,7 @@ final class GeminiPlugin: NSObject,
         return try await GeminiLiveTranscriptionSession.connect(
             apiKey: apiKey,
             modelId: liveModelId,
+            mode: transcriptionMode,
             languageCodes: Self.resolvedLanguageCodes(from: languageSelection),
             customVocabulary: vocabulary,
             onProgress: onProgress
@@ -487,6 +511,7 @@ final class GeminiPlugin: NSObject,
         audio: AudioData,
         apiKey: String,
         modelId: String,
+        mode: GeminiTranscriptionMode,
         language: String?,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
@@ -498,6 +523,7 @@ final class GeminiPlugin: NSObject,
                     uploadedFile: uploadedFile,
                     apiKey: apiKey,
                     modelId: modelId,
+                    mode: mode,
                     language: language,
                     prompt: prompt,
                     timeout: Self.dedicatedTranscriptionRequestTimeout
@@ -609,6 +635,7 @@ final class GeminiPlugin: NSObject,
         uploadedFile: GeminiUploadedFile,
         apiKey: String,
         modelId: String,
+        mode: GeminiTranscriptionMode,
         language: String?,
         prompt: String?,
         timeout: TimeInterval
@@ -617,7 +644,8 @@ final class GeminiPlugin: NSObject,
             throw PluginTranscriptionError.apiError("Invalid Gemini Interactions API URL.")
         }
 
-        var transcriptionConfig: [String: Any] = ["mode": "smart"]
+        let modeConfig: Any = mode == .smart ? "smart" : ["type": "verbatim"]
+        var transcriptionConfig: [String: Any] = ["mode": modeConfig]
         if let languageCode = resolvedTranscriptionLanguageCode(language) {
             transcriptionConfig["language_codes"] = [languageCode]
         }
@@ -1070,6 +1098,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     static func connect(
         apiKey: String,
         modelId: String,
+        mode: GeminiTranscriptionMode,
         languageCodes: [String],
         customVocabulary: [String],
         onProgress: @Sendable @escaping (String) -> Bool
@@ -1097,6 +1126,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         do {
             try await session.start(
                 modelId: modelId,
+                mode: mode,
                 languageCodes: languageCodes,
                 customVocabulary: customVocabulary
             )
@@ -1109,6 +1139,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
 
     private func start(
         modelId: String,
+        mode: GeminiTranscriptionMode,
         languageCodes: [String],
         customVocabulary: [String]
     ) async throws {
@@ -1120,6 +1151,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
 
         let setupMessage = try Self.makeSetupMessage(
             modelId: modelId,
+            mode: mode,
             languageCodes: languageCodes,
             customVocabulary: customVocabulary
         )
@@ -1276,10 +1308,11 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
 
     static func makeSetupMessage(
         modelId: String,
+        mode: GeminiTranscriptionMode,
         languageCodes: [String],
         customVocabulary: [String]
     ) throws -> String {
-        var transcriptionConfig: [String: Any] = ["mode": "SMART"]
+        var transcriptionConfig: [String: Any] = ["mode": mode.rawValue.uppercased()]
         if !languageCodes.isEmpty {
             transcriptionConfig["languageCodes"] = languageCodes
         }
@@ -1540,6 +1573,7 @@ private struct GeminiSettingsView: View {
     @State private var showApiKey = false
     @State private var selectedLLMModel: String = ""
     @State private var selectedTranscriptionModel: String = ""
+    @State private var transcriptionMode: GeminiTranscriptionMode = .verbatim
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
     @State private var fetchedLLMModels: [GeminiFetchedModel] = []
@@ -1679,6 +1713,22 @@ private struct GeminiSettingsView: View {
                     }
                 }
 
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker(selection: $transcriptionMode) {
+                        Text("Verbatim", bundle: bundle).tag(GeminiTranscriptionMode.verbatim)
+                        Text("Smart", bundle: bundle).tag(GeminiTranscriptionMode.smart)
+                    } label: {
+                        Text("Transcription Mode", bundle: bundle)
+                    }
+                    .onChange(of: transcriptionMode) {
+                        plugin.setTranscriptionMode(transcriptionMode)
+                    }
+
+                    Text("Verbatim preserves fillers, repetitions, and self-corrections. Smart cleans up and formats the text.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -1723,6 +1773,7 @@ private struct GeminiSettingsView: View {
             }
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
             selectedTranscriptionModel = plugin.selectedModelId ?? ""
+            transcriptionMode = plugin.transcriptionMode
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels

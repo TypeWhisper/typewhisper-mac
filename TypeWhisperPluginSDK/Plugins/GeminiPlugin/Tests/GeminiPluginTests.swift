@@ -147,6 +147,37 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.5-transcribe")
     }
 
+    func testTranscriptionModeDefaultsToVerbatimForMissingOrInvalidSettings() throws {
+        for storedValue: Any? in [nil, "unknown", 42] {
+            var defaults = try Self.configuredDefaults()
+            defaults["transcriptionMode"] = storedValue
+            let host = try PluginTestHostServices(defaults: defaults)
+            let plugin = GeminiPlugin()
+            plugin.activate(host: host)
+            defer { plugin.deactivate() }
+
+            XCTAssertEqual(plugin.transcriptionMode, .verbatim)
+        }
+    }
+
+    func testTranscriptionModePersistsAndRestoresBothChoices() throws {
+        let host = try PluginTestHostServices(defaults: Self.configuredDefaults())
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        for mode in [GeminiTranscriptionMode.smart, .verbatim] {
+            plugin.setTranscriptionMode(mode)
+            XCTAssertEqual(plugin.transcriptionMode, mode)
+            XCTAssertEqual(host.userDefault(forKey: "transcriptionMode") as? String, mode.rawValue)
+
+            let restoredPlugin = GeminiPlugin()
+            restoredPlugin.activate(host: host)
+            XCTAssertEqual(restoredPlugin.transcriptionMode, mode)
+            restoredPlugin.deactivate()
+        }
+    }
+
     func testUnsupportedFlashSelectionFallsBackAndPersistsDefault() throws {
         let host = try PluginTestHostServices()
         let plugin = GeminiPlugin()
@@ -460,6 +491,7 @@ final class GeminiPluginTests: XCTestCase {
             ),
             apiKey: "gemini-key",
             modelId: "gemini-3.5-transcribe",
+            mode: .smart,
             language: " de ",
             prompt: "TypeWhisper, Gemini",
             timeout: 900
@@ -502,9 +534,17 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(try GeminiPlugin.parseDedicatedTranscriptionResponse(data), "hello from transcribe")
     }
 
-    func testDedicatedTranscribeUploadsRunsInteractionAndDeletesFile() async throws {
+    func testDedicatedTranscribeKeepsSelectedModeAcrossUploadAndDeletesFile() async throws {
+        for mode in [GeminiTranscriptionMode.verbatim, .smart] {
+            try await assertDedicatedTranscription(mode: mode)
+        }
+    }
+
+    private func assertDedicatedTranscription(mode: GeminiTranscriptionMode) async throws {
+        var defaults = try Self.configuredDefaults(selectedModel: "gemini-3.5-transcribe")
+        defaults["transcriptionMode"] = mode.rawValue
         let host = try PluginTestHostServices(
-            defaults: try Self.configuredDefaults(selectedModel: "gemini-3.5-transcribe"),
+            defaults: defaults,
             secrets: ["api-key": "gemini-key"]
         )
         let plugin = GeminiPlugin()
@@ -515,6 +555,8 @@ final class GeminiPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             switch store.sessions.count {
             case 0:
+                // Changing settings during upload must only affect the next transcription.
+                plugin.setTranscriptionMode(mode == .smart ? .verbatim : .smart)
                 return store.makeSession(outcomes: [
                     .success(
                         Data(),
@@ -570,11 +612,46 @@ final class GeminiPluginTests: XCTestCase {
         )
         XCTAssertEqual(store.sessions[1].requestedRequests.first?.url?.host, "upload.example.test")
         XCTAssertEqual(store.sessions[2].requestedRequests.first?.url?.path, "/v1beta/interactions")
+        let request = try XCTUnwrap(store.sessions[2].requestedRequests.first)
+        let body = try Self.jsonBody(from: request)
+        let generationConfig = try XCTUnwrap(body["generation_config"] as? [String: Any])
+        let config = try XCTUnwrap(generationConfig["transcription_config"] as? [String: Any])
+        if mode == .smart {
+            XCTAssertEqual(config["mode"] as? String, "smart")
+        } else {
+            XCTAssertEqual(config["mode"] as? [String: String], ["type": "verbatim"])
+        }
+        XCTAssertEqual(config["language_codes"] as? [String], ["en-US"])
+        XCTAssertEqual(config["custom_vocabulary"] as? [String], ["TypeWhisper"])
+        XCTAssertNil(config["timestamp_granularities"])
+        XCTAssertNil(config["diarization_mode"])
+    }
+
+    func testLiveSetupUsesEachSelectedTranscriptionMode() throws {
+        for (mode, expectedValue) in [(GeminiTranscriptionMode.verbatim, "VERBATIM"), (.smart, "SMART")] {
+            let message = try GeminiLiveTranscriptionSession.makeSetupMessage(
+                modelId: "gemini-3.5-transcribe-live",
+                mode: mode,
+                languageCodes: [],
+                customVocabulary: []
+            )
+            let body = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: Data(message.utf8)) as? [String: Any]
+            )
+            let setup = try XCTUnwrap(body["setup"] as? [String: Any])
+            let config = try XCTUnwrap(setup["inputAudioTranscription"] as? [String: Any])
+            XCTAssertEqual(config["mode"] as? String, expectedValue)
+            XCTAssertNil(config["languageCodes"])
+            XCTAssertNil(config["customVocabulary"])
+            XCTAssertNil(config["wordTimestamp"])
+            XCTAssertNil(config["diarization"])
+        }
     }
 
     func testLiveSetupAudioEncodingAndTranscriptReconciliation() throws {
         let setupMessage = try GeminiLiveTranscriptionSession.makeSetupMessage(
             modelId: "gemini-3.5-transcribe-live",
+            mode: .smart,
             languageCodes: ["de-DE", "en-US"],
             customVocabulary: ["TypeWhisper", "Gemini"]
         )
