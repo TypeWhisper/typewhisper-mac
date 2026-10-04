@@ -1556,6 +1556,11 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginChatError.apiError("Failed to parse response")
         }
 
+        // A reply stopped at max_tokens is incomplete; fail instead of returning it.
+        if (first["finish_reason"] as? String) == "length" {
+            throw PluginChatError.apiError("The reply was cut off at the output token limit (4096 tokens), so the text is incomplete.")
+        }
+
         // Reasoning models return `content: null` or typed parts for an empty
         // visible answer; the shared helper treats those as valid, not malformed.
         return PluginOpenAIChatHelper.chatMessageContent(from: message)

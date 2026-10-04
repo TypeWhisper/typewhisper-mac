@@ -65,3 +65,12 @@ public extension PluginChatError {
         PluginRateLimitResponse.describedMessage(from: responseData).map { .apiError($0) } ?? .rateLimited
     }
 }
+
+extension PluginChatError {
+    /// Error for a reply the provider stopped at its output token limit
+    /// (`finish_reason: "length"` / `stop_reason: "max_tokens"`).
+    static func outputTruncated(limit: Int?) -> PluginChatError {
+        let limitText = limit.map { " (\($0) tokens)" } ?? ""
+        return .apiError("The reply was cut off at the output token limit\(limitText), so the text is incomplete.")
+    }
+}

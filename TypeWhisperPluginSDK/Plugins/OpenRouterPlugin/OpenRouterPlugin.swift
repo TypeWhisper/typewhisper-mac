@@ -558,6 +558,11 @@ final class OpenRouterPlugin: NSObject,
             throw PluginChatError.apiError("Failed to parse response")
         }
 
+        // A reply stopped at max_tokens is incomplete; fail instead of returning it.
+        if (first["finish_reason"] as? String) == "length" {
+            throw PluginChatError.apiError("The reply was cut off at the output token limit (4096 tokens), so the text is incomplete.")
+        }
+
         // Reasoning models on OpenRouter (gpt-5.x, gpt-oss) return `content: null`
         // or an array of typed parts; the shared helper treats those as valid.
         return PluginOpenAIChatHelper.chatMessageContent(from: message)
