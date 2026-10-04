@@ -416,6 +416,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "ScriptPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ScriptPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "WebhookPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/WebhookPlugin",
@@ -770,6 +780,11 @@ let package = Package(
                 "CartesiaPlugin",
             ],
             path: "Plugins/CartesiaPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ScriptPluginTests",
+            dependencies: ["TypeWhisperPluginSDK", "TypeWhisperPluginSDKTesting", "ScriptPlugin"],
+            path: "Plugins/ScriptPlugin/Tests"
         ),
         .testTarget(
             name: "WebhookPluginTests",

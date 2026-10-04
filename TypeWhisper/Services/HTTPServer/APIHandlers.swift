@@ -1,5 +1,6 @@
 import Foundation
 import os
+import TypeWhisperPluginSDK
 
 private let apiLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "APIHandlers")
 
@@ -58,6 +59,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/recorder/stop", handler: handleStopRecorder)
         router.register("GET", "/v1/recorder/status", handler: handleRecorderStatus)
         router.register("GET", "/v1/recorder/session", handler: handleRecorderSession)
+        router.register("GET", "/v1/recorder/recordings") { [audioRecorderViewModel] request in
+            await Self.recorderRecordingsResponse(for: request, recorder: audioRecorderViewModel)
+        }
         router.register("GET", "/v1/dictionary/terms", handler: handleGetDictionaryTerms)
         router.register("PUT", "/v1/dictionary/terms", handler: handlePutDictionaryTerms)
         router.register("DELETE", "/v1/dictionary/terms", handler: handleDeleteDictionaryTerms)
@@ -1619,6 +1623,41 @@ final class APIHandlers: @unchecked Sendable {
             output_file: session.outputFile,
             error: session.error
         ))
+    }
+
+    // MARK: - GET /v1/recorder/recordings
+
+    static func recorderRecordingsResponse(
+        for request: HTTPRequest, recorder: AudioRecorderViewModel
+    ) async -> HTTPResponse {
+        let since: Date?
+        if let value = request.queryParams["since"] {
+            if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
+                since = Date(timeIntervalSince1970: seconds)
+            } else {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let fractionalDate = formatter.date(from: value)
+                formatter.formatOptions = [.withInternetDateTime]
+                guard let date = fractionalDate ?? formatter.date(from: value) else {
+                    return .error(status: 400, message: "Invalid 'since': use Unix seconds or an ISO 8601 timestamp")
+                }
+                since = date
+            }
+        } else {
+            since = nil
+        }
+
+        struct RecordingsResponse: Encodable {
+            let recordings: [RecorderTranscriptReadyPayload]
+        }
+        do {
+            return .json(RecordingsResponse(recordings: try await recorder.apiRecorderRecordings(since: since)))
+        } catch {
+            apiLogger.error("Recorder completion lookup failed: \(error.localizedDescription, privacy: .public)")
+            // Do not silently skip unreadable receipts: consumers could advance their cursor past them.
+            return .error(status: 500, message: "Could not read completed Recorder transcripts")
+        }
     }
 
     // MARK: - Helpers
