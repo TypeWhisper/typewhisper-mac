@@ -737,6 +737,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var dockIconBehaviorObserver: NSKeyValueObservation?
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
+    private var workspaceSleepObserver: NSObjectProtocol?
+    private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
     private let finderTranscriptionService = FinderTranscriptionService()
@@ -912,6 +914,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
                 ServiceContainer.shared.calendarMeetingAutomationController.handleWake()
             }
         }
+
+        // The optional microphone pre-roll keeps the input open, so release it while the
+        // Mac sleeps or the screen is locked and re-arm afterwards.
+        workspaceSleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: "system-sleep")
+            }
+        }
+        screenLockObservers = [
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.apple.screenIsLocked"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: "screen-locked")
+                }
+            },
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.apple.screenIsUnlocked"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    ServiceContainer.shared.audioRecordingService.resumeMicrophonePreroll()
+                }
+            },
+        ]
 
         // Observe settings window lifecycle
         NotificationCenter.default.addObserver(

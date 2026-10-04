@@ -883,6 +883,7 @@ struct RecordingSettingsView: View {
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var bluetoothInstantStartEnabled = false
+    @AppStorage(UserDefaultsKeys.microphonePrerollEnabled) private var microphonePrerollEnabled = false
     @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationEnabled) private var numberNormalizationEnabled = true
     @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
     private var numberNormalizationMinimumValue = TranscriptionNormalizationService.defaultNumberNormalizationMinimumValue
@@ -1178,6 +1179,18 @@ struct RecordingSettingsView: View {
                     }
 
                     Text(String(localized: "Keeps the Bluetooth microphone active between dictations. Audio between dictations is discarded. This shows the orange microphone indicator, uses more battery, and keeps headset audio in call-quality mode."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Toggle(
+                        String(localized: "Start speaking right away"),
+                        isOn: $microphonePrerollEnabled
+                    )
+                    .onChange(of: microphonePrerollEnabled) { _, _ in
+                        audioRecordingService.handleMicrophonePrerollPreferenceChange()
+                    }
+
+                    Text(String(localized: "Keeps the microphone running between dictations and holds the last half second of audio in memory only, so your first words are not cut off. Nothing is saved, sent, or processed until you start dictating. The orange microphone indicator stays on while this is enabled."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

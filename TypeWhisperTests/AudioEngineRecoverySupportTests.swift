@@ -295,6 +295,55 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         ))
     }
 
+    func testMicrophonePrerollOnExplicitInputRequiresOptInAndNonBluetoothSelection() {
+        func isEligible(
+            permission: Bool = true,
+            enabled: Bool = true,
+            deviceID: AudioDeviceID? = 6,
+            explicit: Bool = true,
+            bluetooth: Bool = false
+        ) -> Bool {
+            MicrophonePrerollInputPolicy.isEligibleForExplicitInput(
+                hasMicrophonePermission: permission,
+                isEnabled: enabled,
+                selectedDeviceID: deviceID,
+                hasExplicitDeviceSelection: explicit,
+                usesBluetoothTransport: bluetooth
+            )
+        }
+
+        XCTAssertTrue(isEligible())
+        XCTAssertFalse(isEligible(enabled: false))
+        XCTAssertFalse(isEligible(permission: false))
+        XCTAssertFalse(isEligible(deviceID: nil))
+        XCTAssertFalse(isEligible(explicit: false))
+        XCTAssertFalse(isEligible(bluetooth: true))
+        XCTAssertEqual(UserDefaultsKeys.microphonePrerollEnabled, "microphonePrerollEnabled")
+    }
+
+    func testMicrophonePrerollRearmPolicyBacksOffAndGivesUpAfterABurst() {
+        var policy = MicrophonePrerollRearmPolicy()
+
+        XCTAssertEqual(policy.recordFailure(at: 0), .retry(after: 0.5))
+        XCTAssertEqual(policy.recordFailure(at: 1), .retry(after: 2))
+        XCTAssertEqual(policy.recordFailure(at: 2), .retry(after: 5))
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 3), .giveUp)
+        XCTAssertTrue(policy.hasGivenUp)
+
+        policy.reset()
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 4), .retry(after: 0.5))
+    }
+
+    func testMicrophonePrerollRearmPolicyForgetsOldFailures() {
+        var policy = MicrophonePrerollRearmPolicy()
+        _ = policy.recordFailure(at: 0)
+        _ = policy.recordFailure(at: 1)
+
+        XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: 0.5))
+    }
+
     func testChangingSelectedDeviceIDClearsTheStoredInputDeviceName() {
         let service = AudioRecordingService()
         service.hasMicrophonePermissionOverride = false
