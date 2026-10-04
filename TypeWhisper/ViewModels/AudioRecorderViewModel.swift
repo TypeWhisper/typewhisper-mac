@@ -986,6 +986,7 @@ final class AudioRecorderViewModel: ObservableObject {
             transcriptMarkdownURL(for: item.url),
             transcriptDocumentURL(for: item.url),
             transcriptReadyURL(for: item.url),
+            recordingIdentityURL(for: item.url),
             transcriptionFailureURL(for: item.url)
         ]
 
@@ -1544,11 +1545,9 @@ final class AudioRecorderViewModel: ObservableObject {
             throw CocoaError(.fileReadNoSuchFile, userInfo: [NSFilePathErrorKey: audioURL.path])
         }
         let receiptURL = transcriptReadyURL(for: audioURL)
-        let previous = try FileManager.default.fileExists(atPath: receiptURL.path)
-            ? JSONDecoder().decode(RecorderTranscriptReadyPayload.self, from: Data(contentsOf: receiptURL))
-            : nil
+        let identity = try recordingIdentity(for: audioURL)
         let payload = RecorderTranscriptReadyPayload(
-            recordingID: previous?.recordingID ?? UUID(),
+            recordingID: identity.recordingID,
             text: text,
             audioFilePath: audioURL.path,
             transcriptFilePath: txtURL.path,
@@ -1562,6 +1561,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 for: audioURL
             )
         }
+        writes.append(RecordingFileWrite(url: recordingIdentityURL(for: audioURL), data: try JSONEncoder().encode(identity)))
         writes.append(RecordingFileWrite(url: receiptURL, data: try JSONEncoder().encode(payload)))
         try writeRecordingFilesTransactionally(writes)
         clearTranscriptionFailure(for: audioURL)
@@ -1570,6 +1570,41 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func transcriptReadyURL(for audioURL: URL) -> URL {
         audioURL.appendingPathExtension("transcript-ready.json")
+    }
+
+    private struct RecordingIdentity: Codable {
+        let recordingID: UUID
+
+        private enum CodingKeys: String, CodingKey {
+            case recordingID = "recording_id"
+        }
+    }
+
+    private func recordingIdentityURL(for audioURL: URL) -> URL {
+        audioURL.appendingPathExtension("recording-id.json")
+    }
+
+    private func recordingIdentity(for audioURL: URL) throws -> RecordingIdentity {
+        var foundExistingIdentity = false
+        // Either copy can recover the stable ID after the other is damaged. Reading only
+        // the identity also permits repairing receipts with invalid completion fields.
+        for url in [recordingIdentityURL(for: audioURL), transcriptReadyURL(for: audioURL)] {
+            let data: Data
+            do {
+                data = try Data(contentsOf: url)
+            } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+                continue
+            }
+            foundExistingIdentity = true
+            if let identity = try? JSONDecoder().decode(RecordingIdentity.self, from: data) {
+                return identity
+            }
+        }
+        // Losing both copies must not silently split one recording into a new identity.
+        guard !foundExistingIdentity else {
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSFilePathErrorKey: audioURL.path])
+        }
+        return RecordingIdentity(recordingID: UUID())
     }
 
     private func transcriptDocumentURL(for audioURL: URL) -> URL {

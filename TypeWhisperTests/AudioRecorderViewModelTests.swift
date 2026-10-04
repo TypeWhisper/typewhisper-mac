@@ -297,6 +297,73 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let afterDeletion = try await reloaded.apiRecorderRecordings()
         XCTAssertTrue(afterDeletion.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: original.audioFilePath + ".transcript-ready.json"))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: original.audioFilePath + ".recording-id.json"))
+    }
+
+    func testRecorderRetranscriptionRecoversIdentityWhenOneSidecarIsCorrupt() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("original transcript"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let directory = makeTemporaryDirectory()
+        let defaults = try makeDefaults()
+        let firstModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager, recordingsDirectory: directory)
+        let sessionID = try await firstModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try firstModel.apiStopRecording()
+        _ = try await waitForRecorderSession(firstModel, id: sessionID, status: .completed)
+        let initialCompletions = try await firstModel.apiRecorderRecordings()
+        let original = try XCTUnwrap(initialCompletions.first)
+        var previousCompletionID = original.completionID
+        setupPluginManager(groqBehavior: .success("repaired transcript"))
+
+        for suffix in [".transcript-ready.json", ".recording-id.json"] {
+            try Data("{truncated".utf8).write(to: URL(fileURLWithPath: original.audioFilePath + suffix))
+            let reloaded = makeViewModel(
+                defaults: defaults, modelManager: modelManager,
+                recorderService: makeRecorderService(recordingsDirectory: directory),
+                audioSamplesLoader: { _ in [0.25, -0.25] }
+            )
+            var events: [RecorderTranscriptReadyPayload] = []
+            EventBus.shared.emissionObserverForTesting = { event in
+                if case .recorderTranscriptReady(let payload) = event { events.append(payload) }
+            }
+            try await waitForRecordingsToLoad(reloaded, count: 1)
+            reloaded.transcribeRecording(try XCTUnwrap(reloaded.recordings.first))
+            try await waitForRetranscriptionToFinish(reloaded)
+
+            XCTAssertEqual(events.count, 1, suffix)
+            let repaired = try XCTUnwrap(events.first)
+            XCTAssertEqual(repaired.recordingID, original.recordingID, "Recovery must preserve identity across restarts")
+            XCTAssertNotEqual(repaired.completionID, previousCompletionID)
+            XCTAssertEqual(repaired.text, "repaired transcript")
+            XCTAssertEqual(try String(contentsOfFile: repaired.transcriptFilePath, encoding: .utf8), repaired.text)
+            let persisted = try await reloaded.apiRecorderRecordings()
+            XCTAssertEqual(persisted, [repaired])
+            let identity = try JSONSerialization.jsonObject(with: Data(contentsOf:
+                URL(fileURLWithPath: repaired.audioFilePath + ".recording-id.json"))) as? [String: String]
+            XCTAssertEqual(identity?["recording_id"], original.recordingID.uuidString)
+            previousCompletionID = repaired.completionID
+        }
+
+        for suffix in [".transcript-ready.json", ".recording-id.json"] {
+            try Data("{truncated".utf8).write(to: URL(fileURLWithPath: original.audioFilePath + suffix))
+        }
+        let unrecoverable = makeViewModel(
+            defaults: defaults, modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: directory),
+            audioSamplesLoader: { _ in [0.25, -0.25] }
+        )
+        var readyCount = 0
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .recorderTranscriptReady = event { readyCount += 1 }
+        }
+        try await waitForRecordingsToLoad(unrecoverable, count: 1)
+        unrecoverable.transcribeRecording(try XCTUnwrap(unrecoverable.recordings.first))
+        try await waitForRetranscriptionToFinish(unrecoverable, recordingsSatisfy: {
+            $0.recordings.first?.transcriptionFailure?.phase == .savingTranscript
+        })
+        XCTAssertEqual(readyCount, 0, "Do not mint a different ID if both copies were lost")
+        XCTAssertEqual(try String(contentsOfFile: original.transcriptFilePath, encoding: .utf8), "repaired transcript")
     }
 
     func testRecorderReadySkipsFailuresCancellationAndDisabledTranscription() async throws {
@@ -343,6 +410,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let original = try XCTUnwrap(initialCompletions.first)
         let receiptURL = URL(fileURLWithPath: original.audioFilePath + ".transcript-ready.json")
         let receiptData = try Data(contentsOf: receiptURL)
+        let identityURL = URL(fileURLWithPath: original.audioFilePath + ".recording-id.json")
+        let identityData = try Data(contentsOf: identityURL)
         try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: receiptURL.path)
         defer { try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: receiptURL.path) }
         setupPluginManager(groqBehavior: .success("replacement transcript"))
@@ -357,6 +426,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         })
         XCTAssertEqual(readyCount, 0)
         XCTAssertEqual(try Data(contentsOf: receiptURL), receiptData)
+        XCTAssertEqual(try Data(contentsOf: identityURL), identityData)
         XCTAssertEqual(try String(contentsOfFile: original.transcriptFilePath, encoding: .utf8), original.text)
         let afterFailure = try await viewModel.apiRecorderRecordings()
         XCTAssertEqual(afterFailure, [original])
