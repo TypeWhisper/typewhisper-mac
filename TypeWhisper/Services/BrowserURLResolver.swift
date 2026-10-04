@@ -10,6 +10,10 @@ private let browserURLResolutionQueue = DispatchQueue(
     label: "com.typewhisper.browser-url-resolution",
     qos: .utility
 )
+private let meetingTabResolutionQueue = DispatchQueue(
+    label: "com.typewhisper.meeting-tab-resolution",
+    qos: .utility
+)
 
 private final class BrowserResolutionCompletion<Value: Sendable>: @unchecked Sendable {
     private struct State {
@@ -67,11 +71,13 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         let provider = meetingTabProvider
         return await withCheckedContinuation { continuation in
             let completion = BrowserResolutionCompletion(continuation: continuation)
-            browserURLResolutionQueue.async {
+            meetingTabResolutionQueue.async {
                 completion.resume(returning: provider(bundleIdentifier))
             }
             DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
-                completion.resume(returning: nil)
+                if completion.resume(returning: nil) {
+                    browserURLResolverLogger.warning("Browser meeting-tab resolution timed out")
+                }
             }
         }
     }
@@ -94,20 +100,64 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
                     set windowURLs to get URL of every tab of every window
                     repeat with urlsInWindow in windowURLs
                         repeat with tabURL in urlsInWindow
-                            set end of tabURLs to contents of tabURL
+                            set tabValue to contents of tabURL
+                            if class of tabValue is text then
+                                if tabValue contains linefeed or tabValue contains return then error "Invalid tab URL"
+                                if (length of tabValue) < 2048 then set end of tabURLs to tabValue
+                            end if
                             if (count of tabURLs) > 512 then error "Too many tabs"
                         end repeat
                     end repeat
-                    return tabURLs
+                    set AppleScript's text item delimiters to linefeed
+                    return tabURLs as text
                 end tell
             end timeout
             """
-        var error: NSDictionary?
-        guard let result = NSAppleScript(source: script)?.executeAndReturnError(&error),
-              error == nil else { return nil }
-        return (0..<result.numberOfItems).compactMap { index in
-            result.atIndex(index + 1)?.stringValue.flatMap(validURL)
+        guard let output = executeMeetingTabScript(script) else { return nil }
+        return output.split(separator: "\n").compactMap { validURL(String($0)) }
+    }
+
+    // Isolate the AppleScript runtime as well as the queue: concurrent in-process
+    // NSAppleScript calls must not contend with a stalled dictation URL query.
+    static func executeMeetingTabScript(_ source: String) -> String? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", source]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        defer { try? output.fileHandleForReading.close() }
+        do {
+            try process.run()
+        } catch {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript could not start")
+            return nil
         }
+
+        let timeout = DispatchWorkItem {
+            if process.isRunning {
+                browserURLResolverLogger.warning("Browser meeting-tab AppleScript timed out")
+                process.terminate()
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2, execute: timeout)
+        defer { timeout.cancel() }
+
+        let data: Data
+        do {
+            data = try output.fileHandleForReading.readToEnd() ?? Data()
+        } catch {
+            process.terminate()
+            process.waitUntilExit()
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript failed")
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
     }
 
     private func resolve(

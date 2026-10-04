@@ -67,6 +67,118 @@ final class BrowserURLResolverTests: XCTestCase {
         XCTAssertEqual(emptyURLs, [])
     }
 
+    func testMeetingTabsResolveWhileActiveTabProviderIsBlocked() async {
+        let activeStarted = expectation(description: "Active-tab provider started")
+        let activeFinished = expectation(description: "Active-tab provider finished")
+        let releaseActive = DispatchSemaphore(value: 0)
+        defer { releaseActive.signal() }
+        let meeting = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let resolver = BrowserURLResolver(
+            resolutionProvider: { _, _ in
+                activeStarted.fulfill()
+                _ = releaseActive.wait(timeout: .now() + 5)
+                activeFinished.fulfill()
+                return BrowserResolution(url: nil, title: nil)
+            },
+            meetingTabProvider: { _ in [meeting] }
+        )
+
+        let activeTask = Task { await resolver.activeURL(for: SupportedMeetingBrowser.chrome) }
+        await fulfillment(of: [activeStarted], timeout: 2)
+        let meetingURLs = await resolver.meetingTabURLs(for: SupportedMeetingBrowser.chrome)
+        releaseActive.signal()
+        _ = await activeTask.value
+        await fulfillment(of: [activeFinished], timeout: 2)
+
+        XCTAssertEqual(meetingURLs, [meeting])
+    }
+
+    func testActiveTabResolvesWhileMeetingTabProviderIsBlocked() async {
+        let meetingStarted = expectation(description: "Meeting-tab provider started")
+        let meetingFinished = expectation(description: "Meeting-tab provider finished")
+        let releaseMeeting = DispatchSemaphore(value: 0)
+        defer { releaseMeeting.signal() }
+        let foreground = URL(string: "https://example.com/document")!
+        let resolver = BrowserURLResolver(
+            resolutionProvider: { _, _ in BrowserResolution(url: foreground, title: nil) },
+            meetingTabProvider: { _ in
+                meetingStarted.fulfill()
+                _ = releaseMeeting.wait(timeout: .now() + 5)
+                meetingFinished.fulfill()
+                return []
+            }
+        )
+
+        let meetingTask = Task { await resolver.meetingTabURLs(for: SupportedMeetingBrowser.chrome) }
+        await fulfillment(of: [meetingStarted], timeout: 2)
+        let activeURL = await resolver.activeURL(for: SupportedMeetingBrowser.chrome)
+        releaseMeeting.signal()
+        _ = await meetingTask.value
+        await fulfillment(of: [meetingFinished], timeout: 2)
+
+        XCTAssertEqual(activeURL, foreground)
+    }
+
+    func testMeetingScriptPreservesOutputAndDistinguishesFailureFromEmptyResult() async {
+        let output = await Task.detached {
+            BrowserURLResolver.executeMeetingTabScript(
+                "return \"https://example.com/?a=1,b=2\" & linefeed & \"https://example.com/c\""
+            )
+        }.value
+        let empty = await Task.detached {
+            BrowserURLResolver.executeMeetingTabScript("return \"\"")
+        }.value
+        let failure = await Task.detached {
+            BrowserURLResolver.executeMeetingTabScript("error \"Test failure\"")
+        }.value
+
+        XCTAssertEqual(output, "https://example.com/?a=1,b=2\nhttps://example.com/c\n")
+        XCTAssertEqual(empty, "\n")
+        XCTAssertNil(failure)
+    }
+
+    func testMeetingScriptTimeoutDoesNotBlockTheNextQuery() async {
+        let result = await Task.detached {
+            BrowserURLResolver.executeMeetingTabScript("delay 10\nreturn \"late\"")
+        }.value
+        XCTAssertNil(result)
+
+        let next = await Task.detached {
+            BrowserURLResolver.executeMeetingTabScript("return \"next\"")
+        }.value
+        XCTAssertEqual(next, "next\n")
+    }
+
+    func testLiveMeetingTabsResolveWhileActiveAppleScriptIsBlocked() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        guard let browser = environment["TYPEWHISPER_TEST_BROWSER_BUNDLE_ID"],
+              let expectedString = environment["TYPEWHISPER_TEST_BROWSER_URL"],
+              let expectedURL = URL(string: expectedString) else {
+            throw XCTSkip("Live browser test requires an explicitly selected browser and test URL")
+        }
+        let activeStarted = expectation(description: "Active AppleScript started")
+        let activeFinished = expectation(description: "Active AppleScript finished")
+        let activeIsRunning = OSAllocatedUnfairLock(initialState: false)
+        let resolver = BrowserURLResolver(resolutionProvider: { _, _ in
+            activeIsRunning.withLock { $0 = true }
+            activeStarted.fulfill()
+            var error: NSDictionary?
+            _ = NSAppleScript(source: "delay 4")?.executeAndReturnError(&error)
+            XCTAssertNil(error)
+            activeIsRunning.withLock { $0 = false }
+            activeFinished.fulfill()
+            return BrowserResolution(url: nil, title: nil)
+        })
+
+        let activeTask = Task { await resolver.activeURL(for: browser) }
+        await fulfillment(of: [activeStarted], timeout: 2)
+        let urls = await resolver.meetingTabURLs(for: browser)
+        XCTAssertTrue(urls?.contains(expectedURL) == true, "Expected test tab was not resolved")
+        XCTAssertTrue(activeIsRunning.withLock { $0 }, "Meeting lookup waited for the active script")
+        _ = await activeTask.value
+        await fulfillment(of: [activeFinished], timeout: 6)
+    }
+
     func testBrowserAudioProcessAttributionAcceptsExactMainBundleIdentifiers() {
         for bundleIdentifier in SupportedMeetingBrowser.automaticURLBundleIdentifiers {
             XCTAssertEqual(

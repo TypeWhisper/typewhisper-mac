@@ -55,6 +55,10 @@ The legacy notification start identifier remains registered for requests schedul
 
 ## Calls without calendar events
 
+Meeting-tab queries use a separate serial queue and a bounded `osascript` subprocess so a stalled in-process AppleScript used by dictation cannot starve meeting detection. The subprocess is terminated after two seconds; the outer query retains its independent 2.5-second fallback. Timeout diagnostics never include tab URLs or titles.
+
+`BrowserURLResolverTests.testLiveMeetingTabsResolveWhileActiveAppleScriptIsBlocked` is an opt-in live regression test. Open a disposable test URL in a supported browser, then set `TEST_RUNNER_TYPEWHISPER_TEST_BROWSER_BUNDLE_ID` and `TEST_RUNNER_TYPEWHISPER_TEST_BROWSER_URL` when running that test with `xcodebuild test`. It verifies the real tab query while an in-process AppleScript is blocked; normal test runs skip it without those explicit inputs.
+
 Ad-hoc native calls require five seconds of attributed microphone activity; browser calls require twenty seconds plus exactly one recognized meeting identity across open tabs. Both then use the cancellable five-second start countdown. Reminder mode publishes a detected-call notification and waits for the explicit Start action. Output-only activity and generic camera presence cannot start an ad-hoc recording. FaceTime's shared telephony services remain calendar-only.
 
 A matching selected calendar event takes precedence, including its declined/suppressed state; ad-hoc detection does not bypass it. Detected sessions have ephemeral IDs, use a provider-based filename, and never export fabricated calendar metadata. A ninety-second gap permits a new session; shorter gaps preserve cancellation and recorded-session state. Active recordings retain their session until stopped. Auto-stop waits through ninety seconds without matching activity before showing the existing fifteen-second warning.
