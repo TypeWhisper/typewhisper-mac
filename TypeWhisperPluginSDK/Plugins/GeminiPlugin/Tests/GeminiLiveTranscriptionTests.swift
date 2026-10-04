@@ -38,13 +38,16 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
     func testSilentAudioAfterCompletionDoesNotWaitForAnotherTurn() async throws {
         for completion in ["generationComplete", "turnComplete"] {
             let socket = GeminiTestWebSocket()
-            let session = try await makeSession(socket: socket)
+            let clock = GeminiTestClock()
+            let session = try await makeSession(socket: socket, clock: clock)
             try await session.appendAudio(samples: [0.1])
+            clock.advance(by: .seconds(1))
             try await session.handle(.string("{\"serverContent\":{\"inputTranscription\":{\"text\":\"Already complete\"},\"\(completion)\":true}}"))
             try await session.appendAudio(samples: [Float](repeating: 0, count: 4_800))
+            clock.advance(by: .milliseconds(50))
 
             let start = ContinuousClock.now
-            let result = try await session.finish()
+            let result = try await finishWithWatchdog(session)
 
             XCTAssertEqual(result.text, "Already complete")
             XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
@@ -87,7 +90,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         clock.advance(by: .milliseconds(1))
         let settled = await session.hasSettledCompletion
         XCTAssertTrue(settled)
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "Hello world")
     }
 
@@ -104,7 +107,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertFalse(afterInterim)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"world"},"turnComplete":true}}"#))
         clock.advance(by: .milliseconds(50))
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "Hello world")
     }
 
@@ -120,9 +123,10 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let staleCompletion = await session.hasSettledCompletion
         XCTAssertFalse(staleCompletion)
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"second"}}}"#))
+        clock.advance(by: .seconds(1))
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"second"},"generationComplete":true}}"#))
         clock.advance(by: .milliseconds(50))
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "First second")
     }
 
@@ -135,8 +139,57 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertFalse(pendingInterim)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Corrected final"}}}"#))
         clock.advance(by: .milliseconds(50))
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "Corrected final")
+    }
+
+    func testCompletionSoonAfterResumedAudioStaysUncredited() async throws {
+        for completion in ["generationComplete", "turnComplete"] {
+            let clock = GeminiTestClock()
+            let session = try await makeSession(socket: GeminiTestWebSocket(), clock: clock)
+            try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
+            clock.advance(by: .seconds(2))
+            try await session.appendAudio(samples: [0.1])
+            clock.advance(by: .milliseconds(100))
+            try await session.handle(.string("{\"serverContent\":{\"\(completion)\":true}}"))
+            clock.advance(by: .seconds(2))
+
+            let attributedToResumedSpeech = await session.hasSettledCompletion
+            XCTAssertFalse(attributedToResumedSpeech, "An early completion must not become valid just because more time passes")
+
+            try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"second"},"generationComplete":true}}"#))
+            clock.advance(by: .milliseconds(50))
+            let result = try await finishWithWatchdog(session)
+            XCTAssertEqual(result.text, "First second")
+        }
+    }
+
+    func testCompletionDuringSendStaysUncreditedAfterSendReturns() async throws {
+        let clock = GeminiTestClock()
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, clock: clock)
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
+        clock.advance(by: .seconds(2))
+        socket.onSend = { _ in
+            clock.advance(by: .seconds(2))
+            try await session.handle(.string(#"{"serverContent":{"generationComplete":true}}"#))
+            clock.advance(by: .seconds(2))
+        }
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = nil
+        clock.advance(by: .milliseconds(50))
+        let completionDuringSend = await session.hasSettledCompletion
+        XCTAssertFalse(completionDuringSend)
+
+        try await session.handle(.string(#"{"serverContent":{"turnComplete":true}}"#))
+        clock.advance(by: .seconds(2))
+        let completionJustAfterSend = await session.hasSettledCompletion
+        XCTAssertFalse(completionJustAfterSend, "The guard window must start when the send returns")
+
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"second"},"generationComplete":true}}"#))
+        clock.advance(by: .milliseconds(50))
+        let result = try await finishWithWatchdog(session)
+        XCTAssertEqual(result.text, "First second")
     }
 
     func testCompletionBetweenAudioChunksDoesNotFinalizeRemainingAudio() async throws {
@@ -156,9 +209,10 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let staleCompletion = await session.hasSettledCompletion
         XCTAssertFalse(staleCompletion)
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"last chunk"}}}"#))
+        clock.advance(by: .seconds(1))
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"last chunk"},"generationComplete":true}}"#))
         clock.advance(by: .milliseconds(50))
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "First last chunk")
     }
 
@@ -359,4 +413,19 @@ func waitUntil(_ condition: @Sendable () -> Bool) async throws {
 private func isGeminiEndMessage(_ message: URLSessionWebSocketTask.Message) -> Bool {
     if case .string(let text) = message { return text == GeminiLiveTranscriptionSession.audioStreamEndMessage }
     return false
+}
+
+// A frozen test clock must not leave a broken finalization rule hanging forever.
+// This generous wall-clock watchdog is cleanup, not a timing assertion.
+private func finishWithWatchdog(_ session: GeminiLiveTranscriptionSession) async throws -> PluginTranscriptionResult {
+    try await withThrowingTaskGroup(of: PluginTranscriptionResult.self) { group in
+        group.addTask { try await session.finish() }
+        group.addTask {
+            try await Task.sleep(for: .seconds(10))
+            await session.cancel()
+            throw URLError(.timedOut)
+        }
+        defer { group.cancelAll() }
+        return try await group.next()!
+    }
 }

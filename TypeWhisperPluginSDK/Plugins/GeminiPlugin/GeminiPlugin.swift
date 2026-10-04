@@ -1268,6 +1268,10 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     private static let pcmChunkSampleCount = 1_600
     private static let setupTimeout: Duration = .seconds(10)
+    // A completion is not an acknowledgement of audio sent around a turn
+    // boundary. Leave near-send events uncredited and use the bounded fallback.
+    // This conservative VAD/network allowance is not a server ordering guarantee.
+    private static let completionAttributionDelay: Duration = .seconds(1)
     private let finishTimeout: Duration
     private let completionSettleTime: Duration
     private let now: @Sendable () -> ContinuousClock.Instant
@@ -1285,6 +1289,8 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var claimed = false
     private var audioRevision = 0
     private var lastNonSilentAudioRevision = 0
+    private var lastNonSilentAudioSentAt: ContinuousClock.Instant?
+    private var nonSilentSendsInFlight = 0
     private var completionAudioRevision: Int?
     private var completionReceivedAt: ContinuousClock.Instant?
     private var lastTranscriptAt: ContinuousClock.Instant?
@@ -1459,11 +1465,17 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             // it for server VAD, but preserve completion. Any nonzero PCM sample
             // invalidates completion, including between chunks of this append;
             // do not classify quiet speech as silence with an amplitude cutoff.
-            if pcmData.contains(where: { $0 != 0 }) {
+            let containsNonSilentAudio = pcmData.contains(where: { $0 != 0 })
+            if containsNonSilentAudio {
                 lastNonSilentAudioRevision = audioRevision
+                nonSilentSendsInFlight += 1
+            }
+            defer {
+                if containsNonSilentAudio { nonSilentSendsInFlight -= 1 }
             }
             do {
                 try await socket.send(.string(message))
+                if containsNonSilentAudio { lastNonSilentAudioSentAt = now() }
             } catch {
                 latestError = error.localizedDescription
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
@@ -1593,9 +1605,14 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             finalText: content.inputTranscription?.text
         )
         if preview != nil { lastTranscriptAt = now() }
-        if content.generationComplete == true || content.turnComplete == true {
+        let receivedAt = now()
+        let canAttributeCompletion = nonSilentSendsInFlight == 0
+            && (lastNonSilentAudioSentAt.map {
+                receivedAt >= $0.advanced(by: Self.completionAttributionDelay)
+            } ?? true)
+        if (content.generationComplete == true || content.turnComplete == true), canAttributeCompletion {
             completionAudioRevision = lastNonSilentAudioRevision
-            completionReceivedAt = now()
+            completionReceivedAt = receivedAt
         }
         if let preview, !preview.isEmpty { _ = onProgress?(preview) }
     }
