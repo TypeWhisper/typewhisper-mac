@@ -1,4 +1,5 @@
 import Foundation
+import os
 import XCTest
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
@@ -43,6 +44,62 @@ final class GeminiPluginTests: XCTestCase {
             defaults["selectedModel"] = selectedModel
         }
         return defaults
+    }
+
+    func testLiveCheckoutRejectsSessionInvalidatedBeforeHandover() async throws {
+        let changes: [(String, Bool, @Sendable (GeminiPlugin, PluginTestHostServices) -> Void)] = [
+            ("key", true, { plugin, _ in plugin.setApiKey("replacement-key") }),
+            ("key removal", true, { plugin, _ in plugin.removeApiKey() }),
+            ("model", true, { plugin, _ in plugin.selectModel("gemini-test-transcribe") }),
+            ("mode", true, { plugin, _ in plugin.setTranscriptionMode(.smart) }),
+            ("deactivation", true, { plugin, _ in plugin.deactivate() }),
+            ("activation", true, { plugin, host in plugin.activate(host: host) }),
+            ("unchanged settings", false, { plugin, _ in
+                plugin.setApiKey("test-key")
+                plugin.selectModel("gemini-3.5-transcribe")
+                plugin.setTranscriptionMode(.verbatim)
+            }),
+        ]
+        for (name, shouldReject, change) in changes {
+            var defaults = try Self.configuredDefaults()
+            defaults[Self.cachedTranscriptionModelsKey] = try JSONEncoder().encode([
+                GeminiFetchedTranscriptionModel(
+                    id: "gemini-3.5-transcribe", displayName: nil, liveModelId: "gemini-3.5-transcribe-live"
+                ),
+                GeminiFetchedTranscriptionModel(
+                    id: "gemini-test-transcribe", displayName: nil, liveModelId: "gemini-test-transcribe-live"
+                ),
+            ])
+            let host = try PluginTestHostServices(defaults: defaults, secrets: ["api-key": "test-key"])
+            let socket = GeminiTestWebSocket()
+            let session = try await GeminiLiveTranscriptionSession.connect(
+                apiKey: "test-key", modelId: "gemini-3.5-transcribe-live", mode: .verbatim,
+                languageCodes: [], customVocabulary: [], socket: socket
+            )
+            let beforeReturn = OSAllocatedUnfairLock<(@Sendable () -> Void)?>(initialState: nil)
+            let plugin = GeminiPlugin(liveSessionCheckout: { _, _, _ in
+                // Simulate checkout winning the race with the old pool's asynchronous shutdown.
+                beforeReturn.withLock { $0 }?()
+                return session
+            })
+            plugin.activate(host: host)
+            beforeReturn.withLock { $0 = { change(plugin, host) } }
+            defer {
+                beforeReturn.withLock { $0 = nil }
+                plugin.deactivate()
+            }
+            do {
+                let returned = try await plugin.createLiveTranscriptionSession(
+                    language: "en", translate: false, prompt: nil, onProgress: { _ in true }
+                )
+                XCTAssertFalse(shouldReject, "Stale session returned after \(name)")
+                XCTAssertTrue(returned as? GeminiLiveTranscriptionSession === session)
+            } catch is CancellationError {
+                XCTAssertTrue(shouldReject, "Valid session rejected for \(name)")
+            }
+            XCTAssertEqual(socket.isClosed, shouldReject, "Socket cleanup after \(name)")
+            await session.cancel()
+        }
     }
 
     func testPreferredModelIdReflectsSelectedLLMModel() throws {

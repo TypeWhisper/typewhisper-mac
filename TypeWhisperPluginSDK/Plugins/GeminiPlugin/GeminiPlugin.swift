@@ -97,6 +97,10 @@ final class GeminiPlugin: NSObject,
         set { state.withLock { $0.fetchedTranscriptionModels = newValue } }
     }
     private var modelCatalogRefreshTask: Task<Void, Never>?
+    typealias LiveSessionCheckout = @Sendable (
+        GeminiLiveSessionPool, GeminiLiveConfiguration, @Sendable @escaping (String) -> Bool
+    ) async throws -> GeminiLiveTranscriptionSession
+    private let liveSessionCheckout: LiveSessionCheckout
 
     private let chatHelper = PluginOpenAIChatHelper(
         baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
@@ -104,6 +108,14 @@ final class GeminiPlugin: NSObject,
     )
 
     required override init() {
+        liveSessionCheckout = { pool, configuration, onProgress in
+            try await pool.checkout(configuration: configuration, onProgress: onProgress)
+        }
+        super.init()
+    }
+
+    init(liveSessionCheckout: @escaping LiveSessionCheckout) {
+        self.liveSessionCheckout = liveSessionCheckout
         super.init()
     }
 
@@ -472,10 +484,14 @@ final class GeminiPlugin: NSObject,
         guard !translate else {
             throw PluginTranscriptionError.apiError("Gemini speech transcription does not support translation yet.")
         }
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        let snapshot = state.withLock {
+            (apiKey: $0.apiKey, modelId: $0.selectedTranscriptionModelId ?? Self.defaultTranscriptionModelId,
+             mode: $0.transcriptionMode, pool: $0.liveSessionPool)
+        }
+        guard let apiKey = snapshot.apiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
-        guard let liveModelId = liveTranscriptionModelId(for: selectedModelId) else {
+        guard let liveModelId = liveTranscriptionModelId(for: snapshot.modelId) else {
             throw PluginTranscriptionError.apiError("The selected Gemini model does not support live transcription.")
         }
 
@@ -488,14 +504,19 @@ final class GeminiPlugin: NSObject,
         let configuration = GeminiLiveConfiguration(
             apiKey: apiKey,
             modelId: liveModelId,
-            mode: transcriptionMode,
+            mode: snapshot.mode,
             languageCodes: Self.resolvedLanguageCodes(from: languageSelection),
             customVocabulary: vocabulary
         )
-        guard let pool = state.withLock({ $0.liveSessionPool }) else {
+        guard let pool = snapshot.pool else {
             throw CancellationError()
         }
-        return try await pool.checkout(configuration: configuration, onProgress: onProgress)
+        let session = try await liveSessionCheckout(pool, configuration, onProgress)
+        guard state.withLock({ $0.liveSessionPool === pool }) else {
+            await session.cancel()
+            throw CancellationError()
+        }
+        return session
     }
 
     nonisolated static func resolvedLanguageCodes(
