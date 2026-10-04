@@ -281,7 +281,7 @@ private final class GeminiTestSessionFactory: @unchecked Sendable {
     }
 }
 
-private final class GeminiTestClock: @unchecked Sendable {
+final class GeminiTestClock: @unchecked Sendable {
     private let time = OSAllocatedUnfairLock(initialState: ContinuousClock.now)
     func now() -> ContinuousClock.Instant { time.withLock { $0 } }
     func advance(by duration: Duration) { time.withLock { $0 = $0.advanced(by: duration) } }

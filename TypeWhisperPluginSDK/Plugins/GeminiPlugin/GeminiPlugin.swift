@@ -1492,7 +1492,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
 
     private func performFinish() async throws -> PluginTranscriptionResult {
         // Include a stalled audioStreamEnd send in the total release budget.
-        let deadline = ContinuousClock.now.advanced(by: finishTimeout)
+        let deadline = now().advanced(by: finishTimeout)
         let endSignal = Task {
             do {
                 try await socket.send(.string(Self.audioStreamEndMessage))
@@ -1505,7 +1505,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             endSignal.cancel()
             closeSocket(code: .normalClosure)
         }
-        while latestError == nil, !socketClosed, ContinuousClock.now < deadline {
+        while latestError == nil, !socketClosed, now() < deadline {
             try Task.checkCancellation()
             if endSignalSent, hasSettledCompletion { break }
             try await Task.sleep(for: .milliseconds(25))
@@ -1523,13 +1523,13 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         return result
     }
 
-    private var hasSettledCompletion: Bool {
+    var hasSettledCompletion: Bool {
         guard completionAudioRevision == lastNonSilentAudioRevision,
               let completionReceivedAt,
               !collector.hasUncommittedInterimText, !collector.resultText.isEmpty else { return false }
         // Input transcription and generation completion have no guaranteed order.
         let lastUpdate = max(completionReceivedAt, lastTranscriptAt ?? completionReceivedAt)
-        return ContinuousClock.now >= lastUpdate.advanced(by: completionSettleTime)
+        return now() >= lastUpdate.advanced(by: completionSettleTime)
     }
 
     func cancel() async {
@@ -1592,10 +1592,10 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             interimText: content.interimInputTranscription?.text,
             finalText: content.inputTranscription?.text
         )
-        if preview != nil { lastTranscriptAt = .now }
+        if preview != nil { lastTranscriptAt = now() }
         if content.generationComplete == true || content.turnComplete == true {
             completionAudioRevision = lastNonSilentAudioRevision
-            completionReceivedAt = .now
+            completionReceivedAt = now()
         }
         if let preview, !preview.isEmpty { _ = onProgress?(preview) }
     }
