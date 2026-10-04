@@ -1460,6 +1460,7 @@ final class APIHandlers: @unchecked Sendable {
                 let engine_ready_at_start: Bool?
                 let input_transport: String?
                 let request_to_first_audio_buffer_ms: Double?
+                let preroll_ms: Double
                 let recording_seconds: Double?
                 let stop_to_final_transcript_ms: Double?
                 let post_processing_ms: Double?
@@ -1511,6 +1512,7 @@ final class APIHandlers: @unchecked Sendable {
                     engine_ready_at_start: trace.engineReadyAtStart,
                     input_transport: trace.inputTransport,
                     request_to_first_audio_buffer_ms: trace.requestToFirstAudioBufferMs,
+                    preroll_ms: trace.prerollMs,
                     recording_seconds: trace.recordingSeconds,
                     stop_to_final_transcript_ms: trace.stopToFinalTranscriptMs,
                     post_processing_ms: trace.postProcessingMs,

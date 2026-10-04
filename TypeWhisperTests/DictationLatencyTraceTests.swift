@@ -25,6 +25,16 @@ final class DictationLatencyTraceTests: XCTestCase {
         XCTAssertNil(trace.stopToVerifiedInsertionMs)
     }
 
+    func testPrerollDefaultsToZeroAndIsLogged() {
+        var trace = trace()
+
+        XCTAssertEqual(trace.prerollMs, 0)
+        XCTAssertTrue(trace.logDescription.contains("prerollMs=0.0"))
+
+        trace.prerollMs = 412.5
+        XCTAssertTrue(trace.logDescription.contains("prerollMs=412.5"))
+    }
+
     func testAccessibilityInsertionCountsAsVerifiedWhenItReturns() {
         var trace = trace()
         trace.recordInsertion(.insertedViaAccessibility, timing: timing(inserted: 5_450_000_000, verified: 5_450_000_000))

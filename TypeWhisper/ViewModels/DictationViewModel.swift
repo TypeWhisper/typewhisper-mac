@@ -2034,6 +2034,8 @@ final class DictationViewModel: ObservableObject {
             from: requestUptimeNanoseconds,
             to: audioStartCompletedTimestamp
         )
+        let prerollMs = audioRecordingService.lastPrerollMilliseconds
+        updateLatencyTrace(sessionID: sessionID) { $0.prerollMs = prerollMs }
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
         modelManager.cancelAutoUnloadTimer()
@@ -2143,7 +2145,7 @@ final class DictationViewModel: ObservableObject {
 
         let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
         logger.info(
-            "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
+            "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public), prerollMs=\(String(format: "%.0f", prerollMs), privacy: .public)"
         )
     }
 
