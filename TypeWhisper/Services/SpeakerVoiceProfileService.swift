@@ -10,6 +10,9 @@ enum SpeakerVoiceState: Equatable {
     case suggestion
     /// The speaker is linked to a voice profile.
     case linked
+    /// The speaker is linked to a voice profile learned with an older model,
+    /// which recognizes no one until it is relearned from this recording.
+    case outdated
 }
 
 /// Recognizes named voices in recordings: keeps each recording's speaker
@@ -36,11 +39,17 @@ final class SpeakerVoiceProfileService: ObservableObject {
 
     /// Keeps the speakers' embeddings for enrolling them later and suggests
     /// the names of recognized voice profiles.
-    func recordVoices(_ embeddings: [String: [Float]], of transcript: SpeakerTranscript, recordID: UUID) {
+    func recordVoices(
+        _ embeddings: [String: [Float]],
+        model: String,
+        of transcript: SpeakerTranscript,
+        recordID: UUID
+    ) {
         guard premiumAccess() else { return }
         let speakerIDs = Set(transcript.speakerIDs)
         store.storeEmbeddings(
             embeddings.filter { speakerIDs.contains($0.key) },
+            model: model,
             forRecordID: recordID,
             revision: transcript.revision
         )
@@ -79,6 +88,7 @@ final class SpeakerVoiceProfileService: ObservableObject {
         let usedProfiles = Set(transcript.speakerIDs.compactMap { names?.profileID(for: $0) })
         let matches = VoiceProfileMatching.matches(
             speakers: embeddings,
+            embeddingModel: store.embeddingModel(forRecordID: recordID, revision: transcript.revision),
             speakingTime: transcript.speakingTime(of:),
             profiles: store.profiles.filter { !usedProfiles.contains($0.id) }
         )
@@ -103,30 +113,41 @@ final class SpeakerVoiceProfileService: ObservableObject {
         // A link synced from another device points to a profile that only
         // exists there; here the name is an ordinary name that can get a
         // profile of its own.
-        if let profileID = names?.profileID(for: speakerID), store.profile(withID: profileID) != nil {
-            return names?.isSuggestion(for: speakerID) == true ? .suggestion : .linked
+        if let profileID = names?.profileID(for: speakerID), let profile = store.profile(withID: profileID) {
+            if names?.isSuggestion(for: speakerID) == true { return .suggestion }
+            let canRelearn = voice(of: speakerID, inRecordID: recordID) != nil
+            return store.isOutdated(profile) && canRelearn ? .outdated : .linked
         }
-        guard premiumAccess(),
-              names?.displayName(for: speakerID) != nil,
-              transcript.speakingTime(of: speakerID) >= VoiceProfileMatching.minimumSpeechSeconds,
-              store.embeddings(forRecordID: recordID, revision: transcript.revision)[speakerID] != nil else {
+        guard transcript.speakingTime(of: speakerID) >= VoiceProfileMatching.minimumSpeechSeconds,
+              voice(of: speakerID, inRecordID: recordID) != nil else {
             return .none
         }
         return .canEnroll
     }
 
+    /// A named speaker's voice in this recording. Only embeddings of the
+    /// current model count, so an older recording can't put an outdated
+    /// voice into a profile.
     private func voice(
         of speakerID: String,
         inRecordID recordID: UUID
-    ) -> (name: String, profileID: UUID?, embedding: [Float], seconds: TimeInterval)? {
+    ) -> (name: String, profileID: UUID?, embedding: [Float], model: String, seconds: TimeInterval)? {
         guard premiumAccess(),
               let record = historyService.record(withID: recordID),
               let transcript = record.speakerTranscript,
               let name = record.speakerNames?.displayName(for: speakerID),
+              let model = store.embeddingModel(forRecordID: recordID, revision: transcript.revision),
+              model == store.currentEmbeddingModel,
               let embedding = store.embeddings(forRecordID: recordID, revision: transcript.revision)[speakerID] else {
             return nil
         }
-        return (name, record.speakerNames?.profileID(for: speakerID), embedding, transcript.speakingTime(of: speakerID))
+        return (
+            name,
+            record.speakerNames?.profileID(for: speakerID),
+            embedding,
+            model,
+            transcript.speakingTime(of: speakerID)
+        )
     }
 
     /// Creates a voice profile for a named speaker. A person enrolled again
@@ -136,10 +157,15 @@ final class SpeakerVoiceProfileService: ObservableObject {
               let voice = voice(of: speakerID, inRecordID: recordID) else { return }
         let profileID: UUID
         if let existing = store.profile(named: voice.name) {
-            store.learn(profileID: existing.id, embedding: voice.embedding, seconds: voice.seconds)
+            store.learn(profileID: existing.id, embedding: voice.embedding, model: voice.model, seconds: voice.seconds)
             profileID = existing.id
         } else {
-            profileID = store.enroll(name: voice.name, embedding: voice.embedding, seconds: voice.seconds).id
+            profileID = store.enroll(
+                name: voice.name,
+                embedding: voice.embedding,
+                model: voice.model,
+                seconds: voice.seconds
+            ).id
         }
         historyService.setSpeakerName(voice.name, for: speakerID, profileID: profileID, inRecordID: recordID)
         suggestNamesInStoredRecordings()
@@ -150,7 +176,7 @@ final class SpeakerVoiceProfileService: ObservableObject {
         guard state(of: speakerID, inRecordID: recordID) == .suggestion,
               let voice = voice(of: speakerID, inRecordID: recordID),
               let profileID = voice.profileID else { return }
-        store.learn(profileID: profileID, embedding: voice.embedding, seconds: voice.seconds)
+        store.learn(profileID: profileID, embedding: voice.embedding, model: voice.model, seconds: voice.seconds)
         historyService.setSpeakerName(voice.name, for: speakerID, profileID: profileID, inRecordID: recordID)
         suggestNamesInStoredRecordings()
     }
@@ -162,12 +188,12 @@ final class SpeakerVoiceProfileService: ObservableObject {
     }
 
     /// Replaces the profile's voice with this recording's, when the old one
-    /// came from poor audio or the wrong person.
+    /// came from poor audio, the wrong person, or an older model.
     func relearn(_ speakerID: String, inRecordID recordID: UUID) {
-        guard state(of: speakerID, inRecordID: recordID) == .linked,
+        guard [.linked, .outdated].contains(state(of: speakerID, inRecordID: recordID)),
               let voice = voice(of: speakerID, inRecordID: recordID),
               let profileID = voice.profileID else { return }
-        store.relearn(profileID: profileID, embedding: voice.embedding, seconds: voice.seconds)
+        store.relearn(profileID: profileID, embedding: voice.embedding, model: voice.model, seconds: voice.seconds)
         suggestNamesInStoredRecordings()
     }
 

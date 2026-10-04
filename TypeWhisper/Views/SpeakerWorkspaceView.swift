@@ -583,6 +583,11 @@ private struct SpeakerInspectorRow: View {
                         .foregroundStyle(.secondary)
                         .help(String(localized: "speakers.voice.linked"))
                         .accessibilityLabel(String(localized: "speakers.voice.linked"))
+                } else if voiceState == .outdated {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(.orange)
+                        .help(String(localized: "speakers.voice.outdated"))
+                        .accessibilityLabel(String(localized: "speakers.voice.outdated"))
                 }
                 if let share {
                     Text(share.fraction, format: .percent.precision(.fractionLength(0)))
@@ -637,7 +642,7 @@ private struct SpeakerInspectorRow: View {
                     if voiceState == .canEnroll {
                         Divider()
                         Button(String(localized: "speakers.voice.enroll")) { confirmsEnrollment = true }
-                    } else if voiceState == .linked {
+                    } else if voiceState == .linked || voiceState == .outdated {
                         Divider()
                         Button(String(localized: "speakers.voice.relearn")) { model.relearnVoice(of: speakerID) }
                             .disabled(!canCorrect)

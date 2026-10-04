@@ -510,7 +510,12 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             for (label, embedding) in result.speakerEmbeddings {
                 if let speakerID = numbering[label] { embeddings[speakerID] = embedding }
             }
-            voices?.recordVoices(embeddings, of: transcript, recordID: recordID)
+            voices?.recordVoices(
+                embeddings,
+                model: result.speakerEmbeddingModel ?? result.engine,
+                of: transcript,
+                recordID: recordID
+            )
         } catch is CancellationError {
             finishWithoutResult(recordID: recordID)
         } catch {

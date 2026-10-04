@@ -5,11 +5,17 @@ final class VoiceProfileMatchingTests: XCTestCase {
     private let anna = UUID()
     private let ben = UUID()
 
-    private func profile(_ id: UUID, _ name: String, _ embedding: [Float]) -> VoiceProfile {
+    private func profile(
+        _ id: UUID,
+        _ name: String,
+        _ embedding: [Float],
+        model: String? = "model-a"
+    ) -> VoiceProfile {
         VoiceProfile(
             id: id,
             name: name,
             embedding: embedding,
+            embeddingModel: model,
             enrolledSeconds: 60,
             createdAt: Date(timeIntervalSince1970: 0),
             updatedAt: Date(timeIntervalSince1970: 0)
@@ -25,6 +31,7 @@ final class VoiceProfileMatchingTests: XCTestCase {
                 "S3": [0.05, 1, 0],
                 "S4": [0, 0, 1],
             ],
+            embeddingModel: "model-a",
             speakingTime: { _ in 60 },
             profiles: profiles
         )
@@ -40,14 +47,43 @@ final class VoiceProfileMatchingTests: XCTestCase {
 
         XCTAssertTrue(VoiceProfileMatching.matches(
             speakers: ["S1": [1, 0.05, 0.05]],
+            embeddingModel: "model-a",
             speakingTime: { _ in 60 },
             profiles: profiles
         ).isEmpty, "Anna and Ben score almost the same")
         XCTAssertTrue(VoiceProfileMatching.matches(
             speakers: ["S1": [1, 0, 0]],
+            embeddingModel: "model-a",
             speakingTime: { _ in 10 },
             profiles: [profile(anna, "Anna", [1, 0, 0])]
         ).isEmpty, "too little speech")
+    }
+
+    func testOnlyProfilesOfTheSpeakersEmbeddingModelMatch() {
+        let profiles = [
+            profile(anna, "Anna", [1, 0, 0], model: "model-b"),
+            profile(ben, "Ben", [0, 1, 0], model: nil),
+        ]
+        let speakers: [String: [Float]] = ["S1": [1, 0, 0], "S2": [0, 1, 0]]
+
+        XCTAssertTrue(VoiceProfileMatching.matches(
+            speakers: speakers,
+            embeddingModel: "model-a",
+            speakingTime: { _ in 60 },
+            profiles: profiles
+        ).isEmpty, "the same numbers from another model mean nothing")
+        XCTAssertTrue(VoiceProfileMatching.matches(
+            speakers: speakers,
+            embeddingModel: nil,
+            speakingTime: { _ in 60 },
+            profiles: profiles
+        ).isEmpty, "embeddings of an unknown model never match")
+        XCTAssertEqual(VoiceProfileMatching.matches(
+            speakers: speakers,
+            embeddingModel: "model-b",
+            speakingTime: { _ in 60 },
+            profiles: profiles
+        ).mapValues(\.profileID), ["S1": anna])
     }
 
     func testCorrectedEmbeddingsFollowMergesButNotSingleMovedTurns() throws {
@@ -107,13 +143,13 @@ final class VoiceProfileStoreTests: XCTestCase {
 
     func testProfilesAndEmbeddingsPersistOutsideBackups() throws {
         let store = VoiceProfileStore(directoryURL: root)
-        let profile = store.enroll(name: "Ben", embedding: [1, 0], seconds: 30)
-        store.enroll(name: "anna", embedding: [0, 1], seconds: 30)
+        let profile = store.enroll(name: "Ben", embedding: [1, 0], model: "model-a", seconds: 30)
+        store.enroll(name: "anna", embedding: [0, 1], model: "model-a", seconds: 30)
         let recordID = UUID()
         let revision = UUID()
-        store.storeEmbeddings(["S1": [1, 0]], forRecordID: recordID, revision: revision)
+        store.storeEmbeddings(["S1": [1, 0]], model: "model-a", forRecordID: recordID, revision: revision)
 
-        store.learn(profileID: profile.id, embedding: [0, 1], seconds: 10)
+        store.learn(profileID: profile.id, embedding: [0, 1], model: "model-a", seconds: 10)
         store.rename(profileID: profile.id, to: "  Benjamin ")
 
         let reopened = VoiceProfileStore(directoryURL: root)
@@ -122,6 +158,9 @@ final class VoiceProfileStoreTests: XCTestCase {
         XCTAssertEqual(learned.enrolledSeconds, 40)
         XCTAssertEqual(learned.embedding[0], 0.75, accuracy: 0.0001)
         XCTAssertEqual(reopened.embeddings(forRecordID: recordID, revision: revision), ["S1": [1, 0]])
+        XCTAssertEqual(reopened.embeddingModel(forRecordID: recordID, revision: revision), "model-a")
+        XCTAssertEqual(reopened.currentEmbeddingModel, "model-a")
+        XCTAssertFalse(reopened.isOutdated(learned))
         XCTAssertTrue(reopened.embeddings(forRecordID: recordID, revision: UUID()).isEmpty)
         XCTAssertEqual(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
 
@@ -130,6 +169,37 @@ final class VoiceProfileStoreTests: XCTestCase {
         let emptied = VoiceProfileStore(directoryURL: root)
         XCTAssertEqual(emptied.profiles.map(\.name), ["anna"])
         XCTAssertTrue(emptied.embeddings(forRecordID: recordID, revision: revision).isEmpty)
+    }
+
+    func testAProfileOfAnotherModelIsOutdatedAndReplacedInsteadOfAveraged() throws {
+        let store = VoiceProfileStore(directoryURL: root)
+        let profile = store.enroll(name: "Ben", embedding: [1, 0], model: "model-a", seconds: 30)
+        store.storeEmbeddings(["S1": [0, 1, 0]], model: "model-b", forRecordID: UUID(), revision: UUID())
+        XCTAssertTrue(store.isOutdated(try XCTUnwrap(store.profile(withID: profile.id))))
+
+        store.learn(profileID: profile.id, embedding: [0, 1, 0], model: "model-b", seconds: 10)
+
+        let learned = try XCTUnwrap(store.profile(withID: profile.id))
+        XCTAssertEqual(learned.embedding, [0, 1, 0])
+        XCTAssertEqual(learned.embeddingModel, "model-b")
+        XCTAssertEqual(learned.enrolledSeconds, 10)
+        XCTAssertFalse(store.isOutdated(learned))
+    }
+
+    func testProfilesStoredWithoutAModelAreOutdated() throws {
+        let file = root.appendingPathComponent("voice-profiles.json")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let id = UUID()
+        try Data("""
+        {"profiles": [{"id": "\(id.uuidString)", "name": "Ben", "embedding": [1, 0], "enrolledSeconds": 30,
+          "createdAt": 0, "updatedAt": 0}], "recordings": []}
+        """.utf8).write(to: file)
+
+        let store = VoiceProfileStore(directoryURL: root)
+
+        let profile = try XCTUnwrap(store.profile(withID: id))
+        XCTAssertNil(profile.embeddingModel)
+        XCTAssertTrue(store.isOutdated(profile))
     }
 }
 
@@ -163,7 +233,8 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
     /// A recording where S1 speaks 40 s, S2 30 s and S3 10 s, with their voices stored.
     @discardableResult
     private func addRecording(
-        _ embeddings: [String: [Float]] = ["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0, 0, 1]]
+        _ embeddings: [String: [Float]] = ["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0, 0, 1]],
+        model: String = "model-a"
     ) throws -> UUID {
         let id = UUID()
         try SpeakerAudioWriter.writeAAC(
@@ -187,7 +258,7 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
             granularity: .segment,
             transcript: transcript
         ))
-        service.recordVoices(embeddings, of: transcript, recordID: id)
+        service.recordVoices(embeddings, model: model, of: transcript, recordID: id)
         return id
     }
 
@@ -278,6 +349,31 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         service.relearn("S1", inRecordID: second)
         XCTAssertEqual(store.profile(withID: profileID)?.embedding, [0, 0, 1])
         XCTAssertEqual(store.profile(withID: profileID)?.enrolledSeconds, 40)
+    }
+
+    func testAfterAModelChangeOldProfilesWaitForRelearningFromANewRecording() throws {
+        let old = try addRecording()
+        history.setSpeakerName("Anna", for: "S1", inRecordID: old)
+        service.enroll("S1", inRecordID: old)
+        let profileID = try XCTUnwrap(store.profiles.first?.id)
+
+        // A new speaker model: the same voice gives other numbers.
+        let new = try addRecording(["S1": [0, 1, 0], "S2": [0, 0, 1]], model: "model-b")
+        XCTAssertNil(names(new)?.displayName(for: "S1"), "Anna's old profile isn't comparable")
+        XCTAssertEqual(service.state(of: "S1", inRecordID: old), .linked, "the old recording can't relearn")
+        history.setSpeakerName("Ben", for: "S2", inRecordID: old)
+        XCTAssertEqual(service.state(of: "S2", inRecordID: old), .none, "an old voice can't start a profile")
+
+        history.setSpeakerName("Anna", for: "S1", profileID: profileID, inRecordID: new)
+        XCTAssertEqual(service.state(of: "S1", inRecordID: new), .outdated)
+        service.relearn("S1", inRecordID: new)
+
+        XCTAssertEqual(store.profile(withID: profileID)?.embeddingModel, "model-b")
+        XCTAssertEqual(store.profile(withID: profileID)?.embedding, [0, 1, 0])
+        XCTAssertEqual(service.state(of: "S1", inRecordID: new), .linked)
+        let later = try addRecording(["S1": [0, 0.98, 0.05]], model: "model-b")
+        XCTAssertEqual(names(later)?.displayName(for: "S1"), "Anna")
+        XCTAssertEqual(service.state(of: "S1", inRecordID: later), .suggestion)
     }
 
     func testRenamingAProfileRenamesItsSpeakersAndDeletingKeepsNames() throws {

@@ -299,9 +299,14 @@ extension ServiceContainer {
         // Anna has a voice profile; the third speaker is recognized as Lena and waits for confirmation.
         let voices = speakerVoiceProfileService
         if voices.store.profiles.isEmpty {
-            voices.store.enroll(name: "Lena", embedding: [0, 0, 1], seconds: 95)
+            voices.store.enroll(name: "Lena", embedding: [0, 0, 1], model: "screenshot-embedding", seconds: 95)
         }
-        voices.recordVoices(["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0.05, 0, 1]], of: transcript, recordID: recordID)
+        voices.recordVoices(
+            ["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0.05, 0, 1]],
+            model: "screenshot-embedding",
+            of: transcript,
+            recordID: recordID
+        )
         voices.enroll("S1", inRecordID: recordID)
         historyViewModel.requestRecordSelection([recordID])
     }

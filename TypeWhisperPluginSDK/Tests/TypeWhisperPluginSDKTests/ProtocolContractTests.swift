@@ -524,6 +524,7 @@ private final class MockSpeakerDiarizationPlugin: SpeakerDiarizationProviderPlug
                 PluginSpeakerTurn(speakerLabel: "B", start: 1, end: 2),
             ],
             speakerEmbeddings: ["A": [0.5], "B": [0.25]],
+            speakerEmbeddingModel: "mock-embedding",
             engine: "mock-diarizer"
         )
     }
@@ -916,11 +917,13 @@ final class ProtocolContractTests: XCTestCase {
             PluginSpeakerTurn(speakerLabel: "B", start: 1, end: 2),
         ])
         XCTAssertEqual(result.speakerEmbeddings["A"], [0.5])
+        XCTAssertEqual(result.speakerEmbeddingModel, "mock-embedding")
         XCTAssertEqual(result.engine, "mock-diarizer")
         XCTAssertNil(result.modelVersion)
         XCTAssertEqual(provider.lastRequest?.speakerCount, 2)
         XCTAssertNil(PluginDiarizationRequest(audioURL: URL(fileURLWithPath: "/tmp/a"), duration: 1).speakerCount)
         XCTAssertTrue(PluginDiarizationResult(turns: [], engine: "x").speakerEmbeddings.isEmpty)
+        XCTAssertNil(PluginDiarizationResult(turns: [], engine: "x").speakerEmbeddingModel)
 
         try await provider.deleteDiarizationModels()
         XCTAssertFalse(provider.areDiarizationModelsInstalled)

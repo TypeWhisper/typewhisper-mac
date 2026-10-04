@@ -35,6 +35,11 @@ public struct PluginDiarizationResult: Sendable {
     public let turns: [PluginSpeakerTurn]
     /// One voice embedding per `speakerLabel`; empty when the provider has none.
     public let speakerEmbeddings: [String: [Float]]
+    /// Stable identifier of the model that produced `speakerEmbeddings`, such
+    /// as `fluidaudio-offline-diarizer.community-1`. Embeddings of different
+    /// models are never compared; change it whenever the vectors change.
+    /// Nil uses `engine`.
+    public let speakerEmbeddingModel: String?
     /// Stable identifier such as `fluidaudio-offline-diarizer`, not a display name.
     public let engine: String
     public let modelVersion: String?
@@ -42,11 +47,13 @@ public struct PluginDiarizationResult: Sendable {
     public init(
         turns: [PluginSpeakerTurn],
         speakerEmbeddings: [String: [Float]] = [:],
+        speakerEmbeddingModel: String? = nil,
         engine: String,
         modelVersion: String? = nil
     ) {
         self.turns = turns
         self.speakerEmbeddings = speakerEmbeddings
+        self.speakerEmbeddingModel = speakerEmbeddingModel
         self.engine = engine
         self.modelVersion = modelVersion
     }

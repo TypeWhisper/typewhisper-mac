@@ -10,6 +10,10 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
     static let pluginId = "com.typewhisper.speaker-diarization"
     static let pluginName = "Speaker Detection"
     static let engineIdentifier = "fluidaudio-offline-diarizer"
+    /// The offline diarizer's speaker embeddings come from pyannote's
+    /// community-1 embedding model. Voice profiles learned from them only
+    /// match embeddings of the same model.
+    static let speakerEmbeddingModel = "fluidaudio-offline-diarizer.community-1"
     /// Euclidean cut distance between unit-normalized embeddings. On five AMI
     /// table-microphone meetings 0.6 (the pyannote default) and 0.7 score the
     /// same; 0.775 merges two speakers of EN2002a into one. iOS uses 0.7 as
@@ -192,6 +196,7 @@ private actor DiarizationRunner {
         return PluginDiarizationResult(
             turns: turns,
             speakerEmbeddings: (result.speakerDatabase ?? [:]).filter { speakers.contains($0.key) },
+            speakerEmbeddingModel: SpeakerDiarizationPlugin.speakerEmbeddingModel,
             engine: SpeakerDiarizationPlugin.engineIdentifier
         )
     }

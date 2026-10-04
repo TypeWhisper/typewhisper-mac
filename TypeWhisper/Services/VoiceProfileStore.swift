@@ -14,9 +14,13 @@ final class VoiceProfileStore: ObservableObject {
     private struct Contents: Codable {
         var profiles: [VoiceProfile] = []
         var recordings: [UUID: RecordingSpeakerEmbeddings] = [:]
+        var currentEmbeddingModel: String?
     }
 
     @Published private(set) var profiles: [VoiceProfile] = []
+    /// The embedding model of the latest speaker detection. Profiles of
+    /// another model are outdated: they no longer match until relearned.
+    @Published private(set) var currentEmbeddingModel: String?
     private var recordings: [UUID: RecordingSpeakerEmbeddings] = [:]
     private let fileURL: URL
     private let now: () -> Date
@@ -45,8 +49,23 @@ final class VoiceProfileStore: ObservableObject {
 
     /// Embeddings of a recording's speakers, if they belong to its current transcript.
     func embeddings(forRecordID id: UUID, revision: UUID) -> [String: [Float]] {
-        guard let stored = recordings[id], stored.transcriptRevision == revision else { return [:] }
-        return stored.embeddings
+        recording(id, revision: revision)?.embeddings ?? [:]
+    }
+
+    /// The model of a recording's embeddings, if they belong to its current transcript.
+    func embeddingModel(forRecordID id: UUID, revision: UUID) -> String? {
+        recording(id, revision: revision)?.embeddingModel
+    }
+
+    private func recording(_ id: UUID, revision: UUID) -> RecordingSpeakerEmbeddings? {
+        guard let stored = recordings[id], stored.transcriptRevision == revision else { return nil }
+        return stored
+    }
+
+    /// True when the profile was learned with another model than the latest
+    /// speaker detection used, so it can't recognize anyone until relearned.
+    func isOutdated(_ profile: VoiceProfile) -> Bool {
+        profile.embeddingModel == nil || profile.embeddingModel != currentEmbeddingModel
     }
 
     /// Recordings whose speaker embeddings are stored, for matching new profiles.
@@ -55,8 +74,13 @@ final class VoiceProfileStore: ObservableObject {
     }
 
     /// Replaces the embeddings of a recording after a diarization run.
-    func storeEmbeddings(_ embeddings: [String: [Float]], forRecordID id: UUID, revision: UUID) {
-        recordings[id] = RecordingSpeakerEmbeddings(transcriptRevision: revision, embeddings: embeddings)
+    func storeEmbeddings(_ embeddings: [String: [Float]], model: String, forRecordID id: UUID, revision: UUID) {
+        recordings[id] = RecordingSpeakerEmbeddings(
+            transcriptRevision: revision,
+            embeddingModel: model,
+            embeddings: embeddings
+        )
+        currentEmbeddingModel = model
         save()
     }
 
@@ -78,12 +102,13 @@ final class VoiceProfileStore: ObservableObject {
     // MARK: - Profiles
 
     @discardableResult
-    func enroll(name: String, embedding: [Float], seconds: TimeInterval) -> VoiceProfile {
+    func enroll(name: String, embedding: [Float], model: String, seconds: TimeInterval) -> VoiceProfile {
         let date = now()
         let profile = VoiceProfile(
             id: UUID(),
             name: name,
             embedding: embedding,
+            embeddingModel: model,
             enrolledSeconds: seconds,
             createdAt: date,
             updatedAt: date
@@ -94,8 +119,13 @@ final class VoiceProfileStore: ObservableObject {
     }
 
     /// Learns from a confirmed recognition, so the profile improves over time.
-    func learn(profileID: UUID, embedding: [Float], seconds: TimeInterval) {
+    /// A profile of another model can't be averaged with it and is replaced.
+    func learn(profileID: UUID, embedding: [Float], model: String, seconds: TimeInterval) {
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        guard profiles[index].embeddingModel == model else {
+            relearn(profileID: profileID, embedding: embedding, model: model, seconds: seconds)
+            return
+        }
         var profile = profiles[index]
         profile.embedding = VoiceProfileMatching.mean(
             profile.embedding, weight: profile.enrolledSeconds, embedding, weight: seconds
@@ -108,9 +138,10 @@ final class VoiceProfileStore: ObservableObject {
 
     /// Replaces the voice with one learned from a single recording, when
     /// the old one came from poor audio or the wrong person.
-    func relearn(profileID: UUID, embedding: [Float], seconds: TimeInterval) {
+    func relearn(profileID: UUID, embedding: [Float], model: String, seconds: TimeInterval) {
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
         profiles[index].embedding = embedding
+        profiles[index].embeddingModel = model
         profiles[index].enrolledSeconds = seconds
         profiles[index].updatedAt = now()
         save()
@@ -148,6 +179,7 @@ final class VoiceProfileStore: ObservableObject {
             let contents = try JSONDecoder().decode(Contents.self, from: data)
             profiles = contents.profiles
             recordings = contents.recordings
+            currentEmbeddingModel = contents.currentEmbeddingModel
         } catch {
             voiceProfileLogger.error("Voice profiles could not be read: \(String(reflecting: error), privacy: .public)")
         }
@@ -155,7 +187,11 @@ final class VoiceProfileStore: ObservableObject {
 
     private func save() {
         do {
-            let data = try JSONEncoder().encode(Contents(profiles: profiles, recordings: recordings))
+            let data = try JSONEncoder().encode(Contents(
+                profiles: profiles,
+                recordings: recordings,
+                currentEmbeddingModel: currentEmbeddingModel
+            ))
             try data.write(to: fileURL, options: .atomic)
             try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         } catch {

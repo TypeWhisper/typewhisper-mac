@@ -1681,6 +1681,34 @@
         }
       }
     },
+    "speakers.voice.outdated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit einem älteren Sprechermodell gelernt. Lerne die Stimme aus dieser Aufnahme neu, damit die Person wieder erkannt wird."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Learned with an older speaker model. Relearn the voice from this recording to recognize this person again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "古い話者モデルで学習されています。この人物を再び認識するには、この録音から声を学習し直してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用较旧的说话人模型学习。请从此录音重新学习声音，以便再次识别此人。"
+          }
+        }
+      }
+    },
     "speakers.voice.linked" : {
       "localizations" : {
         "de" : {
@@ -1789,6 +1817,62 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "还没有声音档案。在录音中为说话人命名，然后选择“在以后的录音中识别此声音”。"
+          }
+        }
+      }
+    },
+    "premium.window.speakers.profiles.outdated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird erst nach neuem Lernen erkannt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not recognized until relearned"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "学習し直すまで認識されません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新学习前不会被识别"
+          }
+        }
+      }
+    },
+    "premium.window.speakers.profiles.outdatedHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Stimme wurde mit einem älteren Sprechermodell gelernt. Öffne eine Aufnahme mit dieser Person und wähle „Stimme aus dieser Aufnahme neu lernen“."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This voice was learned with an older speaker model. Open a recording with this person and choose Relearn Voice from This Recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この声は古い話者モデルで学習されています。この人物の録音を開き、「この録音から声を学習し直す」を選んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此声音是使用较旧的说话人模型学习的。请打开有此人的录音，然后选择“从此录音重新学习声音”。"
           }
         }
       }

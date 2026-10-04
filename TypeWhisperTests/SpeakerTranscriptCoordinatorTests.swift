@@ -399,6 +399,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
 
         let revision = try XCTUnwrap(history.record(withID: id)?.speakerTranscript?.revision)
         XCTAssertEqual(store.embeddings(forRecordID: id, revision: revision), ["S1": [1, 0], "S2": [0, 1]])
+        XCTAssertEqual(store.embeddingModel(forRecordID: id, revision: revision), "fake-diarizer")
     }
 
     func testOwnSpeechFromTheMicrophoneBecomesTheSpeakerMe() async throws {

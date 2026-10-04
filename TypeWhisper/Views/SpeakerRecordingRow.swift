@@ -367,6 +367,15 @@ struct SpeakerPersonCard: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    if service.store.isOutdated(profile) {
+                        Label(
+                            String(localized: "premium.window.speakers.profiles.outdated"),
+                            systemImage: "exclamationmark.triangle"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .help(String(localized: "premium.window.speakers.profiles.outdatedHelp"))
+                    }
                 }
 
                 Spacer(minLength: 4)

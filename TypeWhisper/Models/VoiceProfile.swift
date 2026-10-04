@@ -9,6 +9,9 @@ struct VoiceProfile: Codable, Equatable, Identifiable, Sendable {
     let id: UUID
     var name: String
     var embedding: [Float]
+    /// The model that produced `embedding`. Nil for profiles learned before
+    /// the model was recorded; those never match.
+    var embeddingModel: String?
     /// Speech the embedding was learned from, in seconds.
     var enrolledSeconds: TimeInterval
     let createdAt: Date
@@ -31,6 +34,8 @@ struct VoiceProfileAppearance: Identifiable, Equatable {
 /// the device so a named speaker can still become a voice profile.
 struct RecordingSpeakerEmbeddings: Codable, Equatable, Sendable {
     let transcriptRevision: UUID
+    /// The model that produced `embeddings`; nil when stored before it was recorded.
+    var embeddingModel: String?
     var embeddings: [String: [Float]]
 }
 
@@ -68,12 +73,16 @@ enum VoiceProfileMatching {
     /// Assigns each profile to at most one speaker and each speaker to at most
     /// one profile, best pairs first. A pair counts only above the threshold,
     /// with enough speech, and when the speaker's best profile clearly leads
-    /// its second best.
+    /// its second best. Only profiles of the speakers' embedding model count:
+    /// another model's vectors aren't comparable, even with the same length.
     static func matches(
         speakers: [String: [Float]],
+        embeddingModel: String?,
         speakingTime: (String) -> TimeInterval,
         profiles: [VoiceProfile]
     ) -> [String: Match] {
+        guard let embeddingModel else { return [:] }
+        let profiles = profiles.filter { $0.embeddingModel == embeddingModel }
         var candidates: [(speakerID: String, match: Match)] = []
         for (speakerID, embedding) in speakers where speakingTime(speakerID) >= minimumSpeechSeconds {
             let scores = profiles

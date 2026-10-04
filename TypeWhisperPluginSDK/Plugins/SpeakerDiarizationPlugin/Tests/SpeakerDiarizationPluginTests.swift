@@ -119,6 +119,7 @@ final class SpeakerDiarizationPluginTests: XCTestCase {
 
         XCTAssertEqual(result.engine, SpeakerDiarizationPlugin.engineIdentifier)
         XCTAssertEqual(Set(result.speakerEmbeddings.keys), speakers)
+        XCTAssertEqual(result.speakerEmbeddingModel, SpeakerDiarizationPlugin.speakerEmbeddingModel)
         if let expected = environment["TW_DIARIZATION_SPEAKERS"].flatMap(Int.init) {
             XCTAssertEqual(speakers.count, expected)
         }
