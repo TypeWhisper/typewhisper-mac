@@ -611,6 +611,8 @@
 		B41E711A0DF84CA1B8742F6D /* CanaryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */; };
 		9955C123AB7F4A40A50720CF /* CanaryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */; };
 		3CDF1305CF9D40B5AA359371 /* CanaryPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */; };
+		D5B200000000000000000001 /* MicrophonePrerollRingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */; };
+		D5B200000000000000000003 /* MicrophonePrerollRingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1286,6 +1288,8 @@
 		47400DA71F7147E6934EA081 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryPlugin.swift; sourceTree = "<group>"; };
 		7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/CanaryPluginTests.swift; sourceTree = "<group>"; };
+		D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBuffer.swift; sourceTree = "<group>"; };
+		D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBufferTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2010,6 +2014,7 @@
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
 				BB00000000000000000286 /* LicenseService.swift */,
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
+				D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -2999,6 +3004,7 @@
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
+				D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
@@ -4949,6 +4955,7 @@
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
 				D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */,
+				D5B200000000000000000003 /* MicrophonePrerollRingBufferTests.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */,
 				9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */,
 				9A584149706C7567496E0204 /* XAIPlugin.swift in Sources */,
@@ -5172,6 +5179,7 @@
 				AA00000000000000000335 /* PunctuationStrategyResolver.swift in Sources */,
 				AA00000000000000000336 /* PunctuationVerificationService.swift in Sources */,
 				D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */,
+				D5B200000000000000000001 /* MicrophonePrerollRingBuffer.swift in Sources */,
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
 				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
