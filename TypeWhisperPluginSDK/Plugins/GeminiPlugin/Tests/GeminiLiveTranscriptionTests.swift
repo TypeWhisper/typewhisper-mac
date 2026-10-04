@@ -35,6 +35,23 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
     }
 
+    func testSilentAudioAfterCompletionDoesNotWaitForAnotherTurn() async throws {
+        for completion in ["generationComplete", "turnComplete"] {
+            let socket = GeminiTestWebSocket()
+            let session = try await makeSession(socket: socket)
+            try await session.appendAudio(samples: [0.1])
+            try await session.handle(.string("{\"serverContent\":{\"inputTranscription\":{\"text\":\"Already complete\"},\"\(completion)\":true}}"))
+            try await session.appendAudio(samples: [Float](repeating: 0, count: 4_800))
+
+            let start = ContinuousClock.now
+            let result = try await session.finish()
+
+            XCTAssertEqual(result.text, "Already complete")
+            XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
+            XCTAssertTrue(socket.isClosed)
+        }
+    }
+
     func testTimeoutReturnsCommittedAndInterimText() async throws {
         let session = try await makeSession(socket: GeminiTestWebSocket())
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Hello"}}}"#))
@@ -59,8 +76,8 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Hello"}}}"#))
-        let updates = Task {
-            try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        let updates = Task { @Sendable [socket] in
+            try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
             socket.enqueue(#"{"serverContent":{"generationComplete":true}}"#)
             try await Task.sleep(for: .milliseconds(30))
             socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"world"}}}"#)
@@ -73,8 +90,8 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
     func testFirstFinalChunkDoesNotDropFollowingTranscript() async throws {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)
-        let updates = Task {
-            try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        let updates = Task { @Sendable [socket] in
+            try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
             socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"Hello"}}}"#)
             try await Task.sleep(for: .milliseconds(80))
             socket.enqueue(#"{"serverContent":{"interimInputTranscription":{"text":"world"}}}"#)
@@ -90,9 +107,12 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
-        try await session.appendAudio(samples: [0.1])
-        let updates = Task {
-            try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        // Even the quietest nonzero PCM sample must invalidate completion.
+        // Trailing silence must not make that earlier completion valid again.
+        try await session.appendAudio(samples: [1 / Float(Int16.max)])
+        try await session.appendAudio(samples: [Float](repeating: 0, count: 3_200))
+        let updates = Task { @Sendable [socket] in
+            try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
             try await Task.sleep(for: .milliseconds(280))
             socket.enqueue(#"{"serverContent":{"interimInputTranscription":{"text":"second"}}}"#)
         }
@@ -105,8 +125,8 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"draft"},"generationComplete":true}}"#))
-        let updates = Task {
-            try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        let updates = Task { @Sendable [socket] in
+            try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
             try await Task.sleep(for: .milliseconds(100))
             socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"Corrected final"}}}"#)
         }
@@ -127,8 +147,8 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         }
         try await session.appendAudio(samples: [Float](repeating: 0.1, count: 3_200))
         socket.onSend = nil
-        let updates = Task {
-            try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        let updates = Task { @Sendable [socket] in
+            try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
             try await Task.sleep(for: .milliseconds(280))
             socket.enqueue(#"{"serverContent":{"interimInputTranscription":{"text":"last chunk"}}}"#)
         }
@@ -165,7 +185,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let session = try await makeSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Kept text"}}}"#))
         socket.onSend = { message in
-            if Self.isEnd(message) { try await Task.sleep(for: .seconds(10)) }
+            if isGeminiEndMessage(message) { try await Task.sleep(for: .seconds(10)) }
         }
         let start = ContinuousClock.now
         let result = try await session.finish()
@@ -179,10 +199,10 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let session = try await makeSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Cancelled"}}}"#))
         socket.onSend = { message in
-            if Self.isEnd(message) { try await Task.sleep(for: .seconds(10)) }
+            if isGeminiEndMessage(message) { try await Task.sleep(for: .seconds(10)) }
         }
         let finish = Task { try await session.finish() }
-        try await waitUntil { socket.sentMessages.contains(where: Self.isEnd) }
+        try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
         let start = ContinuousClock.now
         finish.cancel()
         do {
@@ -197,7 +217,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)
         socket.onSend = { message in
-            if Self.isEnd(message) {
+            if isGeminiEndMessage(message) {
                 socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"One result"},"turnComplete":true}}"#)
             }
         }
@@ -205,7 +225,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         async let second = session.finish()
         let results = try await [first, second]
         XCTAssertEqual(results.map(\.text), ["One result", "One result"])
-        XCTAssertEqual(socket.sentMessages.filter(Self.isEnd).count, 1)
+        XCTAssertEqual(socket.sentMessages.filter(isGeminiEndMessage).count, 1)
     }
 
     func testCancelledSetupClosesTransport() async throws {
@@ -223,11 +243,6 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
             XCTFail("Setup cancellation must propagate")
         } catch is CancellationError {}
         XCTAssertTrue(socket.isClosed)
-    }
-
-    private static func isEnd(_ message: URLSessionWebSocketTask.Message) -> Bool {
-        if case .string(let text) = message { return text == GeminiLiveTranscriptionSession.audioStreamEndMessage }
-        return false
     }
 
     private func makeSession(socket: GeminiTestWebSocket) async throws -> GeminiLiveTranscriptionSession {
@@ -330,4 +345,9 @@ func waitUntil(_ condition: @Sendable () -> Bool) async throws {
         XCTFail("Timed out waiting for the test transport")
         throw URLError(.timedOut)
     }
+}
+
+private func isGeminiEndMessage(_ message: URLSessionWebSocketTask.Message) -> Bool {
+    if case .string(let text) = message { return text == GeminiLiveTranscriptionSession.audioStreamEndMessage }
+    return false
 }

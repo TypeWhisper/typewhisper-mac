@@ -73,6 +73,58 @@ final class GeminiLiveSessionPoolTests: XCTestCase {
         await pool.shutdown()
     }
 
+    func testAgingStandbyIsReplacedBeforeItsIdleTimeout() async throws {
+        let clock = GeminiTestClock()
+        let factory = GeminiTestSessionFactory(now: clock.now)
+        let pool = GeminiLiveSessionPool(factory: factory.connect)
+        await pool.prewarm(configuration: configuration())
+        try await waitUntil { factory.sessions.count == 1 }
+        clock.advance(by: .seconds(61))
+
+        let session = try await pool.checkout(configuration: configuration(), onProgress: { _ in true })
+        XCTAssertTrue(factory.sockets[0].isClosed)
+        XCTAssertEqual(factory.sockets.count, 2)
+        XCTAssertTrue(session === factory.sessions[1])
+        await session.cancel()
+        await pool.shutdown()
+    }
+
+    func testRecentStandbyStillUsesWarmConnection() async throws {
+        let clock = GeminiTestClock()
+        let factory = GeminiTestSessionFactory(now: clock.now)
+        let pool = GeminiLiveSessionPool(factory: factory.connect)
+        await pool.prewarm(configuration: configuration())
+        try await waitUntil { factory.sessions.count == 1 }
+        clock.advance(by: .seconds(30))
+
+        let session = try await pool.checkout(configuration: configuration(), onProgress: { _ in true })
+        XCTAssertEqual(factory.sockets.count, 1)
+        XCTAssertTrue(session === factory.sessions[0])
+        await session.cancel()
+        await pool.shutdown()
+    }
+
+    func testConnectionAgeIncludesSetupBeforeStandbyIsPrepared() async throws {
+        let clock = GeminiTestClock()
+        let socket = GeminiTestWebSocket(automaticallyCompleteSetup: false)
+        let connect = Task { @Sendable [socket, clock] in
+            try await GeminiLiveTranscriptionSession.connect(
+                apiKey: "test-key", modelId: "test-model", mode: .verbatim,
+                languageCodes: [], customVocabulary: [], socket: socket, now: clock.now
+            )
+        }
+        try await waitUntil { !socket.sentMessages.isEmpty }
+        clock.advance(by: .seconds(58))
+        socket.enqueue(#"{"setupComplete":{}}"#)
+        let session = try await connect.value
+        // There is no idle deadline yet. The absolute connection age must still
+        // reserve recording time plus the default three-second finish budget.
+        let claimed = await session.claim(onProgress: { _ in true }, onFinished: {})
+        XCTAssertFalse(claimed)
+        XCTAssertTrue(socket.isClosed)
+        await session.cancel()
+    }
+
     func testClaimedConnectionSurvivesFormerIdleDeadline() async throws {
         let factory = GeminiTestSessionFactory()
         let pool = GeminiLiveSessionPool(
@@ -204,11 +256,16 @@ private final class GeminiTestSessionFactory: @unchecked Sendable {
     }
     private let state = OSAllocatedUnfairLock(initialState: State())
     private let automaticallyCompleteSetup: Bool
+    private let now: @Sendable () -> ContinuousClock.Instant
     var sockets: [GeminiTestWebSocket] { state.withLock { $0.sockets } }
     var sessions: [GeminiLiveTranscriptionSession] { state.withLock { $0.sessions } }
 
-    init(automaticallyCompleteSetup: Bool = true) {
+    init(
+        automaticallyCompleteSetup: Bool = true,
+        now: @Sendable @escaping () -> ContinuousClock.Instant = { .now }
+    ) {
         self.automaticallyCompleteSetup = automaticallyCompleteSetup
+        self.now = now
     }
 
     func connect(_ configuration: GeminiLiveConfiguration) async throws -> GeminiLiveTranscriptionSession {
@@ -217,9 +274,15 @@ private final class GeminiTestSessionFactory: @unchecked Sendable {
         let session = try await GeminiLiveTranscriptionSession.connect(
             apiKey: configuration.apiKey, modelId: configuration.modelId, mode: configuration.mode,
             languageCodes: configuration.languageCodes, customVocabulary: configuration.customVocabulary,
-            socket: socket, finishTimeout: .milliseconds(400), completionSettleTime: .milliseconds(5)
+            socket: socket, finishTimeout: .milliseconds(400), completionSettleTime: .milliseconds(5), now: now
         )
         state.withLock { $0.sessions.append(session) }
         return session
     }
+}
+
+private final class GeminiTestClock: @unchecked Sendable {
+    private let time = OSAllocatedUnfairLock(initialState: ContinuousClock.now)
+    func now() -> ContinuousClock.Instant { time.withLock { $0 } }
+    func advance(by duration: Duration) { time.withLock { $0 = $0.advanced(by: duration) } }
 }

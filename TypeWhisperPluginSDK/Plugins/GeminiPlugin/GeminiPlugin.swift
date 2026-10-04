@@ -1106,7 +1106,7 @@ private final class GeminiURLSessionWebSocket: GeminiLiveWebSocket, @unchecked S
     init(url: URL) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
-        configuration.timeoutIntervalForResource = 600
+        configuration.timeoutIntervalForResource = GeminiLiveTranscriptionSession.connectionLifetimeSeconds
         session = URLSession(configuration: configuration)
         socket = session.webSocketTask(with: url)
     }
@@ -1259,12 +1259,19 @@ actor GeminiLiveSessionPool {
 }
 
 actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
+    // Gemini's nominal connection lifetime is about ten minutes. Reserve nine
+    // minutes of recording plus finalization when handing over a warm socket;
+    // this is not session resumption for recordings beyond the provider limit.
+    nonisolated static let connectionLifetimeSeconds: TimeInterval = 600
+    private static let minimumRecordingLifetime: Duration = .seconds(540)
     private static let webSocketEndpoint =
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     private static let pcmChunkSampleCount = 1_600
     private static let setupTimeout: Duration = .seconds(10)
     private let finishTimeout: Duration
     private let completionSettleTime: Duration
+    private let now: @Sendable () -> ContinuousClock.Instant
+    private let connectionOpenedAt: ContinuousClock.Instant
     private let socket: any GeminiLiveWebSocket
     private var onProgress: (@Sendable (String) -> Bool)?
     private var onFinished: (@Sendable () async -> Void)?
@@ -1277,6 +1284,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var setupComplete = false
     private var claimed = false
     private var audioRevision = 0
+    private var lastNonSilentAudioRevision = 0
     private var completionAudioRevision: Int?
     private var completionReceivedAt: ContinuousClock.Instant?
     private var lastTranscriptAt: ContinuousClock.Instant?
@@ -1290,11 +1298,14 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         socket: any GeminiLiveWebSocket,
         finishTimeout: Duration,
         completionSettleTime: Duration,
+        now: @Sendable @escaping () -> ContinuousClock.Instant,
         onProgress: (@Sendable (String) -> Bool)?
     ) {
         self.socket = socket
         self.finishTimeout = finishTimeout
         self.completionSettleTime = completionSettleTime
+        self.now = now
+        self.connectionOpenedAt = now()
         self.onProgress = onProgress
     }
 
@@ -1307,6 +1318,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         socket suppliedSocket: (any GeminiLiveWebSocket)? = nil,
         finishTimeout: Duration = .seconds(3),
         completionSettleTime: Duration = .milliseconds(200),
+        now: @Sendable @escaping () -> ContinuousClock.Instant = { .now },
         onProgress: (@Sendable (String) -> Bool)? = nil
     ) async throws -> GeminiLiveTranscriptionSession {
         try ensureNetworkAccessIsAllowed()
@@ -1322,6 +1334,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             socket: suppliedSocket ?? GeminiURLSessionWebSocket(url: url),
             finishTimeout: finishTimeout,
             completionSettleTime: completionSettleTime,
+            now: now,
             onProgress: onProgress
         )
         return try await withTaskCancellationHandler {
@@ -1361,9 +1374,15 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
 
     func prepareStandby(idleTimeout: Duration, pingInterval: Duration) {
         guard !claimed, !socketClosed else { return }
-        idleDeadline = .now.advanced(by: idleTimeout)
+        let currentTime = now()
+        let deadline = min(currentTime.advanced(by: idleTimeout), latestSafeClaimTime)
+        guard currentTime < deadline else {
+            closeSocket(code: .goingAway)
+            return
+        }
+        idleDeadline = deadline
         expiryTask = Task { [weak self] in
-            do { try await Task.sleep(for: idleTimeout) } catch { return }
+            do { try await Task.sleep(for: currentTime.duration(to: deadline)) } catch { return }
             await self?.expireStandby()
         }
         keepAliveTask = Task { [weak self] in
@@ -1380,7 +1399,8 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     ) -> Bool {
         guard !claimed, !socketClosed, !serverClosing, !cancelled, latestError == nil,
               finishTask == nil, audioRevision == 0,
-              idleDeadline.map({ ContinuousClock.now < $0 }) ?? true else {
+              now() < latestSafeClaimTime,
+              idleDeadline.map({ now() < $0 }) ?? true else {
             closeSocket(code: .goingAway)
             return false
         }
@@ -1389,6 +1409,12 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         self.onProgress = onProgress
         self.onFinished = onFinished
         return true
+    }
+
+    private var latestSafeClaimTime: ContinuousClock.Instant {
+        connectionOpenedAt.advanced(
+            by: .seconds(Self.connectionLifetimeSeconds) - Self.minimumRecordingLifetime - finishTimeout
+        )
     }
 
     private func expireStandby() {
@@ -1426,10 +1452,16 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             try Task.checkCancellation()
             guard finishTask == nil, !cancelled else { return }
             let end = min(offset + Self.pcmChunkSampleCount, samples.count)
-            let message = try Self.makeRealtimeAudioMessage(Self.pcm16Data(from: samples[offset..<end]))
-            // Invalidate earlier completion for every chunk, including events
-            // received while an earlier chunk in this append was being sent.
+            let pcmData = Self.pcm16Data(from: samples[offset..<end])
+            let message = try Self.makeRealtimeAudioMessage(pcmData)
             audioRevision += 1
+            // Digital silence cannot add words to a completed turn. Still send
+            // it for server VAD, but preserve completion. Any nonzero PCM sample
+            // invalidates completion, including between chunks of this append;
+            // do not classify quiet speech as silence with an amplitude cutoff.
+            if pcmData.contains(where: { $0 != 0 }) {
+                lastNonSilentAudioRevision = audioRevision
+            }
             do {
                 try await socket.send(.string(message))
             } catch {
@@ -1492,7 +1524,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     private var hasSettledCompletion: Bool {
-        guard completionAudioRevision == audioRevision,
+        guard completionAudioRevision == lastNonSilentAudioRevision,
               let completionReceivedAt,
               !collector.hasUncommittedInterimText, !collector.resultText.isEmpty else { return false }
         // Input transcription and generation completion have no guaranteed order.
@@ -1562,7 +1594,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         )
         if preview != nil { lastTranscriptAt = .now }
         if content.generationComplete == true || content.turnComplete == true {
-            completionAudioRevision = audioRevision
+            completionAudioRevision = lastNonSilentAudioRevision
             completionReceivedAt = .now
         }
         if let preview, !preview.isEmpty { _ = onProgress?(preview) }

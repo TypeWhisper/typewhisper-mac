@@ -18,6 +18,10 @@ final class GeminiLiveProviderTests: XCTestCase {
         // Fixture sentences: "Blue umbrellas keep the rain away."
         // and "Seven orange bicycles are waiting outside."
         let fixtures = try [firstPath, secondPath].map(Self.samples)
+        let trailingSilenceSeconds = Double(environment["TYPEWHISPER_GEMINI_LIVE_SILENCE_SECONDS"] ?? "1") ?? 1
+        guard (0...5).contains(trailingSilenceSeconds) else {
+            throw XCTSkip("Synthetic trailing silence must be between zero and five seconds.")
+        }
         for mode in [GeminiTranscriptionMode.verbatim, .smart] {
             let sockets = OSAllocatedUnfairLock(initialState: [GeminiRecordingWebSocket]())
             let pool = GeminiLiveSessionPool { configuration in
@@ -41,7 +45,7 @@ final class GeminiLiveProviderTests: XCTestCase {
                     let socket = sockets.withLock { $0[index] }
                     // Send at microphone cadence, including trailing silence to
                     // exercise provider completion before hotkey release.
-                    let samples = fixtures[index] + [Float](repeating: 0, count: 16_000)
+                    let samples = fixtures[index] + [Float](repeating: 0, count: Int(16_000 * trailingSilenceSeconds))
                     for offset in stride(from: 0, to: samples.count, by: 1_600) {
                         try await session.appendAudio(samples: Array(samples[offset..<min(offset + 1_600, samples.count)]))
                         try await Task.sleep(for: .milliseconds(100))
@@ -52,6 +56,9 @@ final class GeminiLiveProviderTests: XCTestCase {
                     let finishDuration = finishStart.duration(to: .now)
                     print("[Gemini live] mode=\(mode.rawValue) dictation=\(index + 1) connect=\(connectDuration) finish=\(finishDuration) beforeRelease=\(eventsBeforeRelease) events=\(socket.events) text=\(result.text)")
                     XCTAssertLessThan(finishDuration, .milliseconds(3_300))
+                    if eventsBeforeRelease.contains("generationComplete") || eventsBeforeRelease.contains("turnComplete") {
+                        XCTAssertLessThan(finishDuration, .milliseconds(750), "Digital silence after completion must not trigger the timeout")
+                    }
                     XCTAssertTrue(result.text.lowercased().contains(index == 0 ? "umbrella" : "bicycle"))
                     XCTAssertFalse(result.text.lowercased().contains(index == 0 ? "bicycle" : "umbrella"))
                     if index == 0 {
