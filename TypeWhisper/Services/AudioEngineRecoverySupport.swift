@@ -82,6 +82,40 @@ enum AudioEngineRecoveryPolicy {
     }
 }
 
+/// Bounds how often the armed microphone pre-roll input is re-armed after its stream
+/// stalled, was reconfigured by the system, or failed to start. Every failure waits a little
+/// longer, and a burst of failures disarms the pre-roll until something external (setting,
+/// device change, wake, a recording that worked) calls `reset()`. The normal prewarm and
+/// cold-start paths keep working while it is disarmed.
+struct MicrophonePrerollRearmPolicy: Equatable {
+    enum Decision: Equatable {
+        case retry(after: TimeInterval)
+        case giveUp
+    }
+
+    static let maximumFailuresInWindow = 3
+    static let failureWindow: TimeInterval = 60
+    static let retryBackoff: [TimeInterval] = [0.5, 2, 5]
+
+    private var failureTimestamps: [TimeInterval] = []
+    private(set) var hasGivenUp = false
+
+    mutating func recordFailure(at timestamp: TimeInterval) -> Decision {
+        failureTimestamps.removeAll { timestamp - $0 > Self.failureWindow }
+        failureTimestamps.append(timestamp)
+        guard failureTimestamps.count <= Self.maximumFailuresInWindow else {
+            hasGivenUp = true
+            return .giveUp
+        }
+        return .retry(after: Self.retryBackoff[min(failureTimestamps.count, Self.retryBackoff.count) - 1])
+    }
+
+    mutating func reset() {
+        failureTimestamps.removeAll()
+        hasGivenUp = false
+    }
+}
+
 enum AudioEngineRecoveryErrorDomains {
     static let avfException = "com.typewhisper.AVFException"
     static let transientFormatMismatch = "com.typewhisper.AudioRecordingRecovery"

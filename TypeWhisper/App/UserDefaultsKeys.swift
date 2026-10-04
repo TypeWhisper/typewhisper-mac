@@ -73,6 +73,9 @@ enum UserDefaultsKeys {
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
     static let inputDevicePriorityList = "inputDevicePriorityList"
     static let airPodsInstantStartEnabled = "airPodsInstantStartEnabled"
+    /// Keeps a built-in or wired/USB input running between dictations and prepends the last
+    /// half second to the next recording. Default off; the macOS microphone indicator stays on.
+    static let microphonePrerollEnabled = "microphonePrerollEnabled"
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
