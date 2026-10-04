@@ -39,7 +39,7 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         ))
     }
 
-    func testAutoStopRequiresFullyAuthorizedNotifications() {
+    func testSupplementaryAutoStopNotificationRequiresAlertAuthorization() {
         XCTAssertTrue(CalendarMeetingAutomationController.canUseAutoStopNotifications(
             authorization: .authorized
         ))
@@ -241,24 +241,29 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         XCTAssertFalse(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: unsupported))
     }
 
-    func testResolvedNonMeetingBrowserURLIsSignalAbsenceNotCollectorFailure() throws {
-        XCTAssertEqual(
-            CalendarMeetingAutomationController.browserURLResolution(for: nil),
-            .unavailable
-        )
-        XCTAssertEqual(
-            CalendarMeetingAutomationController.browserURLResolution(
-                for: URL(string: "https://example.com/after-leaving")
-            ),
-            .nonMeeting
-        )
-
+    func testBackgroundMeetingTabsAreCanonicalizedWithoutTreatingOtherTabsAsMeetings() throws {
         let meetURL = try XCTUnwrap(URL(string: "https://meet.google.com/abc-defg-hij"))
-        guard case .meeting(let link) = CalendarMeetingAutomationController
-            .browserURLResolution(for: meetURL) else {
-            return XCTFail("Expected a canonical Google Meet resolution")
-        }
-        XCTAssertEqual(link.provider, .googleMeet)
+        let foreground = try XCTUnwrap(URL(string: "https://example.com/after-leaving"))
+        let links = CalendarMeetingAutomationController.meetingLinks(in: [foreground, meetURL, meetURL])
+        XCTAssertEqual(links.count, 1)
+        XCTAssertEqual(links.first?.provider, .googleMeet)
+        XCTAssertTrue(CalendarMeetingAutomationController.meetingLinks(in: [foreground]).isEmpty)
+        XCTAssertTrue(CalendarMeetingAutomationController.meetingLinks(in: []).isEmpty)
+    }
+
+    func testAdHocDetectionCanRequestRemindersWithoutCalendarPermission() {
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
+            hasPremiumAccess: true,
+            startMode: .reminder,
+            calendarAuthorization: .denied,
+            detectAdHocMeetings: true
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
+            hasPremiumAccess: false,
+            startMode: .automatic,
+            calendarAuthorization: .denied,
+            detectAdHocMeetings: true
+        ))
     }
 
     func testBrowserHelpersAreAggregatedOncePerCanonicalBrowser() throws {

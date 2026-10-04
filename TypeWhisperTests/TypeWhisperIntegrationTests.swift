@@ -5,6 +5,7 @@ import Combine
 import CoreAudio
 import Foundation
 import os
+import Security
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -20555,4 +20556,179 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             modifierFlags: isDown ? [.function] : []
         )
     }
+}
+
+extension TypeWhisperIntegrationTests {
+    @MainActor
+    func testCalendarAutoStopSurvivesDeniedNotificationsAndRelaunchRefresh() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(adHoc: false, browser: false)
+    }
+
+    @MainActor
+    func testAdHocMeetingWithoutCalendarKeepsAutoStopAndContinueAction() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(adHoc: true, browser: false)
+    }
+
+    @MainActor
+    func testBackgroundMeetingTabAndFailedNotificationKeepContinueAction() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(adHoc: true, browser: true)
+    }
+
+    @MainActor
+    private func exerciseMeetingAutoStopWithoutNotifications(adHoc: Bool, browser: Bool) async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let suite = "MeetingRuntime-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            TestSupport.remove(directory)
+            MockTranscriptionPlugin.reset()
+        }
+        defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
+        defaults.set(true, forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
+        defaults.set(adHoc, forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = directory
+        recorderService.startRecordingOverride = { _, _, _, proposedURL, _ in
+            try Data("recording".utf8).write(to: proposedURL)
+            return proposedURL
+        }
+        recorderService.stopRecordingOverride = { $0 }
+        let recorder = AudioRecorderViewModel(
+            recorderService: recorderService,
+            modelManager: context.modelManager,
+            dictionaryService: context.dictionaryService,
+            audioDeviceService: AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
+            defaults: defaults, recordingsLoader: { _, _ in [] }
+        )
+        recorder.transcriptionEnabled = false
+        recorder.micEnabled = false
+        recorder.systemAudioEnabled = true
+        let countdown = CalendarMeetingCountdownModel()
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let initialTime = now
+        let calendarOccurrence = CalendarMeetingOccurrence(
+            eventIdentifier: "scheduled", occurrenceStart: now, startDate: now,
+            endDate: now.addingTimeInterval(3600), title: "Scheduled test", calendarID: "calendar",
+            participationStatus: .accepted,
+            meetingLinks: [CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")]
+        )
+        let events = MeetingRuntimeEventProvider(occurrences: adHoc ? [] : [calendarOccurrence])
+        let notifications = MeetingRuntimeNotifications(authorization: browser ? .authorized : .denied)
+        let browserResolver = MeetingRuntimeBrowserResolver()
+        let controller = CalendarMeetingAutomationController(
+            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
+                keychainCopyMatching: { _, _ in errSecItemNotFound }),
+            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
+                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
+            recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
+            countdownModel: countdown, defaults: defaults,
+            eventProviderFactory: { events },
+            audioCollectorFactory: { MeetingRuntimeAudioCollector() },
+            cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
+            browserResolverFactory: { browserResolver },
+            notificationServiceFactory: { notifications },
+            premiumAccessProvider: { true }, nowProvider: { now }
+        )
+        defer { controller.shutdown() }
+        await controller.testingRefresh()
+        XCTAssertEqual(controller.calendarAuthorization, adHoc ? .denied : .fullAccess)
+        XCTAssertTrue(controller.isAutomationActive)
+        XCTAssertTrue(controller.autoStopEnabled, "Permission refresh must not erase the saved preference")
+        XCTAssertTrue(controller.canEnableAutoStop)
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled))
+
+        let process = MeetingAudioProcess(audioObjectID: 1, processID: 123,
+            bundleIdentifier: browser ? SupportedMeetingBrowser.chrome : "us.zoom.xos",
+            isRunningInput: true, isRunningOutput: true)
+        await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available, processes: [process]))
+        now = initialTime.addingTimeInterval(adHoc ? (browser ? 20 : 5) : 3)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        now = now.addingTimeInterval(5)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .recording)
+        XCTAssertNil(countdown.presentation)
+
+        // Switching away from the meeting did not prevent the start; removing
+        // its background tab is observed even though browser audio is unchanged.
+        if browser {
+            await browserResolver.removeMeetingTab()
+            await controller.testingAdvanceTime()
+        } else {
+            await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now,
+                availability: .available, processes: []))
+        }
+        if adHoc {
+            XCTAssertNil(countdown.presentation)
+            now = now.addingTimeInterval(90)
+            await controller.testingAdvanceTime()
+        }
+        XCTAssertEqual(countdown.presentation?.kind, .autoStop)
+        XCTAssertEqual(notifications.autoStopAttempts, 1)
+        XCTAssertTrue(controller.autoStopEnabled)
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled))
+        countdown.continueRecording()
+        XCTAssertNil(countdown.presentation)
+        now = now.addingTimeInterval(200)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .recording, "The in-app veto survives failed notification delivery")
+        recorder.stopRecording()
+        for _ in 0..<100 where recorder.state != .idle {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(recorder.state, .idle)
+    }
+}
+
+private actor MeetingRuntimeEventProvider: CalendarMeetingEventProviding {
+    let values: [CalendarMeetingOccurrence]
+    init(occurrences: [CalendarMeetingOccurrence]) { values = occurrences }
+    func authorizationStatus() -> CalendarMeetingCalendarAuthorization { values.isEmpty ? .denied : .fullAccess }
+    func requestFullAccess() -> Bool { false }
+    func calendars() -> [CalendarMeetingCalendar] {
+        [CalendarMeetingCalendar(id: "calendar", title: "Test", sourceTitle: "Local")]
+    }
+    func occurrences(in interval: DateInterval, calendarIDs: Set<String>) -> [CalendarMeetingOccurrence] { values }
+    func changes() -> AsyncStream<Void> { AsyncStream { _ in } }
+}
+
+private actor MeetingRuntimeAudioCollector: MeetingAudioActivityCollecting {
+    func startCollecting() -> AsyncStream<MeetingActivitySnapshot> { AsyncStream { _ in } }
+    func stopCollecting() {}
+}
+
+private actor MeetingRuntimeCameraCollector: MeetingCameraActivityCollecting {
+    func startCollecting() -> AsyncStream<MeetingCameraActivitySnapshot> { AsyncStream { _ in } }
+    func stopCollecting() {}
+}
+
+private actor MeetingRuntimeBrowserResolver: BrowserURLResolving {
+    private var hasMeeting = true
+    func removeMeetingTab() { hasMeeting = false }
+    func activeURL(for bundleIdentifier: String) -> URL? { URL(string: "https://example.com/document") }
+    func meetingTabURLs(for bundleIdentifier: String) -> [URL]? {
+        var urls = [URL(string: "https://example.com/document")!]
+        if hasMeeting { urls.append(URL(string: "https://meet.google.com/abc-defg-hij")!) }
+        return urls
+    }
+}
+
+@MainActor
+private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
+    let authorization: CalendarMeetingNotificationAuthorization
+    private(set) var autoStopAttempts = 0
+    init(authorization: CalendarMeetingNotificationAuthorization) { self.authorization = authorization }
+    func installRouter(responseHandler: @escaping @MainActor (CalendarMeetingNotificationResponse) -> Void) {}
+    func configureAndRequestAuthorization() async -> CalendarMeetingNotificationAuthorization { authorization }
+    func refreshAuthorizationStatus() async {}
+    func replaceScheduledReminders(_ occurrences: [CalendarMeetingOccurrence], startMode: CalendarMeetingStartMode, now: Date) async {}
+    func publishDetectedMeeting(_ occurrence: CalendarMeetingOccurrence, now: Date) async {}
+    func publishAutoStopWarning(occurrenceDigest: String, now: Date) async -> Bool {
+        autoStopAttempts += 1
+        return false
+    }
+    func removeAutoStopWarning(occurrenceDigest: String) {}
+    func removeScheduledMeetingRequests() async {}
 }

@@ -247,6 +247,9 @@ enum RecordingTranscriptMarkdownRenderer {
 }
 
 struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
+    // Detected sessions share the countdown/recording policy, but are not calendar
+    // events and must never be exported as calendar transcript metadata.
+    let isAdHoc: Bool
     let eventIdentifier: String
     let occurrenceStart: Date
     let startDate: Date
@@ -271,8 +274,10 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
         meetingLinks: [CalendarMeetingCanonicalLink],
         location: String? = nil,
         organizer: CalendarMeetingParticipant? = nil,
-        attendees: [CalendarMeetingParticipant] = []
+        attendees: [CalendarMeetingParticipant] = [],
+        isAdHoc: Bool = false
     ) {
+        self.isAdHoc = isAdHoc
         self.eventIdentifier = eventIdentifier
         self.occurrenceStart = occurrenceStart
         self.startDate = startDate
@@ -301,6 +306,7 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     }
 
     func isInsideJoinWindow(at date: Date) -> Bool {
+        if isAdHoc { return true }
         let interval = DateInterval(
             start: startDate.addingTimeInterval(-10 * 60),
             end: endDate.addingTimeInterval(30 * 60)
@@ -399,6 +405,68 @@ struct MeetingActivitySnapshot: Equatable, Sendable {
     }
 }
 
+struct DetectedMeetingActivity: Equatable, Sendable {
+    let sourceID: String
+    let link: CalendarMeetingCanonicalLink
+    let isRunningInput: Bool
+    let isRunningOutput: Bool
+
+    var sessionKey: String { "\(sourceID):\(link.id)" }
+}
+
+/// Ephemeral identities for calls that have no matching selected calendar event.
+/// A short mute/reconnect retains the session, including its cancellation veto.
+struct AdHocMeetingSessionTracker: Sendable {
+    private struct Session: Sendable {
+        let occurrence: CalendarMeetingOccurrence
+        var lastActivity: Date
+    }
+
+    private var sessions: [String: Session] = [:]
+
+    var occurrences: [CalendarMeetingOccurrence] {
+        sessions.values.map(\.occurrence).sorted { $0.id < $1.id }
+    }
+
+    mutating func update(
+        activities: [DetectedMeetingActivity],
+        now: Date,
+        activeRecordingDigest: String?
+    ) {
+        sessions = sessions.filter {
+            $0.value.occurrence.id == activeRecordingDigest
+                || now.timeIntervalSince($0.value.lastActivity) < 90
+        }
+        for activity in activities where activity.isRunningInput || activity.isRunningOutput {
+            if var session = sessions[activity.sessionKey] {
+                session.lastActivity = now
+                sessions[activity.sessionKey] = session
+            } else if activity.isRunningInput {
+                let title = String.localizedStringWithFormat(
+                    String(localized: "calendarMeeting.detected.titleFormat"),
+                    activity.link.provider.displayName
+                )
+                let occurrence = CalendarMeetingOccurrence(
+                    eventIdentifier: "ad-hoc:\(UUID().uuidString)",
+                    occurrenceStart: now,
+                    startDate: now,
+                    endDate: now,
+                    title: title,
+                    calendarID: "",
+                    participationStatus: .noCurrentUser,
+                    meetingLinks: [activity.link],
+                    isAdHoc: true
+                )
+                sessions[activity.sessionKey] = Session(occurrence: occurrence, lastActivity: now)
+            }
+        }
+    }
+
+    func occurrence(for activity: DetectedMeetingActivity) -> CalendarMeetingOccurrence? {
+        sessions[activity.sessionKey]?.occurrence
+    }
+}
+
 struct MeetingCameraActivitySnapshot: Equatable, Sendable {
     let capturedAt: Date
     let availability: MeetingActivityAvailability
@@ -449,6 +517,8 @@ protocol MeetingCameraActivityCollecting: Sendable {
 
 protocol BrowserURLResolving: Sendable {
     func activeURL(for bundleIdentifier: String) async -> URL?
+    /// All open tab URLs. nil means unavailable; [] means a successful empty read.
+    func meetingTabURLs(for bundleIdentifier: String) async -> [URL]?
 }
 
 enum SupportedMeetingBrowser {
@@ -489,7 +559,7 @@ enum BrowserAudioProcessAttribution {
     // Current Safari/WebKit versions attribute browser meeting audio to the
     // GPU XPC process rather than to Safari itself. This attribution only
     // selects Safari for URL resolution; the controller still requires the
-    // active Safari URL to match the canonical calendar meeting identity.
+    // browser's tab URLs to match the canonical meeting identity.
     static let safariWebKitGPUProcess = "com.apple.WebKit.GPU"
 
     private static let supportedHelperSuffixes = [

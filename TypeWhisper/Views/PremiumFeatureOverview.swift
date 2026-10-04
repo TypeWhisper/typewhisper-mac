@@ -433,7 +433,8 @@ struct PremiumActiveFeatureOverview: View {
             return requirementStatus(access.requirement(for: .calendarMeeting))
         }
         if calendarController.startMode != .off,
-           calendarController.calendarAuthorization != .fullAccess {
+           calendarController.calendarAuthorization != .fullAccess,
+           !calendarController.detectAdHocMeetings {
             return String(localized: "premium.hub.status.actionRequired")
         }
         switch calendarController.startMode {
@@ -449,7 +450,8 @@ struct PremiumActiveFeatureOverview: View {
     private var calendarStatusTone: PremiumFeatureStatusTone {
         guard access.requirement(for: .calendarMeeting) == .available else { return .warning }
         if calendarController.startMode != .off,
-           calendarController.calendarAuthorization != .fullAccess {
+           calendarController.calendarAuthorization != .fullAccess,
+           !calendarController.detectAdHocMeetings {
             return .warning
         }
         switch calendarController.startMode {
@@ -477,7 +479,8 @@ struct PremiumActiveFeatureOverview: View {
             Int64(calendarController.selectedCalendarIDs.count),
             Int64(calendarController.enabledProviders.count)
         )
-        return [permission, selection]
+        return [calendarController.detectAdHocMeetings
+            ? String(localized: "calendarMeeting.settings.detectAdHoc") : permission, selection]
     }
 
     private var learningStatus: String {

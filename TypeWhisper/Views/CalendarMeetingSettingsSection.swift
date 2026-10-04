@@ -95,6 +95,23 @@ struct CalendarMeetingSettingsSection: View {
 
             if controller.startMode != .off {
                 SettingsCard {
+                    VStack(alignment: .leading, spacing: 9) {
+                        Toggle(
+                            String(localized: "calendarMeeting.settings.detectAdHoc"),
+                            isOn: Binding(
+                                get: { controller.detectAdHocMeetings },
+                                set: { controller.setDetectAdHocMeetings($0) }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                        .accessibilityIdentifier("calendarMeeting.detectAdHoc")
+                        Text(String(localized: "calendarMeeting.settings.detectAdHocHelp"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                SettingsCard {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(String(localized: "calendarMeeting.settings.permissions"))
                             .font(.headline)
@@ -107,10 +124,13 @@ struct CalendarMeetingSettingsSection: View {
                         calendarSelection
                     }
 
-                    SettingsCard {
-                        providerSelection
-                    }
+                }
 
+                SettingsCard {
+                    providerSelection
+                }
+
+                if controller.calendarAuthorization == .fullAccess || controller.detectAdHocMeetings {
                     SettingsCard {
                         VStack(alignment: .leading, spacing: 9) {
                             Text(String(localized: "calendarMeeting.settings.stopping"))
@@ -129,16 +149,23 @@ struct CalendarMeetingSettingsSection: View {
                             .disabled(!controller.canEnableAutoStop)
                             .accessibilityIdentifier("calendarMeeting.autoStop")
 
-                            Text(controller.canEnableAutoStop
-                                ? String(localized: "calendarMeeting.settings.autoStopHelp")
-                                : String(localized: "calendarMeeting.settings.autoStopNotificationsRequired"))
+                            Text(String(localized: "calendarMeeting.settings.autoStopHelp"))
                                 .font(.caption)
-                                .foregroundStyle(
-                                    controller.canEnableAutoStop ? Color.secondary : Color.orange
-                                )
+                                .foregroundStyle(.secondary)
 
-                            if !controller.canEnableAutoStop,
-                               controller.notificationAuthorization != .notDetermined {
+                            if controller.detectAdHocMeetings {
+                                Text(String(localized: "calendarMeeting.settings.adHocAutoStopHelp"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if controller.notificationAuthorization != .authorized {
+                                Text(String(localized: "calendarMeeting.settings.autoStopNotificationsOptional"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            if controller.notificationAuthorization == .denied {
                                 Button(String(localized: "calendarMeeting.settings.openNotificationSettings")) {
                                     controller.openNotificationSettings()
                                 }
@@ -330,7 +357,7 @@ struct CalendarMeetingSettingsSection: View {
         if controller.startMode == .off {
             return String(localized: "calendarMeeting.status.off")
         }
-        if controller.calendarAuthorization != .fullAccess {
+        if controller.calendarAuthorization != .fullAccess, !controller.detectAdHocMeetings {
             return String(localized: "calendarMeeting.status.permissionRequired")
         }
         return controller.startMode == .automatic
@@ -340,7 +367,7 @@ struct CalendarMeetingSettingsSection: View {
 
     private var statusColor: Color {
         if controller.startMode != .off,
-           controller.calendarAuthorization != .fullAccess {
+           controller.calendarAuthorization != .fullAccess, !controller.detectAdHocMeetings {
             return .orange
         }
         switch controller.startMode {

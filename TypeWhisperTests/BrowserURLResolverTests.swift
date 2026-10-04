@@ -45,6 +45,28 @@ private final class SerializedBrowserResolutionProbe: @unchecked Sendable {
 }
 
 final class BrowserURLResolverTests: XCTestCase {
+    func testMeetingTabsDoNotChangeTheActiveURLUsedForDictation() async {
+        let foreground = URL(string: "https://example.com/document")!
+        let meeting = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let resolver = BrowserURLResolver(
+            resolutionProvider: { _, _ in BrowserResolution(url: foreground, title: "Document") },
+            meetingTabProvider: { _ in [foreground, meeting] }
+        )
+        let activeURL = await resolver.activeURL(for: SupportedMeetingBrowser.chrome)
+        let meetingURLs = await resolver.meetingTabURLs(for: SupportedMeetingBrowser.chrome)
+        XCTAssertEqual(activeURL, foreground)
+        XCTAssertEqual(meetingURLs, [foreground, meeting])
+    }
+
+    func testMeetingTabsDistinguishAnEmptyBrowserFromDeniedAccess() async {
+        let unavailable = BrowserURLResolver(meetingTabProvider: { _ in nil })
+        let empty = BrowserURLResolver(meetingTabProvider: { _ in [] })
+        let unavailableURLs = await unavailable.meetingTabURLs(for: SupportedMeetingBrowser.chrome)
+        let emptyURLs = await empty.meetingTabURLs(for: SupportedMeetingBrowser.chrome)
+        XCTAssertNil(unavailableURLs)
+        XCTAssertEqual(emptyURLs, [])
+    }
+
     func testBrowserAudioProcessAttributionAcceptsExactMainBundleIdentifiers() {
         for bundleIdentifier in SupportedMeetingBrowser.automaticURLBundleIdentifiers {
             XCTAssertEqual(

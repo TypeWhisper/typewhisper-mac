@@ -775,6 +775,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
             UserDefaultsKeys.calendarMeetingStartMode: CalendarMeetingStartMode.off.rawValue,
             UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,
+            UserDefaultsKeys.calendarMeetingDetectAdHoc: false,
             UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests: [String](),
             UserDefaultsKeys.calendarMeetingReminderRequestDigests: [String](),
             UserDefaultsKeys.calendarMeetingNotificationsConfigured: false,

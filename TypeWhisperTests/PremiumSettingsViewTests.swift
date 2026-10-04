@@ -184,7 +184,11 @@ final class PremiumSettingsViewTests: XCTestCase {
             "calendarMeeting.settings.howItWorks",
             "calendarMeeting.settings.autoStop",
             "calendarMeeting.settings.autoStopHelp",
-            "calendarMeeting.settings.autoStopNotificationsRequired",
+            "calendarMeeting.settings.autoStopNotificationsOptional",
+            "calendarMeeting.settings.detectAdHoc",
+            "calendarMeeting.settings.detectAdHocHelp",
+            "calendarMeeting.settings.adHocAutoStopHelp",
+            "calendarMeeting.detected.titleFormat",
             "calendarMeeting.settings.notificationHelp",
             "calendarMeeting.settings.privacy",
             "calendarMeeting.settings.requestCalendarAccess",
@@ -254,6 +258,7 @@ final class PremiumSettingsViewTests: XCTestCase {
             "TypeWhisper/Services/SettingsBackupExporter.swift"
         ), encoding: .utf8)
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingStartMode))
+        XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingDetectAdHoc))
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingSelectedCalendarIDs))
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests))
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingReminderRequestDigests))

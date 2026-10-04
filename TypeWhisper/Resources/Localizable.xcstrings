@@ -39757,30 +39757,170 @@
         }
       }
     },
-    "calendarMeeting.settings.description" : {
+    "calendarMeeting.settings.detectAdHoc" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lass dich vor geplanten Meetings erinnern oder starte die Aufnahme automatisch, sobald du wirklich beitrittst."
+            "value" : "Anrufe ohne Kalendertermin erkennen"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Get reminders for scheduled meetings or start recording automatically after you actually join."
+            "value" : "Detect calls without a calendar event"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "予定したミーティングの通知を受け取るか、実際の参加後に自動で録音を開始します。"
+            "value" : "カレンダーにない通話を検出"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "获取预定会议提醒，或在你实际加入后自动开始录音。"
+            "value" : "检测没有日历事件的通话"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.detectAdHocHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkennt auch Mikrofonaktivität von Zoom und Teams sowie Browser-Meetings wie Google Meet, auch in Hintergrund-Tabs. Kalenderzugriff ist optional. Der gewählte Startmodus und die ausgewählten Anbieter gelten auch für diese Anrufe."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Also detect Zoom and Teams microphone activity and browser meetings such as Google Meet, even in background tabs. Calendar access is optional. The selected start mode and providers apply to these calls too."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ZoomとTeamsのマイク使用、およびバックグラウンドのタブを含むGoogle Meetなどのブラウザでのミーティングも検出します。カレンダーへのアクセスは任意です。選択した開始モードとサービスはこれらの通話にも適用されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同时检测 Zoom 和 Teams 的麦克风活动，以及 Google Meet 等浏览器会议，包括后台标签页。无需授予日历访问权限。所选的开始模式和服务也适用于这些通话。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.autoStopNotificationsOptional" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohne Mitteilungen bleibt „Aufnahme fortsetzen“ in der Aufnahmeanzeige verfügbar. Sie wird während des Countdowns auch dann eingeblendet, wenn sie sonst ausgeblendet ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Without notifications, Continue recording remains available in the recording indicator, which is shown during the countdown even if normally hidden."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知がなくても、録音インジケーターの「録音を続ける」を使用できます。通常は非表示でも、カウントダウン中は表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即使没有通知，仍可在录音指示器中选择“继续录音”。即使平时隐藏，指示器也会在倒计时期间显示。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.adHocAutoStopHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Anrufen ohne Kalendertermin beginnt der Stopp-Countdown erst nach 90 Sekunden ohne Meeting-Audio. Kurze Unterbrechungen beenden die Aufnahme dadurch nicht."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calls without a calendar event allow 90 seconds without meeting audio before the stop countdown begins, so brief interruptions do not end the recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーにない通話では、ミーティング音声が90秒間使用されなくなってから停止カウントダウンが始まるため、短い中断で録音が終了することはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对于没有日历事件的通话，会议音频停止活动 90 秒后才会开始停止倒计时，避免短暂中断导致录音结束。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.detected.titleFormat" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@-Anruf"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ call"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@の通話"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 通话"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lass dich an Meetings erinnern oder starte Aufnahmen automatisch, wenn ein Anruf erkannt wird."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get meeting reminders or start recording automatically when a call is detected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミーティングの通知を受け取るか、通話の検出時に自動で録音を開始します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取会议提醒，或在检测到通话时自动开始录音。"
           }
         }
       }
@@ -39986,53 +40126,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn das Meeting beendet scheint, warnt dich TypeWhisper sofort und stoppt die Aufnahme 15 Sekunden später, sofern du sie nicht fortsetzt."
+            "value" : "Wenn das Meeting beendet scheint, zeigt die Aufnahmeanzeige einen 15-Sekunden-Countdown mit „Aufnahme fortsetzen“. macOS-Mitteilungen sind optional."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "When the meeting appears to have ended, TypeWhisper warns you immediately and stops the recording 15 seconds later unless you continue it."
+            "value" : "When the meeting appears to have ended, the recording indicator shows a 15-second countdown with Continue recording. macOS notifications are optional."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミーティングが終了したように見えると、TypeWhisperはすぐに警告し、「録音を続ける」を選ばない限り15秒後に録音を停止します。"
+            "value" : "ミーティングが終了したように見えると、録音インジケーターに15秒のカウントダウンと「録音を続ける」が表示されます。macOSの通知は任意です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当会议似乎已结束时，TypeWhisper 会立即发出警告，并在 15 秒后停止录音，除非你选择继续录音。"
-          }
-        }
-      }
-    },
-    "calendarMeeting.settings.autoStopNotificationsRequired" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-Stop benötigt erlaubte macOS-Mitteilungen und bleibt sonst ausgeschaltet."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-stop requires macOS notifications and stays off when they are unavailable."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動停止にはmacOSの通知許可が必要です。通知を利用できない場合はオフのままになります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动停止需要允许 macOS 通知；通知不可用时将保持关闭。"
+            "value" : "当会议似乎已结束时，录音指示器会显示 15 秒倒计时和“继续录音”按钮。macOS 通知不是必需的。"
           }
         }
       }
@@ -40154,25 +40266,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mitteilungen werden für Meeting-Hinweise und für die Warnung vor dem automatischen Stopp verwendet."
+            "value" : "Der Erinnerungsmodus benötigt macOS-Mitteilungen. Automatische Aufnahmen und der Stopp-Countdown in der App funktionieren auch ohne sie."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Notifications are used for meeting reminders and the warning before an automatic stop."
+            "value" : "Reminder mode needs macOS notifications. Automatic recording and the in-app stop countdown also work without them."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通知はミーティングのリマインダーと、自動停止前の警告に使用されます。"
+            "value" : "通知モードにはmacOSの通知許可が必要です。自動録音とアプリ内の停止カウントダウンは、通知なしでも動作します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通知用于会议提醒和自动停止前的警告。"
+            "value" : "提醒模式需要 macOS 通知。自动录音和应用内的停止倒计时无需通知也能正常运行。"
           }
         }
       }
@@ -44298,25 +44410,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lass dich vor dem Meeting erinnern oder starte die Aufnahme automatisch, sobald du dem geplanten Meeting tatsächlich beitrittst."
+            "value" : "Wähle eine Erinnerung zum Starten der Aufnahme oder die automatische Aufnahme mit abbrechbarem Countdown."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Get a reminder before the meeting, or start recording automatically after you actually join the scheduled meeting."
+            "value" : "Choose a reminder that lets you start recording, or automatic recording with a cancellable countdown."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミーティングの前に通知を受け取るか、予定したミーティングへの実際の参加後に自動録音を開始します。"
+            "value" : "録音を開始できる通知、またはキャンセル可能なカウントダウン付きの自動録音を選択します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在会议前获取提醒，或在你实际加入预定会议后自动开始录音。"
+            "value" : "选择通过提醒手动开始录音，或在可取消的倒计时后自动录音。"
           }
         }
       }
@@ -44543,25 +44655,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper startet erst, wenn dein Mac erkennt, dass du dem passenden geplanten Meeting beigetreten bist."
+            "value" : "Die Erkennung nutzt die Audioaktivität von Meeting-Apps und Meeting-URLs, auch in Hintergrund-Tabs. Bei mehrdeutigen Browser-Meetings startet keine Aufnahme."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper starts only after your Mac detects that you joined the matching scheduled meeting."
+            "value" : "Detection uses meeting app audio activity and meeting URLs, including background tabs. Ambiguous browser meetings do not start a recording."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは、対応する予定済みミーティングへの参加をMacが検出した後にのみ開始します。"
+            "value" : "検出にはミーティングアプリの音声使用状況と、バックグラウンドのタブを含むミーティングURLを使用します。ブラウザのミーティングを特定できない場合は録音を開始しません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有当 Mac 检测到你已加入匹配的预定会议后，TypeWhisper 才会启动。"
+            "value" : "检测会使用会议应用的音频活动和会议网址，包括后台标签页。无法明确识别浏览器中的会议时，不会开始录音。"
           }
         }
       }
