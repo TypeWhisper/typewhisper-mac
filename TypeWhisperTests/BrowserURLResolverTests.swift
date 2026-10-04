@@ -119,6 +119,83 @@ final class BrowserURLResolverTests: XCTestCase {
         XCTAssertEqual(activeURL, foreground)
     }
 
+    func testMeetingTabsForAnotherBrowserResolveWhileOneBrowserIsBlocked() async {
+        let firstStarted = expectation(description: "First browser query started")
+        let firstFinished = expectation(description: "First browser query finished")
+        let releaseFirst = DispatchSemaphore(value: 0)
+        defer { releaseFirst.signal() }
+        let meeting = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let resolver = BrowserURLResolver(meetingTabProvider: { browser in
+            if browser == SupportedMeetingBrowser.chrome {
+                firstStarted.fulfill()
+                _ = releaseFirst.wait(timeout: .now() + 5)
+                firstFinished.fulfill()
+            }
+            return [meeting]
+        })
+
+        let firstTask = Task { await resolver.meetingTabURLs(for: SupportedMeetingBrowser.chrome) }
+        await fulfillment(of: [firstStarted], timeout: 2)
+        let secondURLs = await resolver.meetingTabURLs(for: SupportedMeetingBrowser.safari)
+        releaseFirst.signal()
+        _ = await firstTask.value
+        await fulfillment(of: [firstFinished], timeout: 2)
+
+        XCTAssertEqual(secondURLs, [meeting])
+    }
+
+    func testMeetingQueriesBoundConcurrencyWithoutTimingOutQueuedRequests() async throws {
+        let blockedStarted = expectation(description: "Two providers started")
+        blockedStarted.expectedFulfillmentCount = 2
+        let blockedFinished = expectation(description: "Two providers finished")
+        blockedFinished.expectedFulfillmentCount = 2
+        let thirdRequested = expectation(description: "Third request submitted")
+        let releaseProviders = DispatchSemaphore(value: 0)
+        defer {
+            releaseProviders.signal()
+            releaseProviders.signal()
+        }
+        let state = OSAllocatedUnfairLock(initialState: (active: 0, maximum: 0, thirdStarted: false))
+        let meeting = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let resolver = BrowserURLResolver(meetingTabProvider: { browser in
+            state.withLock {
+                $0.active += 1
+                $0.maximum = max($0.maximum, $0.active)
+            }
+            defer { state.withLock { $0.active -= 1 } }
+            if browser == SupportedMeetingBrowser.brave {
+                state.withLock { $0.thirdStarted = true }
+            } else {
+                blockedStarted.fulfill()
+                _ = releaseProviders.wait(timeout: .now() + 8)
+                blockedFinished.fulfill()
+            }
+            return [meeting]
+        })
+
+        let first = Task { await resolver.meetingTabURLs(for: SupportedMeetingBrowser.chrome) }
+        let second = Task { await resolver.meetingTabURLs(for: SupportedMeetingBrowser.safari) }
+        await fulfillment(of: [blockedStarted], timeout: 2)
+        let third = Task {
+            thirdRequested.fulfill()
+            return await resolver.meetingTabURLs(for: SupportedMeetingBrowser.brave)
+        }
+        await fulfillment(of: [thirdRequested], timeout: 2)
+        try await Task.sleep(for: .seconds(3))
+        XCTAssertFalse(state.withLock { $0.thirdStarted })
+        releaseProviders.signal()
+        releaseProviders.signal()
+
+        let firstURLs = await first.value
+        let secondURLs = await second.value
+        let thirdURLs = await third.value
+        await fulfillment(of: [blockedFinished], timeout: 2)
+        XCTAssertNil(firstURLs)
+        XCTAssertNil(secondURLs)
+        XCTAssertEqual(thirdURLs, [meeting])
+        XCTAssertEqual(state.withLock { $0.maximum }, 2)
+    }
+
     func testMeetingScriptPreservesOutputAndDistinguishesFailureFromEmptyResult() async {
         let output = await Task.detached {
             BrowserURLResolver.executeMeetingTabScript(

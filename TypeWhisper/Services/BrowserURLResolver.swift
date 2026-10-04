@@ -10,10 +10,13 @@ private let browserURLResolutionQueue = DispatchQueue(
     label: "com.typewhisper.browser-url-resolution",
     qos: .utility
 )
-private let meetingTabResolutionQueue = DispatchQueue(
-    label: "com.typewhisper.meeting-tab-resolution",
-    qos: .utility
-)
+private let meetingTabResolutionQueue: OperationQueue = {
+    let queue = OperationQueue()
+    queue.name = "com.typewhisper.meeting-tab-resolution"
+    queue.qualityOfService = .utility
+    queue.maxConcurrentOperationCount = 2
+    return queue
+}()
 
 private final class BrowserResolutionCompletion<Value: Sendable>: @unchecked Sendable {
     private struct State {
@@ -71,13 +74,15 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         let provider = meetingTabProvider
         return await withCheckedContinuation { continuation in
             let completion = BrowserResolutionCompletion(continuation: continuation)
-            meetingTabResolutionQueue.async {
-                completion.resume(returning: provider(bundleIdentifier))
-            }
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
-                if completion.resume(returning: nil) {
-                    browserURLResolverLogger.warning("Browser meeting-tab resolution timed out")
+            meetingTabResolutionQueue.addOperation {
+                // Queue admission is not a browser failure. Give each query its
+                // full execution budget once a bounded worker is available.
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                    if completion.resume(returning: nil) {
+                        browserURLResolverLogger.warning("Browser meeting-tab resolution timed out")
+                    }
                 }
+                completion.resume(returning: provider(bundleIdentifier))
             }
         }
     }

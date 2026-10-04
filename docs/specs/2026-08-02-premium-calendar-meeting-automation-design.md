@@ -55,7 +55,7 @@ The legacy notification start identifier remains registered for requests schedul
 
 ## Calls without calendar events
 
-Meeting-tab queries use a separate serial queue and a bounded `osascript` subprocess so a stalled in-process AppleScript used by dictation cannot starve meeting detection. The subprocess is terminated after two seconds; the outer query retains its independent 2.5-second fallback. Timeout diagnostics never include tab URLs or titles.
+Meeting-tab queries use a separate operation queue with at most two concurrent `osascript` subprocesses so a stalled in-process AppleScript used by dictation cannot starve meeting detection, and one slow browser does not block another. Each subprocess is terminated after two seconds; its independent 2.5-second fallback starts when the queued operation begins, so waiting for a worker cannot produce a false browser-unavailable result. Timeout diagnostics never include tab URLs or titles.
 
 `BrowserURLResolverTests.testLiveMeetingTabsResolveWhileActiveAppleScriptIsBlocked` is an opt-in live regression test. Open a disposable test URL in a supported browser, then set `TEST_RUNNER_TYPEWHISPER_TEST_BROWSER_BUNDLE_ID` and `TEST_RUNNER_TYPEWHISPER_TEST_BROWSER_URL` when running that test with `xcodebuild test`. It verifies the real tab query while an in-process AppleScript is blocked; normal test runs skip it without those explicit inputs.
 
