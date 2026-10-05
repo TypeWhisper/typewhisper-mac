@@ -116,6 +116,39 @@ struct MicrophonePrerollRearmPolicy: Equatable {
     }
 }
 
+/// Tracks stops that are still draining a recording. The recording is already inactive and
+/// its engine already detached while a stop waits out the short-speech grace and finalizes,
+/// yet the stop still owns the capture path. Input preparation (which would arm a second
+/// stream) stays blocked until every stop has finished. A counter keeps overlapping stops
+/// from releasing each other.
+struct RecordingStopTracker: Equatable {
+    private var activeStops = 0
+
+    var isStopping: Bool { activeStops > 0 }
+
+    mutating func begin() {
+        activeStops += 1
+    }
+
+    mutating func end() {
+        activeStops = max(0, activeStops - 1)
+    }
+
+    /// Whether preparing or arming a microphone input is allowed right now.
+    func allowsInputPreparation(isRecordingActive: Bool) -> Bool {
+        !isRecordingActive && !isStopping
+    }
+}
+
+/// A re-arm that cannot store its stream (slot taken, preparation generation changed) must
+/// only disarm the capture it set up itself. When a different prepared stream is already
+/// armed, disarming globally would route that stream's idle audio into the recording buffers.
+enum MicrophonePrerollRearmStoreFailurePolicy {
+    static func shouldDisarmCapture(otherStreamingInputIsPrepared: Bool) -> Bool {
+        !otherStreamingInputIsPrepared
+    }
+}
+
 /// Freshness bookkeeping for the armed microphone pre-roll stream. The timestamp is the
 /// uptime of the last real converted buffer from the stream, whether it landed in the ring or
 /// in a recording. Re-arming after a recording never synthesizes freshness: a stream that

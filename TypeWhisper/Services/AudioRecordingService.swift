@@ -526,6 +526,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let engineLock = NSLock()
     private let audioLevelPublishLock = NSLock()
     private let recordingActivityLock = OSAllocatedUnfairLock(initialState: false)
+    private let recordingStopTracker = OSAllocatedUnfairLock(initialState: RecordingStopTracker())
     private struct AsyncRecordingStartState {
         var nextRequestID: UInt64 = 0
         var activeRequestID: UInt64?
@@ -627,6 +628,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private var isRecordingActive: Bool {
         recordingActivityLock.withLock { $0 }
+    }
+
+    /// False while a recording is active or a stop is still draining it (short-speech grace,
+    /// finalization, re-arming). Preparing or arming an input is only safe when this is true.
+    private var allowsInputPreparation: Bool {
+        let isActive = isRecordingActive
+        return recordingStopTracker.withLock { $0.allowsInputPreparation(isRecordingActive: isActive) }
     }
 
     private func setRecordingActive(_ active: Bool) {
@@ -801,7 +809,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// after the system default input changed. Returns true when something was released.
     @discardableResult
     private func releaseStreamingInputIfNoLongerWanted() -> Bool {
-        guard !isRecordingActive else { return false }
+        guard allowsInputPreparation else { return false }
         let streaming = engineLock.withLock {
             (builtIn: preparedBuiltInInput, inputOnly: preparedUSBInput)
         }
@@ -917,7 +925,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performBuiltInInputPreparationIfEligible() {
-        guard !isRecordingActive,
+        guard allowsInputPreparation,
               let defaultInputDeviceID = builtInInputPreparationDeviceID() else {
             return
         }
@@ -958,7 +966,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 engine.prepare()
             }
 
-            guard !isRecordingActive,
+            guard allowsInputPreparation,
                   builtInInputPreparationDeviceID() == defaultInputDeviceID else {
                 teardownPreparedEngine(engine)
                 if isStreaming { setPrerollCaptureArmed(false) }
@@ -1035,7 +1043,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performUSBInputPreparationIfEligible() {
-        guard !isRecordingActive,
+        guard allowsInputPreparation,
               let deviceID = inputOnlyPreparationDeviceID() else {
             return
         }
@@ -1067,7 +1075,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 }
                 preparedInput.isStreaming = true
             }
-            guard !isRecordingActive,
+            guard allowsInputPreparation,
                   inputOnlyPreparationDeviceID() == deviceID else {
                 preparedInput.session.stop()
                 if isStreaming { setPrerollCaptureArmed(false) }
@@ -1170,7 +1178,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performBluetoothInputPreparationIfEligible() {
-        guard !isRecordingActive,
+        guard allowsInputPreparation,
               let deviceID = bluetoothInputPreparationDeviceID() else {
             return
         }
@@ -1512,7 +1520,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Runs on `recordingStartQueue`. A dead armed stream delivers nothing, so the ring would
     /// silently stay empty; detect that and re-arm within the failure budget.
     private func checkPrerollStreamHealth() {
-        guard !isRecordingActive, !hasPendingRecordingStart else { return }
+        guard allowsInputPreparation, !hasPendingRecordingStart else { return }
         guard hasStreamingPreparedInput() else {
             stopPrerollWatchdog()
             return
@@ -1529,7 +1537,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func handlePrerollStreamFailure(reason: String) {
         recordingStartQueue.async { [weak self] in
             guard let self,
-                  !self.isRecordingActive,
+                  self.allowsInputPreparation,
                   !self.hasPendingRecordingStart,
                   self.hasStreamingPreparedInput() else {
                 return
@@ -1638,10 +1646,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let format = engine.inputNode.outputFormat(forBus: 0)
         // Everything delivered before this point belongs to the recording that just stopped.
         setPrerollCaptureArmed(true, retainingLastBuffer: true)
+        var otherStreamingInputIsPrepared = false
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
-                  preparedBuiltInInput == nil else { return false }
+                  preparedBuiltInInput == nil else {
+                otherStreamingInputIsPrepared = preparedBuiltInInput?.isStreaming == true
+                    || preparedUSBInput?.isStreaming == true
+                return false
+            }
             preparedBuiltInInput = PreparedBuiltInInput(
                 engine: engine,
                 defaultInputDeviceID: deviceID,
@@ -1651,7 +1664,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return true
         }
         guard stored else {
-            setPrerollCaptureArmed(false)
+            // Never disarm a different prepared stream that is already feeding the ring.
+            if MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(
+                otherStreamingInputIsPrepared: otherStreamingInputIsPrepared
+            ) {
+                setPrerollCaptureArmed(false)
+            }
             return false
         }
         installArmedConfigurationObserver(for: engine, tapFormat: Self.tapFormat(for: format))
@@ -1668,17 +1686,27 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return false
         }
         setPrerollCaptureArmed(true, retainingLastBuffer: true)
+        var otherStreamingInputIsPrepared = false
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
                   inputCaptureSession == nil,
-                  preparedUSBInput == nil else { return false }
+                  preparedUSBInput == nil else {
+                otherStreamingInputIsPrepared = preparedBuiltInInput?.isStreaming == true
+                    || preparedUSBInput?.isStreaming == true
+                return false
+            }
             preparedUSBInput = PreparedUSBInput(session: session, deviceID: deviceID, isStreaming: true)
             activeInputOnlyDeviceID = nil
             return true
         }
         guard stored else {
-            setPrerollCaptureArmed(false)
+            // Never disarm a different prepared stream that is already feeding the ring.
+            if MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(
+                otherStreamingInputIsPrepared: otherStreamingInputIsPrepared
+            ) {
+                setPrerollCaptureArmed(false)
+            }
             return false
         }
         startPrerollWatchdogIfNeeded()
@@ -2112,6 +2140,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
             return samples
         }
+
+        // From here until the stop has finished (grace wait, re-arm, finalization) input
+        // preparation stays blocked: the recording is inactive and its engine detached, but a
+        // second armed stream would collide with the re-arm below.
+        recordingStopTracker.withLock { $0.begin() }
+        defer { recordingStopTracker.withLock { $0.end() } }
 
         // Atomically claim the engine - only the first concurrent caller proceeds
         let capture: (engine: AVAudioEngine?, inputCaptureSession: AudioInputCaptureSession?) = engineLock.withLock {

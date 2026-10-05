@@ -470,6 +470,46 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         )
     }
 
+    func testInputPreparationStaysBlockedWhileAStopIsDraining() {
+        var tracker = RecordingStopTracker()
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: true))
+
+        // The recording is already inactive during the short-speech grace wait, but the stop
+        // still owns the capture path.
+        tracker.begin()
+        XCTAssertTrue(tracker.isStopping)
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: false))
+
+        tracker.end()
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+    }
+
+    func testOverlappingStopsDoNotReleaseEachOther() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin()
+
+        tracker.end()
+        XCTAssertTrue(tracker.isStopping)
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: false))
+
+        tracker.end()
+        tracker.end()
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+    }
+
+    func testFailedRearmStoreNeverDisarmsADifferentArmedStream() {
+        XCTAssertFalse(
+            MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(otherStreamingInputIsPrepared: true)
+        )
+        XCTAssertTrue(
+            MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(otherStreamingInputIsPrepared: false)
+        )
+    }
+
     func testMicrophonePrerollSuspensionKeepsLockAcrossWake() {
         var suspension = MicrophonePrerollSuspension()
         XCTAssertFalse(suspension.isSuspended)
