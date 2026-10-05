@@ -116,6 +116,26 @@ struct MicrophonePrerollRearmPolicy: Equatable {
     }
 }
 
+/// Freshness bookkeeping for the armed microphone pre-roll stream. The timestamp is the
+/// uptime of the last real converted buffer from the stream, whether it landed in the ring or
+/// in a recording. Re-arming after a recording never synthesizes freshness: a stream that
+/// stalled during the recording while its engine still reports running stays stale.
+enum MicrophonePrerollFreshnessPolicy {
+    /// Timestamp (0 = no buffer seen) to keep after the armed state was set.
+    static func lastBufferUptimeAfterArming(
+        armed: Bool,
+        retainingLastBuffer: Bool,
+        previous: UInt64
+    ) -> UInt64 {
+        armed && retainingLastBuffer ? previous : 0
+    }
+
+    static func isFresh(lastBufferUptime: UInt64, now: UInt64, within interval: TimeInterval) -> Bool {
+        guard lastBufferUptime != 0, now >= lastBufferUptime else { return false }
+        return Double(now - lastBufferUptime) / 1_000_000_000 <= interval
+    }
+}
+
 /// Decides whether an engine configuration-change notification can be ignored while the
 /// microphone pre-roll is armed. Only a notification that left the engine running with the
 /// prepared tap format is benign; anything else invalidates the stream. A stalled stream is

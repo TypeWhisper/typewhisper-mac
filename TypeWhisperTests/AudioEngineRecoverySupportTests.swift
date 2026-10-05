@@ -403,6 +403,73 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: 0.5))
     }
 
+    func testMicrophonePrerollFreshnessIsNeverSynthesizedWhenRearming() {
+        let lastRealBuffer: UInt64 = 5_000_000_000
+
+        // Re-arming keeps the real timestamp instead of stamping the re-arm time.
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: true,
+                retainingLastBuffer: true,
+                previous: lastRealBuffer
+            ),
+            lastRealBuffer
+        )
+        // A fresh arm or a disarm starts without any buffer.
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: true,
+                retainingLastBuffer: false,
+                previous: lastRealBuffer
+            ),
+            0
+        )
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: false,
+                retainingLastBuffer: true,
+                previous: lastRealBuffer
+            ),
+            0
+        )
+    }
+
+    func testMicrophonePrerollStreamThatStalledDuringRecordingIsNotFreshAfterStop() {
+        let stalledAt: UInt64 = 1_000_000_000
+        let stopTime: UInt64 = 3_000_000_000
+        // Back-to-back dictation right after a stop at the stop time: the last real buffer
+        // is two seconds old, so the dead stream must not be claimed.
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: stalledAt,
+                now: stopTime + 100_000_000,
+                within: 0.25
+            )
+        )
+    }
+
+    func testMicrophonePrerollStreamWithRecentRealBufferIsFreshAfterStop() {
+        let lastBuffer: UInt64 = 3_000_000_000
+        XCTAssertTrue(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: lastBuffer,
+                now: lastBuffer + 200_000_000,
+                within: 0.25
+            )
+        )
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: lastBuffer,
+                now: lastBuffer + 300_000_000,
+                within: 0.25
+            )
+        )
+        XCTAssertFalse(MicrophonePrerollFreshnessPolicy.isFresh(lastBufferUptime: 0, now: lastBuffer, within: 0.25))
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(lastBufferUptime: lastBuffer + 1, now: lastBuffer, within: 0.25)
+        )
+    }
+
     func testMicrophonePrerollSuspensionKeepsLockAcrossWake() {
         var suspension = MicrophonePrerollSuspension()
         XCTAssertFalse(suspension.isSuspended)

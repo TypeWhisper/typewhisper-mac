@@ -1385,16 +1385,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ///
     /// The last-buffer timestamp stays unset until the stream delivers a buffer, so a recording
     /// that claims a stream which never produced audio falls back to the cold start. Pass
-    /// `streamKnownLive` only when the stream was delivering audio an instant ago (re-arming
-    /// after a recording that used it).
-    private func setPrerollCaptureArmed(_ armed: Bool, streamKnownLive: Bool = false) {
+    /// `retainingLastBuffer` when re-arming a stream that just served a recording: the
+    /// timestamp of its last real buffer is kept (recordings keep updating it), so freshness is
+    /// never synthesized for a stream that stalled while the engine still reports running.
+    private func setPrerollCaptureArmed(_ armed: Bool, retainingLastBuffer: Bool = false) {
         processingQueue.sync {
             prerollRing.reset()
             isPrerollCaptureArmed = armed
             prerollArmedMirror.withLock { $0 = armed }
             let now = DispatchTime.now().uptimeNanoseconds
             prerollArmedUptime.withLock { $0 = armed ? now : 0 }
-            prerollLastBufferUptime.withLock { $0 = armed && streamKnownLive ? now : 0 }
+            prerollLastBufferUptime.withLock {
+                $0 = MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                    armed: armed,
+                    retainingLastBuffer: retainingLastBuffer,
+                    previous: $0
+                )
+            }
         }
     }
 
@@ -1419,10 +1426,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     /// True when the armed stream delivered audio recently enough to trust it for a recording.
     private func armedStreamIsFresh(within interval: TimeInterval) -> Bool {
-        let last = prerollLastBufferUptime.withLock { $0 }
-        let now = DispatchTime.now().uptimeNanoseconds
-        guard last != 0, now >= last else { return false }
-        return Double(now - last) / 1_000_000_000 <= interval
+        MicrophonePrerollFreshnessPolicy.isFresh(
+            lastBufferUptime: prerollLastBufferUptime.withLock { $0 },
+            now: DispatchTime.now().uptimeNanoseconds,
+            within: interval
+        )
     }
 
     /// Watchdog variant of `armedStreamIsFresh`: a stream that has not delivered its first
@@ -1629,7 +1637,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         let format = engine.inputNode.outputFormat(forBus: 0)
         // Everything delivered before this point belongs to the recording that just stopped.
-        setPrerollCaptureArmed(true, streamKnownLive: true)
+        setPrerollCaptureArmed(true, retainingLastBuffer: true)
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
@@ -1659,7 +1667,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         guard let deviceID = prerollInputOnlyDeviceID(), sessionDeviceID == deviceID else {
             return false
         }
-        setPrerollCaptureArmed(true, streamKnownLive: true)
+        setPrerollCaptureArmed(true, retainingLastBuffer: true)
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
@@ -3217,6 +3225,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             prerollLastBufferUptime.withLock { $0 = DispatchTime.now().uptimeNanoseconds }
             return
         }
+        // Keep the timestamp of the last real buffer current while recording, so a re-arm
+        // after this recording reflects whether the stream was actually delivering.
+        prerollLastBufferUptime.withLock { $0 = DispatchTime.now().uptimeNanoseconds }
         if let bluetoothInputGeneration,
            !bluetoothInputStartupTracker.isActiveGeneration(bluetoothInputGeneration) {
             return
