@@ -403,7 +403,9 @@ struct MenuBarView: View {
 
             Divider()
 
+            #if !APPSTORE
             menuItem(for: .checkForUpdates)
+            #endif
 
             Button(String(localized: "Quit")) {
                 NSApplication.shared.terminate(nil)
@@ -485,9 +487,13 @@ struct MenuBarView: View {
                 copyLastTranscriptionButton
                 pasteLastTranscriptionButton
                 readBackLastTranscriptionButton
+                // Undo needs to read the target field through Accessibility,
+                // which the App Sandbox does not allow.
+                #if !APPSTORE
                 Divider()
                 undoLastDictationButton
                 restoreRawTranscriptButton
+                #endif
             } label: {
                 Label(
                     localizedAppText("Last Transcription", de: "Letzte Transkription"),

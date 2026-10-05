@@ -613,6 +613,12 @@ final class PluginRegistryService: ObservableObject {
 
     @discardableResult
     func fetchRegistry(force: Bool = false) async -> Bool {
+        #if APPSTORE
+        registry = AppStorePluginCatalog.registryPlugins()
+        fetchState = .loaded
+        updateAvailableUpdatesCount()
+        return true
+        #endif
         #if DEBUG
         if AppConstants.isScreenshotAutomation, !registry.isEmpty {
             fetchState = .loaded
@@ -798,6 +804,9 @@ final class PluginRegistryService: ObservableObject {
 
     @discardableResult
     func downloadAndInstall(_ plugin: RegistryPlugin) async -> Bool {
+        #if APPSTORE
+        return installBundledPlugin(plugin)
+        #endif
         guard plugin.isCompatibleWithCurrentEnvironment else {
             installStates[plugin.id] = .error("Plugin is not compatible with this Mac")
             return false
@@ -888,7 +897,12 @@ final class PluginRegistryService: ObservableObject {
 
         PluginManager.shared.unloadPlugin(pluginId)
         PluginManager.shared.clearIncompatibleExternalBundle(pluginId)
+        #if APPSTORE
+        _ = codeIsLoaded
+        AppStorePluginCatalog.setInstalled(false, pluginId: pluginId)
+        #else
         PluginManager.shared.removeUninstalledBundle(at: plugin.sourceURL, codeIsLoaded: codeIsLoaded)
+        #endif
 
         let keychainError = clearPluginPersistence(
             pluginId,
@@ -959,6 +973,10 @@ final class PluginRegistryService: ObservableObject {
 
     @discardableResult
     func installFromFile(_ url: URL) async throws -> PluginManifest {
+        #if APPSTORE
+        throw NSError(domain: "PluginRegistry", code: 6,
+                      userInfo: [NSLocalizedDescriptionKey: "Plugins from files are not available in the Mac App Store edition"])
+        #endif
         let fm = FileManager.default
 
         if url.pathExtension == "bundle" {

@@ -323,7 +323,11 @@ struct SettingsView: View {
         case .advanced:
             AdvancedSettingsView()
         case .license:
+            #if APPSTORE
+            PremiumSettingsView()
+            #else
             LicenseSettingsView()
+            #endif
         case .about:
             AboutSettingsView()
         case .installedPlugin(let pluginId):
@@ -686,6 +690,20 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
 
     let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
 
+    #if APPSTORE
+    // Premium is bought on the Premium page, so there is no License page.
+    let systemDestinations = [
+        settingsDestination(destinations, .advanced),
+        settingsDestination(destinations, .about)
+    ]
+    #else
+    let systemDestinations = [
+        settingsDestination(destinations, .advanced),
+        settingsDestination(destinations, .license),
+        settingsDestination(destinations, .about)
+    ]
+    #endif
+
     return [
         SettingsDestinationSection(
             id: "home",
@@ -705,11 +723,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         ),
         SettingsDestinationSection(
             id: "system",
-            destinations: [
-                settingsDestination(destinations, .advanced),
-                settingsDestination(destinations, .license),
-                settingsDestination(destinations, .about)
-            ]
+            destinations: systemDestinations
         )
     ]
 }
@@ -891,7 +905,12 @@ struct RecordingSettingsView: View {
     private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
     private var needsPermissions: Bool {
+#if APPSTORE
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
+            || dictation.needsInputMonitoringPermission
+#else
+        dictation.needsMicPermission || dictation.needsAccessibilityPermission
+#endif
     }
 
     private var usesBluetoothInput: Bool {
@@ -1358,6 +1377,25 @@ struct RecordingSettingsView: View {
                         }
                     }
 
+#if APPSTORE
+                    if dictation.needsAccessibilityPermission {
+                        AppStorePermissionRow(
+                            dictation: dictation,
+                            kind: .accessibility,
+                            titleStyle: .short,
+                            labelColor: .orange
+                        )
+                    }
+
+                    if dictation.needsInputMonitoringPermission {
+                        AppStorePermissionRow(
+                            dictation: dictation,
+                            kind: .inputMonitoring,
+                            titleStyle: .short,
+                            labelColor: .orange
+                        )
+                    }
+#else
                     if dictation.needsAccessibilityPermission {
                         HStack {
                             Label(
@@ -1375,6 +1413,7 @@ struct RecordingSettingsView: View {
                             .controlSize(.small)
                         }
                     }
+#endif
                     }
                 }
             }
@@ -1545,6 +1584,15 @@ struct PermissionsBanner: View {
                 }
             }
 
+#if APPSTORE
+            if dictation.needsAccessibilityPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .accessibility, labelColor: .red)
+            }
+
+            if dictation.needsInputMonitoringPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .inputMonitoring, labelColor: .red)
+            }
+#else
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
@@ -1562,6 +1610,7 @@ struct PermissionsBanner: View {
                     .controlSize(.small)
                 }
             }
+#endif
         }
     }
 }

@@ -72,12 +72,18 @@ private func targetAppCorrectionCommitSignal(forKeyCode keyCode: UInt16) -> Targ
 private func installGlobalTargetAppCorrectionKeyMonitor(
     onCommit: @escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void
 ) -> Any? {
+#if APPSTORE
+    // Global key monitors need Accessibility, which the App Sandbox cannot get. Learning also
+    // has no focused-field baseline there, so it ends before a commit observer starts.
+    return nil
+#else
     NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
         guard let signal = targetAppCorrectionCommitSignal(forKeyCode: event.keyCode) else { return }
         Task { @MainActor in
             onCommit(signal)
         }
     }
+#endif
 }
 
 @MainActor

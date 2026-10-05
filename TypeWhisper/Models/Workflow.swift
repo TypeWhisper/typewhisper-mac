@@ -358,6 +358,16 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
 
     var id: String { rawValue }
 
+    /// Submitting with Enter during dictation needs an event tap that keeps Enter from reaching
+    /// the target app. The App Store edition can only observe key events.
+    var isAvailable: Bool {
+#if APPSTORE
+        self != .duringDictation
+#else
+        true
+#endif
+    }
+
     var displayName: String {
         switch self {
         case .never:
@@ -387,11 +397,19 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
                 "Presses Enter when the dictation ends with “press enter” or “press return”.",
                 de: "Drückt Enter, wenn das Diktat mit „press enter“ oder „press return“ endet."
             )
+#if APPSTORE
+        case .duringDictation:
+            localizedAppText(
+                "Not available in this edition because TypeWhisper cannot keep Enter from reaching the app. Dictations are inserted without pressing Enter.",
+                de: "In dieser Edition nicht verfügbar, weil TypeWhisper Enter nicht von der App fernhalten kann. Diktate werden ohne Enter eingefügt."
+            )
+#else
         case .duringDictation:
             localizedAppText(
                 "Press Enter during recording to stop, insert the text, and submit. Stopping normally only inserts the text.",
                 de: "Drücke während der Aufnahme Enter, um sie zu stoppen, den Text einzufügen und abzusenden. Normales Stoppen fügt nur den Text ein."
             )
+#endif
         case .always:
             localizedAppText(
                 "Presses Enter after every inserted dictation.",

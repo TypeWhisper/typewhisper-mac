@@ -50,9 +50,11 @@ struct DictionarySettingsView: View {
 
     private var dictionaryPart: some View {
         VStack(spacing: 0) {
+            #if !APPSTORE
             PremiumActiveFeatureOverview.link(to: .correctionLearning)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.vertical, 12)
+            #endif
 
             dictionaryHeader
 

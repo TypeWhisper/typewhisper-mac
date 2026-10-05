@@ -1,0 +1,37 @@
+// Build settings for the Mac App Store edition.
+//
+// The App Store build shares its bundle identifier with the iOS app so that
+// Premium is a universal purchase across iPhone, iPad and Mac.
+//
+// Local overrides (team, profile) go into AppStore/Config/AppStore.local.xcconfig.
+
+DEVELOPMENT_TEAM = 2D8ALY3LCL
+
+// Four TypeWhisper variants can be installed side by side, each with its own
+// name, bundle ID, privacy permissions, container and keychain items:
+//   TypeWhisper                (direct, Release)    com.typewhisper.mac
+//   TypeWhisper Dev            (direct, Debug)      com.typewhisper.mac.dev
+//   TypeWhisper                (App Store, Release) com.typewhisper.typewhisper-app
+//   TypeWhisper App Store Dev  (App Store, Debug)   com.typewhisper.typewhisper-app.dev
+TYPEWHISPER_APPSTORE_BUNDLE_ID = com.typewhisper.typewhisper-app
+TYPEWHISPER_APPSTORE_BUNDLE_ID[config=Debug] = com.typewhisper.typewhisper-app.dev
+TYPEWHISPER_APPSTORE_PRODUCT_NAME = TypeWhisper
+TYPEWHISPER_APPSTORE_PRODUCT_NAME[config=Debug] = TypeWhisper App Store Dev
+APP_GROUP_ID = $(DEVELOPMENT_TEAM).$(TYPEWHISPER_APPSTORE_BUNDLE_ID)
+ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync
+ICLOUD_CONTAINER_ID[config=Debug] = iCloud.com.typewhisper.sync.dev
+
+// iCloud needs a provisioning profile. Builds signed without one (local
+// sandbox testing) use TypeWhisperAppStore-Local.entitlements instead:
+//   TYPEWHISPER_APPSTORE_ENTITLEMENTS = AppStore/Resources/TypeWhisperAppStore-Local.entitlements
+TYPEWHISPER_APPSTORE_ENTITLEMENTS = AppStore/Resources/TypeWhisperAppStore.entitlements
+TYPEWHISPER_RELEASE_CHANNEL = stable
+TYPEWHISPER_RELEASE_TAG =
+MARKETING_VERSION = 1.8.0
+CURRENT_PROJECT_VERSION = 1
+
+// Paste dictated text with a synthetic Cmd+V (PostEvent access, listed under
+// Accessibility). NO builds a clipboard-only edition that never posts events.
+TYPEWHISPER_APPSTORE_AUTOPASTE = YES
+
+#include? "AppStore.local.xcconfig"

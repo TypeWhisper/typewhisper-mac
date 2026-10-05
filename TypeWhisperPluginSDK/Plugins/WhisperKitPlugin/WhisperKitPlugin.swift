@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import WhisperKit
@@ -1134,7 +1135,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     // MARK: - Model Definitions
 
-    static let availableModels: [WhisperModelDef] = [
+    static let availableModels: [WhisperModelDef] = {
+        let models = [
         WhisperModelDef(
             id: "openai_whisper-tiny",
             displayName: "Tiny",
@@ -1183,7 +1185,13 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             sizeDescription: "~1.5 GB",
             ramRequirement: "8 GB+"
         ),
-    ]
+        ]
+        #if APPSTORE
+        return models.filter { $0.id != "openai_whisper-medium" }
+        #else
+        return models
+        #endif
+    }()
 }
 
 // MARK: - Model Types

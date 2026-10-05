@@ -57,12 +57,21 @@ struct MCPClientSettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("MCP Servers", bundle: bundle)
                         .font(.title2.weight(.semibold))
+                    #if APPSTORE
+                    Text("Configure remote Streamable HTTP endpoints.", bundle: bundle)
+                        .foregroundStyle(.secondary)
+                    #else
                     Text("Configure local stdio processes or remote Streamable HTTP endpoints.", bundle: bundle)
                         .foregroundStyle(.secondary)
+                    #endif
                 }
                 Spacer()
                 Button {
+                    #if APPSTORE
+                    serverEditor = MCPServerConfiguration(name: "", transport: .streamableHTTP)
+                    #else
                     serverEditor = MCPServerConfiguration(name: "", command: "")
+                    #endif
                 } label: {
                     Label(String(localized: "Add Server", bundle: bundle), systemImage: "plus")
                 }
@@ -71,12 +80,21 @@ struct MCPClientSettingsView: View {
             }
 
             if plugin.servers.isEmpty {
+                #if APPSTORE
+                ContentUnavailableView(
+                    String(localized: "No MCP Servers", bundle: bundle),
+                    systemImage: "network",
+                    description: Text("Add a Streamable HTTP server to discover its tools.", bundle: bundle)
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #else
                 ContentUnavailableView(
                     String(localized: "No MCP Servers", bundle: bundle),
                     systemImage: "terminal",
                     description: Text("Add a stdio or Streamable HTTP server to discover its tools.", bundle: bundle)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #endif
             } else {
                 List(plugin.servers) { server in
                     HStack(spacing: 12) {
@@ -281,7 +299,8 @@ private struct MCPServerEditorView: View {
         original = server
         self.onDone = onDone
         _name = State(initialValue: server.name)
-        _transport = State(initialValue: server.transport)
+        // Servers with a transport this build cannot use are edited as Streamable HTTP.
+        _transport = State(initialValue: server.transport.isSupported ? server.transport : .streamableHTTP)
         _command = State(initialValue: server.command)
         _arguments = State(initialValue: server.arguments.map { MCPEditableArgument(value: $0) })
         let plainRows = server.environment.keys.sorted().map {
@@ -318,9 +337,11 @@ private struct MCPServerEditorView: View {
             Form {
                 Section(String(localized: "Server", bundle: bundle)) {
                     TextField(String(localized: "Name", bundle: bundle), text: $name)
-                    Picker(String(localized: "Transport", bundle: bundle), selection: $transport) {
-                        ForEach(MCPServerTransport.allCases) { transport in
-                            Text(transport.displayName).tag(transport)
+                    if MCPServerTransport.supportedCases.count > 1 {
+                        Picker(String(localized: "Transport", bundle: bundle), selection: $transport) {
+                            ForEach(MCPServerTransport.supportedCases) { transport in
+                                Text(transport.displayName).tag(transport)
+                            }
                         }
                     }
 
@@ -600,6 +621,9 @@ private struct MCPServerEditorView: View {
     }
 
     private func updateResolvedPath() {
+        #if APPSTORE
+        resolvedPath = ""
+        #else
         guard transport == .stdio else {
             resolvedPath = ""
             return
@@ -610,6 +634,7 @@ private struct MCPServerEditorView: View {
         } catch {
             resolvedPath = ""
         }
+        #endif
     }
 
     private func moveArgument(id: UUID, offset: Int) {

@@ -222,6 +222,26 @@ enum UserDataExportService {
         )
 
         let archive = workDirectory.appendingPathComponent("export.zip")
+        #if APPSTORE
+        // Sandboxed apps should not launch helper tools. Reading a directory
+        // for uploading yields a zip archive of it, including the folder itself.
+        var coordinationError: NSError?
+        var copyError: Error?
+        NSFileCoordinator().coordinate(
+            readingItemAt: root,
+            options: .forUploading,
+            error: &coordinationError
+        ) { zipURL in
+            do {
+                try fileManager.copyItem(at: zipURL, to: archive)
+            } catch {
+                copyError = error
+            }
+        }
+        if let error = coordinationError ?? copyError {
+            throw error
+        }
+        #else
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
         process.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent", root.path, archive.path]
@@ -230,6 +250,7 @@ enum UserDataExportService {
         guard process.terminationStatus == 0 else {
             throw ExportError.archiveFailed(process.terminationStatus)
         }
+        #endif
 
         if fileManager.fileExists(atPath: destination.path) {
             _ = try fileManager.replaceItemAt(destination, withItemAt: archive)

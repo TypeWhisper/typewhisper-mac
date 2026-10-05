@@ -56,10 +56,20 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         resolutionProvider: ResolutionProvider? = nil,
         meetingTabProvider: MeetingTabProvider? = nil
     ) {
+#if APPSTORE
+        // The App Store edition cannot send Apple Events or run osascript, so browsers report
+        // no URL and no open tabs. Website workflows do not match; meeting detection keeps
+        // its native signals.
+        self.resolutionProvider = resolutionProvider ?? { _, _ in
+            BrowserResolution(url: nil, title: nil)
+        }
+        self.meetingTabProvider = meetingTabProvider ?? { _ in [] }
+#else
         self.resolutionProvider = resolutionProvider ?? { bundleIdentifier, includeTitle in
             Self.resolve(bundleIdentifier: bundleIdentifier, includeTitle: includeTitle)
         }
         self.meetingTabProvider = meetingTabProvider ?? Self.resolveMeetingTabs
+#endif
     }
 
     func activeURL(for bundleIdentifier: String) async -> URL? {
@@ -87,6 +97,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
     }
 
+#if !APPSTORE
     private static func resolveMeetingTabs(bundleIdentifier: String) -> [URL]? {
         let browserType = identifyBrowser(bundleIdentifier)
         guard browserType != .notABrowser, browserType != .unsupportedURLBrowser else {
@@ -164,6 +175,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
         return String(data: data, encoding: .utf8)
     }
+#endif
 
     private func resolve(
         bundleIdentifier: String,
@@ -183,6 +195,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
     }
 
+#if !APPSTORE
     private enum BrowserType {
         case safari
         case arc
@@ -297,6 +310,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
         return descriptor?.stringValue?.nilIfEmpty
     }
+#endif
 
     nonisolated private static func validURL(_ value: String) -> URL? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

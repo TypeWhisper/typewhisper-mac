@@ -41,6 +41,13 @@ final class DictationSettingsHandler {
         pollPermissionStatus()
     }
 
+#if APPSTORE
+    func requestInputMonitoringPermission() {
+        AppStoreInputAccess.requestListenEventAccess()
+        pollPermissionStatus()
+    }
+#endif
+
     func setHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) {
         hotkeyService.updateHotkey(hotkey, for: slot)
         onHotkeyLabelsChanged?()
@@ -142,12 +149,24 @@ final class DictationSettingsHandler {
         }
         let needsAccessibility = { [weak self] () -> Bool in
             guard let self else { return false }
+#if APPSTORE
+            // Hotkey monitoring depends on Input Monitoring, pasting on PostEvent access.
+            return !AppStoreInputAccess.canListenToEvents
+                || (AppStoreInputAccess.isAutoPasteEnabled && !self.textInsertionService.isAccessibilityGranted)
+#else
             return !self.textInsertionService.isAccessibilityGranted
+#endif
         }
         var hasResumedHotkeyMonitoring = !needsAccessibility()
         permissionPollTask?.cancel()
         permissionPollTask = Task { [weak self] in
-            for _ in 0..<30 {
+            #if APPSTORE
+            // Granting two permissions in System Settings can take a while.
+            let pollSeconds = 120
+            #else
+            let pollSeconds = 30
+            #endif
+            for _ in 0..<pollSeconds {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 DispatchQueue.main.async { [weak self] in

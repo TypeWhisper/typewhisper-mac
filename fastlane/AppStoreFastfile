@@ -1,0 +1,135 @@
+# Mac App Store edition screenshots.
+#
+# Captures the App Store edition (APPSTORE build of TypeWhisperAppStore.xcodeproj)
+# in screenshot mode, using the deterministic fixtures and window handling of
+# the regular screenshot lane. Raw window captures are written to
+# fastlane/screenshots/appstore/<language>/<state>.png and composed into store
+# images by scripts/appstore/compose_store_screenshots.rb.
+
+APPSTORE_SCREENSHOT_DERIVED_DATA = File.join(REPOSITORY_ROOT, "build", "appstore-screenshots")
+APPSTORE_SCREENSHOT_PRODUCT = "TypeWhisper App Store Dev"
+APPSTORE_SCREENSHOT_APP_PATH = File.join(
+  APPSTORE_SCREENSHOT_DERIVED_DATA, "Build", "Products", "Debug", "#{APPSTORE_SCREENSHOT_PRODUCT}.app"
+)
+APPSTORE_SCREENSHOT_BUNDLE_ID = "com.typewhisper.typewhisper-app.screenshots"
+APPSTORE_SCREENSHOT_OUTPUT = File.join(SCREENSHOT_OUTPUT, "appstore")
+# Settings states that exist in the App Store edition. The license page is
+# replaced by the Premium page there.
+APPSTORE_SCREENSHOT_STATES = %w[
+  home
+  indicator
+  recording
+  workflows
+  dictionary
+  history
+  statistics
+  integrations-available
+  hotkeys
+  snippets
+  file-transcription
+  premium
+].freeze
+
+def appstore_screenshot_states(value)
+  requested = value.to_s.split(",").map(&:strip).reject(&:empty?)
+  return APPSTORE_SCREENSHOT_STATES if requested.empty?
+
+  unsupported = requested - APPSTORE_SCREENSHOT_STATES
+  UI.user_error!("Unsupported App Store screenshot states: #{unsupported.join(', ')}") unless unsupported.empty?
+  requested
+end
+
+def build_appstore_screenshot_app!
+  sh(Shellwords.escape(File.join(REPOSITORY_ROOT, "scripts", "appstore", "generate_project.sh")))
+  sh(Shellwords.join([
+    "xcodebuild",
+    "-project", File.join(REPOSITORY_ROOT, "TypeWhisperAppStore.xcodeproj"),
+    "-scheme", "TypeWhisperAppStore",
+    "-configuration", "Debug",
+    "-derivedDataPath", APPSTORE_SCREENSHOT_DERIVED_DATA,
+    "-destination", "platform=macOS,arch=#{screenshot_hardware_architecture}",
+    "-skipPackagePluginValidation",
+    "-skipMacroValidation",
+    "CODE_SIGN_IDENTITY=-",
+    "CODE_SIGN_STYLE=Manual",
+    "CODE_SIGNING_REQUIRED=YES",
+    "CODE_SIGNING_ALLOWED=YES",
+    "CODE_SIGN_ENTITLEMENTS=",
+    # Screenshot runs write a readiness marker into a temporary folder.
+    "ENABLE_APP_SANDBOX=NO",
+    "PROVISIONING_PROFILE_SPECIFIER=",
+    "COMPILER_INDEX_STORE_ENABLE=NO",
+    "build",
+  ]))
+
+  UI.user_error!("Missing screenshot app: #{APPSTORE_SCREENSHOT_APP_PATH}") unless File.directory?(APPSTORE_SCREENSHOT_APP_PATH)
+  info_plist = File.join(APPSTORE_SCREENSHOT_APP_PATH, "Contents", "Info.plist")
+  sh(
+    "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Set :CFBundleIdentifier #{APPSTORE_SCREENSHOT_BUNDLE_ID}")} #{Shellwords.escape(info_plist)}",
+    log: false
+  )
+  sh(
+    "/usr/bin/codesign --force --sign - --preserve-metadata=entitlements,requirements,flags #{Shellwords.escape(APPSTORE_SCREENSHOT_APP_PATH)}",
+    log: false
+  )
+end
+
+def reset_appstore_screenshot_defaults!
+  system("/usr/bin/defaults", "delete", APPSTORE_SCREENSHOT_BUNDLE_ID, out: File::NULL, err: File::NULL)
+end
+
+def capture_appstore_screenshot!(language, state, destination)
+  executable = File.join(APPSTORE_SCREENSHOT_APP_PATH, "Contents", "MacOS", APPSTORE_SCREENSHOT_PRODUCT)
+  reset_appstore_screenshot_defaults!
+
+  Dir.mktmpdir("typewhisper-appstore-screenshot") do |run_directory|
+    ready_file = File.join(run_directory, "window-ready.txt")
+    log_file = File.join(run_directory, "application.log")
+    home_directory = File.join(run_directory, "home")
+    FileUtils.mkdir_p(home_directory)
+
+    environment = {
+      "CFFIXED_USER_HOME" => home_directory,
+      "NSUnbufferedIO" => "YES",
+    }
+    log = File.open(log_file, "w")
+    process_id = Process.spawn(
+      environment,
+      executable,
+      *screenshot_launch_arguments(language, state, "free", ready_file),
+      chdir: REPOSITORY_ROOT,
+      out: log,
+      err: log
+    )
+    log.close
+
+    begin
+      window_id = wait_for_screenshot_window!(ready_file, process_id, log_file)
+      sh("/usr/sbin/screencapture -x -l #{window_id} #{Shellwords.escape(destination)}", log: false)
+      unless File.file?(destination) && File.size(destination) > 100_000
+        UI.user_error!("Screenshot capture did not produce a valid PNG: #{destination}")
+      end
+    ensure
+      stop_screenshot_app(process_id)
+      reset_appstore_screenshot_defaults!
+      FileUtils.rm_rf(File.join(Dir.tmpdir, "TypeWhisper-Screenshots-#{process_id}"))
+    end
+  end
+end
+
+platform :mac do
+  desc "Capture the Mac App Store edition in screenshot mode (raw window images)"
+  lane :appstore_screenshots do |options|
+    languages = selected_screenshot_languages(options[:languages])
+    states = appstore_screenshot_states(options[:states])
+    build_appstore_screenshot_app! unless options[:skip_build]
+    languages.each do |language|
+      directory = File.join(APPSTORE_SCREENSHOT_OUTPUT, language)
+      FileUtils.mkdir_p(directory)
+      states.each do |state|
+        UI.message("Capturing #{language} #{state}")
+        capture_appstore_screenshot!(language, state, File.join(directory, "#{state}.png"))
+      end
+    end
+  end
+end

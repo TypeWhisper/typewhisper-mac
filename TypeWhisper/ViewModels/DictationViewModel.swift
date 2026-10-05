@@ -928,8 +928,38 @@ final class DictationViewModel: ObservableObject {
 
     var needsAccessibilityPermission: Bool {
         if AppConstants.isScreenshotAutomation { return false }
+#if APPSTORE
+        // A clipboard-only build never asks for PostEvent access.
+        guard AppStoreInputAccess.isAutoPasteEnabled else { return false }
+#endif
         return !textInsertionService.isAccessibilityGranted
     }
+
+#if APPSTORE
+    /// Input Monitoring is only needed for shortcuts that Carbon cannot register.
+    var needsInputMonitoringPermission: Bool {
+        if AppConstants.isScreenshotAutomation { return false }
+        return hotkeyService.requiresEventObservation && !AppStoreInputAccess.canListenToEvents
+    }
+
+    var isInputMonitoringGranted: Bool {
+        AppStoreInputAccess.canListenToEvents
+    }
+
+    func requestInputMonitoringPermission() { settingsHandler.requestInputMonitoringPermission() }
+
+    /// Rechecks permissions, e.g. when the user returns from System Settings.
+    func refreshInputPermissions() { settingsHandler.pollPermissionStatus() }
+
+    private func showManualPasteFeedback() {
+        showNotchFeedback(
+            message: AppStoreInputAccess.manualPasteMessage,
+            icon: "doc.on.clipboard.fill",
+            duration: 4.0,
+            action: AppStoreInputAccess.isAutoPasteEnabled ? .openSettings(.home) : nil
+        )
+    }
+#endif
 
     // MARK: - HTTP API
 
@@ -1841,8 +1871,9 @@ final class DictationViewModel: ObservableObject {
 
         // Only the physical-submit mode needs context before microphone startup.
         // Preserve audio-first startup for existing workflows.
-        let needsEarlyWorkflowMatch = initialForcedWorkflow.map { $0.output.autoEnterMode == .duringDictation }
-            ?? workflowService.workflows.contains { $0.isEnabled && $0.output.autoEnterMode == .duringDictation }
+        let needsEarlyWorkflowMatch = WorkflowAutoEnterMode.duringDictation.isAvailable
+            && (initialForcedWorkflow.map { $0.output.autoEnterMode == .duringDictation }
+                ?? workflowService.workflows.contains { $0.isEnabled && $0.output.autoEnterMode == .duringDictation })
         let initialActiveApp: (name: String?, bundleId: String?, url: String?) = needsEarlyWorkflowMatch
             ? (pendingLiveFieldCapture?.activeApp ?? textInsertionService.captureActiveApp())
             : (nil, nil, nil)
@@ -1852,7 +1883,8 @@ final class DictationViewModel: ObservableObject {
             applyWorkflowMatch(initialWorkflowMatch, activeApp: initialActiveApp)
         }
 
-        let resolveWebsiteBeforeRecording = initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
+        let resolveWebsiteBeforeRecording = WorkflowAutoEnterMode.duringDictation.isAvailable
+            && initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   workflow.output.autoEnterMode == .duringDictation || effectiveAutoEnterMode == .duringDictation,
                   let trigger = workflow.trigger, !trigger.websitePatterns.isEmpty else { return false }
@@ -2418,7 +2450,8 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var effectiveAutoEnterMode: WorkflowAutoEnterMode {
-        matchedWorkflow?.output.autoEnterMode ?? .never
+        let mode = matchedWorkflow?.output.autoEnterMode ?? .never
+        return mode.isAvailable ? mode : .never
     }
 
     private var requiresVisiblePostProcessingPhase: Bool {
@@ -3021,6 +3054,11 @@ final class DictationViewModel: ObservableObject {
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
                         }
+#if APPSTORE
+                        if insertionResult == .copiedToClipboard {
+                            showManualPasteFeedback()
+                        }
+#endif
                         targetAppCorrectionBaseline = learningPreInsertionObservation.flatMap {
                             textInsertionService.recaptureFocusedTextObservation(matching: $0)
                         }
@@ -3060,6 +3098,10 @@ final class DictationViewModel: ObservableObject {
                                 insertionIsVerifiable = true
                             case .pasted(.unverified), .pasted(.notAwaited):
                                 insertionIsVerifiable = false
+#if APPSTORE
+                            case .copiedToClipboard:
+                                insertionIsVerifiable = false
+#endif
                             }
                         } else {
                             insertionIsVerifiable = true

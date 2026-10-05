@@ -67,6 +67,7 @@ struct AboutSettingsView: View {
                 .padding(.vertical, 12)
             }
 
+                #if !APPSTORE
                 Section {
                 Picker(String(localized: "Update Channel"), selection: updateChannelBinding) {
                     ForEach(AppConstants.ReleaseChannel.allCases, id: \.self) { channel in
@@ -89,6 +90,7 @@ struct AboutSettingsView: View {
                     Spacer()
                 }
             }
+                #endif
 
                 Section {
                 HStack {

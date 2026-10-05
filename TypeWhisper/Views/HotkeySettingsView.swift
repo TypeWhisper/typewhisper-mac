@@ -88,6 +88,7 @@ struct HotkeySettingsView: View {
                 )
                 }
 
+                #if !APPSTORE
                 Section(localizedAppText("Dictation Undo", de: "Diktat rückgängig")) {
                 MultiHotkeySlotRecorder(
                     slot: .undoLastDictation,
@@ -107,6 +108,7 @@ struct HotkeySettingsView: View {
                     )
                 )
                 }
+                #endif
             }
             .formStyle(.grouped)
             .padding(.horizontal, SettingsLayoutMetrics.pagePadding)

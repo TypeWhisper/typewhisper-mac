@@ -679,6 +679,11 @@ enum IndicatorWindowFrameLookup {
     }
 
     private nonisolated static func focusedWindowElement() -> AnyObject? {
+#if APPSTORE
+        // The App Sandbox blocks the Accessibility API of other apps; callers fall back to
+        // the window list.
+        return nil
+#else
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedApplication: AnyObject?
@@ -702,9 +707,13 @@ enum IndicatorWindowFrameLookup {
             return nil
         }
         return focusedWindow
+#endif
     }
 
     private static func accessibilityWindows(for processIdentifier: pid_t) -> [SafariWindowSnapshot] {
+#if APPSTORE
+        return []
+#else
         let applicationElement = AXUIElementCreateApplication(processIdentifier)
 
         var windowsValue: AnyObject?
@@ -727,6 +736,7 @@ enum IndicatorWindowFrameLookup {
                 isFullscreen: accessibilityWindowIsFullscreen(windowElement)
             )
         }
+#endif
     }
 
     private static func accessibilityWindowIsFullscreen(_ windowElement: AXUIElement) -> Bool? {

@@ -58,6 +58,11 @@ final class SettingsNavigationCoordinator: ObservableObject {
     }
 
     func navigateToLicense(target: LicenseSettingsNavigationTarget) {
+        #if APPSTORE
+        // Premium is bought on the Premium page; there is no license page.
+        navigate(to: .premium)
+        #else
         navigate(to: .license, licenseTarget: target)
+        #endif
     }
 }

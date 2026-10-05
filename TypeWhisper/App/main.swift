@@ -34,6 +34,10 @@ private class OverrideBundle: Bundle, @unchecked Sendable {
 
 object_setClass(Bundle.main, OverrideBundle.self)
 
+#if APPSTORE
+AppStoreSingleInstance.enforce()
+#endif
+
 if #available(macOS 15.0, *) {
     TypeWhisperApp<SuppressedManagedAppWindowSceneConfiguration>.main()
 } else {

@@ -893,3 +893,6 @@ platform :mac do
     )
   end
 end
+
+# Mac App Store edition lanes (fork-only).
+import "AppStoreFastfile"

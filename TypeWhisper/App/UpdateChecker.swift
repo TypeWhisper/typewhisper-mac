@@ -1,4 +1,6 @@
+#if !APPSTORE
 import Sparkle
+#endif
 
 @MainActor
 struct UpdateChecker {
@@ -6,6 +8,7 @@ struct UpdateChecker {
     let checkForUpdates: () -> Void
     let resetUpdateCycleAfterSettingsChange: () -> Void
 
+    #if !APPSTORE
     static func sparkle(_ updater: SPUUpdater) -> UpdateChecker {
         return UpdateChecker(
             canCheckForUpdates: { updater.canCheckForUpdates },
@@ -13,6 +16,7 @@ struct UpdateChecker {
             resetUpdateCycleAfterSettingsChange: { updater.resetUpdateCycleAfterShortDelay() }
         )
     }
+    #endif
 
     static var shared: UpdateChecker?
 }

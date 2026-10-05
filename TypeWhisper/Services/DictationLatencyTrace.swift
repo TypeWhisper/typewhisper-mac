@@ -15,6 +15,10 @@ struct DictationLatencyTrace: Sendable, Equatable {
         case actionPlugin = "action-plugin"
         /// The dictation finished without inserting text.
         case notInserted = "not-inserted"
+#if APPSTORE
+        /// Left on the clipboard for a manual paste.
+        case clipboard
+#endif
     }
 
     enum PasteVerification: Equatable, Sendable {
@@ -91,6 +95,10 @@ struct DictationLatencyTrace: Sendable, Equatable {
         case .pasted(let verification):
             insertion = .paste
             recordPasteVerification(verification, at: verifiedUptime)
+#if APPSTORE
+        case .copiedToClipboard:
+            insertion = .clipboard
+#endif
         }
     }
 

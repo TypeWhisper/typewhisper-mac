@@ -50,6 +50,10 @@ struct PremiumSettingsView: View {
                         }
                     )
 
+                    #if APPSTORE
+                    AppStorePremiumStoreView()
+                    #endif
+
                     if access.hasAnyPremiumAccess {
                         PremiumActiveFeatureOverview(
                             licenseService: license,
@@ -60,12 +64,14 @@ struct PremiumSettingsView: View {
                             windowPresenter: windowPresenter
                         )
                     } else {
+                        #if !APPSTORE
                         PremiumLockedFeatureOverview(
                             isSupporter: license.isSupporter,
                             onUnlock: {
                                 settingsNavigation.navigateToLicense(target: .top)
                             }
                         )
+                        #endif
                     }
                 }
                 .padding(SettingsLayoutMetrics.pagePadding)
@@ -109,7 +115,7 @@ struct PremiumAccessSettingsView: View {
                 icon: "person.crop.circle.badge.checkmark",
                 accent: .purple,
                 title: String(localized: "premium.window.access.title"),
-                description: String(localized: "premium.window.access.description"),
+                description: accessDescription,
                 status: accessTitle,
                 statusColor: access.hasAnyPremiumAccess ? .green : .secondary
             )
@@ -130,10 +136,7 @@ struct PremiumAccessSettingsView: View {
                     Button {
                         settingsNavigation.navigateToLicense(target: .top)
                     } label: {
-                        Label(
-                            String(localized: "premium.window.access.manageLicense"),
-                            systemImage: "key"
-                        )
+                        Label(manageAccessTitle, systemImage: "key")
                     }
                     .accessibilityIdentifier("premium.window.access.manageLicense")
                 }
@@ -256,6 +259,27 @@ struct PremiumAccessSettingsView: View {
     private var accessTitle: String {
         access.summary.localizedTitle
     }
+
+    private var accessDescription: String {
+        #if APPSTORE
+        localizedAppText(
+            "Manage your Premium purchase and the optional account for cross-device sync.",
+            de: "Verwalte deinen Premium-Kauf und das optionale Konto für die Synchronisierung zwischen Geräten."
+        )
+        #else
+        String(localized: "premium.window.access.description")
+        #endif
+    }
+
+    private var manageAccessTitle: String {
+        #if APPSTORE
+        access.hasAnyPremiumAccess
+            ? localizedAppText("Manage Premium…", de: "Premium verwalten …")
+            : String(localized: "premium.hub.unlock")
+        #else
+        String(localized: "premium.window.access.manageLicense")
+        #endif
+    }
 }
 
 @MainActor
@@ -282,7 +306,7 @@ struct PremiumCorrectionLearningSettingsView: View {
             enabledContent
         } else {
             PremiumLockedDetailView(
-                message: String(localized: "premium.window.learning.locked"),
+                message: lockedMessage,
                 onManageAccess: onManageAccess
             )
         }
@@ -408,6 +432,17 @@ struct PremiumCorrectionLearningSettingsView: View {
                 }
             }
         }
+    }
+
+    private var lockedMessage: String {
+        #if APPSTORE
+        localizedAppText(
+            "Learning from corrections requires TypeWhisper Premium.",
+            de: "Das Lernen aus Korrekturen benötigt TypeWhisper Premium."
+        )
+        #else
+        String(localized: "premium.window.learning.locked")
+        #endif
     }
 
     private var learningBinding: Binding<Bool> {

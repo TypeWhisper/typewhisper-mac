@@ -720,6 +720,28 @@
           }
         }
       }
+    },
+    "TypeWhisper can no longer access this vault. Choose it again with Browse.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper hat keinen Zugriff mehr auf diesen Vault. Wähle ihn mit „Durchsuchen ...“ erneut aus."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper はこのVaultにアクセスできなくなりました。「検索...」でもう一度選択してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper 无法再访问此 Vault。请通过“浏览...”重新选择。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

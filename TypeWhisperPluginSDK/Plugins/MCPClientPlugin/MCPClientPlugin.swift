@@ -122,6 +122,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         return host?.loadSecret(key: MCPServerConfiguration.bearerTokenStorageKey(serverID: serverID)) ?? ""
     }
 
+    #if !APPSTORE
     func resolvedExecutable(for server: MCPServerConfiguration, secretValues: [String: String] = [:]) throws -> URL {
         var configuredEnvironment = server.environment
         for name in server.secretEnvironmentNames {
@@ -135,6 +136,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             configuredEnvironment: configuredEnvironment
         )
     }
+    #endif
 
     func resolvedEndpoint(for server: MCPServerConfiguration) throws -> URL {
         try MCPHTTPEndpointResolver.resolve(server.endpoint)
@@ -148,6 +150,9 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         try ensureConfigurationWritable()
         guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter a server name."))
+        }
+        guard draft.transport.isSupported else {
+            throw MCPServerTransport.unsupportedError
         }
         guard draft.launchAcknowledged else {
             let message = draft.transport == .stdio
@@ -168,7 +173,11 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
 
         switch draft.transport {
         case .stdio:
+            #if APPSTORE
+            throw MCPServerTransport.unsupportedError
+            #else
             _ = try resolvedExecutable(for: draft, secretValues: secretValues)
+            #endif
         case .streamableHTTP:
             _ = try resolvedEndpoint(for: draft)
             if draft.httpAuthentication == .bearerToken {
@@ -592,6 +601,9 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             return MCPResolvedServer(configuration: server, endpoint: endpoint, bearerToken: token)
         }
 
+        #if APPSTORE
+        throw MCPServerTransport.unsupportedError
+        #else
         let inherited = ProcessInfo.processInfo.environment
         let inheritedKeys = ["PATH", "HOME", "USER", "SHELL", "TMPDIR", "LANG"]
         var environment = Dictionary(uniqueKeysWithValues: inheritedKeys.compactMap { key in
@@ -619,6 +631,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             environment: environment,
             secrets: secrets
         )
+        #endif
     }
 
     private func persistConfiguration(using host: HostServices) {

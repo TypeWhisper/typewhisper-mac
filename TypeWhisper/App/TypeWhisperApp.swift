@@ -3,7 +3,9 @@ import AVFoundation
 import Combine
 import Foundation
 import TypeWhisperPluginSDK
+#if !APPSTORE
 @preconcurrency import Sparkle
+#endif
 
 extension UserDefaults {
     @objc dynamic var showMenuBarIcon: Bool {
@@ -436,7 +438,11 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                 .sheet(item: $startupSheet, onDismiss: handleStartupSheetDismissed) { route in
                     switch route {
                     case .welcome:
+                        #if APPSTORE
+                        EmptyView()
+                        #else
                         WelcomeSheet()
+                        #endif
                     case .iOSCompanion:
                         IOSCompanionPromoView(
                             appStoreURL: AppConstants.IOSCompanion.appStoreURL,
@@ -444,6 +450,9 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                             onDismiss: handleIOSCompanionDismissal
                         )
                     case .postUpdateLicensing:
+                        #if APPSTORE
+                        EmptyView()
+                        #else
                         PostUpdateLicensePromptView(
                             onPersonalOSS: handlePersonalOSSSelection,
                             onWorkUsage: handleWorkUsageSelection,
@@ -451,6 +460,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                             onBecomeSupporter: handleSupporterSelection,
                             onNotNow: handlePromptDismissalAction
                         )
+                        #endif
                     }
                 }
                 .task {
@@ -730,7 +740,7 @@ final class ManagedAppWindowOpener {
 // MARK: - App Delegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
@@ -742,11 +752,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
     private let finderTranscriptionService = FinderTranscriptionService()
+    #if !APPSTORE
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
     }
+    #endif
 
     private var showMenuBarIconPreference: Bool {
         UserDefaults.standard.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
@@ -810,7 +822,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         NSApp.servicesProvider = finderTranscriptionService
         NSUpdateDynamicServices()
 
+        #if !APPSTORE
         UpdateChecker.shared = updateChecker
+        #endif
         applyActivationPolicy()
 
         let coordinator = IndicatorCoordinator(
@@ -1196,6 +1210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        #if !APPSTORE
         guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
 
         openSettingsWindow()
@@ -1203,6 +1218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         Task { @MainActor in
             await SupporterDiscordService.shared?.handleCallbackURL(url)
         }
+        #endif
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
@@ -1252,8 +1268,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             self.applyActivationPolicy()
         }
     }
+}
 
+#if !APPSTORE
+extension AppDelegate: SPUUpdaterDelegate {
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         AppConstants.effectiveUpdateChannel.sparkleChannels
     }
 }
+#endif

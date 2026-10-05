@@ -17,7 +17,7 @@ struct HomeSettingsView: View {
             SettingsPageHeader(String(localized: "Dashboard"))
             Divider()
 
-            if dictation.needsMicPermission || dictation.needsAccessibilityPermission {
+            if needsPermissions {
                 permissionsBanner
                     .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                     .padding(.top, SettingsLayoutMetrics.sectionSpacing)
@@ -318,6 +318,15 @@ struct HomeSettingsView: View {
 
     // MARK: - Permissions Banner
 
+    private var needsPermissions: Bool {
+#if APPSTORE
+        dictation.needsMicPermission || dictation.needsAccessibilityPermission
+            || dictation.needsInputMonitoringPermission
+#else
+        dictation.needsMicPermission || dictation.needsAccessibilityPermission
+#endif
+    }
+
     private var permissionsBanner: some View {
         VStack(spacing: 8) {
             if dictation.needsMicPermission {
@@ -334,6 +343,14 @@ struct HomeSettingsView: View {
                     .controlSize(.small)
                 }
             }
+#if APPSTORE
+            if dictation.needsAccessibilityPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .accessibility)
+            }
+            if dictation.needsInputMonitoringPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .inputMonitoring)
+            }
+#else
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
@@ -348,6 +365,7 @@ struct HomeSettingsView: View {
                     .controlSize(.small)
                 }
             }
+#endif
         }
         .foregroundStyle(.red)
         .padding(SettingsLayoutMetrics.cardPadding)

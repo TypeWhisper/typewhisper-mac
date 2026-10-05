@@ -45,6 +45,16 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case cloudSync
 
     var id: String { rawValue }
+
+    /// Features offered in this edition. Correction learning reads other apps'
+    /// text fields through Accessibility, which the App Sandbox does not allow.
+    static var editionFeatures: [PremiumFeatureID] {
+        #if APPSTORE
+        [.calendarMeeting, .cloudSync]
+        #else
+        allCases
+        #endif
+    }
 }
 
 enum PremiumFeatureRequirement: Equatable, Sendable {
@@ -72,7 +82,11 @@ enum PremiumAccessSummary: Equatable, Sendable {
         case .commercialLicense:
             String(localized: "premium.hub.access.commercial")
         case .premiumAccount:
+            #if APPSTORE
+            String(localized: "premium.window.access.accountActive")
+            #else
             String(localized: "premium.hub.access.account")
+            #endif
         case .commercialAndPremiumAccount:
             String(localized: "premium.hub.access.both")
         }
@@ -99,6 +113,10 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
     }
 
     var summary: PremiumAccessSummary {
+        #if APPSTORE
+        // App Store Premium and account entitlements both unlock the same features.
+        return hasAnyPremiumAccess ? .premiumAccount : .locked
+        #else
         switch (hasCommercialLicense, hasPremiumEntitlement) {
         case (true, true):
             .commercialAndPremiumAccount
@@ -109,9 +127,15 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
         case (false, false):
             isSupporter ? .supporterOnly : .locked
         }
+        #endif
     }
 
     func requirement(for feature: PremiumFeatureID) -> PremiumFeatureRequirement {
+        #if APPSTORE
+        guard hasAnyPremiumAccess else { return .commercialOrPremiumAccount }
+        // Sync needs the account to connect devices; the other features work offline.
+        return feature == .cloudSync && !isSignedIn ? .signIn : .available
+        #else
         switch feature {
         case .calendarMeeting:
             return hasAnyPremiumAccess ? .available : .commercialOrPremiumAccount
@@ -125,6 +149,7 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
             }
             return isSignedIn ? .available : .signIn
         }
+        #endif
     }
 
     func action(for feature: PremiumFeatureID) -> PremiumFeatureCardAction {
@@ -212,7 +237,7 @@ struct PremiumLockedFeatureOverview: View {
                             .font(.title2.weight(.semibold))
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Text(String(localized: "premium.hub.locked.description"))
+                        Text(premiumLockedDescription)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -245,44 +270,46 @@ struct PremiumLockedFeatureOverview: View {
     }
 
     private var lockedCards: [AnyView] {
-        [
-            AnyView(
-                PremiumFeatureCard(
-                    feature: .calendarMeeting,
-                    icon: "calendar.badge.clock",
-                    accent: .blue,
-                    title: String(localized: "premium.hub.calendar.title"),
-                    description: String(localized: "premium.hub.calendar.description"),
-                    status: String(localized: "premium.hub.status.premium"),
-                    statusTone: .secondary,
-                    previewLines: [String(localized: "premium.hub.calendar.providersPreview")]
-                )
-            ),
-            AnyView(
-                PremiumFeatureCard(
-                    feature: .correctionLearning,
-                    icon: "wand.and.sparkles",
-                    accent: .yellow,
-                    title: String(localized: "premium.hub.learning.title"),
-                    description: String(localized: "premium.hub.learning.description"),
-                    status: String(localized: "premium.hub.status.premium"),
-                    statusTone: .secondary,
-                    previewLines: [PremiumCorrectionExamples.primaryLine]
-                )
-            ),
-            AnyView(
-                PremiumFeatureCard(
-                    feature: .cloudSync,
-                    icon: "cloud",
-                    accent: .cyan,
-                    title: String(localized: "premium.hub.sync.title"),
-                    description: String(localized: "premium.hub.sync.description"),
-                    status: String(localized: "premium.hub.status.premium"),
-                    statusTone: .secondary,
-                    previewLines: [String(localized: "premium.hub.sync.preview")]
-                )
+        PremiumFeatureID.editionFeatures.map { AnyView(lockedCard(for: $0)) }
+    }
+
+    @ViewBuilder
+    private func lockedCard(for feature: PremiumFeatureID) -> some View {
+        switch feature {
+        case .calendarMeeting:
+            PremiumFeatureCard(
+                feature: .calendarMeeting,
+                icon: "calendar.badge.clock",
+                accent: .blue,
+                title: String(localized: "premium.hub.calendar.title"),
+                description: String(localized: "premium.hub.calendar.description"),
+                status: String(localized: "premium.hub.status.premium"),
+                statusTone: .secondary,
+                previewLines: [String(localized: "premium.hub.calendar.providersPreview")]
             )
-        ]
+        case .correctionLearning:
+            PremiumFeatureCard(
+                feature: .correctionLearning,
+                icon: "wand.and.sparkles",
+                accent: .yellow,
+                title: String(localized: "premium.hub.learning.title"),
+                description: String(localized: "premium.hub.learning.description"),
+                status: String(localized: "premium.hub.status.premium"),
+                statusTone: .secondary,
+                previewLines: [PremiumCorrectionExamples.primaryLine]
+            )
+        case .cloudSync:
+            PremiumFeatureCard(
+                feature: .cloudSync,
+                icon: "cloud",
+                accent: .cyan,
+                title: String(localized: "premium.hub.sync.title"),
+                description: String(localized: "premium.hub.sync.description"),
+                status: String(localized: "premium.hub.status.premium"),
+                statusTone: .secondary,
+                previewLines: [String(localized: "premium.hub.sync.preview")]
+            )
+        }
     }
 }
 
@@ -320,7 +347,7 @@ struct PremiumActiveFeatureOverview: View {
         correctionLearningService: TargetAppCorrectionLearningService,
         calendarController: CalendarMeetingAutomationController,
         windowPresenter: any PremiumSettingsWindowPresenting,
-        features: [PremiumFeatureID] = PremiumFeatureID.allCases,
+        features: [PremiumFeatureID] = PremiumFeatureID.editionFeatures,
         showsHeading: Bool = true
     ) {
         self.features = features
@@ -1059,4 +1086,12 @@ struct PremiumCorrectionExampleRow: View {
                 .fill(Color(nsColor: .controlBackgroundColor))
         )
     }
+}
+
+private var premiumLockedDescription: String {
+    #if APPSTORE
+    return AppStorePremiumCopy.lockedDescription
+    #else
+    return String(localized: "premium.hub.locked.description")
+    #endif
 }

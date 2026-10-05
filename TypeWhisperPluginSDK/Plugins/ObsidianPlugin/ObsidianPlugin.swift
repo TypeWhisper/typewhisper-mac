@@ -22,6 +22,11 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
     // Settings (cached from UserDefaults)
     fileprivate var _vaultPath: String = ""
+    #if APPSTORE
+    /// Security-scoped URL resolved from the vault bookmark. The sandbox only
+    /// grants access to folders the user picked, so the path alone is not enough.
+    fileprivate var _vaultURL: URL?
+    #endif
     fileprivate var _subfolder: String = "TypeWhisper"
     fileprivate var _filenameTemplate: String = "{{DATE}} {{TIME}} {{APP}}"
     fileprivate var _noteTemplate: String = "{{TRANSCRIPT}}"
@@ -53,7 +58,11 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     }
 
     var isConfigured: Bool {
+        #if APPSTORE
+        _vaultURL != nil
+        #else
         !_vaultPath.isEmpty
+        #endif
     }
 
     // MARK: - Settings Persistence
@@ -82,6 +91,9 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             persistLiveSyncEntries(&entries)
         }
 
+        #if APPSTORE
+        resolveVaultBookmark()
+        #else
         // Auto-detect vault if none set
         if _vaultPath.isEmpty {
             if let vaults = Self.detectVaults(), let first = vaults.first {
@@ -89,6 +101,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
                 host?.setUserDefault(_vaultPath, forKey: "vaultPath")
             }
         }
+        #endif
     }
 
     fileprivate func saveSetting(_ value: Any, forKey key: String) {
@@ -130,6 +143,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let timestamp: Int
     }
 
+    #if !APPSTORE
     static func detectVaults() -> [VaultInfo]? {
         let obsidianConfigPath = NSHomeDirectory() + "/Library/Application Support/obsidian/obsidian.json"
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: obsidianConfigPath)),
@@ -146,6 +160,85 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             result.append(VaultInfo(id: hash, path: path, name: name, timestamp: ts))
         }
         return result.sorted { $0.timestamp > $1.timestamp }
+    }
+    #endif
+
+    #if APPSTORE
+    // MARK: - Vault Access
+
+    /// Stores the folder picked in the open panel as an app-scoped
+    /// security-scoped bookmark so the vault stays writable across launches.
+    fileprivate func selectVault(at url: URL) throws {
+        let bookmark = try url.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        _vaultURL = url
+        _vaultPath = url.path
+        saveSetting(bookmark, forKey: "vaultBookmark")
+        saveSetting(url.path, forKey: "vaultPath")
+    }
+
+    private func resolveVaultBookmark() {
+        _vaultURL = nil
+        guard let bookmark = host?.userDefault(forKey: "vaultBookmark") as? Data else { return }
+
+        var isStale = false
+        let url: URL
+        do {
+            url = try URL(
+                resolvingBookmarkData: bookmark,
+                options: [.withSecurityScope, .withoutUI],
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+        } catch {
+            print("[ObsidianPlugin] Failed to resolve the vault bookmark: \(error)")
+            return
+        }
+
+        if isStale {
+            // The vault was moved or renamed. Recreate the bookmark while the
+            // resolved URL is still accessible.
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            do {
+                let refreshed = try url.bookmarkData(
+                    options: .withSecurityScope,
+                    includingResourceValuesForKeys: nil,
+                    relativeTo: nil
+                )
+                saveSetting(refreshed, forKey: "vaultBookmark")
+            } catch {
+                print("[ObsidianPlugin] Failed to refresh the stale vault bookmark: \(error)")
+                return
+            }
+        }
+
+        _vaultURL = url
+        if _vaultPath != url.path {
+            _vaultPath = url.path
+            saveSetting(url.path, forKey: "vaultPath")
+        }
+    }
+    #endif
+
+    /// Opens the security scope of the vault bookmark in the App Store edition.
+    /// Call the returned closure when the file access is done.
+    private func beginVaultAccess() -> () -> Void {
+        #if APPSTORE
+        guard let vaultURL = _vaultURL, vaultURL.startAccessingSecurityScopedResource() else {
+            return {}
+        }
+        return { vaultURL.stopAccessingSecurityScopedResource() }
+        #else
+        return {}
+        #endif
     }
 
     // MARK: - File Writing
@@ -574,6 +667,8 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
         do {
             let noteContext = NoteContext(input: input, actionContext: context)
+            let endVaultAccess = beginVaultAccess()
+            defer { endVaultAccess() }
             let note = try liveSyncEntries.withLock { entries in
                 let note = try writeNote(context: noteContext)
                 if _liveSyncEnabled, !_dailyNoteEnabled {
@@ -605,6 +700,8 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         guard !text.isEmpty else { return }
 
         do {
+            let endVaultAccess = beginVaultAccess()
+            defer { endVaultAccess() }
             try liveSyncEntries.withLock { entries in
                 if _liveSyncEnabled,
                    !_dailyNoteEnabled,
@@ -629,7 +726,9 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
     @discardableResult
     private func adoptMatchingActionExport(payload: TranscriptionCompletedPayload) async -> Bool {
-        liveSyncEntries.withLock { entries in
+        let endVaultAccess = beginVaultAccess()
+        defer { endVaultAccess() }
+        return liveSyncEntries.withLock { entries in
             adoptMatchingActionExport(payload: payload, entries: &entries)
         }
     }
@@ -685,6 +784,8 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
               let update = try? JSONDecoder().decode(HistorySyncPayload.self, from: data) else { return }
 
         let updatedContext = NoteContext(update, timestamp: payload.timestamp)
+        let endVaultAccess = beginVaultAccess()
+        defer { endVaultAccess() }
         liveSyncEntries.withLock { entries in
             let didPrune = pruneLiveSyncEntries(&entries)
             guard let oldKey = matchingEntryKey(
@@ -767,6 +868,7 @@ private struct ObsidianSettingsView: View {
                 Text("Vault", bundle: bundle)
                     .font(.headline)
 
+                #if !APPSTORE
                 if !detectedVaults.isEmpty || !vaultPath.isEmpty {
                     Picker(String(localized: "Detected Vaults", bundle: bundle), selection: $vaultPath) {
                         Text("Select vault...", bundle: bundle).tag("")
@@ -785,6 +887,7 @@ private struct ObsidianSettingsView: View {
                         plugin.host?.notifyCapabilitiesChanged()
                     }
                 }
+                #endif
 
                 HStack(spacing: 8) {
                     Text(vaultPath.isEmpty ? String(localized: "No vault selected", bundle: bundle) : vaultPath)
@@ -801,6 +904,14 @@ private struct ObsidianSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+
+                #if APPSTORE
+                if !vaultPath.isEmpty && !plugin.isConfigured {
+                    Text("TypeWhisper can no longer access this vault. Choose it again with Browse.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+                #endif
             }
 
             if !vaultPath.isEmpty {
@@ -1052,7 +1163,9 @@ private struct ObsidianSettingsView: View {
             tagsInput = plugin._frontmatterTags.joined(separator: ", ")
             autoExportEnabled = plugin._autoExportEnabled
             liveSyncEnabled = plugin._liveSyncEnabled
+            #if !APPSTORE
             detectedVaults = ObsidianPlugin.detectVaults() ?? []
+            #endif
         }
     }
 
@@ -1083,9 +1196,19 @@ private struct ObsidianSettingsView: View {
         panel.allowsMultipleSelection = false
         panel.message = String(localized: "Select your Obsidian vault folder", bundle: bundle)
         if panel.runModal() == .OK, let url = panel.url {
+            #if APPSTORE
+            do {
+                try plugin.selectVault(at: url)
+            } catch {
+                print("[ObsidianPlugin] Failed to store the vault bookmark: \(error)")
+                return
+            }
+            vaultPath = url.path
+            #else
             vaultPath = url.path
             plugin._vaultPath = url.path
             plugin.saveSetting(url.path, forKey: "vaultPath")
+            #endif
             plugin.host?.notifyCapabilitiesChanged()
         }
     }

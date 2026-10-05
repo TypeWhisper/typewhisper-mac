@@ -95,6 +95,10 @@ final class PostUpdatePromptCoordinator {
     }
 
     var shouldPresentPrompt: Bool {
+        #if APPSTORE
+        // The App Store edition sells Premium in the app only; there is no license prompt.
+        return false
+        #else
         guard !licenseService.isLicenseManaged else { return false }
         guard !currentSessionDismissed else { return false }
         guard !licenseService.needsWelcomeSheet else { return false }
@@ -105,6 +109,7 @@ final class PostUpdatePromptCoordinator {
         }
 
         return acknowledgedReleaseFingerprint != currentReleaseFingerprint
+        #endif
     }
 
     var activeSheetRoute: StartupSheetRoute? {

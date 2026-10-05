@@ -274,18 +274,32 @@ struct AdvancedSettingsView: View {
                         Text(behavior.title).tag(behavior)
                     }
                 } label: {
+#if APPSTORE
+                    // Without an event-suppressing tap, Esc reaches the active app as well.
+                    SettingsInfoLabel(
+                        title: String(localized: "Cancellation behavior"),
+                        info: localizedAppText(
+                            "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Disabled: Esc never cancels. Applies to recording and processing. Esc always reaches the active app as well. In other apps, it needs Input Monitoring.",
+                            de: "Doppelt: Esc zweimal drücken, um abzubrechen. Einfach: Esc einmal drücken. Beide zeigen 1,5 Sekunden lang einen Abbruch-Hinweis. Sofort: Esc einmal drücken, ohne Hinweis. Deaktiviert: Esc bricht nie ab. Gilt für Aufnahme und Verarbeitung. Esc erreicht immer auch die aktive App. In anderen Apps ist dafür Eingabeüberwachung nötig."
+                        )
+                    )
+#else
                     SettingsInfoLabel(
                         title: String(localized: "Cancellation behavior"),
                         info: String(localized: "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Disabled: Esc never cancels and passes through to the app. Applies to recording and processing.")
                     )
+#endif
                 }
 
+#if !APPSTORE
+                // Live updates write into other apps through the Accessibility API.
                 Toggle(isOn: $dictation.liveFieldTranscriptEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Show live transcript in the active text field"),
                         info: String(localized: "Supported text fields are updated while you speak. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions.")
                     )
                 }
+#endif
 
                 Toggle(isOn: $dictation.microphoneBoostEnabled) {
                     SettingsInfoLabel(
@@ -441,6 +455,7 @@ struct AdvancedSettingsView: View {
             }
 
                 // MARK: - Command Line Tool
+                #if !APPSTORE
                 Section(String(localized: "Command Line Tool")) {
                 HStack {
                     Image(systemName: "circle.fill")
@@ -472,6 +487,7 @@ struct AdvancedSettingsView: View {
                     }
                 }
             }
+                #endif
 
                 // MARK: - Usage Examples
                 if viewModel.isEnabled {

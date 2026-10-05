@@ -285,6 +285,11 @@ final class TextInsertionService {
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
         case pasted(verification: PasteVerification)
+#if APPSTORE
+        /// The text was left on the clipboard for a manual paste because the app may not post
+        /// keyboard events.
+        case copiedToClipboard
+#endif
 
         /// The focused field was readable and still unchanged after the paste. Unreadable fields
         /// (common in Electron apps) do not count, so they never produce a false failure.
@@ -331,10 +336,28 @@ final class TextInsertionService {
     }
 
     var isAccessibilityGranted: Bool {
+#if APPSTORE
+        // The sandbox only grants PostEvent, which System Settings lists under Accessibility.
+        accessibilityGrantedOverride ?? AppStoreInputAccess.canPostEvents
+#else
         accessibilityGrantedOverride ?? AXIsProcessTrusted()
+#endif
+    }
+
+    /// Whether the Accessibility API of other apps may be used. The App Sandbox blocks it, and
+    /// the calls would only fail or wait for their messaging timeout.
+    private var canInspectOtherApplications: Bool {
+#if APPSTORE
+        false
+#else
+        isAccessibilityGranted
+#endif
     }
 
     func requestAccessibilityPermission() {
+#if APPSTORE
+        AppStoreInputAccess.requestPostEventAccess()
+#else
         // Try the prompt first
         let options = ["AXTrustedCheckOptionPrompt" as CFString: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
@@ -343,6 +366,7 @@ final class TextInsertionService {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
             NSWorkspace.shared.open(url)
         }
+#endif
     }
 
     func captureActiveApp() -> (name: String?, bundleId: String?, url: String?) {
@@ -361,6 +385,7 @@ final class TextInsertionService {
         if let chromiumAccessibilityObservationOverride {
             return chromiumAccessibilityObservationOverride(bundleIdentifier, processIdentifier)
         }
+        guard canInspectOtherApplications else { return nil }
         return chromiumAccessibilityObservationController.beginObservation(
             bundleIdentifier: bundleIdentifier,
             processIdentifier: processIdentifier
@@ -505,7 +530,7 @@ final class TextInsertionService {
         if let textSelectionOverride {
             return textSelectionOverride()
         }
-        guard isAccessibilityGranted else { return nil }
+        guard canInspectOtherApplications else { return nil }
 
         let element: AXUIElement
         if let focusedTextElementOverride {
@@ -541,7 +566,7 @@ final class TextInsertionService {
             applyMessagingTimeout(messagingTimeout, to: element)
             return element
         }
-        guard isAccessibilityGranted else { return nil }
+        guard canInspectOtherApplications else { return nil }
 
         let systemWide = AXUIElementCreateSystemWide()
         applyMessagingTimeout(messagingTimeout, to: systemWide)
@@ -856,7 +881,7 @@ final class TextInsertionService {
     }
 
     func captureLiveFieldTarget(expectedBundleIdentifier: String?) -> LiveFieldTarget? {
-        guard isAccessibilityGranted else {
+        guard canInspectOtherApplications else {
             logger.debug("Live field target rejected: Accessibility is not granted")
             return nil
         }
@@ -887,7 +912,7 @@ final class TextInsertionService {
     /// Pins the focused AX element without running the slower active-app context
     /// lookup. The full app and URL context is still captured after audio starts.
     func captureLiveFieldTargetAtRecordingRequest() -> LiveFieldRecordingRequestCapture? {
-        guard isAccessibilityGranted else {
+        guard canInspectOtherApplications else {
             logger.debug("Live field target rejected: Accessibility is not granted")
             return nil
         }
@@ -1174,12 +1199,23 @@ final class TextInsertionService {
         deferredClipboardRestore: DeferredClipboardRestore? = nil,
         awaitPasteVerification: Bool = false
     ) async throws -> InsertionResult {
+#if !APPSTORE
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
+#endif
         lastInsertionTiming = nil
         // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
         try await settlePendingPaste()
+#if APPSTORE
+        guard isAccessibilityGranted else {
+            return copyTextForManualPaste(
+                text,
+                outputFormat: outputFormat,
+                deferredClipboardRestore: deferredClipboardRestore
+            )
+        }
+#endif
 
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
@@ -1304,6 +1340,33 @@ final class TextInsertionService {
         return .pasted(verification: verification)
     }
 
+#if APPSTORE
+    /// Leaves the text on the clipboard for a manual paste. The user's clipboard is not restored:
+    /// the text has to stay there until it is pasted.
+    private func copyTextForManualPaste(
+        _ text: String,
+        outputFormat: String?,
+        deferredClipboardRestore: DeferredClipboardRestore?
+    ) -> InsertionResult {
+        let pasteboard = pasteboardProvider()
+        // Cancel restores that would overwrite the text with an older clipboard.
+        _ = takeOverPendingClipboardRestore(on: pasteboard)
+        _ = takeOverDeferredClipboardRestore(deferredClipboardRestore, on: pasteboard)
+        pasteboard.clearContents()
+        let payload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
+            ?? ClipboardContentPayload(plainText: text)
+        payload.write(to: pasteboard)
+        logger.info(
+            "insertText copied text for manual paste: autoPasteEnabled=\(AppStoreInputAccess.isAutoPasteEnabled, privacy: .public)"
+        )
+        lastInsertionTiming = InsertionTiming(
+            insertedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
+            verifiedUptimeNanoseconds: nil
+        )
+        return .copiedToClipboard
+    }
+#endif
+
     private func waitForPasteVerification(using state: PasteVerificationState) async -> PasteVerification {
         guard state.focusedTextState != nil else {
             return .unverified(.focusedTextStateUnavailable)
@@ -1343,6 +1406,7 @@ final class TextInsertionService {
     }
 
     func focusedElementPosition() -> CGPoint? {
+        guard canInspectOtherApplications else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
 
         var focusedElement: AnyObject?
@@ -1402,16 +1466,24 @@ final class TextInsertionService {
             return
         }
         let returnKeyCode: CGKeyCode = 0x24
+#if APPSTORE
+        // PostEvent access covers session-level posting; match the paste below.
+        guard isAccessibilityGranted else { return }
+        let eventSource: CGEventSource? = nil
+        let tapLocation: CGEventTapLocation = .cgSessionEventTap
+#else
         let eventSource = CGEventSource(stateID: .combinedSessionState)
+        let tapLocation: CGEventTapLocation = .cghidEventTap
+#endif
         let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedReturnEventMarker)
         keyDown?.flags = []
-        keyDown?.post(tap: .cghidEventTap)
+        keyDown?.post(tap: tapLocation)
 
         let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: false)
         keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedReturnEventMarker)
         keyUp?.flags = []
-        keyUp?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: tapLocation)
     }
 
     private func simulatePaste() {
@@ -1419,6 +1491,9 @@ final class TextInsertionService {
             pasteSimulatorOverride()
             return
         }
+#if APPSTORE
+        guard isAccessibilityGranted else { return }
+#endif
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
@@ -1437,6 +1512,9 @@ final class TextInsertionService {
             copySimulatorOverride()
             return
         }
+#if APPSTORE
+        guard isAccessibilityGranted else { return }
+#endif
         let cKeyCode = virtualKeyCode(for: "c") ?? 0x08 // Fallback to QWERTY
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: cKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
@@ -1524,6 +1602,10 @@ final class TextInsertionService {
             }
             return CopiedTextSelection(text: text, deferredClipboardRestore: deferredRestore)
         }
+#if APPSTORE
+        // Without PostEvent access the copy never arrives; do not wait for it.
+        guard isAccessibilityGranted else { return nil }
+#endif
 
         let pasteboard = pasteboardProvider()
 

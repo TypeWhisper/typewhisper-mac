@@ -174,8 +174,14 @@ struct LoadedPlugin: Identifiable {
     var id: String { manifest.id }
 
     var isBundled: Bool {
+        #if APPSTORE
+        // App Store plugins ship inside the app but are installed and
+        // uninstalled like downloaded plugins (see AppStorePluginCatalog).
+        return false
+        #else
         guard let builtInURL = Bundle.main.builtInPlugInsURL else { return false }
         return sourceURL.path.hasPrefix(builtInURL.path)
+        #endif
     }
 
     var isRuntimeLoaded: Bool {
@@ -587,10 +593,11 @@ final class PluginManager: ObservableObject {
     }
 
     private func loadAllPluginBundles() {
-        logger.info("Scanning plugins directory: \(self.pluginsDirectory.path)")
         incompatibleExternalBundles = [:]
 
         let fm = FileManager.default
+        #if !APPSTORE
+        logger.info("Scanning plugins directory: \(self.pluginsDirectory.path)")
         guard let contents = try? fm.contentsOfDirectory(at: pluginsDirectory, includingPropertiesForKeys: nil) else {
             logger.info("No plugins directory or empty")
             return
@@ -609,12 +616,20 @@ final class PluginManager: ObservableObject {
                 logger.error("Failed to load plugin at \(bundleURL.lastPathComponent): \(error.localizedDescription)")
             }
         }
+        #endif
 
         // Built-in plugins from app bundle
         if let builtInURL = Bundle.main.builtInPlugInsURL,
            let builtIn = try? fm.contentsOfDirectory(at: builtInURL, includingPropertiesForKeys: nil) {
+            #if APPSTORE
+            let candidateBundles = builtIn.filter {
+                $0.pathExtension == "bundle" && AppStorePluginCatalog.shouldLoadBundledPlugin(at: $0)
+            }
+            #else
+            let candidateBundles = builtIn.filter { $0.pathExtension == "bundle" }
+            #endif
             let builtInBundles = sortedPluginBundleURLs(
-                builtIn.filter { $0.pathExtension == "bundle" },
+                candidateBundles,
                 isBundledSource: true
             )
             logger.info("Found \(builtInBundles.count) built-in plugin bundle(s)")

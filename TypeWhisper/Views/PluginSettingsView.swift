@@ -601,6 +601,7 @@ struct PluginSettingsView: View {
                 bulkUpdateControl
             }
 
+            #if !APPSTORE
             Button {
                 pluginManager.openPluginsFolder()
             } label: {
@@ -625,6 +626,7 @@ struct PluginSettingsView: View {
             .help(String(localized: "Install from File..."))
             .accessibilityLabel(String(localized: "Install from File..."))
             .disabled(registryService.isBulkUpdating)
+            #endif
         }
     }
 
@@ -1131,7 +1133,10 @@ struct PluginSettingsView: View {
 
     private var availableTab: some View {
         VStack(alignment: .leading, spacing: 16) {
+            // The App Store edition offers only the plugins inside the app.
+            #if !APPSTORE
             discoverHero
+            #endif
             discoverFilterBar
 
             switch registryService.fetchState {
@@ -1183,7 +1188,9 @@ struct PluginSettingsView: View {
                 discoverCapabilityMenu
                 discoverHostingMenu
                 discoverSortMenu
+                #if !APPSTORE
                 discoverCommunityToggle
+                #endif
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -1193,7 +1200,9 @@ struct PluginSettingsView: View {
                     discoverCapabilityMenu
                     discoverHostingMenu
                     discoverSortMenu
+                    #if !APPSTORE
                     discoverCommunityToggle
+                    #endif
                 }
             }
         }
