@@ -933,10 +933,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
         } catch {
             teardownPreparedEngine(engine)
-            if isStreaming {
-                setPrerollCaptureArmed(false)
-                handlePrerollArmingFailure(error)
-            }
+            if isStreaming { setPrerollCaptureArmed(false) }
+            // Capture setup can fail before streaming starts (device format or route change),
+            // so retry whenever streaming was requested.
+            if wantsStreaming { handlePrerollArmingFailure(error) }
             logger.warning(
                 "Could not prepare built-in recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
@@ -1036,10 +1036,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 )
             }
         } catch {
-            if isStreaming {
-                setPrerollCaptureArmed(false)
-                handlePrerollArmingFailure(error)
-            }
+            if isStreaming { setPrerollCaptureArmed(false) }
+            // Format lookup and session preparation can fail before streaming starts, so
+            // retry whenever streaming was requested.
+            if wantsStreaming { handlePrerollArmingFailure(error) }
             logger.warning(
                 "Could not prepare selected USB recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
