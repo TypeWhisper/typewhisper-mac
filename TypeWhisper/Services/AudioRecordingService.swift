@@ -992,7 +992,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
             if isStreaming {
-                installArmedConfigurationObserver(for: engine)
+                installArmedConfigurationObserver(for: engine, tapFormat: configuredCapture.tapFormat)
                 noteMicrophonePrerollArmed(transport: "builtIn", elapsedMs: elapsedMs)
             } else {
                 logger.info(
@@ -1439,13 +1439,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         stopPrerollWatchdog()
     }
 
-    private func installArmedConfigurationObserver(for engine: AVAudioEngine) {
+    private func installArmedConfigurationObserver(for engine: AVAudioEngine, tapFormat: AVAudioFormat) {
         removeArmedConfigurationObserver()
         let observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
             object: engine,
             queue: recoveryNotificationQueue
-        ) { [weak self] _ in
+        ) { [weak self, weak engine] _ in
+            if let engine {
+                let liveTapFormat = Self.tapFormat(for: engine.inputNode.outputFormat(forBus: 0))
+                if MicrophonePrerollConfigurationChangePolicy.isFormatPreserving(
+                    engineIsRunning: engine.isRunning,
+                    tapSampleRate: tapFormat.sampleRate,
+                    tapChannelCount: tapFormat.channelCount,
+                    liveSampleRate: liveTapFormat.sampleRate,
+                    liveChannelCount: liveTapFormat.channelCount
+                ) {
+                    logger.info("Ignoring format-preserving configuration change on the armed pre-roll input")
+                    return
+                }
+            }
             self?.handlePrerollStreamFailure(reason: "configuration-change")
         }
         engineLock.withLock { armedConfigChangeObserver = observer }
@@ -1633,7 +1646,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             setPrerollCaptureArmed(false)
             return false
         }
-        installArmedConfigurationObserver(for: engine)
+        installArmedConfigurationObserver(for: engine, tapFormat: Self.tapFormat(for: format))
         startPrerollWatchdogIfNeeded()
         logger.info("Mic pre-roll re-armed after recording: transport=builtIn")
         return true

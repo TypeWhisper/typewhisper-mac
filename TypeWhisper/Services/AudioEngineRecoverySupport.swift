@@ -116,6 +116,26 @@ struct MicrophonePrerollRearmPolicy: Equatable {
     }
 }
 
+/// Decides whether an engine configuration-change notification can be ignored while the
+/// microphone pre-roll is armed. Only a notification that left the engine running with the
+/// prepared tap format is benign; anything else invalidates the stream. A stalled stream is
+/// still caught by the watchdog.
+enum MicrophonePrerollConfigurationChangePolicy {
+    static func isFormatPreserving(
+        engineIsRunning: Bool,
+        tapSampleRate: Double,
+        tapChannelCount: UInt32,
+        liveSampleRate: Double,
+        liveChannelCount: UInt32
+    ) -> Bool {
+        engineIsRunning
+            && liveSampleRate > 0
+            && liveChannelCount > 0
+            && liveSampleRate == tapSampleRate
+            && liveChannelCount == tapChannelCount
+    }
+}
+
 /// Why the armed microphone pre-roll input is released. Sleep and screen lock are tracked
 /// separately: waking the Mac must not re-arm the microphone while the screen is still locked.
 enum MicrophonePrerollSuspensionReason: String, Equatable {

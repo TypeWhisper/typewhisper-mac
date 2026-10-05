@@ -357,6 +357,29 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertFalse(isEligible(bluetooth: true))
     }
 
+    func testArmedConfigurationChangeIsIgnoredOnlyWhenRunningWithTheTapFormat() {
+        func isFormatPreserving(
+            running: Bool = true,
+            liveRate: Double = 48_000,
+            liveChannels: UInt32 = 1
+        ) -> Bool {
+            MicrophonePrerollConfigurationChangePolicy.isFormatPreserving(
+                engineIsRunning: running,
+                tapSampleRate: 48_000,
+                tapChannelCount: 1,
+                liveSampleRate: liveRate,
+                liveChannelCount: liveChannels
+            )
+        }
+
+        XCTAssertTrue(isFormatPreserving())
+        XCTAssertFalse(isFormatPreserving(running: false))
+        XCTAssertFalse(isFormatPreserving(liveRate: 44_100))
+        XCTAssertFalse(isFormatPreserving(liveChannels: 2))
+        XCTAssertFalse(isFormatPreserving(liveRate: 0))
+        XCTAssertFalse(isFormatPreserving(liveChannels: 0))
+    }
+
     func testMicrophonePrerollRearmPolicyBacksOffAndGivesUpAfterABurst() {
         var policy = MicrophonePrerollRearmPolicy()
 
