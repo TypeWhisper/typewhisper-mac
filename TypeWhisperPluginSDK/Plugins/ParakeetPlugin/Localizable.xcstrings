@@ -572,6 +572,28 @@
           }
         }
       }
+    },
+    "Parakeet recognizes your terms better with Vocabulary Boosting (about 100 MB download).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parakeet erkennt deine Begriffe mit Vokabel-Boosting besser (ca. 100 MB Download)."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "語彙ブーストを使うと、Parakeetが用語をより正確に認識します（約100 MBのダウンロード）。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用词汇增强后，Parakeet 能更准确地识别你的词条（需下载约 100 MB）。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

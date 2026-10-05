@@ -634,6 +634,55 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
     }
 
+    func testEnablingDictionaryTermsSettingTurnsOnBoostingAndDownloadsFilesOnlyWhileUnloaded() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        var downloadRequests: [Bool] = []
+        plugin.ctcModelDownloadOverrideForTests = { loadIntoMemory in
+            XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+            downloadRequests.append(loadIntoMemory)
+        }
+
+        XCTAssertTrue((plugin as Any) is any DictionaryTermsSettingEnabling)
+        XCTAssertFalse(plugin.dictionaryTermsSettingSummary.isEmpty)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+
+        try await plugin.enableDictionaryTermsSetting()
+
+        XCTAssertEqual(downloadRequests, [false])
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 2)
+    }
+
+    func testEnablingDictionaryTermsSettingThrowsDownloadFailureAndKeepsBoostingOn() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        plugin.ctcModelDownloadOverrideForTests = { _ in
+            plugin.ctcModelState = .error("Not enough disk space")
+        }
+
+        do {
+            try await plugin.enableDictionaryTermsSetting()
+            XCTFail("Expected the download failure to be thrown")
+        } catch let error as ParakeetVocabularyBoostingError {
+            XCTAssertEqual(error.localizedDescription, "Not enough disk space")
+        }
+
+        // Same as the settings toggle: boosting stays on and the download is retried later.
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.ctcModelDownloadOverrideForTests = { _ in
+            plugin.ctcModelState = .notDownloaded
+        }
+        try await plugin.enableDictionaryTermsSetting()
+        XCTAssertEqual(host.capabilitiesChangedCount, 2)
+    }
+
     func testDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {
         let host = try PluginTestHostServices(defaults: ["vocabularyBoostingEnabled": true])
         let plugin = makePlugin()
