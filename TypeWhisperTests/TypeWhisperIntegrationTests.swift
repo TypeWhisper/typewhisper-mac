@@ -46,6 +46,29 @@ private final class IntegrationFakeAudioInputDeviceActivator: AudioInputDeviceAc
     func restore(reason: String) {}
 }
 
+private final class IntegrationOutputVolumeController: AudioOutputVolumeControlling {
+    private let state = OSAllocatedUnfairLock(initialState: (volume: Float(0.75), writes: [Float]()))
+
+    var volume: Float {
+        get { state.withLock { $0.volume } }
+        set { state.withLock { $0.volume = newValue } }
+    }
+
+    var writes: [Float] { state.withLock { $0.writes } }
+
+    func defaultOutputSnapshot() -> AudioOutputVolumeSnapshot? {
+        AudioOutputVolumeSnapshot(deviceID: 1, deviceUID: "test-output", deviceName: "Test output", volume: volume)
+    }
+
+    func setVolume(_ volume: Float, for deviceID: AudioDeviceID) -> Bool {
+        state.withLock {
+            $0.volume = volume
+            $0.writes.append(volume)
+        }
+        return true
+    }
+}
+
 final class WavEncoderParityTests: XCTestCase {
     func testAppAndPluginEncodersProduceIdenticalPCMAtSupportedRates() {
         for rate in [8_000, 16_000, 44_100, 48_000] {
@@ -1797,6 +1820,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         override func duckAudio(to factor: Float) {
             onDuck(factor)
         }
+
+        override func prepareDucking() {}
 
         override func restoreAudio() {
             onRestore()
@@ -9644,6 +9669,60 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(events, ["start_audio", "start_sound"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
+    }
+
+    @MainActor
+    func testRecordingStartupVolumeChangeIsRestoredOnCancelOrFailure() async throws {
+        let originalDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
+        let originalDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel)
+        let originalCancellation = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
+        let originalSoundFeedback = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        defer {
+            Self.restoreUserDefault(originalDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+            Self.restoreUserDefault(originalDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
+            Self.restoreUserDefault(originalCancellation, forKey: UserDefaultsKeys.cancellationBehavior)
+            Self.restoreUserDefault(originalSoundFeedback, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        }
+
+        for (label, inputReady, startFails, duckingEnabled) in [
+            ("cancel after ducking", true, false, true),
+            ("cancel before first buffer", false, false, true),
+            ("startup failure", false, true, true),
+            ("ducking disabled", true, false, false),
+        ] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let volume = IntegrationOutputVolumeController()
+            let ducking = AudioDuckingService(volumeController: volume)
+            let context = Self.makeDictationContext(appSupportDirectory: directory, audioDuckingService: ducking)
+            context.dictationViewModel.audioDuckingEnabled = duckingEnabled
+            context.dictationViewModel.audioDuckingLevel = 0.2
+            context.dictationViewModel.soundFeedbackEnabled = false
+            context.dictationViewModel.cancellationBehavior = .doubleEscape
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {
+                // USB speakerphone capture startup can change the shared output volume.
+                volume.volume = 0
+                if startFails { throw NSError(domain: "test-recording-start", code: 1) }
+            }
+            context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+            _ = context.dictationViewModel.apiStartRecording()
+            await context.dictationViewModel.testingWaitForRecordingStart()
+            if !startFails {
+                if inputReady {
+                    context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+                    XCTAssertEqual(volume.volume, duckingEnabled ? 0.15 : 0, accuracy: 0.0001, label)
+                }
+                context.dictationViewModel.handleCancelHotkey()
+                context.dictationViewModel.handleCancelHotkey()
+                await context.dictationViewModel.testingWaitForRecordingCleanup()
+            }
+
+            XCTAssertEqual(volume.volume, duckingEnabled ? 0.75 : 0, accuracy: 0.0001, label)
+            if !duckingEnabled { XCTAssertTrue(volume.writes.isEmpty, label) }
+        }
     }
 
     @MainActor

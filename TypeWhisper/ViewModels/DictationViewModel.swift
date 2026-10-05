@@ -1922,6 +1922,10 @@ final class DictationViewModel: ObservableObject {
                     try Task.checkCancellation()
                     guard self.activeDictationSessionID == sessionID else { return }
                 }
+                if self.audioDuckingEnabled {
+                    self.audioDuckingService.prepareDucking()
+                    self.recordingRestoresSystemAudio = true
+                }
                 try await self.audioRecordingService.startRecordingAsync(
                     requestUptimeNanoseconds: requestUptimeNanoseconds
                 )
