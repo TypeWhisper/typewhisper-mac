@@ -15,8 +15,9 @@ SCREENSHOT_APP_PATH = File.join(
   "Build",
   "Products",
   "Debug",
-  "TypeWhisper.app"
+  "TypeWhisper Dev.app"
 )
+SCREENSHOT_EXECUTABLE_PATH = File.join(SCREENSHOT_APP_PATH, "Contents", "MacOS", "TypeWhisper Dev")
 SCREENSHOT_BUNDLE_ID = "com.typewhisper.mac.screenshots"
 
 def screenshot_hardware_architecture
@@ -385,7 +386,7 @@ def reset_screenshot_defaults!
 end
 
 def capture_screenshot!(language, state, variant, destination)
-  executable = File.join(SCREENSHOT_APP_PATH, "Contents", "MacOS", "TypeWhisper")
+  executable = SCREENSHOT_EXECUTABLE_PATH
   reset_screenshot_defaults!
 
   Dir.mktmpdir("typewhisper-screenshot-run") do |run_directory|
@@ -595,7 +596,7 @@ def stitch_plugin_screenshot_pages!(page_paths, states, destination)
 end
 
 def capture_plugin_screenshot!(language, plugin, destination)
-  executable = File.join(SCREENSHOT_APP_PATH, "Contents", "MacOS", "TypeWhisper")
+  executable = SCREENSHOT_EXECUTABLE_PATH
   reset_screenshot_defaults!
 
   Dir.mktmpdir("typewhisper-plugin-screenshot-run") do |run_directory|

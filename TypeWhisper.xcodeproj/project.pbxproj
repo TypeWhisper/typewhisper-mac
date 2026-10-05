@@ -5790,7 +5790,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper Dev.app/Contents/MacOS/TypeWhisper Dev";
 				TEST_TARGET_NAME = TypeWhisper;
 			};
 			name = Debug;
@@ -5945,7 +5945,8 @@
 				);
 				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
-				PRODUCT_NAME = TypeWhisper;
+				PRODUCT_MODULE_NAME = TypeWhisper;
+				PRODUCT_NAME = "TypeWhisper Dev";
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
