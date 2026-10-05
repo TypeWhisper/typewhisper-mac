@@ -63,6 +63,33 @@ enum MicrophonePrerollInputPolicy {
     }
 }
 
+extension MicrophonePrerollInputPolicy {
+    /// Automatic input selection (no explicit device) whose system default input is a
+    /// non-built-in, non-Bluetooth device such as USB, virtual, or aggregate. The built-in
+    /// default keeps using the engine path and Bluetooth stays excluded.
+    static func isEligibleForSystemDefaultInput(
+        hasMicrophonePermission: Bool,
+        isEnabled: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool,
+        defaultInputDeviceID: AudioDeviceID?,
+        defaultInputTransport: UInt32?
+    ) -> Bool {
+        guard hasMicrophonePermission,
+              isEnabled,
+              selectedDeviceID == nil,
+              !hasExplicitDeviceSelection,
+              !usesBluetoothTransport,
+              defaultInputDeviceID != nil,
+              let defaultInputTransport else {
+            return false
+        }
+        return !AudioDeviceService.isBuiltInTransportType(defaultInputTransport)
+            && !AudioDeviceService.isBluetoothTransportType(defaultInputTransport)
+    }
+}
+
 enum BluetoothRecordingInputPreparationPolicy {
     static func isEligible(
         hasMicrophonePermission: Bool,
@@ -760,6 +787,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func performRecordingInputPreparationIfEligible() {
         guard !hasPendingRecordingStart else { return }
+        releaseStreamingInputIfNoLongerWanted()
         if bluetoothInputPreparationDeviceID() != nil {
             performBluetoothInputPreparationIfEligible()
         } else if builtInInputPreparationDeviceID() != nil {
@@ -767,6 +795,27 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         } else if inputOnlyPreparationDeviceID() != nil {
             performUSBInputPreparationIfEligible()
         }
+    }
+
+    /// Releases a streaming pre-roll input that no longer matches the wanted one, for example
+    /// after the system default input changed. Returns true when something was released.
+    @discardableResult
+    private func releaseStreamingInputIfNoLongerWanted() -> Bool {
+        guard !isRecordingActive else { return false }
+        let streaming = engineLock.withLock {
+            (builtIn: preparedBuiltInInput, inputOnly: preparedUSBInput)
+        }
+        let builtInIsStale = streaming.builtIn.map { input in
+            input.isStreaming
+                && (!isMicrophonePrerollActive
+                    || builtInInputPreparationDeviceID() != input.defaultInputDeviceID)
+        } ?? false
+        let inputOnlyIsStale = streaming.inputOnly.map { input in
+            input.isStreaming && prerollInputOnlyDeviceID() != input.deviceID
+        } ?? false
+        guard builtInIsStale || inputOnlyIsStale else { return false }
+        invalidatePreparedRecordingInputs(reason: "preroll-input-changed")
+        return true
     }
 
     /// Whether the user opted into the pre-roll and nothing currently keeps it released.
@@ -777,7 +826,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return prerollLifecycle.withLock { !$0.suspension.isSuspended && !$0.rearmPolicy.hasGivenUp }
     }
 
-    /// Explicitly selected non-Bluetooth input that should stay running for the pre-roll.
+    /// Non-Bluetooth input that should stay running for the pre-roll through the input-only
+    /// session: the explicitly selected device, or with automatic selection the system default
+    /// input when it is not built-in (the built-in default uses the engine path).
     private func prerollInputOnlyDeviceID() -> AudioDeviceID? {
         let selection = configLock.withLock {
             (
@@ -786,16 +837,33 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
             )
         }
-        guard MicrophonePrerollInputPolicy.isEligibleForExplicitInput(
+        let isEnabled = isMicrophonePrerollActive
+        if MicrophonePrerollInputPolicy.isEligibleForExplicitInput(
             hasMicrophonePermission: hasMicrophonePermission,
-            isEnabled: isMicrophonePrerollActive,
+            isEnabled: isEnabled,
             selectedDeviceID: selection.selectedDeviceID,
             hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
             usesBluetoothTransport: selection.usesBluetoothTransport
+        ) {
+            return selection.selectedDeviceID
+        }
+        guard isEnabled, selection.selectedDeviceID == nil else { return nil }
+        let defaultInputDeviceID = defaultInputController.defaultInputDeviceID()
+        let defaultInputTransport = defaultInputDeviceID.flatMap {
+            inputTransportResolver.transportType(for: $0)
+        }
+        guard MicrophonePrerollInputPolicy.isEligibleForSystemDefaultInput(
+            hasMicrophonePermission: hasMicrophonePermission,
+            isEnabled: isEnabled,
+            selectedDeviceID: selection.selectedDeviceID,
+            hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selection.usesBluetoothTransport,
+            defaultInputDeviceID: defaultInputDeviceID,
+            defaultInputTransport: defaultInputTransport
         ) else {
             return nil
         }
-        return selection.selectedDeviceID
+        return defaultInputDeviceID
     }
 
     /// Input-only HAL device that is prepared ahead of a dictation: a selected USB input, or
@@ -1428,6 +1496,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             stopPrerollWatchdog()
             return
         }
+        // Automatic selection follows the system default; a changed default is not a failure.
+        if releaseStreamingInputIfNoLongerWanted() {
+            performRecordingInputPreparationIfEligible()
+            return
+        }
         guard !armedStreamIsActive(within: Self.prerollStallThreshold) else { return }
         handlePrerollStreamFailure(reason: "stalled")
     }
@@ -1872,7 +1945,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        if case .inputOnlyDevice(let inputOnlyDeviceID) = selectedCaptureRoute {
+        if case .inputOnlyDevice(let inputOnlyDeviceID) = effectiveCaptureRoute {
             do {
                 if let preparedInput = claimPreparedUSBInputIfEligible(deviceID: inputOnlyDeviceID) {
                     do {
@@ -2700,6 +2773,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 )
             )
         }
+    }
+
+    /// The selected route, except that automatic selection on a non-built-in system default
+    /// input uses the input-only session while the pre-roll is on, so it can stay armed.
+    private var effectiveCaptureRoute: AudioInputCaptureRoute {
+        let route = selectedCaptureRoute
+        guard case .avAudioEngine(let preferredDeviceID) = route,
+              preferredDeviceID == nil,
+              let defaultInputDeviceID = prerollInputOnlyDeviceID() else {
+            return route
+        }
+        return .inputOnlyDevice(defaultInputDeviceID)
     }
 
     private var selectedCaptureRoute: AudioInputCaptureRoute {

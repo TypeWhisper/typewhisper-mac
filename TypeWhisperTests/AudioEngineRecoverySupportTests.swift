@@ -321,6 +321,42 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(UserDefaultsKeys.microphonePrerollEnabled, "microphonePrerollEnabled")
     }
 
+    func testMicrophonePrerollOnSystemDefaultInputAcceptsOnlyNonBuiltInNonBluetoothTransports() {
+        func isEligible(
+            permission: Bool = true,
+            enabled: Bool = true,
+            selectedDeviceID: AudioDeviceID? = nil,
+            explicit: Bool = false,
+            bluetooth: Bool = false,
+            defaultDeviceID: AudioDeviceID? = 9,
+            transport: UInt32? = kAudioDeviceTransportTypeUSB
+        ) -> Bool {
+            MicrophonePrerollInputPolicy.isEligibleForSystemDefaultInput(
+                hasMicrophonePermission: permission,
+                isEnabled: enabled,
+                selectedDeviceID: selectedDeviceID,
+                hasExplicitDeviceSelection: explicit,
+                usesBluetoothTransport: bluetooth,
+                defaultInputDeviceID: defaultDeviceID,
+                defaultInputTransport: transport
+            )
+        }
+
+        XCTAssertTrue(isEligible())
+        XCTAssertTrue(isEligible(transport: kAudioDeviceTransportTypeVirtual))
+        XCTAssertTrue(isEligible(transport: kAudioDeviceTransportTypeAggregate))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBuiltIn))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBluetooth))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBluetoothLE))
+        XCTAssertFalse(isEligible(transport: nil))
+        XCTAssertFalse(isEligible(defaultDeviceID: nil))
+        XCTAssertFalse(isEligible(enabled: false))
+        XCTAssertFalse(isEligible(permission: false))
+        XCTAssertFalse(isEligible(selectedDeviceID: 6))
+        XCTAssertFalse(isEligible(explicit: true))
+        XCTAssertFalse(isEligible(bluetooth: true))
+    }
+
     func testMicrophonePrerollRearmPolicyBacksOffAndGivesUpAfterABurst() {
         var policy = MicrophonePrerollRearmPolicy()
 
