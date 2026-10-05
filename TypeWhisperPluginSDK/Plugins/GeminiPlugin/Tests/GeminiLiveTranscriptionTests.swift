@@ -308,6 +308,24 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertEqual(result.text, "First second turn")
     }
 
+    func testInterruptedTurnCompleteIsNotAttributedAfterQuietAudio() async throws {
+        let clock = GeminiTestClock()
+        let session = try await makeSession(socket: GeminiTestWebSocket(), clock: clock)
+        try await session.appendAudio(samples: [0.1])
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"}}}"#))
+        clock.advance(by: .seconds(2))
+        try await session.handle(.string(#"{"serverContent":{"interrupted":true}}"#))
+        try await session.handle(.string(#"{"serverContent":{"turnComplete":true}}"#))
+        clock.advance(by: .milliseconds(100))
+        let interruptedTurn = await session.hasSettledCompletion
+        XCTAssertFalse(interruptedTurn, "turnComplete after interrupted closes the earlier turn")
+
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"second"},"generationComplete":true}}"#))
+        clock.advance(by: .milliseconds(50))
+        let result = try await finishWithWatchdog(session)
+        XCTAssertEqual(result.text, "First second")
+    }
+
     func testServerTurnWaitsForCurrentTurnFinalTranscript() async throws {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))

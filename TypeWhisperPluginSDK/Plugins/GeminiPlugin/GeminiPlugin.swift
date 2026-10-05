@@ -1702,16 +1702,15 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             serverTurnHasFinalTranscript = true
         }
         if content.interrupted == true { awaitingInterruptedTurnComplete = true }
-        var completesServerTurn = content.generationComplete == true
+        var isCompletion = content.generationComplete == true
         if content.turnComplete == true {
             if awaitingInterruptedTurnComplete {
                 awaitingInterruptedTurnComplete = false
             } else {
-                completesServerTurn = true
+                isCompletion = true
             }
         }
-        if completesServerTurn { serverTurnCompletedAt = receivedAt }
-        let isCompletion = content.generationComplete == true || content.turnComplete == true
+        if isCompletion { serverTurnCompletedAt = receivedAt }
         if isCompletion, canAttributeCompletion {
             completionAudioRevision = lastNonSilentAudioRevision
             completionReceivedAt = receivedAt
