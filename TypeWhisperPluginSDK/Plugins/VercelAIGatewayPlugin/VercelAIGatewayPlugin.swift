@@ -46,6 +46,8 @@ final class VercelAIGatewayPlugin: NSObject,
         /// compares its captured value against this before publishing, so
         /// key A's late completion cannot overwrite key B's status.
         var apiKeyGeneration = 0
+        /// Chunk length for the retry after the gateway rejects a body as too large.
+        var splitRetryChunkDuration: TimeInterval = VercelAIGatewayPlugin.defaultSplitRetryChunkDuration
     }
 
     private let lock = NSLock()
@@ -78,6 +80,8 @@ final class VercelAIGatewayPlugin: NSObject,
 
     private static let chatRequestTimeout: TimeInterval = 30
     private static let transcriptionRequestTimeout: TimeInterval = 120
+    /// 20 minutes stay well below the gateway's body limit even as a WAV fallback.
+    static let defaultSplitRetryChunkDuration: TimeInterval = 20 * 60
 
     private let chatHelper = PluginOpenAIChatHelper(baseURL: VercelAIGatewayPlugin.baseURL)
 
@@ -94,6 +98,12 @@ final class VercelAIGatewayPlugin: NSObject,
     required override init() {
         super.init()
     }
+
+    #if DEBUG
+    func testingSetSplitRetryChunkDuration(_ duration: TimeInterval) {
+        updateState { $0.splitRetryChunkDuration = duration }
+    }
+    #endif
 
     func activate(host: HostServices) {
         var loaded = State()
@@ -207,6 +217,33 @@ final class VercelAIGatewayPlugin: NSObject,
             throw PluginTranscriptionError.apiError("Vercel AI Gateway speech-to-text does not support translation.")
         }
 
+        let (data, response) = try await requestTranscription(
+            audio: audio,
+            apiKey: apiKey,
+            modelId: modelId,
+            language: language
+        )
+        let chunkDuration = readState { $0.splitRetryChunkDuration }
+        if (response as? HTTPURLResponse)?.statusCode == 413,
+           audio.samples.count > Self.sampleCount(for: chunkDuration) {
+            return try await transcribeInChunks(
+                audio: audio,
+                apiKey: apiKey,
+                modelId: modelId,
+                language: language,
+                chunkDuration: chunkDuration
+            )
+        }
+        try Self.validateTranscriptionResponse(data: data, response: response)
+        return try Self.parseTranscriptionResponse(data)
+    }
+
+    private func requestTranscription(
+        audio: AudioData,
+        apiKey: String,
+        modelId: String,
+        language: String?
+    ) async throws -> (Data, URLResponse) {
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
         let preferredUpload: PluginAudioUploadFile
         if Self.requiresLosslessUpload(modelId: modelId) {
@@ -239,8 +276,102 @@ final class VercelAIGatewayPlugin: NSObject,
             )
             (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: Self.transcriptionRequestTimeout)
         }
-        try Self.validateTranscriptionResponse(data: data, response: response)
-        return try Self.parseTranscriptionResponse(data)
+        return (data, response)
+    }
+
+    private func transcribeInChunks(
+        audio: AudioData,
+        apiKey: String,
+        modelId: String,
+        language: String?,
+        chunkDuration: TimeInterval
+    ) async throws -> PluginTranscriptionResult {
+        let sampleRate = Double(PluginAudioUploadEncoder.sampleRate)
+        var textParts: [String] = []
+        var detectedLanguage: String?
+        var segments: [PluginTranscriptionSegment] = []
+
+        for range in Self.chunkRanges(samples: audio.samples, maximumChunkSamples: Self.sampleCount(for: chunkDuration)) {
+            let samples = Array(audio.samples[range])
+            let chunk = AudioData(
+                samples: samples,
+                wavData: PluginWavEncoder.encode(samples),
+                duration: Double(samples.count) / sampleRate
+            )
+            let (data, response) = try await requestTranscription(
+                audio: chunk,
+                apiKey: apiKey,
+                modelId: modelId,
+                language: language
+            )
+            try Self.validateTranscriptionResponse(data: data, response: response)
+            let result = try Self.parseTranscriptionResponse(data)
+            let trimmedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedText.isEmpty {
+                textParts.append(trimmedText)
+            }
+            if detectedLanguage == nil {
+                detectedLanguage = result.detectedLanguage
+            }
+            // A short last chunk is padded for upload; drop segments in the padding.
+            let timeOffset = Double(range.lowerBound) / sampleRate
+            let chunkEndTime = Double(range.upperBound) / sampleRate
+            segments.append(contentsOf: result.segments.compactMap {
+                let segmentStart = $0.start + timeOffset
+                guard segmentStart < chunkEndTime else { return nil }
+                return PluginTranscriptionSegment(
+                    text: $0.text,
+                    start: segmentStart,
+                    end: min($0.end + timeOffset, chunkEndTime)
+                )
+            })
+        }
+
+        return PluginTranscriptionResult(
+            text: textParts.joined(separator: " "),
+            detectedLanguage: detectedLanguage,
+            segments: segments
+        )
+    }
+
+    private static func sampleCount(for duration: TimeInterval) -> Int {
+        max(1, Int(duration * Double(PluginAudioUploadEncoder.sampleRate)))
+    }
+
+    /// Splits audio into chunks of at most `maximumChunkSamples`. Each cut moves
+    /// back to the quietest 100 ms frame in the last 10 seconds before the limit,
+    /// so it rarely lands inside a word.
+    static func chunkRanges(samples: [Float], maximumChunkSamples: Int) -> [Range<Int>] {
+        let maximumChunkSamples = max(1, maximumChunkSamples)
+        let frameSamples = PluginAudioUploadEncoder.sampleRate / 10
+        let searchSamples = min(PluginAudioUploadEncoder.sampleRate * 10, maximumChunkSamples / 2)
+        var ranges: [Range<Int>] = []
+        var start = 0
+
+        while samples.count - start > maximumChunkSamples {
+            let limit = start + maximumChunkSamples
+            var end = limit
+            var quietestEnergy = Float.infinity
+            var frameStart = limit - searchSamples
+            while frameStart + frameSamples <= limit {
+                var energy: Float = 0
+                for index in frameStart..<(frameStart + frameSamples) {
+                    energy += samples[index] * samples[index]
+                }
+                if energy < quietestEnergy {
+                    quietestEnergy = energy
+                    end = frameStart + frameSamples / 2
+                }
+                frameStart += frameSamples
+            }
+            ranges.append(start..<end)
+            start = end
+        }
+
+        if start < samples.count {
+            ranges.append(start..<samples.count)
+        }
+        return ranges
     }
 
     /// MAI-Transcribe accepts only WAV, MP3 and FLAC. The gateway answers an M4A

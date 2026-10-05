@@ -597,6 +597,111 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertFalse(bodyText.contains(#"\/"#))
     }
 
+    func testTranscribeSplitsIntoChunksAtQuietPointsWhenGatewayRejectsPayloadSize() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "vck_test"])
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("microsoft/mai-transcribe-2")
+        plugin.testingSetSplitRetryChunkDuration(2)
+
+        let url = "https://ai-gateway.vercel.sh/v4/ai/transcription-model"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data("Request Entity Too Large\n\nFUNCTION_PAYLOAD_TOO_LARGE".utf8),
+                    Self.httpResponse(url: url, statusCode: 413)
+                ),
+                .success(
+                    Data(#"{"text":" first part ","segments":[{"text":"first part","startSecond":0.1,"endSecond":0.6}],"language":"de"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"text":"second part","segments":[{"text":"second part","startSecond":0.2,"endSecond":0.8},{"text":"beyond chunk","startSecond":1.8,"endSecond":1.9}],"language":"en"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        // 3.2 s of signal with silence between 1.4 s and 1.5 s; the 2 s limit cuts at 1.45 s.
+        var samples = [Float](repeating: 0.1, count: 51_200)
+        for index in 22_400..<24_000 { samples[index] = 0 }
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 3.2)
+
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "first part second part")
+        XCTAssertEqual(result.detectedLanguage, "de")
+        XCTAssertEqual(result.segments.map(\.text), ["first part", "second part"])
+        XCTAssertEqual(result.segments[0].start, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(result.segments[0].end, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(result.segments[1].start, 1.65, accuracy: 0.0001)
+        XCTAssertEqual(result.segments[1].end, 2.25, accuracy: 0.0001)
+
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 3)
+        var chunkSampleCounts: [Int] = []
+        for request in requests.dropFirst() {
+            let body = try Self.jsonBody(from: request)
+            XCTAssertEqual(body["mediaType"] as? String, "audio/flac")
+            let audioData = try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(body["audio"] as? String)))
+            chunkSampleCounts.append(try Self.decodedInt16Samples(from: audioData, fileExtension: "flac").count)
+        }
+        XCTAssertEqual(chunkSampleCounts, [23_200, 28_000])
+    }
+
+    func testPayloadTooLargeForAudioWithinChunkLimitFailsWithoutSplitting() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "vck_test"])
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("microsoft/mai-transcribe-2")
+        plugin.testingSetSplitRetryChunkDuration(5)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [.success(
+                Data("FUNCTION_PAYLOAD_TOO_LARGE".utf8),
+                Self.httpResponse(url: "https://ai-gateway.vercel.sh/v4/ai/transcription-model", statusCode: 413)
+            )])
+        }
+
+        do {
+            _ = try await plugin.transcribe(audio: Self.audio(), language: nil, translate: false, prompt: nil)
+            XCTFail("Expected fileTooLarge")
+        } catch PluginTranscriptionError.fileTooLarge {
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+        XCTAssertEqual(store.sessions.flatMap(\.requestedRequests).count, 1)
+    }
+
+    func testChunkRangesCoverAudioWithinLimitAndCutAtQuietestFrame() {
+        let sampleRate = 16_000
+        let maximumChunkSamples = sampleRate * 60
+        // Speech-like noise with one silent 100 ms frame 7 s before each limit.
+        var samples = (0..<(sampleRate * 150)).map { Float(($0 * 7_919) % 2_001 - 1_000) / 10_000 }
+        let firstSilentFrame = maximumChunkSamples - 112_000
+        let silentFrameStarts = [firstSilentFrame, firstSilentFrame + 800 + maximumChunkSamples - 112_000]
+        for frameStart in silentFrameStarts {
+            for index in frameStart..<(frameStart + 1_600) { samples[index] = 0 }
+        }
+
+        let ranges = VercelAIGatewayPlugin.chunkRanges(samples: samples, maximumChunkSamples: maximumChunkSamples)
+
+        XCTAssertEqual(ranges.first?.lowerBound, 0)
+        XCTAssertEqual(ranges.last?.upperBound, samples.count)
+        for (previous, next) in zip(ranges, ranges.dropFirst()) {
+            XCTAssertEqual(previous.upperBound, next.lowerBound)
+        }
+        XCTAssertTrue(ranges.allSatisfy { $0.count <= maximumChunkSamples && !$0.isEmpty })
+        XCTAssertEqual(ranges.dropLast().map(\.upperBound), silentFrameStarts.map { $0 + 800 })
+    }
+
+    func testChunkRangesKeepShortAudioInOneChunk() {
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        XCTAssertEqual(VercelAIGatewayPlugin.chunkRanges(samples: samples, maximumChunkSamples: 16_000), [0..<16_000])
+    }
+
     func testExplicitRequestErrorsDoNotTriggerWavRetry() async throws {
         for (status, message) in [(400, "Model not found"), (401, "Invalid API key"), (402, "Insufficient credits"), (429, "Rate limited")] {
             PluginHTTPClientTestHarness.reset()
