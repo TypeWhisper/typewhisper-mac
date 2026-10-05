@@ -205,12 +205,12 @@ jobs:
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
-  # Mac App Store edition: sandboxed APPSTORE build with bundled plugins.
-  # Builds arm64 only to keep pull requests fast; the TestFlight workflow builds
-  # and audits the universal binary. See docs/appstore/README.md.
+  # Mac App Store edition: compile check of the APPSTORE build with bundled plugins.
+  # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
+  # builds the universal Release binary and audits it. See docs/appstore/README.md.
   appstore:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 60
     env:
       APPSTORE_DERIVED_DATA: build/appstore
       XCODEGEN_VERSION: "2.46.0"
@@ -246,33 +246,26 @@ jobs:
           restore-keys: |
             appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
-      - name: Build App Store app (arm64, unsigned)
+      - name: Build App Store app (Debug, arm64, unsigned)
         run: |
           mkdir -p build
           if ! xcodebuild build \
             -project TypeWhisperAppStore.xcodeproj \
             -scheme TypeWhisperAppStore \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath "$APPSTORE_DERIVED_DATA" \
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/AppStoreSourcePackages" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             > build/appstore-xcodebuild.log 2>&1; then
             grep -E ' error: ' build/appstore-xcodebuild.log | sort -u | head -50
             tail -n 40 build/appstore-xcodebuild.log
             exit 1
           fi
           tail -n 3 build/appstore-xcodebuild.log
-
-      - name: Audit App Store boundary
-        run: |
-          scripts/appstore/audit_app_store_binary.sh \
-            --allow-unsigned \
-            "$APPSTORE_DERIVED_DATA/Build/Products/Release/TypeWhisper.app"
 
       - name: Upload build log
         if: failure()

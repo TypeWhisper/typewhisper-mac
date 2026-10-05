@@ -77,10 +77,10 @@ as warnings for the host app.
 
 ## Release
 
-The `appstore` job in `.github/workflows/build.yml` runs an unsigned arm64
-Release build and the audit for every pull request, so changes that break the
-sandboxed edition fail in the pull request that introduces them. The universal
-binary is built and audited by the TestFlight workflow and `release-audit.sh`.
+The `appstore` job in `.github/workflows/build.yml` compiles the edition (Debug,
+arm64, unsigned) for every pull request, so changes that break the `APPSTORE`
+build fail in the pull request that introduces them. The universal Release
+binary and the audit run in the TestFlight workflow and in `release-audit.sh`.
 
 `.github/workflows/appstore-testflight.yml` (manual or nightly at 02:30 UTC, `main` only) archives with
 manual signing, audits the signed archive, exports a `.pkg` and uploads it to

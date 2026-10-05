@@ -52,8 +52,8 @@ swift test --package-path TypeWhisperPluginSDK
 
 The Mac App Store edition builds the same sources from `appstore-project.yml`
 (XcodeGen) with the `APPSTORE` compilation condition, the App Sandbox and the
-first-party plugins listed there. CI builds and audits it for every pull
-request. Code that the sandbox cannot run (launching processes, Apple Events,
+first-party plugins listed there. CI compiles it for every pull request.
+Code that the sandbox cannot run (launching processes, Apple Events,
 Accessibility access to other apps, downloading code) needs an `#if APPSTORE`
 alternative; keep such blocks small and explain them in a comment. Details,
 build commands and the plugin list are in
