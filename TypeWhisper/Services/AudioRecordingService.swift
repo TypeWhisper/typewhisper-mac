@@ -632,9 +632,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     /// False while a recording is active or a stop is still draining it (short-speech grace,
     /// finalization, re-arming). Preparing or arming an input is only safe when this is true.
+    /// A request rejected while a stop drains is remembered and replayed when the last stop ends.
     private var allowsInputPreparation: Bool {
         let isActive = isRecordingActive
-        return recordingStopTracker.withLock { $0.allowsInputPreparation(isRecordingActive: isActive) }
+        return recordingStopTracker.withLock { $0.evaluatePreparationRequest(isRecordingActive: isActive) }
     }
 
     private func setRecordingActive(_ active: Bool) {
@@ -771,6 +772,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         prerollHandoffState.withLock { $0.prerollMilliseconds }
     }
 
+    /// Runs the preparation that the stop gate rejected, once the last stop has finished. It
+    /// uses the same delay as the stop's own follow-up and is skipped when that follow-up (or
+    /// any other pass) already ran, so the preparation is not duplicated. Unlike the stop's
+    /// follow-up it survives a preparation-generation change, which is how a rejected
+    /// preference-change preparation was lost. Eligibility is re-checked when it runs.
+    private func scheduleRecordingInputPreparationRejectedDuringStop() {
+        recordingStartQueue.asyncAfter(deadline: .now() + Self.postRecordingInputPreparationDelay) { [weak self] in
+            guard let self,
+                  self.recordingStopTracker.withLock({ $0.hasRejectedPreparation }) else {
+                return
+            }
+            self.performRecordingInputPreparationIfEligible()
+        }
+    }
+
     private func scheduleRecordingInputPreparation(after delay: TimeInterval) {
         let scheduledGeneration = engineLock.withLock { preparedInputGeneration }
         recordingStartQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
@@ -794,7 +810,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performRecordingInputPreparationIfEligible() {
-        guard !hasPendingRecordingStart else { return }
+        guard !hasPendingRecordingStart, allowsInputPreparation else { return }
+        // This pass re-checks eligibility itself, so it satisfies any request a stop rejected.
+        recordingStopTracker.withLock { $0.consumeRejectedPreparation() }
         releaseStreamingInputIfNoLongerWanted()
         if bluetoothInputPreparationDeviceID() != nil {
             performBluetoothInputPreparationIfEligible()
@@ -2173,7 +2191,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         // preparation stays blocked: the recording is inactive and its engine detached, but a
         // second armed stream would collide with the re-arm below.
         recordingStopTracker.withLock { $0.begin() }
-        defer { recordingStopTracker.withLock { $0.end() } }
+        defer {
+            if recordingStopTracker.withLock({ $0.end() }) {
+                scheduleRecordingInputPreparationRejectedDuringStop()
+            }
+        }
 
         // Atomically claim the engine - only the first concurrent caller proceeds
         let capture: (engine: AVAudioEngine?, inputCaptureSession: AudioInputCaptureSession?) = engineLock.withLock {

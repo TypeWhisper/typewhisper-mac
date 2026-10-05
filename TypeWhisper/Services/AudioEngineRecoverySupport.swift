@@ -121,8 +121,14 @@ struct MicrophonePrerollRearmPolicy: Equatable {
 /// yet the stop still owns the capture path. Input preparation (which would arm a second
 /// stream) stays blocked until every stop has finished. A counter keeps overlapping stops
 /// from releasing each other.
+///
+/// A preparation request that the stop gate rejects is remembered, because nothing else
+/// retries it (for example a preference change while a stop drains, or a Bluetooth release
+/// stop that schedules no follow-up). The last stop to finish reports it so the caller can
+/// run the preparation once; the flag clears when a preparation pass runs with the gate open.
 struct RecordingStopTracker: Equatable {
     private var activeStops = 0
+    private(set) var hasRejectedPreparation = false
 
     var isStopping: Bool { activeStops > 0 }
 
@@ -130,13 +136,33 @@ struct RecordingStopTracker: Equatable {
         activeStops += 1
     }
 
-    mutating func end() {
+    /// Returns true when this ended the last stop while a preparation request was rejected
+    /// in the meantime, so the caller should run the preparation once.
+    @discardableResult
+    mutating func end() -> Bool {
         activeStops = max(0, activeStops - 1)
+        return activeStops == 0 && hasRejectedPreparation
     }
 
     /// Whether preparing or arming a microphone input is allowed right now.
     func allowsInputPreparation(isRecordingActive: Bool) -> Bool {
         !isRecordingActive && !isStopping
+    }
+
+    /// Gate check for a preparation request. A request rejected while a stop is draining is
+    /// remembered for `end()`.
+    mutating func evaluatePreparationRequest(isRecordingActive: Bool) -> Bool {
+        let allowed = allowsInputPreparation(isRecordingActive: isRecordingActive)
+        if !allowed, isStopping {
+            hasRejectedPreparation = true
+        }
+        return allowed
+    }
+
+    /// A preparation pass is running with the gate open and re-evaluates eligibility itself,
+    /// so a remembered request is satisfied.
+    mutating func consumeRejectedPreparation() {
+        hasRejectedPreparation = false
     }
 }
 

@@ -501,6 +501,46 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
     }
 
+    func testPreparationRejectedDuringAStopIsReportedWhenTheLastStopEnds() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin()
+
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertTrue(tracker.hasRejectedPreparation)
+
+        XCTAssertFalse(tracker.end(), "an overlapping stop is still draining")
+        XCTAssertTrue(tracker.end())
+    }
+
+    func testStopWithoutRejectedPreparationReportsNothing() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+
+        // A request that arrives while no stop is draining is not deferred.
+        XCTAssertTrue(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: true))
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+    }
+
+    func testPreparationPassClearsTheRejectedRequestSoItIsNotDuplicated() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        _ = tracker.evaluatePreparationRequest(isRecordingActive: false)
+        XCTAssertTrue(tracker.hasRejectedPreparation)
+
+        // The stop's own follow-up preparation ran after the stop ended.
+        XCTAssertTrue(tracker.end())
+        tracker.consumeRejectedPreparation()
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+    }
+
     func testFailedRearmStoreNeverDisarmsADifferentArmedStream() {
         XCTAssertFalse(
             MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(otherStreamingInputIsPrepared: true)
