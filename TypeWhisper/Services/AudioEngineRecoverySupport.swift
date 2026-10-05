@@ -271,6 +271,15 @@ enum MicrophonePrerollConfigurationChangePolicy {
     }
 }
 
+/// Binds a failure callback of an armed pre-roll stream to the stream it came from. The
+/// generation changes whenever prepared inputs are invalidated, so a callback of a stream that
+/// was already replaced is stale and must neither release nor penalize the replacement.
+enum MicrophonePrerollStreamScopePolicy {
+    static func isCurrent(streamGeneration: UInt64, currentGeneration: UInt64) -> Bool {
+        streamGeneration == currentGeneration
+    }
+}
+
 /// Why the armed microphone pre-roll input is released. Sleep and screen lock are tracked
 /// separately: waking the Mac must not re-arm the microphone while the screen is still locked.
 enum MicrophonePrerollSuspensionReason: String, Equatable {

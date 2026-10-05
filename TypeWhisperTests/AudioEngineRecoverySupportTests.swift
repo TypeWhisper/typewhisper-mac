@@ -357,6 +357,12 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertFalse(isEligible(bluetooth: true))
     }
 
+    func testPrerollFailureCallbackIsCurrentOnlyForItsOwnGeneration() {
+        XCTAssertTrue(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 4, currentGeneration: 4))
+        XCTAssertFalse(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 4, currentGeneration: 5))
+        XCTAssertFalse(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 5, currentGeneration: 4))
+    }
+
     func testArmedConfigurationChangeIsIgnoredOnlyWhenRunningWithTheTapFormat() {
         func isFormatPreserving(
             running: Bool = true,
@@ -3316,6 +3322,52 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         await service.testingWaitForScheduledRecordingInputPreparation()
 
         XCTAssertTrue(activation.activateCalls.isEmpty)
+    }
+
+    func testStalePrerollFailureCallbackKeepsTheReplacementStreamAndItsRetryBudget() async {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = false
+        service.engineTeardownOverride = { _ in }
+        let oldEngine = AVAudioEngine()
+        service.testingSetPreparedBuiltInInput(oldEngine, deviceID: 1, isStreaming: true)
+        let oldGeneration = service.testingPreparedInputGeneration()
+
+        // An input change invalidates the old stream, then the replacement is armed.
+        service.configureInputSelection(
+            deviceID: 7,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: false
+        )
+        service.testingSetPreparedBuiltInInput(AVAudioEngine(), deviceID: 1, isStreaming: true)
+        let replacementGeneration = service.testingPreparedInputGeneration()
+        XCTAssertNotEqual(oldGeneration, replacementGeneration)
+
+        // More late callbacks than the retry budget allows must still change nothing.
+        for _ in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+            service.testingHandlePrerollStreamFailure(
+                reason: "configuration-change",
+                streamGeneration: oldGeneration
+            )
+        }
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertTrue(service.testingHasStreamingBuiltInInput())
+        XCTAssertEqual(service.testingPreparedInputGeneration(), replacementGeneration)
+        XCTAssertFalse(service.testingPrerollRearmHasGivenUp)
+    }
+
+    func testPrerollFailureCallbackOfTheCurrentStreamStillReleasesIt() async {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = false
+        service.engineTeardownOverride = { _ in }
+        service.testingSetPreparedBuiltInInput(AVAudioEngine(), deviceID: 1, isStreaming: true)
+        let generation = service.testingPreparedInputGeneration()
+
+        service.testingHandlePrerollStreamFailure(reason: "configuration-change", streamGeneration: generation)
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertFalse(service.testingHasStreamingBuiltInInput())
+        XCTAssertNotEqual(service.testingPreparedInputGeneration(), generation)
     }
 
     func testPrerollStaysSuspendedWhenLaunchedOnALockedScreen() {

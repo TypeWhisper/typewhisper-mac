@@ -1061,7 +1061,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
             if isStreaming {
-                installArmedConfigurationObserver(for: engine, tapFormat: configuredCapture.tapFormat)
+                installArmedConfigurationObserver(
+                    for: engine,
+                    tapFormat: configuredCapture.tapFormat,
+                    preparationGeneration: preparationGeneration
+                )
                 noteMicrophonePrerollArmed(transport: "builtIn", elapsedMs: elapsedMs)
             } else {
                 logger.info(
@@ -1516,7 +1520,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         stopPrerollWatchdog()
     }
 
-    private func installArmedConfigurationObserver(for engine: AVAudioEngine, tapFormat: AVAudioFormat) {
+    /// `preparationGeneration` is the generation the armed stream was prepared in. A failure
+    /// reported by this observer only counts while that generation is current, so a callback
+    /// of an engine that an input or preference change already replaced cannot tear down the
+    /// replacement or use up its retry budget.
+    private func installArmedConfigurationObserver(
+        for engine: AVAudioEngine,
+        tapFormat: AVAudioFormat,
+        preparationGeneration: UInt64
+    ) {
         removeArmedConfigurationObserver()
         let observer = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange,
@@ -1536,9 +1548,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     return
                 }
             }
-            self?.handlePrerollStreamFailure(reason: "configuration-change")
+            self?.handlePrerollStreamFailure(
+                reason: "configuration-change",
+                streamGeneration: preparationGeneration
+            )
         }
-        engineLock.withLock { armedConfigChangeObserver = observer }
+        let isStillCurrent = engineLock.withLock { () -> Bool in
+            guard MicrophonePrerollStreamScopePolicy.isCurrent(
+                streamGeneration: preparationGeneration,
+                currentGeneration: preparedInputGeneration
+            ) else {
+                return false
+            }
+            armedConfigChangeObserver = observer
+            return true
+        }
+        // The stream was invalidated while the observer was being installed; nothing would
+        // remove it later.
+        if !isStillCurrent {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func removeArmedConfigurationObserver() {
@@ -1595,13 +1624,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         handlePrerollStreamFailure(reason: "stalled")
     }
 
-    private func handlePrerollStreamFailure(reason: String) {
+    /// `streamGeneration` binds a callback to the stream that reported it. Callers that look at
+    /// the current stream (the watchdog) pass nil.
+    private func handlePrerollStreamFailure(reason: String, streamGeneration: UInt64? = nil) {
         recordingStartQueue.async { [weak self] in
             guard let self,
                   self.allowsInputPreparation,
                   !self.hasPendingRecordingStart,
                   self.hasStreamingPreparedInput() else {
                 return
+            }
+            if let streamGeneration {
+                let currentGeneration = self.engineLock.withLock { self.preparedInputGeneration }
+                guard MicrophonePrerollStreamScopePolicy.isCurrent(
+                    streamGeneration: streamGeneration,
+                    currentGeneration: currentGeneration
+                ) else {
+                    logger.info("Ignoring \(reason, privacy: .public) of a pre-roll stream that was already replaced")
+                    return
+                }
             }
             self.invalidatePreparedRecordingInputs(reason: "preroll-stream-\(reason)")
             self.scheduleRearmAfterPrerollFailure(reason: reason)
@@ -1733,7 +1774,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
             return false
         }
-        installArmedConfigurationObserver(for: engine, tapFormat: Self.tapFormat(for: format))
+        installArmedConfigurationObserver(
+            for: engine,
+            tapFormat: Self.tapFormat(for: format),
+            preparationGeneration: preparationGeneration
+        )
         startPrerollWatchdogIfNeeded()
         logger.info("Mic pre-roll re-armed after recording: transport=builtIn")
         return true
@@ -4028,15 +4073,33 @@ extension AudioRecordingService {
         }
     }
 
-    func testingSetPreparedBuiltInInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
+    func testingSetPreparedBuiltInInput(
+        _ engine: AVAudioEngine,
+        deviceID: AudioDeviceID,
+        isStreaming: Bool = false
+    ) {
         let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
         engineLock.withLock {
             preparedBuiltInInput = PreparedBuiltInInput(
                 engine: engine,
                 defaultInputDeviceID: deviceID,
-                tapFormat: format
+                tapFormat: format,
+                isStreaming: isStreaming
             )
         }
+    }
+
+    func testingHandlePrerollStreamFailure(reason: String, streamGeneration: UInt64?) {
+        handlePrerollStreamFailure(reason: reason, streamGeneration: streamGeneration)
+    }
+
+    func testingHasStreamingBuiltInInput() -> Bool {
+        engineLock.withLock { preparedBuiltInInput?.isStreaming == true }
+    }
+
+    func testingInstallArmedConfigurationObserver(for engine: AVAudioEngine, preparationGeneration: UInt64) {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        installArmedConfigurationObserver(for: engine, tapFormat: format, preparationGeneration: preparationGeneration)
     }
 
     func testingClaimPreparedBluetoothInputIfEligible() -> Bool {
