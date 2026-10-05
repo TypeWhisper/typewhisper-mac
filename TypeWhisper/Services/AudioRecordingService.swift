@@ -880,6 +880,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// audio lifts the re-arm failure state, so a pre-roll that gave up comes back after the
     /// next working cold-start recording instead of staying off until an external event.
     private func notePrerollRecoveryIfRecordingDeliveredAudio() {
+        // The last buffer may still be queued; its delivery sets the flag read below.
+        processingQueue.sync { }
         let deliveredAudio = bufferLock.withLock { hasLoggedFirstConvertedSample }
         guard deliveredAudio else { return }
         prerollLifecycle.withLock { $0.rearmPolicy.noteWorkingRecording() }
