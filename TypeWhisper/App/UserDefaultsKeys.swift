@@ -91,6 +91,7 @@ enum UserDefaultsKeys {
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
+    static let dismissedDictionaryTermsSettingSuggestions = "dismissedDictionaryTermsSettingSuggestions"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
     static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
     static let targetAppCorrectionLearningRequiredObservations = "targetAppCorrectionLearningRequiredObservations"

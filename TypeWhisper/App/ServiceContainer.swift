@@ -347,7 +347,12 @@ final class ServiceContainer: ObservableObject {
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,
             licenseService: licenseService,
-            termPackRegistryService: termPackRegistryService
+            termPackRegistryService: termPackRegistryService,
+            selectedTranscriptionEngine: { [modelManagerService] in
+                modelManagerService.selectedProviderId.flatMap {
+                    PluginManager.shared?.transcriptionEngine(for: $0)
+                }
+            }
         )
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
         homeViewModel = HomeViewModel(
