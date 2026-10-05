@@ -217,7 +217,7 @@ Installed builds can switch channels in `Settings -> About` via the `Update Chan
 ## Quick Start
 
 1. Install TypeWhisper from Homebrew or the latest DMG.
-2. Open Settings and grant Microphone plus Accessibility access.
+2. Open Settings and grant Microphone plus Accessibility access (System Settings > Privacy & Security > Accessibility, named Device Control and Data Access on macOS 27 and later).
 3. Pick an engine and, if needed, download a local model.
 4. Trigger the global hotkey and complete your first dictation.
 
