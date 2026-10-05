@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import TypeWhisperPluginSDK
 import XCTest
@@ -521,7 +522,7 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
     }
 
-    func testMAITranscribeUploadsWavWithoutM4AAttempt() async throws {
+    func testMAITranscribeUploadsFlacWithoutM4AAttempt() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "vck_test"])
         let plugin = VercelAIGatewayPlugin()
         plugin.activate(host: host)
@@ -545,16 +546,55 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(requests.count, 1)
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "ai-model-id"), "microsoft/mai-transcribe-2")
         let body = try Self.jsonBody(from: requests[0])
-        XCTAssertEqual(body["mediaType"] as? String, "audio/wav")
+        XCTAssertEqual(body["mediaType"] as? String, "audio/flac")
         let encodedAudio = try XCTUnwrap(body["audio"] as? String)
-        XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
+        let flacData = try XCTUnwrap(Data(base64Encoded: encodedAudio))
+        XCTAssertEqual(try Self.decodedInt16Samples(from: flacData, fileExtension: "flac"), Self.int16Samples(audio.samples))
     }
 
-    func testOnlyMAITranscribeModelsRequireWavUpload() {
-        XCTAssertTrue(VercelAIGatewayPlugin.requiresWavUpload(modelId: "microsoft/mai-transcribe-2"))
-        XCTAssertTrue(VercelAIGatewayPlugin.requiresWavUpload(modelId: "microsoft/mai-transcribe-1.5"))
-        XCTAssertFalse(VercelAIGatewayPlugin.requiresWavUpload(modelId: "openai/whisper-1"))
-        XCTAssertFalse(VercelAIGatewayPlugin.requiresWavUpload(modelId: "google/gemini-3.5-transcribe"))
+    func testOnlyMAITranscribeModelsRequireLosslessUpload() {
+        XCTAssertTrue(VercelAIGatewayPlugin.requiresLosslessUpload(modelId: "microsoft/mai-transcribe-2"))
+        XCTAssertTrue(VercelAIGatewayPlugin.requiresLosslessUpload(modelId: "microsoft/mai-transcribe-1.5"))
+        XCTAssertFalse(VercelAIGatewayPlugin.requiresLosslessUpload(modelId: "openai/whisper-1"))
+        XCTAssertFalse(VercelAIGatewayPlugin.requiresLosslessUpload(modelId: "google/gemini-3.5-transcribe"))
+    }
+
+    func testFlacUploadIsLosslessSixteenBitAndSmallerThanWav() throws {
+        // Longer than one 30 s encoder chunk, with a speech-like varying signal.
+        let samples = (0..<(16_000 * 35)).map { index -> Float in
+            let time = Float(index) / 16_000
+            return 0.4 * sinf(2 * .pi * 220 * time) * (0.5 + 0.5 * sinf(2 * .pi * 3 * time))
+        }
+
+        let upload = try VercelAIGatewayPlugin.flacUpload(from: samples)
+
+        XCTAssertEqual(upload.contentType, "audio/flac")
+        XCTAssertEqual(upload.filename, "audio.flac")
+        XCTAssertEqual(upload.format, "flac")
+        XCTAssertEqual(upload.data.prefix(4), Data("fLaC".utf8))
+        XCTAssertLessThan(upload.data.count, PluginWavEncoder.encode(samples).count)
+        XCTAssertEqual(try Self.decodedInt16Samples(from: upload.data, fileExtension: "flac"), Self.int16Samples(samples))
+    }
+
+    func testFlacUploadRejectsEmptyAudio() {
+        XCTAssertThrowsError(try VercelAIGatewayPlugin.flacUpload(from: []))
+    }
+
+    func testTranscriptionRequestDoesNotEscapeSlashesInBase64Audio() throws {
+        let audioBytes = Data([0xFF, 0xFF, 0xFF])
+        XCTAssertEqual(audioBytes.base64EncodedString(), "////")
+
+        let request = try VercelAIGatewayPlugin.makeTranscriptionRequest(
+            uploadFile: PluginAudioUploadFile(data: audioBytes, filename: "audio.flac", contentType: "audio/flac", format: "flac"),
+            apiKey: "vck_test",
+            modelId: "microsoft/mai-transcribe-2",
+            language: nil,
+            timeout: 120
+        )
+
+        let bodyText = try XCTUnwrap(request.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+        XCTAssertTrue(bodyText.contains(#""audio":"////""#))
+        XCTAssertFalse(bodyText.contains(#"\/"#))
     }
 
     func testExplicitRequestErrorsDoNotTriggerWavRetry() async throws {
@@ -1024,6 +1064,25 @@ final class VercelAIGatewayPluginTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private static func int16Samples(_ samples: [Float]) -> [Int16] {
+        samples.map { Int16(max(-1.0, min(1.0, $0)) * 32767) }
+    }
+
+    private static func decodedInt16Samples(from data: Data, fileExtension: String) throws -> [Int16] {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vercel-upload-test-\(UUID().uuidString).\(fileExtension)")
+        try data.write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: false)
+        XCTAssertEqual(file.fileFormat.sampleRate, 16_000)
+        XCTAssertEqual(file.fileFormat.channelCount, 1)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.int16ChannelData?[0])
+        return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+    }
 
     private static func audio() -> AudioData {
         let samples = [Float](repeating: 0.1, count: 16_000)

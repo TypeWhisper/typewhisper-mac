@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
@@ -208,8 +209,9 @@ final class VercelAIGatewayPlugin: NSObject,
 
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
         let preferredUpload: PluginAudioUploadFile
-        if Self.requiresWavUpload(modelId: modelId) {
-            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
+        if Self.requiresLosslessUpload(modelId: modelId) {
+            preferredUpload = (try? Self.flacUpload(from: uploadAudio.samples))
+                ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
         } else {
             preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio))
                 ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
@@ -243,8 +245,74 @@ final class VercelAIGatewayPlugin: NSObject,
 
     /// MAI-Transcribe accepts only WAV, MP3 and FLAC. The gateway answers an M4A
     /// upload with a bare "Bad Request", so the format-rejection WAV retry never fires.
-    static func requiresWavUpload(modelId: String) -> Bool {
+    static func requiresLosslessUpload(modelId: String) -> Bool {
         modelId.lowercased().hasPrefix("microsoft/mai-transcribe")
+    }
+
+    /// FLAC is about half the size of WAV for speech. The gateway rejects request
+    /// bodies above roughly 100 MB with 413, so WAV caps MAI-Transcribe at about
+    /// 30 minutes per request while FLAC roughly doubles that.
+    static func flacUpload(from samples: [Float]) throws -> PluginAudioUploadFile {
+        guard !samples.isEmpty else {
+            throw PluginTranscriptionError.apiError("Cannot encode empty audio upload")
+        }
+
+        let sampleRate = Double(PluginAudioUploadEncoder.sampleRate)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("typewhisper-upload-\(UUID().uuidString).flac")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatFLAC,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: 1,
+        ]
+        // Writing Int16 buffers makes the encoder use a 16-bit source; Float32
+        // buffers produce 24-bit FLAC that is larger than the 16-bit WAV.
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: sampleRate,
+            channels: 1,
+            interleaved: false
+        ) else {
+            throw PluginTranscriptionError.apiError("Failed to create FLAC upload format")
+        }
+
+        do {
+            // The file is finalized when it goes out of scope, before it is read back.
+            let file = try AVAudioFile(
+                forWriting: url,
+                settings: settings,
+                commonFormat: .pcmFormatInt16,
+                interleaved: false
+            )
+
+            let chunkFrames = PluginAudioUploadEncoder.sampleRate * 30
+            var offset = 0
+            while offset < samples.count {
+                let count = min(chunkFrames, samples.count - offset)
+                guard let buffer = AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(count)
+                ), let channel = buffer.int16ChannelData?[0] else {
+                    throw PluginTranscriptionError.apiError("Failed to create FLAC upload buffer")
+                }
+                buffer.frameLength = AVAudioFrameCount(count)
+                for index in 0..<count {
+                    let clamped = max(-1.0, min(1.0, samples[offset + index]))
+                    channel[index] = Int16(clamped * 32767)
+                }
+                try file.write(from: buffer)
+                offset += count
+            }
+        }
+
+        return PluginAudioUploadFile(
+            data: try Data(contentsOf: url),
+            filename: "audio.flac",
+            contentType: "audio/flac",
+            format: "flac"
+        )
     }
 
     /// Builds the request for the gateway's AI SDK transcription protocol
@@ -277,7 +345,9 @@ final class VercelAIGatewayPlugin: NSObject,
         request.setValue("4", forHTTPHeaderField: "ai-transcription-model-specification-version")
         request.setValue(modelId, forHTTPHeaderField: "ai-model-id")
         request.timeoutInterval = timeout
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        // Base64 contains many "/" characters. Escaping each as "\/" adds about 14%
+        // to the body and pushes long recordings over the gateway's size limit.
+        request.httpBody = try JSONSerialization.data(withJSONObject: body, options: .withoutEscapingSlashes)
         return request
     }
 
