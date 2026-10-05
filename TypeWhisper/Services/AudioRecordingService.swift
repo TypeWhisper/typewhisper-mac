@@ -826,6 +826,29 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return true
     }
 
+    /// A recording must never share the capture path with an armed input of another route. If
+    /// the system default input changed since arming, the selected route is a cold start while
+    /// the previous input stays armed, and the global armed flag would send the recording's
+    /// audio into the pre-roll ring. Release the stale input and disarm before capture starts.
+    private func releaseArmedPrerollInputIfRouteMismatch(route: AudioInputCaptureRoute) {
+        let armedInput = engineLock.withLock { () -> MicrophonePrerollRouteConsistencyPolicy.ArmedInput? in
+            if let input = preparedBuiltInInput, input.isStreaming {
+                return .engine(defaultInputDeviceID: input.defaultInputDeviceID)
+            }
+            if let input = preparedUSBInput, input.isStreaming {
+                return .inputOnly(deviceID: input.deviceID)
+            }
+            return nil
+        }
+        guard MicrophonePrerollRouteConsistencyPolicy.shouldInvalidate(
+            armedInput: armedInput,
+            route: route,
+            currentEngineDeviceID: builtInInputPreparationDeviceID()
+        ) else { return }
+        logger.info("Armed mic pre-roll input does not match the recording route; releasing it before capture starts")
+        invalidatePreparedRecordingInputs(reason: "preroll-route-mismatch")
+    }
+
     /// Whether the user opted into the pre-roll and nothing currently keeps it released.
     private var isMicrophonePrerollActive: Bool {
         guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else {
@@ -1994,7 +2017,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        if case .inputOnlyDevice(let inputOnlyDeviceID) = effectiveCaptureRoute {
+        // Evaluate the route once: the system default can change at any time, and the armed
+        // input must match the route this recording actually uses.
+        let captureRoute = effectiveCaptureRoute
+        releaseArmedPrerollInputIfRouteMismatch(route: captureRoute)
+
+        if case .inputOnlyDevice(let inputOnlyDeviceID) = captureRoute {
             do {
                 if let preparedInput = claimPreparedUSBInputIfEligible(deviceID: inputOnlyDeviceID) {
                     do {
@@ -3252,7 +3280,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ samples: inout [Float],
         bluetoothInputGeneration: UInt64? = nil
     ) {
-        if isPrerollCaptureArmed {
+        // An active recording always owns its audio, whatever the armed state says.
+        if isPrerollCaptureArmed, !isRecordingActive {
             // Armed between dictations: the audio only fills the bounded ring. It does not
             // reach the recording, the recovery store, the level meter, or any consumer.
             prerollRing.append(samples)

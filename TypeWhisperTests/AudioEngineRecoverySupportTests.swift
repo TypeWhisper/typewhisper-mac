@@ -510,6 +510,53 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         )
     }
 
+    func testArmedBuiltInEngineMatchesOnlyTheSameAutomaticDefault() {
+        let armed = MicrophonePrerollRouteConsistencyPolicy.ArmedInput.engine(defaultInputDeviceID: 41)
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertTrue(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 41))
+        // The default moved to another built-in device or off the engine path entirely.
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 42))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .inputOnlyDevice(77), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: 41), currentEngineDeviceID: 41))
+    }
+
+    func testArmedInputOnlySessionMatchesOnlyItsOwnDevice() {
+        let armed = MicrophonePrerollRouteConsistencyPolicy.ArmedInput.inputOnly(deviceID: 77)
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertTrue(policy.armedInputMatches(armed, route: .inputOnlyDevice(77), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .inputOnlyDevice(78), currentEngineDeviceID: nil))
+        // The default switched to the built-in microphone: cold engine route.
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 41))
+    }
+
+    func testRouteMismatchInvalidatesOnlyAnExistingArmedInput() {
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertFalse(policy.shouldInvalidate(
+            armedInput: nil,
+            route: .avAudioEngine(preferredDeviceID: nil),
+            currentEngineDeviceID: 41
+        ))
+        XCTAssertFalse(policy.shouldInvalidate(
+            armedInput: .inputOnly(deviceID: 77),
+            route: .inputOnlyDevice(77),
+            currentEngineDeviceID: nil
+        ))
+        XCTAssertTrue(policy.shouldInvalidate(
+            armedInput: .inputOnly(deviceID: 77),
+            route: .avAudioEngine(preferredDeviceID: nil),
+            currentEngineDeviceID: 41
+        ))
+        XCTAssertTrue(policy.shouldInvalidate(
+            armedInput: .engine(defaultInputDeviceID: 41),
+            route: .inputOnlyDevice(77),
+            currentEngineDeviceID: nil
+        ))
+    }
+
     func testMicrophonePrerollSuspensionKeepsLockAcrossWake() {
         var suspension = MicrophonePrerollSuspension()
         XCTAssertFalse(suspension.isSuspended)

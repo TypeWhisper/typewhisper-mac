@@ -149,6 +149,46 @@ enum MicrophonePrerollRearmStoreFailurePolicy {
     }
 }
 
+/// Whether the armed pre-roll input still belongs to the route a recording is about to use.
+/// Automatic selection follows the system default, which can change between watchdog ticks:
+/// the recording then selects another route while the old input stays armed, and the global
+/// armed flag would route the new route's audio into the pre-roll ring instead of the recording.
+enum MicrophonePrerollRouteConsistencyPolicy {
+    enum ArmedInput: Equatable {
+        /// Built-in default input kept running through the engine path.
+        case engine(defaultInputDeviceID: AudioDeviceID)
+        /// Input-only HAL session for one device.
+        case inputOnly(deviceID: AudioDeviceID)
+    }
+
+    /// `currentEngineDeviceID` is the system default input that is currently eligible for the
+    /// engine pre-roll (nil when none is).
+    static func armedInputMatches(
+        _ armedInput: ArmedInput,
+        route: AudioInputCaptureRoute,
+        currentEngineDeviceID: AudioDeviceID?
+    ) -> Bool {
+        switch (armedInput, route) {
+        case (.engine(let armedID), .avAudioEngine(let preferredDeviceID)):
+            return preferredDeviceID == nil && currentEngineDeviceID == armedID
+        case (.inputOnly(let armedID), .inputOnlyDevice(let routeID)):
+            return armedID == routeID
+        default:
+            return false
+        }
+    }
+
+    /// True when a prepared streaming input exists and does not match the selected route.
+    static func shouldInvalidate(
+        armedInput: ArmedInput?,
+        route: AudioInputCaptureRoute,
+        currentEngineDeviceID: AudioDeviceID?
+    ) -> Bool {
+        guard let armedInput else { return false }
+        return !armedInputMatches(armedInput, route: route, currentEngineDeviceID: currentEngineDeviceID)
+    }
+}
+
 /// Freshness bookkeeping for the armed microphone pre-roll stream. The timestamp is the
 /// uptime of the last real converted buffer from the stream, whether it landed in the ring or
 /// in a recording. Re-arming after a recording never synthesizes freshness: a stream that
