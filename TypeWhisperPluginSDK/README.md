@@ -179,6 +179,30 @@ This protocol is optional. Legacy plugins that do not adopt it remain compatible
 `sdkCompatibilityVersion = "v1"` and automatically continue to use TypeWhisper's
 default 600-character fallback when building dictionary prompts.
 
+If your engine reports `.requiresPluginSetting` through
+`DictionaryTermsCapabilityProviding` and can turn that setting on by itself, adopt
+`DictionaryTermsSettingEnabling`. When a user adds a dictionary term while your
+engine is selected, TypeWhisper suggests the setting with an Enable button and
+offers the same action in the dictionary's engine overview:
+
+```swift
+extension MyTranscriptionEngine: DictionaryTermsSettingEnabling {
+    var dictionaryTermsSettingSummary: String {
+        String(localized: "My Engine recognizes your terms better with term boosting (about 50 MB download).")
+    }
+
+    func enableDictionaryTermsSetting() async throws {
+        setTermBoostingEnabled(true)         // dictionaryTermsSupport now returns .supported
+        host?.notifyCapabilitiesChanged()
+        try await downloadTermBoostingModel() // throw a localized error on failure
+    }
+}
+```
+
+`DictionaryTermsSettingEnabling` requires TypeWhisper 1.8.0 or later; declare
+`"minHostVersion": "1.8.0"` when you adopt it. Plugins without it keep working and
+TypeWhisper continues to show its static plugin-setting hint for them.
+
 ### LLMProviderPlugin
 
 Add an LLM for prompt processing (text transformation, summarization, etc.).

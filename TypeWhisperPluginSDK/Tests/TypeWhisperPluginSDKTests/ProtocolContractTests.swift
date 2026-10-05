@@ -254,6 +254,37 @@ private final class MockDictionaryTermsPlugin: NSObject, TranscriptionEnginePlug
     }
 }
 
+@objc(MockDictionaryTermsSettingPlugin)
+private final class MockDictionaryTermsSettingPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsSettingEnabling, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dictionary-terms-setting"
+    static let pluginName = "Mock Dictionary Terms Setting"
+
+    private(set) var isSettingEnabled = false
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-dictionary-terms-setting" }
+    var providerDisplayName: String { "Mock Dictionary Terms Setting" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { isSettingEnabled ? .supported : .requiresPluginSetting }
+    var dictionaryTermsSettingSummary: String { "Enable term support (about 1 MB download)." }
+
+    func enableDictionaryTermsSetting() async throws {
+        isSettingEnabled = true
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
 @objc(MockDictionaryBudgetPlugin)
 private final class MockDictionaryBudgetPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsBudgetProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.dictionary-budget"
@@ -801,6 +832,23 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertFalse(legacyPlugin is any DictionaryTermsCapabilityProviding)
         XCTAssertEqual(capabilityPlugin.dictionaryTermsSupport, .requiresPluginSetting)
+    }
+
+    func testDictionaryTermsSettingEnablingProtocolIsOptional() async throws {
+        let legacyPlugin = MockTranscriptionPlugin()
+        let capabilityOnlyPlugin = MockDictionaryTermsPlugin()
+        let enablingPlugin = MockDictionaryTermsSettingPlugin()
+
+        XCTAssertFalse(legacyPlugin is any DictionaryTermsSettingEnabling)
+        XCTAssertFalse(capabilityOnlyPlugin is any DictionaryTermsSettingEnabling)
+
+        let capability: any DictionaryTermsCapabilityProviding = enablingPlugin
+        let enabler = try XCTUnwrap(capability as? any DictionaryTermsSettingEnabling)
+        XCTAssertEqual(enabler.dictionaryTermsSupport, .requiresPluginSetting)
+        XCTAssertFalse(enabler.dictionaryTermsSettingSummary.isEmpty)
+
+        try await enabler.enableDictionaryTermsSetting()
+        XCTAssertEqual(enabler.dictionaryTermsSupport, .supported)
     }
 
     func testDictionaryTermsBudgetProtocolIsOptional() {

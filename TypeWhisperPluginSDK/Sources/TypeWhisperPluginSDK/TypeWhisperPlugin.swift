@@ -790,6 +790,22 @@ public protocol DictionaryTermsCapabilityProviding: TypeWhisperPlugin {
     var dictionaryTermsSupport: DictionaryTermsSupport { get }
 }
 
+/// Optional companion for engines that report `.requiresPluginSetting` and can turn
+/// that setting on themselves. TypeWhisper 1.8.0 and later offer the action next to
+/// the dictionary, so users do not have to find it in the plugin settings. Plugins
+/// adopting this protocol must declare `"minHostVersion": "1.8.0"` or later.
+public protocol DictionaryTermsSettingEnabling: DictionaryTermsCapabilityProviding {
+    /// Short localized sentence shown next to the Enable action. Mention any download
+    /// and its approximate size.
+    var dictionaryTermsSettingSummary: String { get }
+
+    /// Turns the setting on and finishes the preparation it needs, such as a model
+    /// download. Report `.supported` once the setting is on and call
+    /// `HostServices.notifyCapabilitiesChanged()`. Throw a localized error when
+    /// preparation fails; the host offers to try again.
+    func enableDictionaryTermsSetting() async throws
+}
+
 public protocol LiveTranscriptionSession: AnyObject, Sendable {
     func appendAudio(samples: [Float]) async throws
     func finish() async throws -> PluginTranscriptionResult
