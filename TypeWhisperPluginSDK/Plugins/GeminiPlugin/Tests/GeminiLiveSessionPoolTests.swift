@@ -118,7 +118,7 @@ final class GeminiLiveSessionPoolTests: XCTestCase {
         socket.enqueue(#"{"setupComplete":{}}"#)
         let session = try await connect.value
         // There is no idle deadline yet. The absolute connection age must still
-        // reserve recording time plus the default three-second finish budget.
+        // reserve recording time plus the default five-second finish limit.
         let claimed = await session.claim(onProgress: { _ in true }, onFinished: {})
         XCTAssertFalse(claimed)
         XCTAssertTrue(socket.isClosed)
