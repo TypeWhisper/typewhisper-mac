@@ -1960,6 +1960,9 @@ final class DictationViewModel: ObservableObject {
                     websiteResolvedBeforeRecording: resolveWebsiteBeforeRecording
                 )
             } catch is CancellationError {
+                if self.activeDictationSessionID == sessionID {
+                    self.restoreRecordingSideEffects()
+                }
                 logger.info("Recording preparation cancelled")
             } catch {
                 guard self.activeDictationSessionID == sessionID else { return }

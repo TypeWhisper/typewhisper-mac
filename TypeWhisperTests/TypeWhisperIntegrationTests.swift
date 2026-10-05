@@ -9726,6 +9726,55 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testRecordingStartupVolumeChangeIsRestoredOnExternalCancellation() async throws {
+        let originalDuckingEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled)
+        let originalSoundFeedback = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        let originalCancellation = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let audioStartEntered = expectation(description: "Recording startup changed output volume")
+        let audioStartGate = DispatchSemaphore(value: 0)
+        defer {
+            audioStartGate.signal()
+            TestSupport.remove(directory)
+            Self.restoreUserDefault(originalDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+            Self.restoreUserDefault(originalSoundFeedback, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+            Self.restoreUserDefault(originalCancellation, forKey: UserDefaultsKeys.cancellationBehavior)
+        }
+
+        let volume = IntegrationOutputVolumeController()
+        let ducking = AudioDuckingService(volumeController: volume)
+        let context = Self.makeDictationContext(appSupportDirectory: directory, audioDuckingService: ducking)
+        context.dictationViewModel.audioDuckingEnabled = true
+        context.dictationViewModel.soundFeedbackEnabled = false
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            volume.volume = 0
+            audioStartEntered.fulfill()
+            audioStartGate.wait()
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+        _ = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [audioStartEntered], timeout: 1)
+        context.audioRecordingService.cancelPendingRecordingStart()
+        XCTAssertEqual(volume.volume, 0)
+        XCTAssertTrue(volume.writes.isEmpty)
+        audioStartGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertEqual(volume.volume, 0.75, accuracy: 0.0001)
+        XCTAssertEqual(volume.writes, [0.75])
+
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.handleCancelHotkey()
+        await context.dictationViewModel.testingWaitForRecordingCleanup()
+        XCTAssertEqual(volume.writes, [0.75], "The cancelled startup must clear its saved snapshot")
+    }
+
+    @MainActor
     func testApiStartRecording_ducksAudioAfterStartSoundWhenInputIsReady() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
