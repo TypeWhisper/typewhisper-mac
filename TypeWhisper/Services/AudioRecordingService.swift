@@ -541,6 +541,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         var prerollMilliseconds: Double = 0
         var readinessSignalPending = false
     }
+    /// Samples at the head of `sampleBuffer` that were captured before the recording request
+    /// (the handed-off pre-roll). Guarded by `bufferLock`.
+    private var prerollHeadSampleCount = 0
     private var recordingRequestUptimeNanoseconds: UInt64?
     private var hasLoggedFirstConvertedSample = false
     private var lastAudioLevelPublishUptimeNanoseconds: UInt64 = 0
@@ -1494,7 +1497,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let heldMs = Double(heldSampleCount) / Self.targetSampleRate * 1000
         // Audio older than the request: the part of the ring that was captured before the press.
         let prerollMs = max(0, heldMs - requestAgeMs)
-        bufferLock.withLock { hasLoggedFirstConvertedSample = true }
+        bufferLock.withLock {
+            hasLoggedFirstConvertedSample = true
+            prerollHeadSampleCount = min(
+                sampleBuffer.count,
+                Int((prerollMs / 1000 * Self.targetSampleRate).rounded())
+            )
+        }
         prerollHandoffState.withLock { state in
             state.prerollMilliseconds = prerollMs
             state.readinessSignalPending = true
@@ -1623,6 +1632,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         return Double(sampleBuffer.count) / Self.targetSampleRate
+    }
+
+    /// Duration of audio captured since the recording was requested. Excludes the handed-off
+    /// pre-roll, so the short-speech stop grace still waits for audio from after the press.
+    private var postRequestBufferDuration: TimeInterval {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        return Double(max(0, sampleBuffer.count - prerollHeadSampleCount)) / Self.targetSampleRate
     }
 
     /// Build a mono tap format from a (possibly multi-channel) input format.
@@ -1835,6 +1852,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         if let startRecordingOverride {
             bufferLock.lock()
             sampleBuffer.removeAll()
+            prerollHeadSampleCount = 0
             _peakRawAudioLevel = 0
             bufferLock.unlock()
             do {
@@ -2011,7 +2029,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         setRecordingActive(false)
         if let inputCaptureSession = capture.inputCaptureSession {
-            let bufferedDuration = totalBufferDuration
+            let bufferedDuration = postRequestBufferDuration
             var graceApplied = false
 
             if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
@@ -2019,7 +2037,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 let deadline = Date().addingTimeInterval(maxExtraCapture)
                 graceApplied = true
 
-                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
                     try? await Task.sleep(for: .seconds(pollInterval))
                 }
             }
@@ -2059,7 +2077,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return []
         }
 
-        let bufferedDuration = totalBufferDuration
+        let bufferedDuration = postRequestBufferDuration
         var graceApplied = false
 
         if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
@@ -2067,7 +2085,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let deadline = Date().addingTimeInterval(maxExtraCapture)
             graceApplied = true
 
-            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
                 try? await Task.sleep(for: .seconds(pollInterval))
             }
         }
@@ -2852,6 +2870,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         bufferLock.lock()
         sampleBuffer.removeAll()
+        prerollHeadSampleCount = 0
         _peakRawAudioLevel = 0
         recordingRequestUptimeNanoseconds = requestUptimeNanoseconds
         hasLoggedFirstConvertedSample = false
@@ -3258,6 +3277,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         defer { bufferLock.unlock() }
         let samples = sampleBuffer
         sampleBuffer.removeAll()
+        prerollHeadSampleCount = 0
         return samples
     }
 
