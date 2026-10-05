@@ -1,5 +1,6 @@
 import Foundation
 import AudioToolbox
+import CoreGraphics
 import os
 
 enum AudioEngineRecoveryAction: Equatable {
@@ -292,6 +293,25 @@ struct MicrophonePrerollSuspension: Equatable {
         case .screenLock: isScreenLocked = false
         }
         return wasSuspended && !isSuspended
+    }
+}
+
+/// Reads whether the login session's screen is locked, so the microphone pre-roll does not
+/// arm at launch on a locked screen (the lock notifications only report later transitions).
+enum MicrophonePrerollScreenLockProbe {
+    static let lockedKey = "CGSSessionScreenIsLocked"
+
+    /// Fails open: a missing dictionary or key means "not locked".
+    static func isLocked(sessionDictionary: [String: Any]?) -> Bool {
+        guard let value = sessionDictionary?[lockedKey] else { return false }
+        if let flag = value as? Bool { return flag }
+        if let number = value as? NSNumber { return number.boolValue }
+        return false
+    }
+
+    static func currentlyLocked() -> Bool {
+        let dictionary = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return isLocked(sessionDictionary: dictionary)
     }
 }
 

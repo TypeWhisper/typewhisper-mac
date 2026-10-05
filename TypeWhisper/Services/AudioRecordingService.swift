@@ -604,7 +604,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
         defaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
         inputTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
-        recoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore()
+        recoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
+        isScreenLocked: () -> Bool = { AppConstants.isRunningTests ? false : MicrophonePrerollScreenLockProbe.currentlyLocked() }
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.inputActivationGuard = inputActivationGuard
@@ -618,6 +619,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         self.recoverableRecordingURLs = recoveryURLs
         self.recoverableRecordingURL = recoveryURLs.first
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
+        // The lock observers only report later transitions. Starting while the screen is
+        // already locked must not let launch-time preparation arm the microphone.
+        if isScreenLocked() {
+            prerollLifecycle.withLock { $0.suspension.suspend(for: .screenLock) }
+        }
     }
 
     var peakRawAudioLevel: Float {
@@ -4008,6 +4014,8 @@ extension AudioRecordingService {
     func testingCurrentAudioEngine() -> AVAudioEngine? {
         engineLock.withLock { audioEngine }
     }
+
+    var testingIsMicrophonePrerollActive: Bool { isMicrophonePrerollActive }
 
     func testingHasPreparedBluetoothInput() -> Bool {
         engineLock.withLock { preparedBluetoothInput != nil }

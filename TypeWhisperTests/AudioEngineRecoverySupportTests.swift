@@ -513,6 +513,16 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(tracker.end())
     }
 
+    func testScreenLockProbeReadsTheSessionDictionaryAndFailsOpen() {
+        let probe = MicrophonePrerollScreenLockProbe.self
+        XCTAssertTrue(probe.isLocked(sessionDictionary: [probe.lockedKey: true]))
+        XCTAssertTrue(probe.isLocked(sessionDictionary: [probe.lockedKey: NSNumber(value: 1)]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [probe.lockedKey: false]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [:]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: nil))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [probe.lockedKey: "yes"]))
+    }
+
     func testBluetoothReleaseStopDoesNotBlockOrReplayPreparation() {
         var tracker = RecordingStopTracker()
         tracker.begin(blocksPreparation: false)
@@ -3278,6 +3288,28 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         await service.testingWaitForScheduledRecordingInputPreparation()
 
         XCTAssertTrue(activation.activateCalls.isEmpty)
+    }
+
+    func testPrerollStaysSuspendedWhenLaunchedOnALockedScreen() {
+        let preferenceKey = UserDefaultsKeys.microphonePrerollEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let unlocked = AudioRecordingService(isScreenLocked: { false })
+        XCTAssertTrue(unlocked.testingIsMicrophonePrerollActive)
+
+        let locked = AudioRecordingService(isScreenLocked: { true })
+        XCTAssertFalse(locked.testingIsMicrophonePrerollActive)
+
+        locked.resumeMicrophonePreroll()
+        XCTAssertTrue(locked.testingIsMicrophonePrerollActive)
     }
 
     func testBluetoothStopReleaseWaitsForInFlightPreparationCleanup() async {
