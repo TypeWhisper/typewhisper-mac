@@ -531,7 +531,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var isPrerollCaptureArmed = false
     /// Lock-protected mirror of `isPrerollCaptureArmed` for callers off `processingQueue`.
     private let prerollArmedMirror = OSAllocatedUnfairLock(initialState: false)
+    /// Uptime of the newest buffer the armed stream delivered; 0 until it delivered one.
     private let prerollLastBufferUptime = OSAllocatedUnfairLock(initialState: UInt64(0))
+    /// Uptime at which the stream was armed; the watchdog measures a never-started stream from here.
+    private let prerollArmedUptime = OSAllocatedUnfairLock(initialState: UInt64(0))
     private let prerollLifecycle = OSAllocatedUnfairLock(initialState: PrerollLifecycleState())
     private let prerollHandoffState = OSAllocatedUnfairLock(initialState: PrerollHandoffState())
     private struct PrerollHandoffState {
@@ -1308,14 +1311,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Routes converted samples to the pre-roll ring (armed) or to the recording (not armed).
     /// Runs the switch on `processingQueue` so it is ordered against sample delivery: every
     /// slice queued before this call belongs to the previous state, every later one to the new.
-    private func setPrerollCaptureArmed(_ armed: Bool) {
+    ///
+    /// The last-buffer timestamp stays unset until the stream delivers a buffer, so a recording
+    /// that claims a stream which never produced audio falls back to the cold start. Pass
+    /// `streamKnownLive` only when the stream was delivering audio an instant ago (re-arming
+    /// after a recording that used it).
+    private func setPrerollCaptureArmed(_ armed: Bool, streamKnownLive: Bool = false) {
         processingQueue.sync {
             prerollRing.reset()
             isPrerollCaptureArmed = armed
             prerollArmedMirror.withLock { $0 = armed }
-            if armed {
-                prerollLastBufferUptime.withLock { $0 = DispatchTime.now().uptimeNanoseconds }
-            }
+            let now = DispatchTime.now().uptimeNanoseconds
+            prerollArmedUptime.withLock { $0 = armed ? now : 0 }
+            prerollLastBufferUptime.withLock { $0 = armed && streamKnownLive ? now : 0 }
         }
     }
 
@@ -1341,6 +1349,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// True when the armed stream delivered audio recently enough to trust it for a recording.
     private func armedStreamIsFresh(within interval: TimeInterval) -> Bool {
         let last = prerollLastBufferUptime.withLock { $0 }
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard last != 0, now >= last else { return false }
+        return Double(now - last) / 1_000_000_000 <= interval
+    }
+
+    /// Watchdog variant of `armedStreamIsFresh`: a stream that has not delivered its first
+    /// buffer yet counts as active until it has been armed for `interval`.
+    private func armedStreamIsActive(within interval: TimeInterval) -> Bool {
+        let last = max(prerollLastBufferUptime.withLock { $0 }, prerollArmedUptime.withLock { $0 })
         let now = DispatchTime.now().uptimeNanoseconds
         guard last != 0, now >= last else { return false }
         return Double(now - last) / 1_000_000_000 <= interval
@@ -1408,7 +1425,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             stopPrerollWatchdog()
             return
         }
-        guard !armedStreamIsFresh(within: Self.prerollStallThreshold) else { return }
+        guard !armedStreamIsActive(within: Self.prerollStallThreshold) else { return }
         handlePrerollStreamFailure(reason: "stalled")
     }
 
@@ -1517,7 +1534,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         let format = engine.inputNode.outputFormat(forBus: 0)
         // Everything delivered before this point belongs to the recording that just stopped.
-        setPrerollCaptureArmed(true)
+        setPrerollCaptureArmed(true, streamKnownLive: true)
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
@@ -1547,7 +1564,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         guard let deviceID = prerollInputOnlyDeviceID(), sessionDeviceID == deviceID else {
             return false
         }
-        setPrerollCaptureArmed(true)
+        setPrerollCaptureArmed(true, streamKnownLive: true)
         let stored = engineLock.withLock { () -> Bool in
             guard preparedInputGeneration == preparationGeneration,
                   audioEngine == nil,
