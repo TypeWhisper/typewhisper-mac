@@ -1365,7 +1365,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         finishTimeout: Duration = .seconds(3),
         maximumFinishTime: Duration = .seconds(5),
         completionSettleTime: Duration = .milliseconds(200),
-        speechResumeGrace: Duration = .milliseconds(500),
+        speechResumeGrace: Duration = .milliseconds(800),
         now: @Sendable @escaping () -> ContinuousClock.Instant = { .now },
         onProgress: (@Sendable (String) -> Bool)? = nil
     ) async throws -> GeminiLiveTranscriptionSession {
@@ -1607,7 +1607,9 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     // A real microphone keeps sending room noise after a completed turn, which
     // the audio revision check above never credits. Gemini's VAD still reports
     // that no speech followed. The grace after audioStreamEnd lets speech that
-    // resumed just before release report ACTIVITY_START first.
+    // resumed just before release report ACTIVITY_START first. Gemini's flush
+    // after audioStreamEnd arrived 0.22-0.47 s after release in live tests, so
+    // the default leaves margin for a late start.
     private var hasSettledServerTurn: Bool {
         guard serverSpeechEnded, serverTurnHasFinalTranscript, let serverTurnCompletedAt, let endSignalSentAt,
               now() >= endSignalSentAt.advanced(by: speechResumeGrace) else { return false }
