@@ -252,6 +252,10 @@ class AudioDuckingService {
         }
 
         let baseline = savedSnapshot ?? current
+        guard baseline.deviceID == current.deviceID else {
+            logger.info("Skipping audio ducking because the output device changed")
+            return
+        }
         savedSnapshot = baseline
         let targetVolume = max(0, min(1, baseline.volume * factor))
         guard volumeController.setVolume(targetVolume, for: current.deviceID) else {
@@ -267,8 +271,7 @@ class AudioDuckingService {
     func restoreAudio() {
         guard let savedSnapshot else { return }
 
-        let restoreDeviceID = volumeController.defaultOutputSnapshot()?.deviceID ?? savedSnapshot.deviceID
-        if volumeController.setVolume(savedSnapshot.volume, for: restoreDeviceID) {
+        if volumeController.setVolume(savedSnapshot.volume, for: savedSnapshot.deviceID) {
             logger.info("Audio restored to \(savedSnapshot.volume, privacy: .public)")
         } else {
             logger.warning("Could not restore audio output volume")
