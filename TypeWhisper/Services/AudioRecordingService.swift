@@ -2190,9 +2190,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         // From here until the stop has finished (grace wait, re-arm, finalization) input
         // preparation stays blocked: the recording is inactive and its engine detached, but a
         // second armed stream would collide with the re-arm below.
-        recordingStopTracker.withLock { $0.begin() }
+        // A Bluetooth release stop re-arms nothing and cancels in-flight preparation itself
+        // (see below), so it does not block preparation and never replays a rejected one.
+        let stopBlocksPreparation = bluetoothBehavior != .release
+        recordingStopTracker.withLock { $0.begin(blocksPreparation: stopBlocksPreparation) }
         defer {
-            if recordingStopTracker.withLock({ $0.end() }) {
+            if recordingStopTracker.withLock({ $0.end(blocksPreparation: stopBlocksPreparation) }) {
                 scheduleRecordingInputPreparationRejectedDuringStop()
             }
         }

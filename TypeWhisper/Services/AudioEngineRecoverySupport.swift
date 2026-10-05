@@ -122,25 +122,33 @@ struct MicrophonePrerollRearmPolicy: Equatable {
 /// stream) stays blocked until every stop has finished. A counter keeps overlapping stops
 /// from releasing each other.
 ///
+/// A Bluetooth release stop does not block preparation: it re-arms nothing, invalidates any
+/// in-flight preparation itself and waits for its cleanup, so a preparation that overlaps it
+/// is cancelled and cleaned up rather than colliding with a re-arm. Such a stop must not
+/// re-arm the input afterwards either, which is why it never leaves a rejected request behind.
+///
 /// A preparation request that the stop gate rejects is remembered, because nothing else
 /// retries it (for example a preference change while a stop drains, or a Bluetooth release
 /// stop that schedules no follow-up). The last stop to finish reports it so the caller can
 /// run the preparation once; the flag clears when a preparation pass runs with the gate open.
 struct RecordingStopTracker: Equatable {
     private var activeStops = 0
+    private var blockingStops = 0
     private(set) var hasRejectedPreparation = false
 
-    var isStopping: Bool { activeStops > 0 }
+    var isStopping: Bool { blockingStops > 0 }
 
-    mutating func begin() {
+    mutating func begin(blocksPreparation: Bool = true) {
         activeStops += 1
+        if blocksPreparation { blockingStops += 1 }
     }
 
     /// Returns true when this ended the last stop while a preparation request was rejected
     /// in the meantime, so the caller should run the preparation once.
     @discardableResult
-    mutating func end() -> Bool {
+    mutating func end(blocksPreparation: Bool = true) -> Bool {
         activeStops = max(0, activeStops - 1)
+        if blocksPreparation { blockingStops = max(0, blockingStops - 1) }
         return activeStops == 0 && hasRejectedPreparation
     }
 

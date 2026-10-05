@@ -513,6 +513,26 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(tracker.end())
     }
 
+    func testBluetoothReleaseStopDoesNotBlockOrReplayPreparation() {
+        var tracker = RecordingStopTracker()
+        tracker.begin(blocksPreparation: false)
+
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+        XCTAssertFalse(tracker.end(blocksPreparation: false))
+    }
+
+    func testBluetoothReleaseStopOverlappingABlockingStopKeepsTheGateClosed() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin(blocksPreparation: false)
+
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.end(), "the release stop is still draining")
+        XCTAssertTrue(tracker.end(blocksPreparation: false))
+    }
+
     func testStopWithoutRejectedPreparationReportsNothing() {
         var tracker = RecordingStopTracker()
         tracker.begin()
