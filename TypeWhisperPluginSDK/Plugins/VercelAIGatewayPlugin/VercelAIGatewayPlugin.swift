@@ -207,8 +207,13 @@ final class VercelAIGatewayPlugin: NSObject,
         }
 
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
-        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
+        let preferredUpload: PluginAudioUploadFile
+        if Self.requiresWavUpload(modelId: modelId) {
+            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
+        } else {
+            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio))
+                ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
+        }
         var request = try Self.makeTranscriptionRequest(
             uploadFile: preferredUpload,
             apiKey: apiKey,
@@ -234,6 +239,12 @@ final class VercelAIGatewayPlugin: NSObject,
         }
         try Self.validateTranscriptionResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(data)
+    }
+
+    /// MAI-Transcribe accepts only WAV, MP3 and FLAC. The gateway answers an M4A
+    /// upload with a bare "Bad Request", so the format-rejection WAV retry never fires.
+    static func requiresWavUpload(modelId: String) -> Bool {
+        modelId.lowercased().hasPrefix("microsoft/mai-transcribe")
     }
 
     /// Builds the request for the gateway's AI SDK transcription protocol

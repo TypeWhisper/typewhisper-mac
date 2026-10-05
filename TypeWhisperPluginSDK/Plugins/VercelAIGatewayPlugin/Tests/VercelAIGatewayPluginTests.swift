@@ -521,6 +521,42 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
     }
 
+    func testMAITranscribeUploadsWavWithoutM4AAttempt() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "vck_test"])
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("microsoft/mai-transcribe-2")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"mai transcript","segments":[],"language":"en","durationInSeconds":1,"warnings":[]}"#.utf8),
+                    Self.httpResponse(url: "https://ai-gateway.vercel.sh/v4/ai/transcription-model", statusCode: 200)
+                ),
+            ])
+        }
+
+        let audio = Self.audio()
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "mai transcript")
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].value(forHTTPHeaderField: "ai-model-id"), "microsoft/mai-transcribe-2")
+        let body = try Self.jsonBody(from: requests[0])
+        XCTAssertEqual(body["mediaType"] as? String, "audio/wav")
+        let encodedAudio = try XCTUnwrap(body["audio"] as? String)
+        XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
+    }
+
+    func testOnlyMAITranscribeModelsRequireWavUpload() {
+        XCTAssertTrue(VercelAIGatewayPlugin.requiresWavUpload(modelId: "microsoft/mai-transcribe-2"))
+        XCTAssertTrue(VercelAIGatewayPlugin.requiresWavUpload(modelId: "microsoft/mai-transcribe-1.5"))
+        XCTAssertFalse(VercelAIGatewayPlugin.requiresWavUpload(modelId: "openai/whisper-1"))
+        XCTAssertFalse(VercelAIGatewayPlugin.requiresWavUpload(modelId: "google/gemini-3.5-transcribe"))
+    }
+
     func testExplicitRequestErrorsDoNotTriggerWavRetry() async throws {
         for (status, message) in [(400, "Model not found"), (401, "Invalid API key"), (402, "Insufficient credits"), (429, "Rate limited")] {
             PluginHTTPClientTestHarness.reset()
