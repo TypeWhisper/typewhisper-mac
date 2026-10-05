@@ -282,6 +282,56 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertLessThan(start.duration(to: .now), .seconds(1))
     }
 
+    func testInterruptedTurnCompleteDoesNotSettleResumedSpeech() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = { message in
+            guard isGeminiEndMessage(message) else { return }
+            socket.enqueue(activity("ACTIVITY_START"))
+            socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"second"}}}"#)
+            // The turnComplete after interrupted closes the earlier turn, not the resumed speech.
+            socket.enqueue(#"{"serverContent":{"interrupted":true}}"#)
+            socket.enqueue(#"{"serverContent":{"turnComplete":true}}"#)
+            socket.enqueue(activity("ACTIVITY_END"))
+            Task {
+                try await Task.sleep(for: .milliseconds(300))
+                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"turn"},"generationComplete":true}}"#)
+            }
+        }
+
+        let result = try await finishWithWatchdog(session)
+
+        XCTAssertEqual(result.text, "First second turn")
+    }
+
+    func testServerTurnWaitsForCurrentTurnFinalTranscript() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = { message in
+            guard isGeminiEndMessage(message) else { return }
+            socket.enqueue(activity("ACTIVITY_START"))
+            socket.enqueue(#"{"serverContent":{"generationComplete":true}}"#)
+            socket.enqueue(activity("ACTIVITY_END"))
+            // Input transcription has no guaranteed order relative to completion.
+            Task {
+                try await Task.sleep(for: .milliseconds(300))
+                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"second"}}}"#)
+            }
+        }
+
+        let result = try await finishWithWatchdog(session)
+
+        XCTAssertEqual(result.text, "First second")
+    }
+
     func testServerTurnEndWaitsForSpeechResumeGrace() async throws {
         let clock = GeminiTestClock()
         let socket = GeminiTestWebSocket()

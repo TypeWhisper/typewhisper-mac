@@ -1320,11 +1320,16 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var completionAudioRevision: Int?
     private var completionReceivedAt: ContinuousClock.Instant?
     private var lastTranscriptAt: ContinuousClock.Instant?
-    // Gemini's server VAD reports ACTIVITY_START and ACTIVITY_END. A completion
-    // after the latest start, followed by an end, covers everything the server
-    // heard as speech, even when the microphone keeps sending room noise.
+    // Gemini's server VAD reports ACTIVITY_START and ACTIVITY_END. A final
+    // transcript and a completion after the latest start, followed by an end,
+    // cover everything the server heard as speech, even when the microphone
+    // keeps sending room noise.
     private var serverSpeechEnded = false
     private var serverTurnCompletedAt: ContinuousClock.Instant?
+    private var serverTurnHasFinalTranscript = false
+    // An interrupted turn ends with interrupted, then turnComplete. That
+    // turnComplete belongs to the earlier turn, not to the resumed speech.
+    private var awaitingInterruptedTurnComplete = false
     private var latestError: String?
     private var socketClosed = false
     private var serverClosing = false
@@ -1604,7 +1609,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     // that no speech followed. The grace after audioStreamEnd lets speech that
     // resumed just before release report ACTIVITY_START first.
     private var hasSettledServerTurn: Bool {
-        guard serverSpeechEnded, let serverTurnCompletedAt, let endSignalSentAt,
+        guard serverSpeechEnded, serverTurnHasFinalTranscript, let serverTurnCompletedAt, let endSignalSentAt,
               now() >= endSignalSentAt.advanced(by: speechResumeGrace) else { return false }
         return isSettled(after: serverTurnCompletedAt)
     }
@@ -1674,6 +1679,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         case "ACTIVITY_START":
             serverSpeechEnded = false
             serverTurnCompletedAt = nil
+            serverTurnHasFinalTranscript = false
         case "ACTIVITY_END":
             serverSpeechEnded = true
         default:
@@ -1690,8 +1696,20 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             && (lastNonSilentAudioSentAt.map {
                 receivedAt >= $0.advanced(by: Self.completionAttributionDelay)
             } ?? true)
+        if content.inputTranscription?.text?.contains(where: { !$0.isWhitespace }) == true {
+            serverTurnHasFinalTranscript = true
+        }
+        if content.interrupted == true { awaitingInterruptedTurnComplete = true }
+        var completesServerTurn = content.generationComplete == true
+        if content.turnComplete == true {
+            if awaitingInterruptedTurnComplete {
+                awaitingInterruptedTurnComplete = false
+            } else {
+                completesServerTurn = true
+            }
+        }
+        if completesServerTurn { serverTurnCompletedAt = receivedAt }
         let isCompletion = content.generationComplete == true || content.turnComplete == true
-        if isCompletion { serverTurnCompletedAt = receivedAt }
         if isCompletion, canAttributeCompletion {
             completionAudioRevision = lastNonSilentAudioRevision
             completionReceivedAt = receivedAt
@@ -1853,6 +1871,7 @@ private struct GeminiLiveResponse: Decodable, Sendable {
         let interimInputTranscription: Transcription?
         let inputTranscription: Transcription?
         let turnComplete: Bool?
+        let interrupted: Bool?
         let generationComplete: Bool?
     }
 
