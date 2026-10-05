@@ -1332,9 +1332,11 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     // that started since.
     private var serverTurnStarted = false
     private var previousTurnFinalPending = false
-    // An interrupted turn ends with interrupted, then turnComplete. That
-    // turnComplete belongs to the earlier turn, not to the resumed speech.
+    // An interrupted turn ends with interrupted, then turnComplete, and a
+    // generationComplete may be followed by a delayed turnComplete. Either
+    // turnComplete belongs to the earlier turn, not to resumed speech.
     private var awaitingInterruptedTurnComplete = false
+    private var awaitingTurnCompleteAfterGeneration = false
     private var latestError: String?
     private var socketClosed = false
     private var serverClosing = false
@@ -1717,9 +1719,14 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         if content.turnComplete == true {
             if awaitingInterruptedTurnComplete {
                 awaitingInterruptedTurnComplete = false
+            } else if awaitingTurnCompleteAfterGeneration {
+                awaitingTurnCompleteAfterGeneration = false
             } else {
                 isCompletion = true
             }
+        }
+        if content.generationComplete == true, content.turnComplete != true {
+            awaitingTurnCompleteAfterGeneration = true
         }
         if isCompletion { serverTurnCompletedAt = receivedAt }
         if isCompletion, canAttributeCompletion {
@@ -1877,6 +1884,18 @@ private struct GeminiLiveResponse: Decodable, Sendable {
 
     struct VoiceActivity: Decodable, Sendable {
         let type: String?
+
+        // Live responses use type; the published SDK types name it voiceActivityType.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            type = try container.decodeIfPresent(String.self, forKey: .type)
+                ?? container.decodeIfPresent(String.self, forKey: .voiceActivityType)
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case type
+            case voiceActivityType
+        }
     }
 
     struct ServerContent: Decodable, Sendable {

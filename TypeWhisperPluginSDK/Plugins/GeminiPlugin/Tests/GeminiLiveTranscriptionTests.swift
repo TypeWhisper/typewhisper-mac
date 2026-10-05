@@ -375,6 +375,46 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertEqual(result.text, "First second")
     }
 
+    func testDelayedTurnCompleteOfPreviousGenerationDoesNotSettleResumedTurn() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"},"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = { message in
+            guard isGeminiEndMessage(message) else { return }
+            socket.enqueue(activity("ACTIVITY_START"))
+            socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"second"}}}"#)
+            // This turnComplete closes the first generation, not the resumed turn.
+            socket.enqueue(#"{"serverContent":{"turnComplete":true}}"#)
+            socket.enqueue(activity("ACTIVITY_END"))
+            Task {
+                try await Task.sleep(for: .milliseconds(300))
+                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"turn"},"generationComplete":true}}"#)
+            }
+        }
+
+        let result = try await finishWithWatchdog(session)
+
+        XCTAssertEqual(result.text, "First second turn")
+    }
+
+    func testVoiceActivityTypeKeyIsDecoded() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket)
+        try await session.handle(.string(#"{"voiceActivity":{"voiceActivityType":"ACTIVITY_START"}}"#))
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Done"},"generationComplete":true}}"#))
+        try await session.handle(.string(#"{"voiceActivity":{"voiceActivityType":"ACTIVITY_END"}}"#))
+        try await session.appendAudio(samples: [Float](repeating: 0.001, count: 1_600))
+
+        let start = ContinuousClock.now
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "Done")
+        XCTAssertLessThan(start.duration(to: .now), .milliseconds(300))
+    }
+
     func testServerTurnEndWaitsForSpeechResumeGrace() async throws {
         let clock = GeminiTestClock()
         let socket = GeminiTestWebSocket()
