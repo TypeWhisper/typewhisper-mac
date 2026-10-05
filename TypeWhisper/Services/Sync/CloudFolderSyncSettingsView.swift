@@ -711,7 +711,14 @@ final class CloudFolderSyncController: ObservableObject {
     private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
     private let automaticICloudBridge: any PremiumICloudBridging
-    private let automaticICloudAvailable: Bool
+    private let automaticICloudAvailableOverride: Bool?
+    private var automaticICloudAvailable: Bool {
+        automaticICloudAvailableOverride
+            ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
+    }
+    #if APPSTORE
+    private var ubiquityIdentityObserver: NSObjectProtocol?
+    #endif
     private let historyService: HistoryService?
     let historySyncPreferences: HistorySyncPreferences?
     private var customState: CloudFolderSyncState
@@ -787,7 +794,8 @@ final class CloudFolderSyncController: ObservableObject {
         self.historySyncPreferences = historySyncPreferences
         self.defaults = defaults
         self.automaticICloudBridge = automaticICloudBridge
-        self.automaticICloudAvailable = automaticICloudAvailable
+        self.automaticICloudAvailableOverride = automaticICloudAvailable
+        let isAutomaticICloudAvailable = automaticICloudAvailable
             ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
         self.automaticState = Self.loadState(from: defaults, key: Keys.automaticSyncState)
@@ -795,13 +803,23 @@ final class CloudFolderSyncController: ObservableObject {
         let requestedMode = AppConstants.isPremiumSyncSmokeTest
             ? PremiumSyncMode.automaticICloud
             : storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
-        self.mode = requestedMode == .automaticICloud && !self.automaticICloudAvailable ? .off : requestedMode
+        self.mode = requestedMode == .automaticICloud && !isAutomaticICloudAvailable ? .off : requestedMode
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
         if mode == .automaticICloud { provider = .iCloudDrive }
         installLocalChangeObserver()
         updateICloudObservation()
+        #if APPSTORE
+        // Offer automatic iCloud once the user signs in to iCloud while TypeWhisper runs.
+        ubiquityIdentityObserver = NotificationCenter.default.addObserver(
+            forName: .NSUbiquityIdentityDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.objectWillChange.send() }
+        }
+        #endif
         // Entitlement refreshes republish unchanged values; only gaining access starts a sync.
         #if APPSTORE
         let premiumAccess = AppStorePremiumService.shared?.$hasPremiumAccess.eraseToAnyPublisher()

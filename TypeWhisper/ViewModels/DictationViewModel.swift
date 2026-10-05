@@ -796,7 +796,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func loadLiveFieldTranscriptEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool ?? false
+        #if APPSTORE
+        // Needs Accessibility access to the target field, which the sandbox does
+        // not allow; a value restored from a backup must not turn it on.
+        return false
+        #else
+        return defaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool ?? false
+        #endif
     }
 
     nonisolated static func persistLiveFieldTranscriptEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {

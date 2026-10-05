@@ -8,7 +8,11 @@ import Foundation
 /// iCloud entitlements. The App Store app holds the iCloud container itself, so
 /// it runs the same mirror in process.
 final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
-    let isAvailable: Bool
+    /// Re-evaluated on every access: the user can sign in to iCloud or turn on
+    /// iCloud Drive while TypeWhisper runs.
+    var isAvailable: Bool {
+        localFolderURL != nil && fileManager.ubiquityIdentityToken != nil
+    }
     let localFolderURL: URL?
 
     private let containerIdentifier: String
@@ -24,9 +28,6 @@ final class AppStoreICloudMirror: PremiumICloudBridging, @unchecked Sendable {
             bundle: bundle,
             fileManager: fileManager
         )
-        // nil when the user is signed out of iCloud or the build lacks the
-        // iCloud entitlements (local development builds).
-        isAvailable = localFolderURL != nil && fileManager.ubiquityIdentityToken != nil
     }
 
     func synchronize() async throws {

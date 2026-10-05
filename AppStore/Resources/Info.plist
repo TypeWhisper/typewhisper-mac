@@ -41,7 +41,7 @@
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
+	<string>TypeWhisper needs microphone access for speech-to-text transcription.</string>
 	<key>NSServices</key>
 	<array>
 		<dict>

@@ -97,7 +97,9 @@ these secrets in the `app-store` environment:
 
 Both the workflow and `scripts/appstore/testflight-local.sh` create
 `MAC_APP_STORE` profiles for the app, the widget and the Finder action with
-`scripts/appstore/create_app_store_profile.rb`.
+`scripts/appstore/create_app_store_profile.rb`. Active profiles are reused;
+recreate them only after capability changes (`recreate_profiles` input or
+`--recreate-profiles`), because recreating revokes them for every other signer.
 
 ## Plugins
 

@@ -1,9 +1,9 @@
 #!/bin/bash
 # Archives, signs, audits and exports the Mac App Store edition on this Mac and
 # optionally uploads it to App Store Connect (TestFlight). Mirrors
-# .github/workflows/testflight.yml with the local login keychain.
+# .github/workflows/appstore-testflight.yml with the local login keychain.
 #
-# Usage: scripts/appstore/testflight-local.sh [--upload] [--build-number N]
+# Usage: scripts/appstore/testflight-local.sh [--upload] [--build-number N] [--recreate-profiles]
 #
 # Requirements:
 #   - "Apple Distribution" and "3rd Party Mac Developer Installer" (or "Mac
@@ -22,13 +22,15 @@ team_id="2D8ALY3LCL"
 apple_id="6759319267"
 bundle_id="com.typewhisper.typewhisper-app"
 upload=false
+recreate_profiles=
 build_number="$(( $(date +%s) / 60 ))"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --upload) upload=true; shift ;;
+        --recreate-profiles) recreate_profiles=1; shift ;;
         --build-number) [[ $# -ge 2 ]] || exit 1; build_number="$2"; shift 2 ;;
-        *) echo "Usage: $0 [--upload] [--build-number N]" >&2; exit 1 ;;
+        *) echo "Usage: $0 [--upload] [--build-number N] [--recreate-profiles]" >&2; exit 1 ;;
     esac
 done
 
@@ -82,7 +84,7 @@ profile_name_for() {
     BUNDLE_IDENTIFIER="$identifier" \
     PROFILE_NAME="TypeWhisper Mac AppStore ${certificate_serial: -8} $label" \
     PROFILE_TYPE=MAC_APP_STORE \
-    RECREATE_PROFILE=1 \
+    RECREATE_PROFILE="$recreate_profiles" \
     OUTPUT_PATH="$output" \
         ruby "$repo_root/scripts/appstore/create_app_store_profile.rb" >&2
     security cms -D -i "$output" > "$work_dir/$label.plist"

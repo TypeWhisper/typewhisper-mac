@@ -301,6 +301,10 @@ final class AppStorePremiumService: ObservableObject {
         // Before StoreKit has answered, the cached access stays in place.
         guard hasLoadedEntitlements else { return }
 
+        // isActive compares the expiration with the current time, so a lapsed
+        // account subscription is noticed when the expiration check fires.
+        accountHasPremium = premiumAccountService.hasPremiumEntitlement
+
         let access = AppStorePremiumPolicy.hasPremiumAccess(
             storeKitEntitlement: storeKitEntitlement,
             hasAccountEntitlement: accountHasPremium

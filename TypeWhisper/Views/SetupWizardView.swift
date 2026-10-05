@@ -675,10 +675,16 @@ struct SetupWizardView: View {
         "\(title). \(description) \(localizedAppText("Shortcut", de: "Shortcut")): \(label)."
     }
 
-    /// The selected mode always offers a recorder, so the recommended or an
-    /// existing shortcut can be replaced right here.
     private func shouldShowRecorder(for mode: HotkeySlotType) -> Bool {
-        mode == selectedHotkeyMode
+        if mode != selectedHotkeyMode { return false }
+        #if APPSTORE
+        // The selected mode always offers a recorder, so the recommended or an
+        // existing shortcut can be replaced right here.
+        return true
+        #else
+        if !dictation.hotkeys(for: mode).isEmpty { return false }
+        return mode != .hybrid || !recommendedHotkeyResolution.shouldApply
+        #endif
     }
 
     private func hotkeyRecorder(for mode: HotkeySlotType) -> some View {

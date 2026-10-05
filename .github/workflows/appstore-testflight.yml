@@ -21,6 +21,11 @@ on:
         required: true
         default: false
         type: boolean
+      recreate_profiles:
+        description: Recreate the provisioning profiles (only after capability changes)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -158,7 +163,9 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
           PROFILE_TYPE: MAC_APP_STORE
-          RECREATE_PROFILE: "1"
+          # Existing active profiles are reused; recreating revokes them for
+          # every other signer, so it only happens on request.
+          RECREATE_PROFILE: ${{ inputs.recreate_profiles && '1' || '' }}
         run: |
           profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
           mkdir -p "$profiles_dir"

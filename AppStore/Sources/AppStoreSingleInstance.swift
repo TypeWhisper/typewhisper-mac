@@ -14,6 +14,10 @@ enum AppStoreSingleInstance {
         UserDefaults.standard.set(Date(), forKey: relaunchRequestedKey)
     }
 
+    static func clearRelaunchMark() {
+        UserDefaults.standard.removeObject(forKey: relaunchRequestedKey)
+    }
+
     private static func consumeRelaunchMark() -> Bool {
         let defaults = UserDefaults.standard
         guard let requestedAt = defaults.object(forKey: relaunchRequestedKey) as? Date else { return false }
@@ -36,7 +40,8 @@ enum AppStoreSingleInstance {
             while !otherInstances().isEmpty, Date() < deadline {
                 Thread.sleep(forTimeInterval: 0.1)
             }
-            return
+            // The old instance did not quit; keep it rather than running two.
+            guard !otherInstances().isEmpty else { return }
         }
 
         otherInstances().first?.activate()
