@@ -3370,6 +3370,86 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertNotEqual(service.testingPreparedInputGeneration(), generation)
     }
 
+    func testTerminalRecoveryFailureSchedulesInputPreparationAgain() async {
+        let usbDeviceID = AudioDeviceID(735)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(
+            inputCaptureFactory: inputCaptureFactory,
+            inputTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+        service.configureInputSelection(
+            deviceID: usbDeviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: false
+        )
+        var tornDownEngine: AVAudioEngine?
+        service.engineTeardownOverride = { tornDownEngine = $0 }
+        let recordingEngine = AVAudioEngine()
+        service.testingSetAudioEngine(recordingEngine)
+        XCTAssertFalse(service.testingHasPreparedUSBInput(deviceID: usbDeviceID))
+
+        service.testingFailActiveRecordingDueToRecovery(.engineStartFailed("test"))
+
+        XCTAssertTrue(tornDownEngine === recordingEngine)
+        let didPrepareAgain = await waitUntil(timeout: 2) {
+            service.testingHasPreparedUSBInput(deviceID: usbDeviceID)
+        }
+        XCTAssertTrue(didPrepareAgain)
+    }
+
+    func testBluetoothReleaseStopDropsThePreparationScheduledByARecoveryFailure() async {
+        let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let deviceID = AudioDeviceID(2)
+        let activation = FakeAudioInputDeviceActivator()
+        let queueGate = DispatchSemaphore(value: 0)
+        defer { queueGate.signal() }
+        let service = AudioRecordingService(
+            inputActivationGuard: activation,
+            bluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in false },
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.configureInputSelection(
+            deviceID: deviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true
+        )
+        service.engineTeardownOverride = { _ in }
+        service.testingSetAudioEngine(AVAudioEngine())
+        let preparationGeneration = service.testingPreparedInputGeneration()
+        service.testingBlockRecordingStartQueue(until: queueGate)
+
+        service.testingFailActiveRecordingDueToRecovery(.engineStartFailed("test"))
+        let stopTask = Task {
+            await service.stopRecording(policy: .immediate, bluetoothBehavior: .release)
+        }
+        let didInvalidatePreparation = await waitUntil(timeout: 1) {
+            service.testingPreparedInputGeneration() != preparationGeneration
+        }
+        XCTAssertTrue(didInvalidatePreparation)
+        queueGate.signal()
+        _ = await stopTask.value
+        try? await Task.sleep(for: .milliseconds(500))
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertTrue(activation.activateCalls.isEmpty)
+        XCTAssertFalse(service.testingHasPreparedBluetoothInput())
+    }
+
     func testPrerollStaysSuspendedWhenLaunchedOnALockedScreen() {
         let preferenceKey = UserDefaultsKeys.microphonePrerollEnabled
         let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)

@@ -2490,6 +2490,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let recoveryURL = preserveActiveRecoveryRecording()
         let recoveryURLs = recoveryRecordingURLs
         clearRecordingBuffer()
+        // The stop that follows finds no engine and returns before it schedules its own
+        // preparation, so bring the input back here. The usual rules still apply: a stop that
+        // is running by then blocks it and replays it afterwards, and a Bluetooth release
+        // stop invalidates the preparation generation, which drops this request.
+        scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.recoveryError = error
