@@ -206,7 +206,8 @@ jobs:
         run: swift test --package-path TypeWhisperPluginSDK
 
   # Mac App Store edition: sandboxed APPSTORE build with bundled plugins.
-  # See docs/appstore/README.md.
+  # Builds arm64 only to keep pull requests fast; the TestFlight workflow builds
+  # and audits the universal binary. See docs/appstore/README.md.
   appstore:
     runs-on: macos-26
     timeout-minutes: 90
@@ -245,7 +246,7 @@ jobs:
           restore-keys: |
             appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
-      - name: Build universal App Store app (unsigned)
+      - name: Build App Store app (arm64, unsigned)
         run: |
           mkdir -p build
           if ! xcodebuild build \
@@ -257,7 +258,7 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/AppStoreSourcePackages" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
-            ARCHS='arm64 x86_64' \
+            ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             > build/appstore-xcodebuild.log 2>&1; then
@@ -271,7 +272,6 @@ jobs:
         run: |
           scripts/appstore/audit_app_store_binary.sh \
             --allow-unsigned \
-            --require-universal \
             "$APPSTORE_DERIVED_DATA/Build/Products/Release/TypeWhisper.app"
 
       - name: Upload build log

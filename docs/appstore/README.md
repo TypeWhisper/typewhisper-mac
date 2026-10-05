@@ -47,7 +47,7 @@ scripts/appstore/build-dev.sh --relaunch
 # Fast unsigned compile check
 scripts/appstore/build-dev.sh --check
 
-# Universal Release build and App Store audit (what CI runs)
+# Universal Release build and App Store audit (what TestFlight runs)
 scripts/appstore/release-audit.sh
 
 # Archive, sign and export for TestFlight on this Mac; --upload sends it
@@ -77,9 +77,10 @@ as warnings for the host app.
 
 ## Release
 
-The `appstore` job in `.github/workflows/build.yml` runs the unsigned universal
-build and the audit for every pull request, so changes that break the sandboxed
-edition fail in the pull request that introduces them.
+The `appstore` job in `.github/workflows/build.yml` runs an unsigned arm64
+Release build and the audit for every pull request, so changes that break the
+sandboxed edition fail in the pull request that introduces them. The universal
+binary is built and audited by the TestFlight workflow and `release-audit.sh`.
 
 `.github/workflows/appstore-testflight.yml` (manual or nightly at 02:30 UTC, `main` only) archives with
 manual signing, audits the signed archive, exports a `.pkg` and uploads it to
