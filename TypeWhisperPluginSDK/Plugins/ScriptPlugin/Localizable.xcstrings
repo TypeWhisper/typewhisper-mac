@@ -437,7 +437,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "同时对录音器已完成的转录执行"
+            "value": "录音器转录完成后也运行脚本"
           }
         }
       }

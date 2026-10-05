@@ -525,7 +525,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "同时发送录音器已完成的转录"
+            "value": "同时发送录音器已完成的转录结果"
           }
         }
       }
