@@ -48,6 +48,17 @@ swift test --package-path TypeWhisperPluginSDK
 - Localization: use `String(localized:)` for all user-facing strings
 - SwiftData for persistence, Combine for reactive updates
 
+## Mac App Store Edition
+
+The Mac App Store edition builds the same sources from `appstore-project.yml`
+(XcodeGen) with the `APPSTORE` compilation condition, the App Sandbox and the
+first-party plugins listed there. CI builds and audits it for every pull
+request. Code that the sandbox cannot run (launching processes, Apple Events,
+Accessibility access to other apps, downloading code) needs an `#if APPSTORE`
+alternative; keep such blocks small and explain them in a comment. Details,
+build commands and the plugin list are in
+[docs/appstore/README.md](docs/appstore/README.md).
+
 ## Credentials and Test Fixtures
 
 Never commit real credentials, including revoked credentials copied from production.
