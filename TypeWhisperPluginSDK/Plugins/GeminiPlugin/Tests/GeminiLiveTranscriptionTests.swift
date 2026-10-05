@@ -350,6 +350,31 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertEqual(result.text, "First second")
     }
 
+    func testDelayedFinalOfPreviousTurnDoesNotSettleResumedTurn() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        try await session.handle(.string(#"{"serverContent":{"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = { message in
+            guard isGeminiEndMessage(message) else { return }
+            socket.enqueue(activity("ACTIVITY_START"))
+            // The first turn's final arrives late, after the resumed turn started.
+            socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"First"}}}"#)
+            socket.enqueue(#"{"serverContent":{"generationComplete":true}}"#)
+            socket.enqueue(activity("ACTIVITY_END"))
+            Task {
+                try await Task.sleep(for: .milliseconds(300))
+                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"second"}}}"#)
+            }
+        }
+
+        let result = try await finishWithWatchdog(session)
+
+        XCTAssertEqual(result.text, "First second")
+    }
+
     func testServerTurnEndWaitsForSpeechResumeGrace() async throws {
         let clock = GeminiTestClock()
         let socket = GeminiTestWebSocket()

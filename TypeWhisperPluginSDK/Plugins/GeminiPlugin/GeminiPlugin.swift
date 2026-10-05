@@ -1327,6 +1327,11 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var serverSpeechEnded = false
     private var serverTurnCompletedAt: ContinuousClock.Instant?
     private var serverTurnHasFinalTranscript = false
+    // Transcripts carry no turn reference. When a turn ends without a final
+    // transcript, the next final most likely belongs to it, not to the turn
+    // that started since.
+    private var serverTurnStarted = false
+    private var previousTurnFinalPending = false
     // An interrupted turn ends with interrupted, then turnComplete. That
     // turnComplete belongs to the earlier turn, not to the resumed speech.
     private var awaitingInterruptedTurnComplete = false
@@ -1679,6 +1684,8 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         }
         switch response.voiceActivity?.type {
         case "ACTIVITY_START":
+            previousTurnFinalPending = serverTurnStarted && !serverTurnHasFinalTranscript
+            serverTurnStarted = true
             serverSpeechEnded = false
             serverTurnCompletedAt = nil
             serverTurnHasFinalTranscript = false
@@ -1699,7 +1706,11 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
                 receivedAt >= $0.advanced(by: Self.completionAttributionDelay)
             } ?? true)
         if content.inputTranscription?.text?.contains(where: { !$0.isWhitespace }) == true {
-            serverTurnHasFinalTranscript = true
+            if previousTurnFinalPending {
+                previousTurnFinalPending = false
+            } else {
+                serverTurnHasFinalTranscript = true
+            }
         }
         if content.interrupted == true { awaitingInterruptedTurnComplete = true }
         var isCompletion = content.generationComplete == true
