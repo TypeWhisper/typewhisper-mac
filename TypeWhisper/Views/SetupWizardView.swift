@@ -422,7 +422,10 @@ struct SetupWizardView: View {
             )
 
             permissionCard(
-                title: localizedAppText("Accessibility Access", de: "Bedienungshilfen-Zugriff"),
+                title: AccessibilityPermissionPane.text(
+                    legacy: localizedAppText("Accessibility Access", de: "Bedienungshilfen-Zugriff"),
+                    deviceControl: AccessibilityPermissionPane.localizedName()
+                ),
                 description: localizedAppText("Required to type into other apps.", de: "Erforderlich, um in andere Apps zu schreiben."),
                 systemImage: "figure.stand",
                 isGranted: !dictation.needsAccessibilityPermission,
@@ -1255,7 +1258,15 @@ struct SetupWizardView: View {
             return String(localized: "Microphone access is required for dictation.")
         }
         if dictation.needsAccessibilityPermission {
-            return String(localized: "Accessibility access is required to paste text into other apps.")
+            return AccessibilityPermissionPane.text(
+                legacy: String(localized: "Accessibility access is required to paste text into other apps."),
+                deviceControl: localizedAppText(
+                    "Device Control and Data Access permission is required to paste text into other apps.",
+                    de: "Die Berechtigung „Gerätesteuerung und Datenzugriff“ wird benötigt, um Text in andere Apps einzufügen.",
+                    ja: "他のアプリへテキストを貼り付けるには、「デバイスの制御とデータへのアクセス」の権限が必要です。",
+                    zh: "需要“设备控制和数据访问”权限才能将文本粘贴到其他应用。"
+                )
+            )
         }
         if isPreparingAppleSpeechFallback {
             return localizedAppText(

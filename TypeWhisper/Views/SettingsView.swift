@@ -1361,7 +1361,7 @@ struct RecordingSettingsView: View {
                     if dictation.needsAccessibilityPermission {
                         HStack {
                             Label(
-                                String(localized: "Accessibility"),
+                                AccessibilityPermissionPane.localizedName(),
                                 systemImage: "lock.shield"
                             )
                             .foregroundStyle(.orange)
@@ -1548,7 +1548,7 @@ struct PermissionsBanner: View {
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
-                        String(localized: "Accessibility access required"),
+                        AccessibilityPermissionPane.accessRequiredText(),
                         systemImage: "lock.shield"
                     )
                     .foregroundStyle(.red)

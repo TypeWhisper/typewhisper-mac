@@ -337,7 +337,7 @@ struct HomeSettingsView: View {
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
-                        String(localized: "Accessibility access required"),
+                        AccessibilityPermissionPane.accessRequiredText(),
                         systemImage: "lock.shield"
                     )
                     Spacer()

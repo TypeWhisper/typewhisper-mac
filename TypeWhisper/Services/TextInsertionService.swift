@@ -323,7 +323,7 @@ final class TextInsertionService {
         var errorDescription: String? {
             switch self {
             case .accessibilityNotGranted:
-                "Accessibility permission not granted. Please enable it in System Settings → Privacy & Security → Accessibility."
+                AccessibilityPermissionPane.enableInSystemSettingsText()
             case .pasteFailed(let detail):
                 "Failed to paste text: \(detail)"
             }
