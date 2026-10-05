@@ -564,6 +564,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// Uptime at which the stream was armed; the watchdog measures a never-started stream from here.
     private let prerollArmedUptime = OSAllocatedUnfairLock(initialState: UInt64(0))
     private let prerollLifecycle = OSAllocatedUnfairLock(initialState: PrerollLifecycleState())
+    /// Tokens of the live capture streams. A stream's token is retired when it is torn down so
+    /// that late callbacks of that stream are discarded (see `processConvertedSamples`).
+    private let captureStreams = CaptureStreamRegistry()
     private let prerollHandoffState = OSAllocatedUnfairLock(initialState: PrerollHandoffState())
     private struct PrerollHandoffState {
         var prerollMilliseconds: Double = 0
@@ -1117,14 +1120,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 do {
                     try preparedInput.session.start()
                 } catch {
-                    preparedInput.session.stop()
+                    stopCaptureSession(preparedInput.session)
                     throw error
                 }
                 preparedInput.isStreaming = true
             }
             guard allowsInputPreparation,
                   inputOnlyPreparationDeviceID() == deviceID else {
-                preparedInput.session.stop()
+                stopCaptureSession(preparedInput.session)
                 if isStreaming { setPrerollCaptureArmed(false) }
                 return
             }
@@ -1139,7 +1142,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 preparedUSBInput = preparedInput
                 return (true, previous)
             }
-            storageResult.replaced?.session.stop()
+            if let replacedInput = storageResult.replaced { stopCaptureSession(replacedInput.session) }
             if storageResult.replaced?.isStreaming == true, isStreaming { prerollRing.reset() }
             guard storageResult.stored else {
                 if isStreaming { setPrerollCaptureArmed(false) }
@@ -1356,7 +1359,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         if let staleInput {
             if staleInput.isStreaming { releaseArmedPrerollStream() }
-            staleInput.session.stop()
+            stopCaptureSession(staleInput.session)
             if staleInput.isStreaming { setPrerollCaptureArmed(false) }
         }
         if claimedInput?.isStreaming == true {
@@ -1419,7 +1422,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         if let builtInInput = preparedInputs.0 {
             teardownPreparedEngine(builtInInput.engine)
         }
-        preparedInputs.1?.session.stop()
+        if let usbInput = preparedInputs.1 { stopCaptureSession(usbInput.session) }
         if let bluetoothInput = preparedInputs.2 {
             teardownPreparedEngine(bluetoothInput.engine)
             bluetoothInputStartupTracker.reset()
@@ -2234,7 +2237,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             removeConfigurationObserver()
             outputVolumeGuard.captureBaseline()
             if !keepInputOnlyPrerollArmed(inputCaptureSession) {
-                inputCaptureSession.stop()
+                stopCaptureSession(inputCaptureSession)
             }
             engineLock.withLock { activeInputOnlyDeviceID = nil }
             outputVolumeGuard.restoreIfRaised(reason: "recording-stop")
@@ -2773,6 +2776,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let bluetoothInputGeneration = requiresInitialInputReadiness
             ? bluetoothInputStartupTracker.beginGeneration()
             : nil
+        let streamToken = CaptureStreamToken()
         inputNode.removeTap(onBus: 0)
 
         do {
@@ -2795,7 +2799,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                         normalizedBuffer,
                         converter: converter,
                         targetFormat: targetFormat,
-                        bluetoothInputGeneration: captureGeneration
+                        bluetoothInputGeneration: captureGeneration,
+                        stream: streamToken
                     )
                 }
             }
@@ -2810,6 +2815,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw tapError
         }
 
+        captureStreams.register(streamToken, for: engine)
         return ConfiguredEngineCapture(
             inputNode: inputNode,
             tapFormat: tapFormat,
@@ -2853,6 +2859,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         } catch {
             configuredCapture.inputNode.removeTap(onBus: 0)
             engine.stop()
+            retireCaptureStream(engine)
             throw error
         }
     }
@@ -2982,7 +2989,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Retires the stream's token once the teardown is done. The retirement runs on
+    /// `processingQueue`, behind every slice the stream already queued, so the audio of a
+    /// recording that is stopping is kept while later callbacks of the dead stream are dropped.
+    private func retireCaptureStream(_ stream: AnyObject) {
+        guard let token = captureStreams.take(for: stream) else { return }
+        processingQueue.async { token.retire() }
+    }
+
+    private func stopCaptureSession(_ session: AudioInputCaptureSession) {
+        session.stop()
+        retireCaptureStream(session)
+    }
+
     private func teardownEngine(_ engine: AVAudioEngine) {
+        defer { retireCaptureStream(engine) }
         if let engineTeardownOverride {
             engineTeardownOverride(engine)
             return
@@ -3122,7 +3143,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ buffer: AVAudioPCMBuffer,
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
-        bluetoothInputGeneration: UInt64? = nil
+        bluetoothInputGeneration: UInt64? = nil,
+        stream: CaptureStreamToken? = nil
     ) {
         // Convert sample rate on the render thread (AVAudioConverter requires thread consistency)
         let frameCount = AVAudioFrameCount(
@@ -3162,7 +3184,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             var samples = samples
             self?.processConvertedSamples(
                 &samples,
-                bluetoothInputGeneration: bluetoothInputGeneration
+                bluetoothInputGeneration: bluetoothInputGeneration,
+                stream: stream
             )
         }
     }
@@ -3179,14 +3202,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             // Slices arrive on processingQueue, so conversion and downstream processing
             // stay on one serial queue and off the realtime IO thread.
+            let streamToken = CaptureStreamToken()
             let session = try inputCaptureFactory.startInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
                 bufferSize: Self.captureTapFrames,
                 deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                self?.processInputOnlySlice(buffer, converter: sliceConverter)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter, stream: streamToken)
             }
+            captureStreams.register(streamToken, for: session)
 
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
@@ -3218,14 +3243,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 throw AudioRecordingError.engineStartFailed("Cannot create prepared input-only audio converter")
             }
 
+            let streamToken = CaptureStreamToken()
             let session = try inputCaptureFactory.prepareInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
                 bufferSize: Self.captureTapFrames,
                 deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                self?.processInputOnlySlice(buffer, converter: sliceConverter)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter, stream: streamToken)
             }
+            captureStreams.register(streamToken, for: session)
             return PreparedUSBInput(session: session, deviceID: deviceID)
         } catch let error as SelectedInputDeviceError {
             throw mapSelectedInputDeviceError(error)
@@ -3267,21 +3294,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 handOffPrerollToRecording()
             }
         } catch let error as SelectedInputDeviceError {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw mapSelectedInputDeviceError(error)
         } catch let error as AudioRecordingError {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw error
         } catch {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
     }
 
     /// Runs on processingQueue for every slice delivered by an input-only HAL session.
-    private func processInputOnlySlice(_ buffer: AVAudioPCMBuffer, converter: AudioInputSliceConverter) {
+    private func processInputOnlySlice(
+        _ buffer: AVAudioPCMBuffer,
+        converter: AudioInputSliceConverter,
+        stream: CaptureStreamToken
+    ) {
         guard var samples = converter.convert(buffer) else { return }
-        processConvertedSamples(&samples)
+        processConvertedSamples(&samples, stream: stream)
     }
 
     private func cleanupAfterFailedInputOnlyStart() {
@@ -3296,7 +3327,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             startupConfigurationChangeGuard = nil
             return session
         }
-        session?.stop()
+        if let session { stopCaptureSession(session) }
         outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "recording-start-failed")
@@ -3309,8 +3340,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func processConvertedSamples(
         _ samples: inout [Float],
-        bluetoothInputGeneration: UInt64? = nil
+        bluetoothInputGeneration: UInt64? = nil,
+        stream: CaptureStreamToken? = nil
     ) {
+        // A torn-down stream can still deliver a callback that was in flight. Its samples must
+        // not become recording audio while idle or land in the ring of another input.
+        if stream?.isRetired == true { return }
         // An active recording always owns its audio, whatever the armed state says.
         if isPrerollCaptureArmed, !isRecordingActive {
             // Armed between dictations: the audio only fills the bounded ring. It does not

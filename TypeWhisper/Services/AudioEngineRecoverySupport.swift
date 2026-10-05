@@ -315,6 +315,36 @@ enum MicrophonePrerollScreenLockProbe {
     }
 }
 
+/// Identifies one capture stream (an engine tap or an input-only HAL session). Callbacks of a
+/// stream that was torn down can still arrive afterwards; once retired, the token tells the
+/// sample path to drop them instead of appending them to a recording or another input's ring.
+final class CaptureStreamToken: @unchecked Sendable {
+    private let retired = OSAllocatedUnfairLock(initialState: false)
+
+    var isRetired: Bool { retired.withLock { $0 } }
+
+    func retire() {
+        retired.withLock { $0 = true }
+    }
+}
+
+/// Maps the engine or session object behind a stream to its token, so every teardown path can
+/// retire the right stream without threading tokens through the prepared-input records.
+final class CaptureStreamRegistry: @unchecked Sendable {
+    private let tokens = OSAllocatedUnfairLock(initialState: [ObjectIdentifier: CaptureStreamToken]())
+
+    func register(_ token: CaptureStreamToken, for stream: AnyObject) {
+        let key = ObjectIdentifier(stream)
+        tokens.withLock { $0[key] = token }
+    }
+
+    /// Removes and returns the token of `stream`; nil when it was never registered or already retired.
+    func take(for stream: AnyObject) -> CaptureStreamToken? {
+        let key = ObjectIdentifier(stream)
+        return tokens.withLock { $0.removeValue(forKey: key) }
+    }
+}
+
 enum AudioEngineRecoveryErrorDomains {
     static let avfException = "com.typewhisper.AVFException"
     static let transientFormatMismatch = "com.typewhisper.AudioRecordingRecovery"

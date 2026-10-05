@@ -513,6 +513,21 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(tracker.end())
     }
 
+    func testCaptureStreamRegistryHandsOutEachTokenOnce() {
+        let registry = CaptureStreamRegistry()
+        let stream = NSObject()
+        let token = CaptureStreamToken()
+        registry.register(token, for: stream)
+
+        XCTAssertFalse(token.isRetired)
+        XCTAssertTrue(registry.take(for: stream) === token)
+        XCTAssertNil(registry.take(for: stream))
+        XCTAssertNil(registry.take(for: NSObject()))
+
+        token.retire()
+        XCTAssertTrue(token.isRetired)
+    }
+
     func testScreenLockProbeReadsTheSessionDictionaryAndFailsOpen() {
         let probe = MicrophonePrerollScreenLockProbe.self
         XCTAssertTrue(probe.isLocked(sessionDictionary: [probe.lockedKey: true]))
@@ -3834,6 +3849,42 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
     }
 
+    func testStoppedInputOnlySessionDoesNotAppendLateSlicesButActiveOneDoes() async throws {
+        let usbDeviceID = AudioDeviceID(731)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(inputCaptureFactory: inputCaptureFactory)
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = usbDeviceID
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+
+        func makeSlice() throws -> AVAudioPCMBuffer {
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: inputCaptureFactory.inputFormat, frameCapacity: 960))
+            buffer.frameLength = 960
+            for channel in 0..<Int(inputCaptureFactory.inputFormat.channelCount) {
+                let data = try XCTUnwrap(buffer.floatChannelData?[channel])
+                for frame in 0..<960 { data[frame] = 0.5 }
+            }
+            return buffer
+        }
+
+        try service.startRecording()
+        let deliver = try XCTUnwrap(inputCaptureFactory.bufferHandlers.first)
+        deliver(try makeSlice())
+        let didAppend = await waitUntil(timeout: 1) { !service.getCurrentBuffer().isEmpty }
+        XCTAssertTrue(didAppend, "an active recording keeps receiving its samples")
+
+        _ = await service.stopRecording(policy: .immediate)
+        XCTAssertTrue(service.getCurrentBuffer().isEmpty)
+
+        // A callback that was in flight during teardown arrives after the stop.
+        deliver(try makeSlice())
+        deliver(try makeSlice())
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(service.getCurrentBuffer().isEmpty, "late samples of a stopped stream must be dropped")
+    }
+
     func testPreparedUSBInputStartsExistingHALSessionWithoutColdCaptureSetup() async throws {
         let usbDeviceID = AudioDeviceID(733)
         let inputCaptureFactory = FakeAudioInputCaptureFactory()
@@ -5465,6 +5516,11 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
     private var _prepareCalls: [StartCall] = []
     private var _startCalls: [StartCall] = []
     private var _createdSessions: [FakeAudioInputCaptureSession] = []
+    private var _bufferHandlers: [(AVAudioPCMBuffer) -> Void] = []
+
+    /// Delivery callbacks of every created session, in creation order.
+    var bufferHandlers: [(AVAudioPCMBuffer) -> Void] { lock.withLock { _bufferHandlers } }
+    var inputFormat: AVAudioFormat { format }
 
     var inputFormatError: Error? {
         get { lock.withLock { _inputFormatError } }
@@ -5531,7 +5587,10 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         }
         if let error = configuration.0 { throw error }
         let session = FakeAudioInputCaptureSession(startError: configuration.1)
-        lock.withLock { _createdSessions.append(session) }
+        lock.withLock {
+            _createdSessions.append(session)
+            _bufferHandlers.append(onBuffer)
+        }
         configuration.2?()
         return session
     }
@@ -5549,7 +5608,10 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         }
         if let error { throw error }
         let session = FakeAudioInputCaptureSession()
-        lock.withLock { _createdSessions.append(session) }
+        lock.withLock {
+            _createdSessions.append(session)
+            _bufferHandlers.append(onBuffer)
+        }
         return session
     }
 }
