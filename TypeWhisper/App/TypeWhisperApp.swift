@@ -923,7 +923,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             queue: .main
         ) { _ in
             Task { @MainActor in
-                ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: "system-sleep")
+                ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: .sleep)
             }
         }
         screenLockObservers = [
@@ -933,7 +933,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
                 queue: .main
             ) { _ in
                 Task { @MainActor in
-                    ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: "screen-locked")
+                    ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: .screenLock)
                 }
             },
             DistributedNotificationCenter.default().addObserver(

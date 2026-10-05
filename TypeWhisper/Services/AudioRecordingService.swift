@@ -452,8 +452,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private struct PrerollLifecycleState {
-        /// Set while the Mac sleeps or the screen is locked; the input is released meanwhile.
-        var isSuspended = false
+        /// Tracks sleep and screen lock; the input stays released while either is active.
+        var suspension = MicrophonePrerollSuspension()
         var rearmPolicy = MicrophonePrerollRearmPolicy()
         /// Built-in input that needs voice processing and therefore cannot stay armed.
         var unsupportedBuiltInDeviceID: AudioDeviceID?
@@ -702,22 +702,25 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     /// Releases the armed input before the Mac sleeps or the screen locks. Nothing else is
     /// torn down, so the setting off keeps the existing prewarm behavior untouched.
-    func suspendMicrophonePreroll(reason: String) {
+    func suspendMicrophonePreroll(reason: MicrophonePrerollSuspensionReason) {
+        // Track the reason even while the setting is off so that enabling it during a lock
+        // or sleep does not arm the microphone.
+        prerollLifecycle.withLock { $0.suspension.suspend(for: reason) }
         guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else { return }
-        prerollLifecycle.withLock { $0.isSuspended = true }
         recordingStartQueue.async { [weak self] in
-            self?.invalidatePreparedRecordingInputs(reason: reason)
+            self?.invalidatePreparedRecordingInputs(reason: reason.rawValue)
         }
     }
 
+    /// Screen unlock. Clears only the lock reason, so a Mac that is still asleep stays released.
     func resumeMicrophonePreroll() {
-        let wasSuspended = prerollLifecycle.withLock { state -> Bool in
-            let wasSuspended = state.isSuspended
-            state.isSuspended = false
+        let didResume = prerollLifecycle.withLock { state -> Bool in
+            let didResume = state.suspension.resume(from: .screenLock)
             state.resetFailures()
-            return wasSuspended
+            return didResume
         }
-        guard wasSuspended else { return }
+        guard didResume,
+              UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else { return }
         prepareRecordingInputIfEligible()
     }
 
@@ -739,8 +742,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     func handleSystemWake() {
+        // Clears only the sleep reason: the screen may still be locked after waking, and the
+        // unlock notification re-arms the microphone then.
         prerollLifecycle.withLock { state in
-            state.isSuspended = false
+            state.suspension.resume(from: .sleep)
             state.resetFailures()
         }
         invalidatePreparedRecordingInputs(reason: "system-wake")
@@ -763,7 +768,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else {
             return false
         }
-        return prerollLifecycle.withLock { !$0.isSuspended && !$0.rearmPolicy.hasGivenUp }
+        return prerollLifecycle.withLock { !$0.suspension.isSuspended && !$0.rearmPolicy.hasGivenUp }
     }
 
     /// Explicitly selected non-Bluetooth input that should stay running for the pre-roll.

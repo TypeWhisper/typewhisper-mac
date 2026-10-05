@@ -344,6 +344,40 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: 0.5))
     }
 
+    func testMicrophonePrerollSuspensionKeepsLockAcrossWake() {
+        var suspension = MicrophonePrerollSuspension()
+        XCTAssertFalse(suspension.isSuspended)
+
+        suspension.suspend(for: .screenLock)
+        suspension.suspend(for: .sleep)
+        XCTAssertTrue(suspension.isSuspended)
+
+        // Waking while the screen is still locked must not lift the suspension.
+        XCTAssertFalse(suspension.resume(from: .sleep))
+        XCTAssertTrue(suspension.isSuspended)
+
+        XCTAssertTrue(suspension.resume(from: .screenLock))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
+    func testMicrophonePrerollSuspensionKeepsSleepAcrossUnlock() {
+        var suspension = MicrophonePrerollSuspension()
+        suspension.suspend(for: .sleep)
+        suspension.suspend(for: .screenLock)
+
+        XCTAssertFalse(suspension.resume(from: .screenLock))
+        XCTAssertTrue(suspension.isSuspended)
+        XCTAssertTrue(suspension.resume(from: .sleep))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
+    func testMicrophonePrerollSuspensionResumeWithoutSuspensionIsANoOp() {
+        var suspension = MicrophonePrerollSuspension()
+        XCTAssertFalse(suspension.resume(from: .sleep))
+        XCTAssertFalse(suspension.resume(from: .screenLock))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
     func testChangingSelectedDeviceIDClearsTheStoredInputDeviceName() {
         let service = AudioRecordingService()
         service.hasMicrophonePermissionOverride = false

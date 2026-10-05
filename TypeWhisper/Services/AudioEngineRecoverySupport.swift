@@ -116,6 +116,38 @@ struct MicrophonePrerollRearmPolicy: Equatable {
     }
 }
 
+/// Why the armed microphone pre-roll input is released. Sleep and screen lock are tracked
+/// separately: waking the Mac must not re-arm the microphone while the screen is still locked.
+enum MicrophonePrerollSuspensionReason: String, Equatable {
+    case sleep = "system-sleep"
+    case screenLock = "screen-locked"
+}
+
+struct MicrophonePrerollSuspension: Equatable {
+    private(set) var isAsleep = false
+    private(set) var isScreenLocked = false
+
+    var isSuspended: Bool { isAsleep || isScreenLocked }
+
+    mutating func suspend(for reason: MicrophonePrerollSuspensionReason) {
+        switch reason {
+        case .sleep: isAsleep = true
+        case .screenLock: isScreenLocked = true
+        }
+    }
+
+    /// Clears only the given reason. Returns true when this call lifted the last reason.
+    @discardableResult
+    mutating func resume(from reason: MicrophonePrerollSuspensionReason) -> Bool {
+        let wasSuspended = isSuspended
+        switch reason {
+        case .sleep: isAsleep = false
+        case .screenLock: isScreenLocked = false
+        }
+        return wasSuspended && !isSuspended
+    }
+}
+
 enum AudioEngineRecoveryErrorDomains {
     static let avfException = "com.typewhisper.AVFException"
     static let transientFormatMismatch = "com.typewhisper.AudioRecordingRecovery"
