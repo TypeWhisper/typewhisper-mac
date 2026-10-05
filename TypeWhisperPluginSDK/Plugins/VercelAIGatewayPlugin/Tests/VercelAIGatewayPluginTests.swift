@@ -617,7 +617,7 @@ final class VercelAIGatewayPluginTests: XCTestCase {
                     Self.httpResponse(url: url, statusCode: 200)
                 ),
                 .success(
-                    Data(#"{"text":"second part","segments":[{"text":"second part","startSecond":0.2,"endSecond":0.8},{"text":"beyond chunk","startSecond":1.8,"endSecond":1.9}],"language":"en"}"#.utf8),
+                    Data(#"{"text":"second part","segments":[{"text":"second part","startSecond":0.2,"endSecond":0.8}],"language":"en"}"#.utf8),
                     Self.httpResponse(url: url, statusCode: 200)
                 ),
             ])
@@ -700,6 +700,18 @@ final class VercelAIGatewayPluginTests: XCTestCase {
     func testChunkRangesKeepShortAudioInOneChunk() {
         let samples = [Float](repeating: 0.1, count: 16_000)
         XCTAssertEqual(VercelAIGatewayPlugin.chunkRanges(samples: samples, maximumChunkSamples: 16_000), [0..<16_000])
+    }
+
+    func testChunkRangesNeverLeaveAChunkShorterThanTheMinimumUploadDuration() {
+        // 2.1 s with a 2 s limit and the only silence just before the limit. Cutting
+        // there would leave a 0.15 s tail that gets padded to 1 s for upload.
+        var samples = [Float](repeating: 0.1, count: 33_600)
+        for index in 30_400..<32_000 { samples[index] = 0 }
+
+        let ranges = VercelAIGatewayPlugin.chunkRanges(samples: samples, maximumChunkSamples: 32_000)
+
+        XCTAssertEqual(ranges, [0..<16_800, 16_800..<33_600])
+        XCTAssertTrue(ranges.allSatisfy { $0.count >= 16_000 })
     }
 
     func testExplicitRequestErrorsDoNotTriggerWavRetry() async throws {

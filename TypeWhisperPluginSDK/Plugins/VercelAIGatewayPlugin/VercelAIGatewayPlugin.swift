@@ -313,17 +313,9 @@ final class VercelAIGatewayPlugin: NSObject,
             if detectedLanguage == nil {
                 detectedLanguage = result.detectedLanguage
             }
-            // A short last chunk is padded for upload; drop segments in the padding.
             let timeOffset = Double(range.lowerBound) / sampleRate
-            let chunkEndTime = Double(range.upperBound) / sampleRate
-            segments.append(contentsOf: result.segments.compactMap {
-                let segmentStart = $0.start + timeOffset
-                guard segmentStart < chunkEndTime else { return nil }
-                return PluginTranscriptionSegment(
-                    text: $0.text,
-                    start: segmentStart,
-                    end: min($0.end + timeOffset, chunkEndTime)
-                )
+            segments.append(contentsOf: result.segments.map {
+                PluginTranscriptionSegment(text: $0.text, start: $0.start + timeOffset, end: $0.end + timeOffset)
             })
         }
 
@@ -340,19 +332,26 @@ final class VercelAIGatewayPlugin: NSObject,
 
     /// Splits audio into chunks of at most `maximumChunkSamples`. Each cut moves
     /// back to the quietest 100 ms frame in the last 10 seconds before the limit,
-    /// so it rarely lands inside a word.
+    /// so it rarely lands inside a word. Cuts keep every chunk at least as long as
+    /// the minimum upload duration (for limits of twice that or more): a shorter
+    /// chunk would be padded with silence, and text the model hears in the
+    /// padding would end up in the transcript.
     static func chunkRanges(samples: [Float], maximumChunkSamples: Int) -> [Range<Int>] {
         let maximumChunkSamples = max(1, maximumChunkSamples)
+        let minimumChunkSamples = Int(
+            PluginAudioUploadEncoder.minimumUploadDuration * Double(PluginAudioUploadEncoder.sampleRate)
+        )
         let frameSamples = PluginAudioUploadEncoder.sampleRate / 10
-        let searchSamples = min(PluginAudioUploadEncoder.sampleRate * 10, maximumChunkSamples / 2)
+        let searchSamples = PluginAudioUploadEncoder.sampleRate * 10
         var ranges: [Range<Int>] = []
         var start = 0
 
         while samples.count - start > maximumChunkSamples {
-            let limit = start + maximumChunkSamples
+            let earliestCut = start + maximumChunkSamples / 2
+            let limit = max(earliestCut, min(start + maximumChunkSamples, samples.count - minimumChunkSamples))
             var end = limit
             var quietestEnergy = Float.infinity
-            var frameStart = limit - searchSamples
+            var frameStart = max(earliestCut, limit - searchSamples)
             while frameStart + frameSamples <= limit {
                 var energy: Float = 0
                 for index in frameStart..<(frameStart + frameSamples) {
