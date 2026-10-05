@@ -1193,6 +1193,10 @@ struct RecordingSettingsView: View {
                     Text(String(localized: "Keeps the microphone running between dictations and holds the last half second of audio in memory only, so your first words are not cut off. Nothing is saved, sent, or processed until you start dictating. The orange microphone indicator stays on while this is enabled."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Text(String(localized: "On Macs where the built-in microphone needs voice processing, it cannot stay active between dictations. This setting has no effect there; choose another microphone to use it."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let message = audioDevice.selectedDeviceStatusMessage {
