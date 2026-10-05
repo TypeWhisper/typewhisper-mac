@@ -46,8 +46,9 @@ python3 scripts/validate_plugin_release_manifest.py path/to/manifest.json --vers
 
 The release workflow rejects older minimum hosts before building and verifies
 the resulting binary against the SDK shipped by the declared host release.
-Until stable 1.7.0 is published, manual preview releases require the explicit
-`allow_prerelease_host` option to use a matching 1.7.0 daily host for that check.
+Manual preview releases targeting a host version without a published stable
+release require the explicit `allow_prerelease_host` option to use a matching
+daily or RC host for that check.
 Previously published plugin binaries and registry releases retain their original
 host requirements. Use a new plugin version for a new build; preserve old release
 entries so TypeWhisper 1.6 can keep selecting its newest compatible release.

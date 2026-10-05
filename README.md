@@ -9,13 +9,14 @@ on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the
 result with reusable workflows. Your voice data stays on your Mac with local
 models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.6` is the current stable release for macOS. It adds a redesigned
-Settings experience, privacy-friendly statistics and portable backups, faster
-and more resilient recording, calendar-aware meeting automation, expanded
-workflow integrations, Simplified Chinese localization, and reliability
-improvements across dictation, Recorder, local models, and cloud providers.
+TypeWhisper `1.7.0` is the current stable release for macOS. It adds iCloud sync
+for History and Inbox, a visual keyboard shortcut editor, Undo Last Dictation
+and Restore Raw Transcript, new indicator styles, expanded dictation recovery,
+Finder transcription, and compatible local model imports.
 
-See the [1.6.0 release notes](docs/release-notes/1.6.0.md),
+Development on `main` targets `1.8`; daily builds use the `v1.8.0-daily.*` line.
+
+See the [1.7.0 release notes](docs/release-notes/1.7.0.md),
 [release readiness guide](docs/release-readiness.md),
 [support matrix](docs/support-matrix.md), and
 [release validation process](docs/release-checklist.md) for the shipped feature
@@ -211,7 +212,7 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.6.0-rc*` and daily builds such as `v1.6.0-daily.*` are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
