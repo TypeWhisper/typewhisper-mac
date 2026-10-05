@@ -453,6 +453,34 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertEqual(result.text, "First second turn")
     }
 
+    func testDelayedTurnCompletesOfSeveralGenerationsDoNotSettleResumedTurn() async throws {
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
+        for text in ["First", "second"] {
+            try await session.handle(.string(activity("ACTIVITY_START")))
+            try await session.handle(.string("{\"serverContent\":{\"inputTranscription\":{\"text\":\"\(text)\"},\"generationComplete\":true}}"))
+            try await session.handle(.string(activity("ACTIVITY_END")))
+        }
+        try await session.appendAudio(samples: [0.1])
+        socket.onSend = { message in
+            guard isGeminiEndMessage(message) else { return }
+            socket.enqueue(activity("ACTIVITY_START"))
+            socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"third"}}}"#)
+            // Both turnCompletes close the earlier generations.
+            socket.enqueue(#"{"serverContent":{"turnComplete":true}}"#)
+            socket.enqueue(#"{"serverContent":{"turnComplete":true}}"#)
+            socket.enqueue(activity("ACTIVITY_END"))
+            Task {
+                try await Task.sleep(for: .milliseconds(300))
+                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"turn"},"generationComplete":true}}"#)
+            }
+        }
+
+        let result = try await finishWithWatchdog(session)
+
+        XCTAssertEqual(result.text, "First second third turn")
+    }
+
     func testVoiceActivityTypeKeyIsDecoded() async throws {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket)

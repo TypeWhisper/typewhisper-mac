@@ -1336,7 +1336,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     // generationComplete may be followed by a delayed turnComplete. Either
     // turnComplete belongs to the earlier turn, not to resumed speech.
     private var awaitingInterruptedTurnComplete = false
-    private var awaitingTurnCompleteAfterGeneration = false
+    private var turnCompletesAwaitedAfterGeneration = 0
     private var latestError: String?
     private var socketClosed = false
     private var serverClosing = false
@@ -1716,14 +1716,14 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         if content.turnComplete == true {
             if awaitingInterruptedTurnComplete {
                 awaitingInterruptedTurnComplete = false
-            } else if awaitingTurnCompleteAfterGeneration {
-                awaitingTurnCompleteAfterGeneration = false
+            } else if turnCompletesAwaitedAfterGeneration > 0 {
+                turnCompletesAwaitedAfterGeneration -= 1
             } else {
                 isCompletion = true
             }
         }
         if content.generationComplete == true, content.turnComplete != true {
-            awaitingTurnCompleteAfterGeneration = true
+            turnCompletesAwaitedAfterGeneration += 1
         }
         if isCompletion { serverTurnCompletedAt = receivedAt }
         if isCompletion, canAttributeCompletion {
