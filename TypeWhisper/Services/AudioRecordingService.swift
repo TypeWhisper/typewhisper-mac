@@ -876,6 +876,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         invalidatePreparedRecordingInputs(reason: "preroll-route-mismatch")
     }
 
+    /// Call from a stop before the armed input is kept or re-armed. A recording that delivered
+    /// audio lifts the re-arm failure state, so a pre-roll that gave up comes back after the
+    /// next working cold-start recording instead of staying off until an external event.
+    private func notePrerollRecoveryIfRecordingDeliveredAudio() {
+        let deliveredAudio = bufferLock.withLock { hasLoggedFirstConvertedSample }
+        guard deliveredAudio else { return }
+        prerollLifecycle.withLock { $0.rearmPolicy.noteWorkingRecording() }
+    }
+
     /// Whether the user opted into the pre-roll and nothing currently keeps it released.
     private var isMicrophonePrerollActive: Bool {
         guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else {
@@ -2236,6 +2245,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
             outputVolumeGuard.captureBaseline()
+            notePrerollRecoveryIfRecordingDeliveredAudio()
             if !keepInputOnlyPrerollArmed(inputCaptureSession) {
                 stopCaptureSession(inputCaptureSession)
             }
@@ -2289,6 +2299,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release")
             await waitForRecordingInputPreparationCleanup()
         }
+        notePrerollRecoveryIfRecordingDeliveredAudio()
         let keptPreparedInput = bluetoothBehavior == .keepPrepared
             && keepBluetoothInputPrepared(engine)
         let keptPrerollInput = !keptPreparedInput
@@ -4051,6 +4062,18 @@ extension AudioRecordingService {
     }
 
     var testingIsMicrophonePrerollActive: Bool { isMicrophonePrerollActive }
+
+    func testingGiveUpPrerollRearm() {
+        prerollLifecycle.withLock { state in
+            for attempt in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+                _ = state.rearmPolicy.recordFailure(at: TimeInterval(attempt))
+            }
+        }
+    }
+
+    var testingPrerollRearmHasGivenUp: Bool {
+        prerollLifecycle.withLock { $0.rearmPolicy.hasGivenUp }
+    }
 
     func testingHasPreparedBluetoothInput() -> Bool {
         engineLock.withLock { preparedBluetoothInput != nil }

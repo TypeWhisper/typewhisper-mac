@@ -115,6 +115,13 @@ struct MicrophonePrerollRearmPolicy: Equatable {
         failureTimestamps.removeAll()
         hasGivenUp = false
     }
+
+    /// A recording that delivered audio proves the input works, so earlier failures (and a
+    /// given-up state, which keeps the pre-roll off until something external changes) no
+    /// longer apply. Cold-start recordings never claim an armed stream, so they report here.
+    mutating func noteWorkingRecording() {
+        reset()
+    }
 }
 
 /// Tracks stops that are still draining a recording. The recording is already inactive and

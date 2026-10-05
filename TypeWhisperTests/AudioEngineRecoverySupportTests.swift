@@ -513,6 +513,19 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertTrue(tracker.end())
     }
 
+    func testWorkingRecordingClearsGivenUpRearmPolicy() {
+        var policy = MicrophonePrerollRearmPolicy()
+        for attempt in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+            _ = policy.recordFailure(at: TimeInterval(attempt))
+        }
+        XCTAssertTrue(policy.hasGivenUp)
+
+        policy.noteWorkingRecording()
+
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: MicrophonePrerollRearmPolicy.retryBackoff[0]))
+    }
+
     func testCaptureStreamRegistryHandsOutEachTokenOnce() {
         let registry = CaptureStreamRegistry()
         let stream = NSObject()
@@ -3883,6 +3896,40 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         deliver(try makeSlice())
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertTrue(service.getCurrentBuffer().isEmpty, "late samples of a stopped stream must be dropped")
+    }
+
+    func testWorkingInputOnlyRecordingLiftsAGivenUpPrerollRearmPolicy() async throws {
+        let usbDeviceID = AudioDeviceID(732)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(inputCaptureFactory: inputCaptureFactory)
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = usbDeviceID
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+
+        service.testingGiveUpPrerollRearm()
+        XCTAssertTrue(service.testingPrerollRearmHasGivenUp)
+
+        // A recording that never delivered audio proves nothing.
+        try service.startRecording()
+        _ = await service.stopRecording(policy: .immediate)
+        XCTAssertTrue(service.testingPrerollRearmHasGivenUp)
+
+        try service.startRecording()
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: inputCaptureFactory.inputFormat, frameCapacity: 960))
+        buffer.frameLength = 960
+        for channel in 0..<Int(inputCaptureFactory.inputFormat.channelCount) {
+            let data = try XCTUnwrap(buffer.floatChannelData?[channel])
+            for frame in 0..<960 { data[frame] = 0.5 }
+        }
+        let deliver = try XCTUnwrap(inputCaptureFactory.bufferHandlers.last)
+        deliver(buffer)
+        let didAppend = await waitUntil(timeout: 1) { !service.getCurrentBuffer().isEmpty }
+        XCTAssertTrue(didAppend)
+        _ = await service.stopRecording(policy: .immediate)
+
+        XCTAssertFalse(service.testingPrerollRearmHasGivenUp)
     }
 
     func testPreparedUSBInputStartsExistingHALSessionWithoutColdCaptureSetup() async throws {
