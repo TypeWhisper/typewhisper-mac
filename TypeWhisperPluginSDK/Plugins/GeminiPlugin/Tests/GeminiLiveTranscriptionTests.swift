@@ -402,6 +402,32 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertEqual(result.text, "First second third")
     }
 
+    func testTurnWithoutFinalDisablesServerTurnSettling() async throws {
+        let clock = GeminiTestClock()
+        let socket = GeminiTestWebSocket()
+        let session = try await makeSession(socket: socket, clock: clock)
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        try await session.handle(.string(#"{"serverContent":{"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.handle(.string(activity("ACTIVITY_START")))
+        // Two final chunks after the second start cannot be assigned to either turn.
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"First"}}}"#))
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"part"}}}"#))
+        try await session.handle(.string(#"{"serverContent":{"generationComplete":true}}"#))
+        try await session.handle(.string(activity("ACTIVITY_END")))
+        try await session.appendAudio(samples: [0.1])
+
+        let finish = Task { try await finishWithWatchdog(session) }
+        try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
+        clock.advance(by: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(50))
+        let settledOnServerTurn = await session.hasSettledCompletion
+        XCTAssertFalse(settledOnServerTurn, "Ambiguous turn attribution must use the bounded wait")
+        clock.advance(by: .seconds(1))
+        let result = try await finish.value
+        XCTAssertEqual(result.text, "First part")
+    }
+
     func testDelayedTurnCompleteOfPreviousGenerationDoesNotSettleResumedTurn() async throws {
         let socket = GeminiTestWebSocket()
         let session = try await makeSession(socket: socket, finishTimeout: .seconds(2))
