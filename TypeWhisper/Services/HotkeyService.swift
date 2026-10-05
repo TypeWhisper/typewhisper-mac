@@ -497,6 +497,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var eventTapWatchdogTimer: DispatchSourceTimer?
     private static let eventTapWatchdogInterval: TimeInterval = 2.0
     private var carbonHotkeyRegistrations: [UInt32: CarbonHotkeyRegistration] = [:]
+    /// Carbon hotkeys that another app already holds; only the event tap can observe them.
+    private var failedCarbonHotkeyIDs: Set<UInt32> = []
     private var carbonHotkeyEventHandlerRef: EventHandlerRef?
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
     private var capsLockOriginSuppressionUntil: Date?
@@ -529,8 +531,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
 #if APPSTORE
     /// Whether a configured hotkey needs the listen-only event tap because Carbon cannot
-    /// register it (modifier-only, Fn, double-tap and mouse-button hotkeys).
+    /// register it (modifier-only, Fn, double-tap and mouse-button hotkeys, or a shortcut
+    /// that another app already registered).
     var requiresEventObservation: Bool {
+        if !failedCarbonHotkeyIDs.isEmpty { return true }
         let hotkeys = slots.values.flatMap { $0.compactMap(\.hotkey) }
             + profileSlots.values.map(\.hotkey)
             + workflowSlots.values.flatMap { $0.map(\.hotkey) }
@@ -1058,6 +1062,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             logger.warning(
                 "RegisterEventHotKey failed: id=\(id, privacy: .public), status=\(status, privacy: .public), hotkey=\(Self.displayName(for: hotkey), privacy: .public)"
             )
+            failedCarbonHotkeyIDs.insert(id)
             return
         }
 
@@ -1299,6 +1304,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
         }
         carbonHotkeyRegistrations.removeAll()
+        failedCarbonHotkeyIDs.removeAll()
 
         if let handler = carbonHotkeyEventHandlerRef {
             RemoveEventHandler(handler)

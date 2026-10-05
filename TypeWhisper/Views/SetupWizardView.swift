@@ -731,11 +731,16 @@ struct SetupWizardView: View {
 
         let recommendedName = HotkeyService.displayName(for: SetupWizardDefaultHotkey.recommendedHybridHotkey)
         if selectedHotkeyMode == .hybrid, recommendedHotkeyResolution.shouldApply {
+            #if APPSTORE
+            let message = localizedAppText(
+                "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
+                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen."
+            )
+            #else
+            let message = localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt.")
+            #endif
             return (
-                localizedAppText(
-                    "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
-                    de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen."
-                ),
+                message,
                 "keyboard",
                 .secondary
             )

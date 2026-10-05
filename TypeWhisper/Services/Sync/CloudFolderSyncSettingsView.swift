@@ -765,7 +765,13 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     var availableModes: [PremiumSyncMode] {
+        #if APPSTORE
+        // Keep a chosen automatic iCloud sync selectable while iCloud is signed out.
+        automaticICloudAvailable || mode == .automaticICloud
+            ? PremiumSyncMode.allCases : [.off, .cloudFolder]
+        #else
         automaticICloudAvailable ? PremiumSyncMode.allCases : [.off, .cloudFolder]
+        #endif
     }
 
     var selectedFolderDisplayName: String {
@@ -795,15 +801,22 @@ final class CloudFolderSyncController: ObservableObject {
         self.defaults = defaults
         self.automaticICloudBridge = automaticICloudBridge
         self.automaticICloudAvailableOverride = automaticICloudAvailable
+        #if !APPSTORE
         let isAutomaticICloudAvailable = automaticICloudAvailable
             ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
+        #endif
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
         self.automaticState = Self.loadState(from: defaults, key: Keys.automaticSyncState)
         let storedMode = defaults.string(forKey: Keys.mode).flatMap(PremiumSyncMode.init(rawValue:))
         let requestedMode = AppConstants.isPremiumSyncSmokeTest
             ? PremiumSyncMode.automaticICloud
             : storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
+        #if APPSTORE
+        // iCloud can be signed out only temporarily; syncs report it until it returns.
+        self.mode = requestedMode
+        #else
         self.mode = requestedMode == .automaticICloud && !isAutomaticICloudAvailable ? .off : requestedMode
+        #endif
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
@@ -811,13 +824,14 @@ final class CloudFolderSyncController: ObservableObject {
         installLocalChangeObserver()
         updateICloudObservation()
         #if APPSTORE
-        // Offer automatic iCloud once the user signs in to iCloud while TypeWhisper runs.
+        // Offer automatic iCloud once the user signs in to iCloud while TypeWhisper runs,
+        // and resume a chosen automatic iCloud sync.
         ubiquityIdentityObserver = NotificationCenter.default.addObserver(
             forName: .NSUbiquityIdentityDidChange,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.objectWillChange.send() }
+            MainActor.assumeIsolated { self?.handleUbiquityIdentityChange() }
         }
         #endif
         // Entitlement refreshes republish unchanged values; only gaining access starts a sync.
@@ -1159,6 +1173,16 @@ final class CloudFolderSyncController: ObservableObject {
             }
         }
     }
+
+    #if APPSTORE
+    private func handleUbiquityIdentityChange() {
+        objectWillChange.send()
+        updateICloudObservation()
+        guard mode == .automaticICloud, automaticICloudAvailable else { return }
+        errorMessage = nil
+        Task { await syncNow() }
+    }
+    #endif
 
     private func updateICloudObservation() {
         stopICloudObservation()
