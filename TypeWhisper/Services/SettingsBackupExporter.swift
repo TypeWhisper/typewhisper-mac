@@ -851,13 +851,28 @@ enum SettingsBackupExporter {
             }
             hotkeyWrites[key] = hotkeys
         }
-        hotkeysBySlot.merge(hotkeyWrites) { _, imported in imported }
+        // Every slot reacts to a matching key press, so an imported binding
+        // that another slot uses afterwards would trigger both actions. Drop
+        // such bindings until the slots that will actually be written agree
+        // with the slots that keep their current bindings; dropping one can
+        // expose another conflict with the binding it would have replaced.
+        let proposedWriteCount = hotkeyWrites.count
+        var droppedWrite = true
+        while droppedWrite {
+            droppedWrite = false
+            let finalHotkeys = hotkeysBySlot.merging(hotkeyWrites) { _, imported in imported }
+            for (key, hotkeys) in hotkeyWrites {
+                let otherHotkeys = finalHotkeys.filter { $0.key != key }.values.flatMap { $0 }
+                let usable = hotkeys.filter { hotkey in !otherHotkeys.contains { $0.conflicts(with: hotkey) } }
+                guard usable != hotkeys else { continue }
+                hotkeyWrites[key] = usable.isEmpty ? nil : usable
+                droppedWrite = true
+                break
+            }
+        }
+        result.hotkeysSkipped += proposedWriteCount - hotkeyWrites.count
         for (key, hotkeys) in hotkeyWrites {
-            // Every slot reacts to a matching key press, so an imported binding
-            // that another slot already uses would trigger both actions.
-            let otherHotkeys = hotkeysBySlot.filter { $0.key != key }.values.flatMap { $0 }
-            let usable = hotkeys.filter { hotkey in !otherHotkeys.contains { $0.conflicts(with: hotkey) } }
-            guard !usable.isEmpty, let data = try? JSONEncoder().encode(usable) else {
+            guard let data = try? JSONEncoder().encode(hotkeys) else {
                 result.hotkeysSkipped += 1
                 continue
             }
@@ -1165,9 +1180,19 @@ extension SettingsBackupExporter.WorkflowDTO {
     func hasSameContent(as other: Self) -> Bool {
         name == other.name
             && template == other.template
-            && trigger == other.trigger
+            && Self.hasSameSelectors(trigger, other.trigger)
             && behavior == other.behavior
             && output == other.output
+    }
+
+    /// Workflow matching checks apps, websites, and hotkeys with `contains`,
+    /// so their order doesn't change which workflow runs.
+    private static func hasSameSelectors(_ lhs: WorkflowTrigger, _ rhs: WorkflowTrigger) -> Bool {
+        lhs.kind == rhs.kind
+            && lhs.hotkeyBehavior == rhs.hotkeyBehavior
+            && Set(lhs.appBundleIdentifiers) == Set(rhs.appBundleIdentifiers)
+            && Set(lhs.websitePatterns) == Set(rhs.websitePatterns)
+            && Set(lhs.hotkeys) == Set(rhs.hotkeys)
     }
 }
 

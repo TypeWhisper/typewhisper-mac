@@ -1665,4 +1665,71 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: toggleData), [toggleHotkey])
         XCTAssertNotNil(fixture.userDefaults.data(forKey: UserDefaultsKeys.hybridHotkeys))
     }
+
+    func testDroppedHotkeyDoesNotLeaveAConflictWithItsOldBinding() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let y = UnifiedHotkey(keyCode: 16, modifierFlags: 0x100, isFn: false)
+        let z = UnifiedHotkey(keyCode: 6, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([y]), forKey: UserDefaultsKeys.toggleHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([z]), forKey: UserDefaultsKeys.recorderToggleHotkeys)
+        let backup = try exportBackup(from: fixture)
+        // Toggle=Z collides with the Recorder, so Toggle keeps Y and Hybrid=Y must not be written either.
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [z],
+            UserDefaultsKeys.hybridHotkeys: [y],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 0)
+        XCTAssertEqual(result.hotkeysSkipped, 2)
+        XCTAssertNil(fixture.userDefaults.data(forKey: UserDefaultsKeys.hybridHotkeys))
+    }
+
+    func testReplaceSwapsHotkeysBetweenSlots() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let y = UnifiedHotkey(keyCode: 16, modifierFlags: 0x100, isFn: false)
+        let z = UnifiedHotkey(keyCode: 6, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([y]), forKey: UserDefaultsKeys.toggleHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([z]), forKey: UserDefaultsKeys.pttHotkeys)
+        let backup = try exportBackup(from: fixture)
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [z],
+            UserDefaultsKeys.pttHotkeys: [y],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 2)
+        let toggleData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: toggleData), [z])
+    }
+
+    func testWorkflowWithReorderedAppsIsTheSameWorkflow() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(
+            name: "Chat",
+            template: .cleanedText,
+            trigger: WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.tinyspeck.slackmacgap", "com.hnc.Discord"])
+        )
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        let edited = editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+            name: workflow.name,
+            isEnabled: workflow.isEnabled,
+            sortOrder: workflow.sortOrder,
+            template: workflow.template,
+            trigger: WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.hnc.Discord", "com.tinyspeck.slackmacgap"]),
+            behavior: workflow.behavior,
+            output: workflow.output
+        )])
+
+        let result = await importBackup(edited, into: fixture)
+
+        XCTAssertEqual(result.workflowsSkipped, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+    }
 }
