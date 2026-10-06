@@ -1713,7 +1713,9 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         }
         if content.interrupted == true { awaitingInterruptedTurnComplete = true }
         var isCompletion = content.generationComplete == true
-        if content.turnComplete == true {
+        // A combined generationComplete + turnComplete completes its own turn
+        // and leaves earlier pending turnCompletes untouched.
+        if content.turnComplete == true, content.generationComplete != true {
             if awaitingInterruptedTurnComplete {
                 awaitingInterruptedTurnComplete = false
             } else if turnCompletesAwaitedAfterGeneration > 0 {
