@@ -994,13 +994,16 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canStartAPIRecording: Bool {
-        state == .idle || isOfferingUndeliveredTranscript
+        state == .idle || canReplaceUndeliveredTranscriptOffer
     }
 
     /// The Insert offer stays up for a while, so a new dictation replaces it, as the dictation
-    /// hotkey does.
-    private var isOfferingUndeliveredTranscript: Bool {
-        guard state == .inserting, case .insertUndeliveredTranscript? = actionFeedbackAction else {
+    /// hotkey does. A running Insert must finish first, or its paste could land during the
+    /// new dictation.
+    private var canReplaceUndeliveredTranscriptOffer: Bool {
+        guard state == .inserting,
+              !isInsertingUndeliveredTranscript,
+              case .insertUndeliveredTranscript? = actionFeedbackAction else {
             return false
         }
         return true
@@ -1030,7 +1033,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
-        if isOfferingUndeliveredTranscript {
+        if canReplaceUndeliveredTranscriptOffer {
             indicatorFeedbackLifetime.finishImmediately()
         }
         let sessionID = UUID()
@@ -2070,7 +2073,9 @@ final class DictationViewModel: ObservableObject {
         }
 
         if state == .inserting {
-            if actionFeedbackMessage != nil {
+            if isInsertingUndeliveredTranscript {
+                // insertUndeliveredTranscript starts the queued dictation once its paste is done.
+            } else if actionFeedbackMessage != nil {
                 indicatorFeedbackLifetime.finishImmediately()
             } else {
                 scheduleInsertingReset(after: .seconds(actionDisplayDuration))
@@ -3131,12 +3136,13 @@ final class DictationViewModel: ObservableObject {
                                 outputFormat: resolvedOutputFormat,
                                 reason: .noTextField
                             )
+                        } else {
+                            targetAppCorrectionBaseline = learningPreInsertionObservation.flatMap {
+                                textInsertionService.recaptureFocusedTextObservation(matching: $0)
+                            }
+                            insertedTextForCorrectionTracking = insertionText
+                            didInsertText = true
                         }
-                        targetAppCorrectionBaseline = learningPreInsertionObservation.flatMap {
-                            textInsertionService.recaptureFocusedTextObservation(matching: $0)
-                        }
-                        insertedTextForCorrectionTracking = insertionText
-                        didInsertText = true
                     }
                     self.pinnedInsertionTarget = nil
                     if !didInsertText {
@@ -4137,18 +4143,23 @@ final class DictationViewModel: ObservableObject {
                     detectMissedTextField: true
                 )
             } catch {
-                guard state == .idle || state == .inserting else { return }
+                guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
+                      state == .idle || state == .inserting else { return }
+                // Keep Insert so the user can try again.
                 showNotchFeedback(
                     message: error.localizedDescription,
                     icon: "xmark.circle.fill",
+                    duration: Self.undeliveredTranscriptFeedbackDuration,
                     isError: true,
-                    errorCategory: "insertion"
+                    errorCategory: "insertion",
+                    action: .insertUndeliveredTranscript(transcript)
                 )
                 return
             }
 
             // A dictation started in the meantime owns the indicator.
-            guard state == .idle || state == .inserting else { return }
+            guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
+                  state == .idle || state == .inserting else { return }
 #if APPSTORE
             if result == .copiedToClipboard {
                 showManualPasteFeedback()
@@ -4165,6 +4176,14 @@ final class DictationViewModel: ObservableObject {
                 showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
             }
         }
+    }
+
+    /// Starts a dictation hotkey press that arrived while Insert was running. Returns whether
+    /// one was queued.
+    private func startQueuedDictationAfterUndeliveredTranscriptInsertion() -> Bool {
+        guard pendingHotkeyDictationStart != nil, state == .inserting else { return false }
+        resetDictationState()
+        return true
     }
 
     /// Whether an engine is usable as the live preview engine: auth-available and

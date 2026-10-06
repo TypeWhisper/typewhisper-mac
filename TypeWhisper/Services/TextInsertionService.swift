@@ -871,10 +871,27 @@ final class TextInsertionService {
     }
 
     func capturePasteVerificationState() -> PasteVerificationState {
-        PasteVerificationState(
-            focusedTextState: captureFocusedTextState(),
-            canInspectFocus: focusedTextElementOverride != nil || canInspectOtherApplications
+        let focusedTextState = captureFocusedTextState()
+        return PasteVerificationState(
+            focusedTextState: focusedTextState,
+            canInspectFocus: focusedTextState != nil || focusedElementQuerySucceeded()
         )
+    }
+
+    /// Whether accessibility answered the focused-element query, so finding no text element means
+    /// that none was focused, not that the query failed.
+    private func focusedElementQuerySucceeded() -> Bool {
+        if focusedTextElementOverride != nil {
+            return true
+        }
+        guard canInspectOtherApplications else { return false }
+        var focusedElement: AnyObject?
+        let error = AXUIElementCopyAttributeValue(
+            AXUIElementCreateSystemWide(),
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedElement
+        )
+        return error == .success || error == .noValue
     }
 
     func captureInsertionContext() -> InsertionContext? {

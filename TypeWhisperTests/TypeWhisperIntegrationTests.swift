@@ -4145,6 +4145,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 ("Notes", "com.apple.Notes", nil)
             }
             apiContext.textInsertionService.selectedTextOverride = { nil }
+            // An unreadable field keeps the test independent of whatever is focused on the machine.
+            let unreadableElement = AXUIElementCreateSystemWide()
+            apiContext.textInsertionService.focusedTextElementOverride = { unreadableElement }
+            apiContext.textInsertionService.focusedTextStateOverride = { _ in
+                (value: nil, selectedText: nil, selectedRange: nil)
+            }
             apiContext.textInsertionService.pasteSimulatorOverride = {}
             let workflow = try XCTUnwrap(apiContext.workflowService.addWorkflow(
                 name: "Meeting notes",
@@ -9394,9 +9400,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .inserting)
         XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noTextFieldMessage) == true)
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+        XCTAssertNil(viewModel.lastSuccessfulDictationInsertion)
 
         // Clicking Insert without focusing a field misses again and keeps the offer.
         viewModel.performActionFeedbackAction()
+        // A new API dictation waits until the running Insert has pasted.
+        XCTAssertFalse(viewModel.canStartAPIRecording)
         for _ in 0..<80 {
             if pastedTexts.count == 2 {
                 break
@@ -9411,6 +9420,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         // A new API dictation may replace the offer, as the dictation hotkey does.
         XCTAssertTrue(viewModel.canStartAPIRecording)
 
+        // A failing Insert shows the error and keeps the offer.
+        context.textInsertionService.accessibilityGrantedOverride = false
+        viewModel.performActionFeedbackAction()
+        let accessibilityError = TextInsertionService.TextInsertionError.accessibilityNotGranted.localizedDescription
+        for _ in 0..<80 {
+            if viewModel.actionFeedbackMessage == accessibilityError {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(viewModel.actionFeedbackMessage, accessibilityError)
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+        context.textInsertionService.accessibilityGrantedOverride = true
+
         isTextFieldFocused = true
         viewModel.performActionFeedbackAction()
         for _ in 0..<80 {
@@ -9423,6 +9447,78 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pastedTexts, ["transcribed", "transcribed", "transcribed"])
         XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
+    }
+
+    @MainActor
+    func testDictationHotkeyDuringInsertStartsAfterThePaste() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.preserveClipboard = false
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        var statesAtPaste: [DictationViewModel.State] = []
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Finder", "com.apple.finder", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = { statesAtPaste.append(viewModel.state) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        let insertTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Insert")
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if viewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               viewModel.actionFeedbackActionTitle == insertTitle {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+
+        viewModel.performActionFeedbackAction()
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        // The new dictation waits for the running Insert instead of replacing the offer.
+        XCTAssertEqual(viewModel.state, .inserting)
+        for _ in 0..<80 {
+            if viewModel.state == .recording {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(viewModel.state, .recording)
+        // The Insert paste landed before recording started.
+        XCTAssertEqual(statesAtPaste.count, 2)
+        XCTAssertEqual(statesAtPaste.last, .inserting)
+        viewModel.handleCancelHotkey()
     }
 
     @MainActor
@@ -9536,7 +9632,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         context.textInsertionService.accessibilityGrantedOverride = true
         context.textInsertionService.selectedTextOverride = { nil }
-        context.textInsertionService.focusedTextElementOverride = { nil }
+        // An unreadable field: TypeWhisper cannot observe the text, but the paste may have landed.
+        let unreadableElement = AXUIElementCreateSystemWide()
+        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
         context.textInsertionService.pasteSimulatorOverride = {}
         var accessibilityObservationBundleIdentifiers: [String?] = []
         var accessibilityObservationEndCount = 0
@@ -9616,7 +9717,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         context.textInsertionService.accessibilityGrantedOverride = true
         context.textInsertionService.selectedTextOverride = { nil }
-        context.textInsertionService.focusedTextElementOverride = { nil }
+        // An unreadable field: TypeWhisper cannot observe the text, but the paste may have landed.
+        let unreadableElement = AXUIElementCreateSystemWide()
+        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
         context.textInsertionService.pasteSimulatorOverride = {}
         var accessibilityObservationBundleIdentifiers: [String?] = []
         var accessibilityObservationEndCount = 0
