@@ -465,13 +465,13 @@ final class TextInsertionService {
 
     struct PasteVerificationState {
         fileprivate let focusedTextState: FocusedTextState?
-        /// False when accessibility could not inspect other apps, so a missing text element
-        /// does not mean that none was focused.
-        fileprivate let canInspectFocus: Bool
+        /// Accessibility answered the focus query and no text element was focused. False when the
+        /// query failed or could not run, for example without access to other apps.
+        fileprivate let noTextElementFocused: Bool
 
         /// Whether verification can show that the paste missed. Unreadable fields never can.
         var canDetectMissedTextField: Bool {
-            focusedTextState.map(\.hasReadableText) ?? canInspectFocus
+            focusedTextState.map(\.hasReadableText) ?? noTextElementFocused
         }
     }
 
@@ -579,26 +579,39 @@ final class TextInsertionService {
 
     /// Returns the focused text element (even without selection), for later insertion.
     func getFocusedTextElement(messagingTimeout: Float? = nil) -> AXUIElement? {
+        queryFocusedTextElement(messagingTimeout: messagingTimeout).element
+    }
+
+    /// The focused text element, and whether accessibility answered the focus query. Without an
+    /// answer, a missing element does not mean that no text element was focused.
+    private func queryFocusedTextElement(
+        messagingTimeout: Float? = nil
+    ) -> (element: AXUIElement?, focusQuerySucceeded: Bool) {
         if let focusedTextElementOverride {
-            guard let element = focusedTextElementOverride() else { return nil }
+            guard let element = focusedTextElementOverride() else { return (nil, true) }
             applyMessagingTimeout(messagingTimeout, to: element)
-            return element
+            return (element, true)
         }
-        guard canInspectOtherApplications else { return nil }
+        guard canInspectOtherApplications else { return (nil, false) }
 
         let systemWide = AXUIElementCreateSystemWide()
         applyMessagingTimeout(messagingTimeout, to: systemWide)
         var focusedElement: AnyObject?
-        guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success else {
-            return nil
+        switch AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) {
+        case .success:
+            break
+        case .noValue:
+            return (nil, true)
+        default:
+            return (nil, false)
         }
 
-        guard let element = axElement(from: focusedElement) else { return nil }
+        guard let element = axElement(from: focusedElement) else { return (nil, false) }
         applyMessagingTimeout(messagingTimeout, to: element)
         if isLiveFieldTextRole(element) {
-            return element
+            return (element, true)
         }
-        return findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout)
+        return (findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout), true)
     }
 
     /// Replaces the selected text on a previously captured AXUIElement.
@@ -870,28 +883,16 @@ final class TextInsertionService {
         return defaultPasteFallbackRestoreDelay
     }
 
-    func capturePasteVerificationState() -> PasteVerificationState {
-        let focusedTextState = captureFocusedTextState()
+    /// `acceptsPasteWithoutTextElement` is for apps such as terminals that take a paste even though
+    /// accessibility shows no text element.
+    func capturePasteVerificationState(acceptsPasteWithoutTextElement: Bool = false) -> PasteVerificationState {
+        let query = queryFocusedTextElement()
         return PasteVerificationState(
-            focusedTextState: focusedTextState,
-            canInspectFocus: focusedTextState != nil || focusedElementQuerySucceeded()
+            focusedTextState: query.element.flatMap { captureFocusedTextState(for: $0) },
+            // A found element whose state could not be captured is not proof of a missing field.
+            noTextElementFocused: query.focusQuerySucceeded && query.element == nil
+                && !acceptsPasteWithoutTextElement
         )
-    }
-
-    /// Whether accessibility answered the focused-element query, so finding no text element means
-    /// that none was focused, not that the query failed.
-    private func focusedElementQuerySucceeded() -> Bool {
-        if focusedTextElementOverride != nil {
-            return true
-        }
-        guard canInspectOtherApplications else { return false }
-        var focusedElement: AnyObject?
-        let error = AXUIElementCopyAttributeValue(
-            AXUIElementCreateSystemWide(),
-            kAXFocusedUIElementAttribute as CFString,
-            &focusedElement
-        )
-        return error == .success || error == .noValue
     }
 
     func captureInsertionContext() -> InsertionContext? {
@@ -1304,7 +1305,7 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState()
+            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
@@ -1411,7 +1412,7 @@ final class TextInsertionService {
 
     private func waitForPasteVerification(using state: PasteVerificationState) async -> PasteVerification {
         guard state.focusedTextState != nil else {
-            return .unverified(state.canInspectFocus ? .noFocusedTextElement : .focusedTextStateUnavailable)
+            return .unverified(state.noTextElementFocused ? .noFocusedTextElement : .focusedTextStateUnavailable)
         }
 
         let attempts = max(0, pasteVerificationAttempts)

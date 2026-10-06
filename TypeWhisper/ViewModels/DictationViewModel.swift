@@ -247,8 +247,21 @@ final class DictationViewModel: ObservableObject {
         }
 
         let text: String
+        let rawTranscript: String
         let outputFormat: String?
         let reason: Reason
+        /// Recorded as the latest successful dictation once Insert lands.
+        let completion: DictationInsertionCompletion
+
+        func with(reason: Reason) -> UndeliveredTranscript {
+            UndeliveredTranscript(
+                text: text,
+                rawTranscript: rawTranscript,
+                outputFormat: outputFormat,
+                reason: reason,
+                completion: completion
+            )
+        }
     }
 
     /// Long enough to focus another text field before clicking Insert. Hovering pauses it.
@@ -2967,6 +2980,19 @@ final class DictationViewModel: ObservableObject {
                 partialText = ""
                 var insertedTextForCorrectionTracking: String?
                 var undeliveredTranscript: UndeliveredTranscript?
+                let makeUndeliveredTranscript = { (reason: UndeliveredTranscript.Reason, outputFormat: String?) in
+                    UndeliveredTranscript(
+                        text: text,
+                        rawTranscript: result.text,
+                        outputFormat: outputFormat,
+                        reason: reason,
+                        completion: DictationInsertionCompletion(
+                            id: transcriptionID,
+                            providerId: result.engineUsed,
+                            modelId: transcription.modelId
+                        )
+                    )
+                }
                 var targetAppCorrectionBaseline: TextInsertionService.FocusedTextObservation?
                 let modelDisplayName = transcription.modelDisplayName
                 var pipelineSteps = ppResult.appliedSteps
@@ -3021,11 +3047,7 @@ final class DictationViewModel: ObservableObject {
                         shouldUseNormalInsertion = await textInsertionService
                             .focusPinnedInsertionTarget(pinnedInsertionTarget)
                         if !shouldUseNormalInsertion {
-                            undeliveredTranscript = UndeliveredTranscript(
-                                text: text,
-                                outputFormat: nil,
-                                reason: .textFieldChanged
-                            )
+                            undeliveredTranscript = makeUndeliveredTranscript(.textFieldChanged, nil)
                             cancelLiveFieldTranscriptSession()
                         }
                     }
@@ -3063,22 +3085,14 @@ final class DictationViewModel: ObservableObject {
                             shouldUseNormalInsertion = !hadAttemptedMutation
                                 && (allowsFocusedFallback || pinnedInsertionTarget != nil)
                             if !shouldUseNormalInsertion {
-                                undeliveredTranscript = UndeliveredTranscript(
-                                    text: text,
-                                    outputFormat: nil,
-                                    reason: .textFieldChanged
-                                )
+                                undeliveredTranscript = makeUndeliveredTranscript(.textFieldChanged, nil)
                             }
                         }
                         self.liveFieldTranscriptSession = nil
                     } else if liveFieldTranscriptSession != nil {
                         shouldUseNormalInsertion = prepareLiveFieldSessionForNormalInsertion()
                         if !shouldUseNormalInsertion {
-                            undeliveredTranscript = UndeliveredTranscript(
-                                text: text,
-                                outputFormat: resolvedOutputFormat,
-                                reason: .textFieldChanged
-                            )
+                            undeliveredTranscript = makeUndeliveredTranscript(.textFieldChanged, resolvedOutputFormat)
                         }
                     }
 
@@ -3088,11 +3102,7 @@ final class DictationViewModel: ObservableObject {
                         shouldUseNormalInsertion = await textInsertionService
                             .focusPinnedInsertionTarget(pinnedInsertionTarget)
                         if !shouldUseNormalInsertion {
-                            undeliveredTranscript = UndeliveredTranscript(
-                                text: text,
-                                outputFormat: resolvedOutputFormat,
-                                reason: .textFieldChanged
-                            )
+                            undeliveredTranscript = makeUndeliveredTranscript(.textFieldChanged, resolvedOutputFormat)
                         }
                     }
 
@@ -3131,11 +3141,7 @@ final class DictationViewModel: ObservableObject {
                         }
 #endif
                         if insertionResult?.missedTextField == true {
-                            undeliveredTranscript = UndeliveredTranscript(
-                                text: text,
-                                outputFormat: resolvedOutputFormat,
-                                reason: .noTextField
-                            )
+                            undeliveredTranscript = makeUndeliveredTranscript(.noTextField, resolvedOutputFormat)
                         } else {
                             targetAppCorrectionBaseline = learningPreInsertionObservation.flatMap {
                                 textInsertionService.recaptureFocusedTextObservation(matching: $0)
@@ -4129,15 +4135,28 @@ final class DictationViewModel: ObservableObject {
     private func insertUndeliveredTranscript(_ transcript: UndeliveredTranscript) {
         guard !isInsertingUndeliveredTranscript else { return }
         isInsertingUndeliveredTranscript = true
+        // An offer expiring mid-paste would return to idle and let a new dictation start
+        // before this paste lands. The result feedback starts a new lifetime.
+        indicatorFeedbackLifetime.cancel()
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             defer { self.isInsertingUndeliveredTranscript = false }
+            // Format for the field focused now, as a dictation into it would.
+            let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
+            let insertionText = DictationInsertionTextFormatter.textForInsertion(
+                transcript.text,
+                insertionContext: contextualInsertionEnabled ? textInsertionService.captureInsertionContext() : nil,
+                contextualInsertionEnabled: contextualInsertionEnabled,
+                standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
+                    .standaloneValueFinalPeriodCleanupEnabled()
+            )
+            let activeApp = textInsertionService.captureActiveApp()
             let result: TextInsertionService.InsertionResult
             do {
                 // No Auto Enter: the focused field may belong to another app than the dictation.
                 result = try await textInsertionService.insertText(
-                    transcript.text,
+                    insertionText,
                     preserveClipboard: preserveClipboard,
                     outputFormat: transcript.outputFormat,
                     detectMissedTextField: true
@@ -4157,6 +4176,15 @@ final class DictationViewModel: ObservableObject {
                 return
             }
 
+            if !result.missedTextField {
+                recordUndeliveredTranscriptInsertion(
+                    transcript,
+                    insertedText: insertionText,
+                    result: result,
+                    activeApp: activeApp
+                )
+            }
+
             // A dictation started in the meantime owns the indicator.
             guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
                   state == .idle || state == .inserting else { return }
@@ -4167,14 +4195,34 @@ final class DictationViewModel: ObservableObject {
             }
 #endif
             if result.missedTextField {
-                showUndeliveredTranscriptFeedback(UndeliveredTranscript(
-                    text: transcript.text,
-                    outputFormat: transcript.outputFormat,
-                    reason: .noTextField
-                ))
+                showUndeliveredTranscriptFeedback(transcript.with(reason: .noTextField))
             } else {
                 showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
             }
+        }
+    }
+
+    /// The bookkeeping a dictation does after inserting its text.
+    private func recordUndeliveredTranscriptInsertion(
+        _ transcript: UndeliveredTranscript,
+        insertedText: String,
+        result: TextInsertionService.InsertionResult,
+        activeApp: (name: String?, bundleId: String?, url: String?)
+    ) {
+        lastSuccessfulDictationInsertion = transcript.completion
+        EventBus.shared.emit(.textInserted(TextInsertedPayload(
+            text: insertedText,
+            appName: activeApp.name,
+            bundleIdentifier: activeApp.bundleId
+        )))
+        // As after a dictation, Undo needs unformatted text whose insertion was verified.
+        let insertionIsVerifiable = result == .insertedViaAccessibility || result == .pasted(verification: .verified)
+        if transcript.outputFormat == nil, insertionIsVerifiable {
+            dictationUndoService.recordSnapshot(
+                rawTranscript: transcript.rawTranscript,
+                insertedText: insertedText,
+                transcriptionID: transcript.completion.id
+            )
         }
     }
 

@@ -5501,6 +5501,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.focusedTextElementOverride = { nil }
 
         var pasteCount = 0
@@ -5536,11 +5537,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testFocusedElementWithoutCapturedStateIsNotReportedAsMissingTextField() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in nil }
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", awaitPasteVerification: true)
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertFalse(result.missedTextField)
+    }
+
+    @MainActor
     func testDetectMissedTextFieldReportsPasteWithoutFocusedTextElement() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.focusedTextElementOverride = { nil }
         service.pasteSimulatorOverride = {}
 
@@ -5548,6 +5567,22 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(result, .pasted(verification: .unverified(.noFocusedTextElement)))
         XCTAssertTrue(result.missedTextField)
+    }
+
+    @MainActor
+    func testDetectMissedTextFieldIgnoresTerminalWithoutTextElement() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Ghostty", "com.mitchellh.ghostty", nil) }
+        service.focusedTextElementOverride = { nil }
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertFalse(result.missedTextField)
     }
 
     @MainActor
@@ -5623,6 +5658,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.focusedTextElementOverride = { nil }
         service.defaultPasteFallbackRestoreDelay = .milliseconds(80)
 
@@ -9447,6 +9483,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pastedTexts, ["transcribed", "transcribed", "transcribed"])
         XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
+        // The verified Insert counts as the dictation's successful insertion.
+        XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
     }
 
     @MainActor
