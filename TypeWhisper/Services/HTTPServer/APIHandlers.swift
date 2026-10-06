@@ -1,6 +1,7 @@
 import Foundation
 import TypeWhisperPluginSDK
 import os
+import TypeWhisperPluginSDK
 
 private let apiLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "APIHandlers")
 
@@ -62,6 +63,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/recorder/stop", handler: handleStopRecorder)
         router.register("GET", "/v1/recorder/status", handler: handleRecorderStatus)
         router.register("GET", "/v1/recorder/session", handler: handleRecorderSession)
+        router.register("GET", "/v1/recorder/recordings") { [audioRecorderViewModel] request in
+            await Self.recorderRecordingsResponse(for: request, recorder: audioRecorderViewModel)
+        }
         router.register("GET", "/v1/dictionary/terms", handler: handleGetDictionaryTerms)
         router.register("PUT", "/v1/dictionary/terms", handler: handlePutDictionaryTerms)
         router.register("DELETE", "/v1/dictionary/terms", handler: handleDeleteDictionaryTerms)
@@ -88,9 +92,12 @@ final class APIHandlers: @unchecked Sendable {
         guard !request.body.isEmpty else {
             return .error(status: 400, message: "Request body must contain a TypeWhisper settings backup")
         }
+        guard let mode = SettingsBackupExporter.ImportMode(rawValue: request.queryParams["mode"] ?? "merge") else {
+            return .error(status: 400, message: "mode must be merge or replace")
+        }
 
         do {
-            let result = try await settingsBackupService.importData(request.body)
+            let result = try await settingsBackupService.importData(request.body, mode: mode)
             return .json(result)
         } catch SettingsBackupExporter.ImportError.invalidFile {
             return .error(status: 400, message: "Request body is not a valid TypeWhisper settings backup")
@@ -1545,6 +1552,7 @@ final class APIHandlers: @unchecked Sendable {
                 let engine_ready_at_start: Bool?
                 let input_transport: String?
                 let request_to_first_audio_buffer_ms: Double?
+                let preroll_ms: Double
                 let recording_seconds: Double?
                 let stop_to_final_transcript_ms: Double?
                 let post_processing_ms: Double?
@@ -1596,6 +1604,7 @@ final class APIHandlers: @unchecked Sendable {
                     engine_ready_at_start: trace.engineReadyAtStart,
                     input_transport: trace.inputTransport,
                     request_to_first_audio_buffer_ms: trace.requestToFirstAudioBufferMs,
+                    preroll_ms: trace.prerollMs,
                     recording_seconds: trace.recordingSeconds,
                     stop_to_final_transcript_ms: trace.stopToFinalTranscriptMs,
                     post_processing_ms: trace.postProcessingMs,
@@ -1708,6 +1717,41 @@ final class APIHandlers: @unchecked Sendable {
             output_file: session.outputFile,
             error: session.error
         ))
+    }
+
+    // MARK: - GET /v1/recorder/recordings
+
+    static func recorderRecordingsResponse(
+        for request: HTTPRequest, recorder: AudioRecorderViewModel
+    ) async -> HTTPResponse {
+        let since: Date?
+        if let value = request.queryParams["since"] {
+            if let seconds = Double(value), seconds.isFinite, seconds >= 0 {
+                since = Date(timeIntervalSince1970: seconds)
+            } else {
+                let formatter = ISO8601DateFormatter()
+                formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+                let fractionalDate = formatter.date(from: value)
+                formatter.formatOptions = [.withInternetDateTime]
+                guard let date = fractionalDate ?? formatter.date(from: value) else {
+                    return .error(status: 400, message: "Invalid 'since': use Unix seconds or an ISO 8601 timestamp")
+                }
+                since = date
+            }
+        } else {
+            since = nil
+        }
+
+        struct RecordingsResponse: Encodable {
+            let recordings: [RecorderTranscriptReadyPayload]
+        }
+        do {
+            return .json(RecordingsResponse(recordings: try await recorder.apiRecorderRecordings(since: since)))
+        } catch {
+            apiLogger.error("Recorder completion lookup failed: \(error.localizedDescription, privacy: .public)")
+            // Do not silently skip unreadable receipts: consumers could advance their cursor past them.
+            return .error(status: 500, message: "Could not read completed Recorder transcripts")
+        }
     }
 
     // MARK: - Helpers

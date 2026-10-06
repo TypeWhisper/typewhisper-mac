@@ -94,6 +94,9 @@ final class ServiceContainer: ObservableObject {
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
     let premiumAccountService: PremiumAccountService
+    #if APPSTORE
+    let appStorePremiumService: AppStorePremiumService
+    #endif
     let supporterDiscordService: SupporterDiscordService
     let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
     let speakerVoiceProfileService: SpeakerVoiceProfileService
@@ -203,6 +206,14 @@ final class ServiceContainer: ObservableObject {
                 automaticallyRefresh: false
             )
             : PremiumAccountService()
+        #if APPSTORE
+        appStorePremiumService = AppStorePremiumService(
+            licenseService: licenseService,
+            premiumAccountService: premiumAccountService
+        )
+        // The sync controller below reads Premium access while it starts.
+        AppStorePremiumService.shared = appStorePremiumService
+        #endif
         supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
             premiumAccountService: premiumAccountService,
@@ -398,6 +409,9 @@ final class ServiceContainer: ObservableObject {
             },
             dictationRecoveryPreferencesDidChange: { [recoveryViewModel] in
                 recoveryViewModel.reloadPreferencesFromDefaults()
+            },
+            hotkeysDidChange: { [dictationViewModel] in
+                dictationViewModel.reloadHotkeysFromDefaults()
             }
         )
         let handlers = APIHandlers(
@@ -430,7 +444,12 @@ final class ServiceContainer: ObservableObject {
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,
             licenseService: licenseService,
-            termPackRegistryService: termPackRegistryService
+            termPackRegistryService: termPackRegistryService,
+            selectedTranscriptionEngine: { [modelManagerService] in
+                modelManagerService.selectedProviderId.flatMap {
+                    PluginManager.shared?.transcriptionEngine(for: $0)
+                }
+            }
         )
         snippetsViewModel = SnippetsViewModel(snippetService: snippetService)
         homeViewModel = HomeViewModel(
@@ -493,6 +512,11 @@ final class ServiceContainer: ObservableObject {
         let initializeState = signposter.beginInterval("Launch.initialize")
         defer { signposter.endInterval("Launch.initialize", initializeState) }
 
+        #if APPSTORE
+        // Listen for App Store transactions as early as possible.
+        appStorePremiumService.start()
+        #endif
+
         calendarMeetingAutomationController.initialize()
         historyService.failInterruptedSpeakerTranscripts()
         speakerVoiceProfileService.removeEmbeddingsOfDeletedRecordings()
@@ -534,10 +558,12 @@ final class ServiceContainer: ObservableObject {
         // Start memory service
         memoryService.startListening()
 
+        #if !APPSTORE
         // Validate license if needed
         await licenseService.validateIfNeeded()
         await licenseService.validateSupporterIfNeeded()
         await supporterDiscordService.refreshStatusIfNeeded()
+        #endif
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

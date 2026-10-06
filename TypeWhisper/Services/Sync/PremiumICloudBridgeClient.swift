@@ -9,6 +9,16 @@ protocol PremiumICloudBridging: Sendable {
     func removeDevice(_ deviceID: String) async throws
 }
 
+enum PremiumICloudBridgeFactory {
+    static func makeDefault() -> any PremiumICloudBridging {
+        #if APPSTORE
+        AppStoreICloudMirror()
+        #else
+        PremiumICloudBridgeClient()
+        #endif
+    }
+}
+
 private final class PremiumICloudBridgeReplyGate: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?

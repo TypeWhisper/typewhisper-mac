@@ -98,6 +98,12 @@ final class RecentTranscriptionPaletteHandler {
                 autoEnter: false,
                 awaitPasteVerification: true
             )
+#if APPSTORE
+            if result == .copiedToClipboard {
+                onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
+                return
+            }
+#endif
             if result.leftFocusedTextUnchanged {
                 onShowNotchFeedback?(
                     String(localized: "Text may not have been inserted"),

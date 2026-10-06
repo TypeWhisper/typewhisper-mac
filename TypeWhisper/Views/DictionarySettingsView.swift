@@ -42,14 +42,19 @@ struct DictionarySettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Coming back to the page later starts on the page itself.
-        .onDisappear { settingsNavigation.dictionaryPart = .dictionary }
+        .onDisappear {
+            settingsNavigation.dictionaryPart = .dictionary
+            viewModel.clearTermsSettingSuggestion()
+        }
     }
 
     private var dictionaryPart: some View {
         VStack(spacing: 0) {
+            #if !APPSTORE
             PremiumActiveFeatureOverview.link(to: .correctionLearning)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.vertical, 12)
+            #endif
 
             dictionaryHeader
 
@@ -76,6 +81,11 @@ struct DictionarySettingsView: View {
                 service: trainingService,
                 dismiss: { isTrainingPresented = false }
             )
+        }
+        .onChange(of: trainingService.summary?.addedTerm) { _, addedTerm in
+            if addedTerm == true {
+                viewModel.suggestTermsSettingIfNeeded(afterAdding: .term)
+            }
         }
         .alert(String(localized: "Error"), isPresented: Binding(
             get: { viewModel.error != nil },
@@ -334,8 +344,13 @@ struct DictionarySettingsView: View {
     private var dictionaryEntriesView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
+                termsSettingSuggestionBanner
+
                 if !engineSupportRows.isEmpty {
-                    DictionaryEngineSupportSection(rows: engineSupportRows)
+                    DictionaryEngineSupportSection(
+                        rows: engineSupportRows,
+                        enableSetting: enableTermsSetting(providerId:)
+                    )
                 }
 
                 if viewModel.filteredListRows.isEmpty {
@@ -471,6 +486,8 @@ struct DictionarySettingsView: View {
     private var termPacksView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
+                termsSettingSuggestionBanner
+
                 // Built-in Packs
                 ForEach(viewModel.visibleBuiltInPacks) { pack in
                     TermPackCardView(pack: pack, viewModel: viewModel)
@@ -553,11 +570,30 @@ struct DictionarySettingsView: View {
         pluginManager.transcriptionEngines
             .map {
                 DictionaryEngineSupportRow(
+                    providerId: $0.providerId,
                     engineName: $0.providerDisplayName,
-                    support: ($0 as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport ?? .unsupported
+                    support: ($0 as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport ?? .unsupported,
+                    settingSummary: ($0 as? any DictionaryTermsSettingEnabling)?.dictionaryTermsSettingSummary,
+                    settingActivation: viewModel.termsSettingActivations[$0.providerId]
                 )
             }
             .sorted { $0.engineName.localizedCaseInsensitiveCompare($1.engineName) == .orderedAscending }
+    }
+
+    @ViewBuilder
+    private var termsSettingSuggestionBanner: some View {
+        if let suggestion = viewModel.visibleTermsSettingSuggestion {
+            DictionaryTermsSettingSuggestionBanner(
+                suggestion: suggestion,
+                enable: { viewModel.enableSuggestedTermsSetting() },
+                dismiss: { viewModel.dismissTermsSettingSuggestion() }
+            )
+        }
+    }
+
+    private func enableTermsSetting(providerId: String) {
+        guard let engine = pluginManager.transcriptionEngine(for: providerId) else { return }
+        viewModel.enableTermsSetting(for: engine)
     }
 }
 
@@ -955,10 +991,18 @@ private struct DictionaryTrainingSheet: View {
 }
 
 private struct DictionaryEngineSupportRow: Identifiable {
+    let providerId: String
     let engineName: String
     let support: DictionaryTermsSupport
+    /// Present when the plugin can turn on its Terms setting from here.
+    let settingSummary: String?
+    let settingActivation: DictionaryTermsSettingActivation?
 
-    var id: String { engineName }
+    var id: String { providerId }
+
+    var offersSettingAction: Bool {
+        settingSummary != nil && (support == .requiresPluginSetting || settingActivation != nil)
+    }
 
     var badgeText: LocalizedStringKey {
         switch support {
@@ -987,6 +1031,10 @@ private struct DictionaryEngineSupportRow: Identifiable {
         case .supported:
             return nil
         case .requiresPluginSetting:
+            // Plugins that can enable the setting describe it next to the Enable action.
+            if settingSummary != nil {
+                return nil
+            }
             if engineName == "Parakeet" {
                 return "Terms work only when Vocabulary Boosting is enabled in the Parakeet plugin settings."
             }
@@ -1002,6 +1050,7 @@ private struct DictionaryEngineSupportRow: Identifiable {
 
 private struct DictionaryEngineSupportSection: View {
     let rows: [DictionaryEngineSupportRow]
+    let enableSetting: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1036,6 +1085,20 @@ private struct DictionaryEngineSupportSection: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+
+                        if row.offersSettingAction, let summary = row.settingSummary {
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(summary)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 8)
+                                DictionaryTermsSettingActionView(
+                                    activation: row.settingActivation,
+                                    enable: { enableSetting(row.providerId) }
+                                )
+                            }
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 10)
@@ -1045,6 +1108,88 @@ private struct DictionaryEngineSupportSection: View {
                             .fill(Color(NSColor.controlBackgroundColor))
                     )
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Terms Setting Suggestion
+
+private struct DictionaryTermsSettingSuggestionBanner: View {
+    let suggestion: DictionaryTermsSettingSuggestion
+    let enable: () -> Void
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "text.badge.checkmark")
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(localizedAppText("Improve Dictionary Terms", de: "Begriffe besser erkennen"))
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                Text(suggestion.summary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 8) {
+                if suggestion.activation != .enabling {
+                    Button(localizedAppText("Not now", de: "Später"), action: dismiss)
+                        .controlSize(.small)
+                }
+                DictionaryTermsSettingActionView(activation: suggestion.activation, enable: enable)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                .fill(Color.accentColor.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                .strokeBorder(Color.accentColor.opacity(0.25), lineWidth: 1)
+        )
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Enable button, or the progress and failure state while a plugin enables its Terms setting.
+private struct DictionaryTermsSettingActionView: View {
+    let activation: DictionaryTermsSettingActivation?
+    let enable: () -> Void
+
+    var body: some View {
+        switch activation {
+        case nil:
+            Button(localizedAppText("Enable", de: "Aktivieren"), action: enable)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+        case .enabling:
+            HStack(spacing: 6) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(localizedAppText("Setting up...", de: "Wird eingerichtet..."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let message):
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(message)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .help(message)
+                Button(localizedAppText("Retry", de: "Erneut versuchen"), action: enable)
+                    .controlSize(.small)
             }
         }
     }

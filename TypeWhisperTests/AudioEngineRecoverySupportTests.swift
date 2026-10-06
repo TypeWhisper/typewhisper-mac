@@ -295,6 +295,406 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         ))
     }
 
+    func testMicrophonePrerollOnExplicitInputRequiresOptInAndNonBluetoothSelection() {
+        func isEligible(
+            permission: Bool = true,
+            enabled: Bool = true,
+            deviceID: AudioDeviceID? = 6,
+            explicit: Bool = true,
+            bluetooth: Bool = false
+        ) -> Bool {
+            MicrophonePrerollInputPolicy.isEligibleForExplicitInput(
+                hasMicrophonePermission: permission,
+                isEnabled: enabled,
+                selectedDeviceID: deviceID,
+                hasExplicitDeviceSelection: explicit,
+                usesBluetoothTransport: bluetooth
+            )
+        }
+
+        XCTAssertTrue(isEligible())
+        XCTAssertFalse(isEligible(enabled: false))
+        XCTAssertFalse(isEligible(permission: false))
+        XCTAssertFalse(isEligible(deviceID: nil))
+        XCTAssertFalse(isEligible(explicit: false))
+        XCTAssertFalse(isEligible(bluetooth: true))
+        XCTAssertEqual(UserDefaultsKeys.microphonePrerollEnabled, "microphonePrerollEnabled")
+    }
+
+    func testMicrophonePrerollOnSystemDefaultInputAcceptsOnlyNonBuiltInNonBluetoothTransports() {
+        func isEligible(
+            permission: Bool = true,
+            enabled: Bool = true,
+            selectedDeviceID: AudioDeviceID? = nil,
+            explicit: Bool = false,
+            bluetooth: Bool = false,
+            defaultDeviceID: AudioDeviceID? = 9,
+            transport: UInt32? = kAudioDeviceTransportTypeUSB
+        ) -> Bool {
+            MicrophonePrerollInputPolicy.isEligibleForSystemDefaultInput(
+                hasMicrophonePermission: permission,
+                isEnabled: enabled,
+                selectedDeviceID: selectedDeviceID,
+                hasExplicitDeviceSelection: explicit,
+                usesBluetoothTransport: bluetooth,
+                defaultInputDeviceID: defaultDeviceID,
+                defaultInputTransport: transport
+            )
+        }
+
+        XCTAssertTrue(isEligible())
+        XCTAssertTrue(isEligible(transport: kAudioDeviceTransportTypeVirtual))
+        XCTAssertTrue(isEligible(transport: kAudioDeviceTransportTypeAggregate))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBuiltIn))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBluetooth))
+        XCTAssertFalse(isEligible(transport: kAudioDeviceTransportTypeBluetoothLE))
+        XCTAssertFalse(isEligible(transport: nil))
+        XCTAssertFalse(isEligible(defaultDeviceID: nil))
+        XCTAssertFalse(isEligible(enabled: false))
+        XCTAssertFalse(isEligible(permission: false))
+        XCTAssertFalse(isEligible(selectedDeviceID: 6))
+        XCTAssertFalse(isEligible(explicit: true))
+        XCTAssertFalse(isEligible(bluetooth: true))
+    }
+
+    func testPrerollFailureCallbackIsCurrentOnlyForItsOwnGeneration() {
+        XCTAssertTrue(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 4, currentGeneration: 4))
+        XCTAssertFalse(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 4, currentGeneration: 5))
+        XCTAssertFalse(MicrophonePrerollStreamScopePolicy.isCurrent(streamGeneration: 5, currentGeneration: 4))
+    }
+
+    func testArmedConfigurationChangeIsIgnoredOnlyWhenRunningWithTheTapFormat() {
+        func isFormatPreserving(
+            running: Bool = true,
+            liveRate: Double = 48_000,
+            liveChannels: UInt32 = 1
+        ) -> Bool {
+            MicrophonePrerollConfigurationChangePolicy.isFormatPreserving(
+                engineIsRunning: running,
+                tapSampleRate: 48_000,
+                tapChannelCount: 1,
+                liveSampleRate: liveRate,
+                liveChannelCount: liveChannels
+            )
+        }
+
+        XCTAssertTrue(isFormatPreserving())
+        XCTAssertFalse(isFormatPreserving(running: false))
+        XCTAssertFalse(isFormatPreserving(liveRate: 44_100))
+        XCTAssertFalse(isFormatPreserving(liveChannels: 2))
+        XCTAssertFalse(isFormatPreserving(liveRate: 0))
+        XCTAssertFalse(isFormatPreserving(liveChannels: 0))
+    }
+
+    func testMicrophonePrerollRearmPolicyBacksOffAndGivesUpAfterABurst() {
+        var policy = MicrophonePrerollRearmPolicy()
+
+        XCTAssertEqual(policy.recordFailure(at: 0), .retry(after: 0.5))
+        XCTAssertEqual(policy.recordFailure(at: 1), .retry(after: 2))
+        XCTAssertEqual(policy.recordFailure(at: 2), .retry(after: 5))
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 3), .giveUp)
+        XCTAssertTrue(policy.hasGivenUp)
+
+        policy.reset()
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 4), .retry(after: 0.5))
+    }
+
+    func testMicrophonePrerollRearmPolicyForgetsOldFailures() {
+        var policy = MicrophonePrerollRearmPolicy()
+        _ = policy.recordFailure(at: 0)
+        _ = policy.recordFailure(at: 1)
+
+        XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: 0.5))
+    }
+
+    func testMicrophonePrerollFreshnessIsNeverSynthesizedWhenRearming() {
+        let lastRealBuffer: UInt64 = 5_000_000_000
+
+        // Re-arming keeps the real timestamp instead of stamping the re-arm time.
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: true,
+                retainingLastBuffer: true,
+                previous: lastRealBuffer
+            ),
+            lastRealBuffer
+        )
+        // A fresh arm or a disarm starts without any buffer.
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: true,
+                retainingLastBuffer: false,
+                previous: lastRealBuffer
+            ),
+            0
+        )
+        XCTAssertEqual(
+            MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                armed: false,
+                retainingLastBuffer: true,
+                previous: lastRealBuffer
+            ),
+            0
+        )
+    }
+
+    func testMicrophonePrerollStreamThatStalledDuringRecordingIsNotFreshAfterStop() {
+        let stalledAt: UInt64 = 1_000_000_000
+        let stopTime: UInt64 = 3_000_000_000
+        // Back-to-back dictation right after a stop at the stop time: the last real buffer
+        // is two seconds old, so the dead stream must not be claimed.
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: stalledAt,
+                now: stopTime + 100_000_000,
+                within: 0.25
+            )
+        )
+    }
+
+    func testMicrophonePrerollStreamWithRecentRealBufferIsFreshAfterStop() {
+        let lastBuffer: UInt64 = 3_000_000_000
+        XCTAssertTrue(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: lastBuffer,
+                now: lastBuffer + 200_000_000,
+                within: 0.25
+            )
+        )
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(
+                lastBufferUptime: lastBuffer,
+                now: lastBuffer + 300_000_000,
+                within: 0.25
+            )
+        )
+        XCTAssertFalse(MicrophonePrerollFreshnessPolicy.isFresh(lastBufferUptime: 0, now: lastBuffer, within: 0.25))
+        XCTAssertFalse(
+            MicrophonePrerollFreshnessPolicy.isFresh(lastBufferUptime: lastBuffer + 1, now: lastBuffer, within: 0.25)
+        )
+    }
+
+    func testInputPreparationStaysBlockedWhileAStopIsDraining() {
+        var tracker = RecordingStopTracker()
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: true))
+
+        // The recording is already inactive during the short-speech grace wait, but the stop
+        // still owns the capture path.
+        tracker.begin()
+        XCTAssertTrue(tracker.isStopping)
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: false))
+
+        tracker.end()
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+    }
+
+    func testOverlappingStopsDoNotReleaseEachOther() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin()
+
+        tracker.end()
+        XCTAssertTrue(tracker.isStopping)
+        XCTAssertFalse(tracker.allowsInputPreparation(isRecordingActive: false))
+
+        tracker.end()
+        tracker.end()
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.allowsInputPreparation(isRecordingActive: false))
+    }
+
+    func testPreparationRejectedDuringAStopIsReportedWhenTheLastStopEnds() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin()
+
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertTrue(tracker.hasRejectedPreparation)
+
+        XCTAssertFalse(tracker.end(), "an overlapping stop is still draining")
+        XCTAssertTrue(tracker.end())
+    }
+
+    func testWorkingRecordingClearsGivenUpRearmPolicy() {
+        var policy = MicrophonePrerollRearmPolicy()
+        for attempt in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+            _ = policy.recordFailure(at: TimeInterval(attempt))
+        }
+        XCTAssertTrue(policy.hasGivenUp)
+
+        policy.noteWorkingRecording()
+
+        XCTAssertFalse(policy.hasGivenUp)
+        XCTAssertEqual(policy.recordFailure(at: 100), .retry(after: MicrophonePrerollRearmPolicy.retryBackoff[0]))
+    }
+
+    func testCaptureStreamRegistryHandsOutEachTokenOnce() {
+        let registry = CaptureStreamRegistry()
+        let stream = NSObject()
+        let token = CaptureStreamToken()
+        registry.register(token, for: stream)
+
+        XCTAssertFalse(token.isRetired)
+        XCTAssertTrue(registry.take(for: stream) === token)
+        XCTAssertNil(registry.take(for: stream))
+        XCTAssertNil(registry.take(for: NSObject()))
+
+        token.retire()
+        XCTAssertTrue(token.isRetired)
+    }
+
+    func testScreenLockProbeReadsTheSessionDictionaryAndFailsOpen() {
+        let probe = MicrophonePrerollScreenLockProbe.self
+        XCTAssertTrue(probe.isLocked(sessionDictionary: [probe.lockedKey: true]))
+        XCTAssertTrue(probe.isLocked(sessionDictionary: [probe.lockedKey: NSNumber(value: 1)]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [probe.lockedKey: false]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [:]))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: nil))
+        XCTAssertFalse(probe.isLocked(sessionDictionary: [probe.lockedKey: "yes"]))
+    }
+
+    func testBluetoothReleaseStopDoesNotBlockOrReplayPreparation() {
+        var tracker = RecordingStopTracker()
+        tracker.begin(blocksPreparation: false)
+
+        XCTAssertFalse(tracker.isStopping)
+        XCTAssertTrue(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+        XCTAssertFalse(tracker.end(blocksPreparation: false))
+    }
+
+    func testBluetoothReleaseStopOverlappingABlockingStopKeepsTheGateClosed() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        tracker.begin(blocksPreparation: false)
+
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.end(), "the release stop is still draining")
+        XCTAssertTrue(tracker.end(blocksPreparation: false))
+    }
+
+    func testStopWithoutRejectedPreparationReportsNothing() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+
+        // A request that arrives while no stop is draining is not deferred.
+        XCTAssertTrue(tracker.evaluatePreparationRequest(isRecordingActive: false))
+        XCTAssertFalse(tracker.evaluatePreparationRequest(isRecordingActive: true))
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+    }
+
+    func testPreparationPassClearsTheRejectedRequestSoItIsNotDuplicated() {
+        var tracker = RecordingStopTracker()
+        tracker.begin()
+        _ = tracker.evaluatePreparationRequest(isRecordingActive: false)
+        XCTAssertTrue(tracker.hasRejectedPreparation)
+
+        // The stop's own follow-up preparation ran after the stop ended.
+        XCTAssertTrue(tracker.end())
+        tracker.consumeRejectedPreparation()
+        XCTAssertFalse(tracker.hasRejectedPreparation)
+
+        tracker.begin()
+        XCTAssertFalse(tracker.end())
+    }
+
+    func testFailedRearmStoreNeverDisarmsADifferentArmedStream() {
+        XCTAssertFalse(
+            MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(otherStreamingInputIsPrepared: true)
+        )
+        XCTAssertTrue(
+            MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(otherStreamingInputIsPrepared: false)
+        )
+    }
+
+    func testArmedBuiltInEngineMatchesOnlyTheSameAutomaticDefault() {
+        let armed = MicrophonePrerollRouteConsistencyPolicy.ArmedInput.engine(defaultInputDeviceID: 41)
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertTrue(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 41))
+        // The default moved to another built-in device or off the engine path entirely.
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 42))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .inputOnlyDevice(77), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: 41), currentEngineDeviceID: 41))
+    }
+
+    func testArmedInputOnlySessionMatchesOnlyItsOwnDevice() {
+        let armed = MicrophonePrerollRouteConsistencyPolicy.ArmedInput.inputOnly(deviceID: 77)
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertTrue(policy.armedInputMatches(armed, route: .inputOnlyDevice(77), currentEngineDeviceID: nil))
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .inputOnlyDevice(78), currentEngineDeviceID: nil))
+        // The default switched to the built-in microphone: cold engine route.
+        XCTAssertFalse(policy.armedInputMatches(armed, route: .avAudioEngine(preferredDeviceID: nil), currentEngineDeviceID: 41))
+    }
+
+    func testRouteMismatchInvalidatesOnlyAnExistingArmedInput() {
+        let policy = MicrophonePrerollRouteConsistencyPolicy.self
+
+        XCTAssertFalse(policy.shouldInvalidate(
+            armedInput: nil,
+            route: .avAudioEngine(preferredDeviceID: nil),
+            currentEngineDeviceID: 41
+        ))
+        XCTAssertFalse(policy.shouldInvalidate(
+            armedInput: .inputOnly(deviceID: 77),
+            route: .inputOnlyDevice(77),
+            currentEngineDeviceID: nil
+        ))
+        XCTAssertTrue(policy.shouldInvalidate(
+            armedInput: .inputOnly(deviceID: 77),
+            route: .avAudioEngine(preferredDeviceID: nil),
+            currentEngineDeviceID: 41
+        ))
+        XCTAssertTrue(policy.shouldInvalidate(
+            armedInput: .engine(defaultInputDeviceID: 41),
+            route: .inputOnlyDevice(77),
+            currentEngineDeviceID: nil
+        ))
+    }
+
+    func testMicrophonePrerollSuspensionKeepsLockAcrossWake() {
+        var suspension = MicrophonePrerollSuspension()
+        XCTAssertFalse(suspension.isSuspended)
+
+        suspension.suspend(for: .screenLock)
+        suspension.suspend(for: .sleep)
+        XCTAssertTrue(suspension.isSuspended)
+
+        // Waking while the screen is still locked must not lift the suspension.
+        XCTAssertFalse(suspension.resume(from: .sleep))
+        XCTAssertTrue(suspension.isSuspended)
+
+        XCTAssertTrue(suspension.resume(from: .screenLock))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
+    func testMicrophonePrerollSuspensionKeepsSleepAcrossUnlock() {
+        var suspension = MicrophonePrerollSuspension()
+        suspension.suspend(for: .sleep)
+        suspension.suspend(for: .screenLock)
+
+        XCTAssertFalse(suspension.resume(from: .screenLock))
+        XCTAssertTrue(suspension.isSuspended)
+        XCTAssertTrue(suspension.resume(from: .sleep))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
+    func testMicrophonePrerollSuspensionResumeWithoutSuspensionIsANoOp() {
+        var suspension = MicrophonePrerollSuspension()
+        XCTAssertFalse(suspension.resume(from: .sleep))
+        XCTAssertFalse(suspension.resume(from: .screenLock))
+        XCTAssertFalse(suspension.isSuspended)
+    }
+
     func testChangingSelectedDeviceIDClearsTheStoredInputDeviceName() {
         let service = AudioRecordingService()
         service.hasMicrophonePermissionOverride = false
@@ -2924,6 +3324,154 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertTrue(activation.activateCalls.isEmpty)
     }
 
+    func testStalePrerollFailureCallbackKeepsTheReplacementStreamAndItsRetryBudget() async {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = false
+        service.engineTeardownOverride = { _ in }
+        let oldEngine = AVAudioEngine()
+        service.testingSetPreparedBuiltInInput(oldEngine, deviceID: 1, isStreaming: true)
+        let oldGeneration = service.testingPreparedInputGeneration()
+
+        // An input change invalidates the old stream, then the replacement is armed.
+        service.configureInputSelection(
+            deviceID: 7,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: false
+        )
+        service.testingSetPreparedBuiltInInput(AVAudioEngine(), deviceID: 1, isStreaming: true)
+        let replacementGeneration = service.testingPreparedInputGeneration()
+        XCTAssertNotEqual(oldGeneration, replacementGeneration)
+
+        // More late callbacks than the retry budget allows must still change nothing.
+        for _ in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+            service.testingHandlePrerollStreamFailure(
+                reason: "configuration-change",
+                streamGeneration: oldGeneration
+            )
+        }
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertTrue(service.testingHasStreamingBuiltInInput())
+        XCTAssertEqual(service.testingPreparedInputGeneration(), replacementGeneration)
+        XCTAssertFalse(service.testingPrerollRearmHasGivenUp)
+    }
+
+    func testPrerollFailureCallbackOfTheCurrentStreamStillReleasesIt() async {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = false
+        service.engineTeardownOverride = { _ in }
+        service.testingSetPreparedBuiltInInput(AVAudioEngine(), deviceID: 1, isStreaming: true)
+        let generation = service.testingPreparedInputGeneration()
+
+        service.testingHandlePrerollStreamFailure(reason: "configuration-change", streamGeneration: generation)
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertFalse(service.testingHasStreamingBuiltInInput())
+        XCTAssertNotEqual(service.testingPreparedInputGeneration(), generation)
+    }
+
+    func testTerminalRecoveryFailureSchedulesInputPreparationAgain() async {
+        let usbDeviceID = AudioDeviceID(735)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(
+            inputCaptureFactory: inputCaptureFactory,
+            inputTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [usbDeviceID: kAudioDeviceTransportTypeUSB]
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+        service.configureInputSelection(
+            deviceID: usbDeviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: false
+        )
+        var tornDownEngine: AVAudioEngine?
+        service.engineTeardownOverride = { tornDownEngine = $0 }
+        let recordingEngine = AVAudioEngine()
+        service.testingSetAudioEngine(recordingEngine)
+        XCTAssertFalse(service.testingHasPreparedUSBInput(deviceID: usbDeviceID))
+
+        service.testingFailActiveRecordingDueToRecovery(.engineStartFailed("test"))
+
+        XCTAssertTrue(tornDownEngine === recordingEngine)
+        let didPrepareAgain = await waitUntil(timeout: 2) {
+            service.testingHasPreparedUSBInput(deviceID: usbDeviceID)
+        }
+        XCTAssertTrue(didPrepareAgain)
+    }
+
+    func testBluetoothReleaseStopDropsThePreparationScheduledByARecoveryFailure() async {
+        let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let deviceID = AudioDeviceID(2)
+        let activation = FakeAudioInputDeviceActivator()
+        let queueGate = DispatchSemaphore(value: 0)
+        defer { queueGate.signal() }
+        let service = AudioRecordingService(
+            inputActivationGuard: activation,
+            bluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in false },
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.configureInputSelection(
+            deviceID: deviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true
+        )
+        service.engineTeardownOverride = { _ in }
+        service.testingSetAudioEngine(AVAudioEngine())
+        let preparationGeneration = service.testingPreparedInputGeneration()
+        service.testingBlockRecordingStartQueue(until: queueGate)
+
+        service.testingFailActiveRecordingDueToRecovery(.engineStartFailed("test"))
+        let stopTask = Task {
+            await service.stopRecording(policy: .immediate, bluetoothBehavior: .release)
+        }
+        let didInvalidatePreparation = await waitUntil(timeout: 1) {
+            service.testingPreparedInputGeneration() != preparationGeneration
+        }
+        XCTAssertTrue(didInvalidatePreparation)
+        queueGate.signal()
+        _ = await stopTask.value
+        try? await Task.sleep(for: .milliseconds(500))
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertTrue(activation.activateCalls.isEmpty)
+        XCTAssertFalse(service.testingHasPreparedBluetoothInput())
+    }
+
+    func testPrerollStaysSuspendedWhenLaunchedOnALockedScreen() {
+        let preferenceKey = UserDefaultsKeys.microphonePrerollEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let unlocked = AudioRecordingService(isScreenLocked: { false })
+        XCTAssertTrue(unlocked.testingIsMicrophonePrerollActive)
+
+        let locked = AudioRecordingService(isScreenLocked: { true })
+        XCTAssertFalse(locked.testingIsMicrophonePrerollActive)
+
+        locked.resumeMicrophonePreroll()
+        XCTAssertTrue(locked.testingIsMicrophonePrerollActive)
+    }
+
     func testBluetoothStopReleaseWaitsForInFlightPreparationCleanup() async {
         let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
         let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
@@ -3444,6 +3992,76 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertTrue(samples.isEmpty)
         XCTAssertEqual(inputCaptureFactory.createdSessions.first?.stopCalls, 1)
+    }
+
+    func testStoppedInputOnlySessionDoesNotAppendLateSlicesButActiveOneDoes() async throws {
+        let usbDeviceID = AudioDeviceID(731)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(inputCaptureFactory: inputCaptureFactory)
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = usbDeviceID
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+
+        func makeSlice() throws -> AVAudioPCMBuffer {
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: inputCaptureFactory.inputFormat, frameCapacity: 960))
+            buffer.frameLength = 960
+            for channel in 0..<Int(inputCaptureFactory.inputFormat.channelCount) {
+                let data = try XCTUnwrap(buffer.floatChannelData?[channel])
+                for frame in 0..<960 { data[frame] = 0.5 }
+            }
+            return buffer
+        }
+
+        try service.startRecording()
+        let deliver = try XCTUnwrap(inputCaptureFactory.bufferHandlers.first)
+        deliver(try makeSlice())
+        let didAppend = await waitUntil(timeout: 1) { !service.getCurrentBuffer().isEmpty }
+        XCTAssertTrue(didAppend, "an active recording keeps receiving its samples")
+
+        _ = await service.stopRecording(policy: .immediate)
+        XCTAssertTrue(service.getCurrentBuffer().isEmpty)
+
+        // A callback that was in flight during teardown arrives after the stop.
+        deliver(try makeSlice())
+        deliver(try makeSlice())
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(service.getCurrentBuffer().isEmpty, "late samples of a stopped stream must be dropped")
+    }
+
+    func testWorkingInputOnlyRecordingLiftsAGivenUpPrerollRearmPolicy() async throws {
+        let usbDeviceID = AudioDeviceID(732)
+        let inputCaptureFactory = FakeAudioInputCaptureFactory()
+        let service = AudioRecordingService(inputCaptureFactory: inputCaptureFactory)
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = usbDeviceID
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { $0 == usbDeviceID }
+
+        service.testingGiveUpPrerollRearm()
+        XCTAssertTrue(service.testingPrerollRearmHasGivenUp)
+
+        // A recording that never delivered audio proves nothing.
+        try service.startRecording()
+        _ = await service.stopRecording(policy: .immediate)
+        XCTAssertTrue(service.testingPrerollRearmHasGivenUp)
+
+        try service.startRecording()
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: inputCaptureFactory.inputFormat, frameCapacity: 960))
+        buffer.frameLength = 960
+        for channel in 0..<Int(inputCaptureFactory.inputFormat.channelCount) {
+            let data = try XCTUnwrap(buffer.floatChannelData?[channel])
+            for frame in 0..<960 { data[frame] = 0.5 }
+        }
+        let deliver = try XCTUnwrap(inputCaptureFactory.bufferHandlers.last)
+        deliver(buffer)
+        let didAppend = await waitUntil(timeout: 1) { !service.getCurrentBuffer().isEmpty }
+        XCTAssertTrue(didAppend)
+        _ = await service.stopRecording(policy: .immediate)
+
+        XCTAssertFalse(service.testingPrerollRearmHasGivenUp)
     }
 
     func testPreparedUSBInputStartsExistingHALSessionWithoutColdCaptureSetup() async throws {
@@ -4946,6 +5564,84 @@ final class AudioOutputVolumeIntegrationTests: XCTestCase {
         XCTAssertEqual(controller.setCalls[0].volume, 0.02, accuracy: 0.0001)
         XCTAssertEqual(controller.setCalls[1], .init(deviceID: AudioDeviceID(1), volume: 0.10))
     }
+
+    @MainActor
+    func testAudioDuckingPreservesPreparedVolumeWhenStartupChangesOutputVolume() {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.75)
+        let service = AudioDuckingService(volumeController: controller)
+
+        service.prepareDucking()
+        XCTAssertTrue(controller.setCalls.isEmpty)
+        controller.updateVolume(0, for: AudioDeviceID(1))
+        service.prepareDucking()
+        service.duckAudio(to: 0.20)
+        service.restoreAudio()
+
+        XCTAssertEqual(controller.setCalls.count, 2)
+        XCTAssertEqual(controller.setCalls[0].volume, 0.15, accuracy: 0.0001)
+        XCTAssertEqual(controller.setCalls[1].volume, 0.75)
+
+        controller.updateVolume(0.50, for: AudioDeviceID(1))
+        service.prepareDucking()
+        controller.updateVolume(0, for: AudioDeviceID(1))
+        service.restoreAudio()
+        XCTAssertEqual(controller.setCalls.last?.volume, 0.50)
+    }
+
+    @MainActor
+    func testAudioDuckingRestoresPreparedVolumeIfDuckingWriteFails() {
+        let controller = FakeAudioOutputVolumeController.airPods(volume: 0.75)
+        let service = AudioDuckingService(volumeController: controller)
+
+        service.prepareDucking()
+        controller.updateVolume(0, for: AudioDeviceID(1))
+        controller.volumeWritesSucceed = false
+        service.duckAudio(to: 0.20)
+        controller.volumeWritesSucceed = true
+        service.restoreAudio()
+
+        XCTAssertEqual(controller.setCalls.last?.volume, 0.75)
+        XCTAssertEqual(controller.defaultOutputSnapshot()?.volume, 0.75)
+    }
+
+    @MainActor
+    func testAudioDuckingKeepsSavedVolumePairedWithItsOutputDevice() {
+        for switchBeforeDucking in [true, false] {
+            let controller = FakeAudioOutputVolumeController(
+                defaultDeviceID: AudioDeviceID(1),
+                snapshots: [
+                    AudioDeviceID(1): AudioOutputVolumeSnapshot(
+                        deviceID: AudioDeviceID(1),
+                        deviceUID: "original-output",
+                        deviceName: "Original output",
+                        volume: 0.75
+                    ),
+                    AudioDeviceID(2): AudioOutputVolumeSnapshot(
+                        deviceID: AudioDeviceID(2),
+                        deviceUID: "new-output",
+                        deviceName: "New output",
+                        volume: 0.40
+                    ),
+                ]
+            )
+            let service = AudioDuckingService(volumeController: controller)
+            let scenario = switchBeforeDucking ? "switch before ducking" : "switch after ducking"
+
+            service.prepareDucking()
+            controller.updateVolume(0, for: AudioDeviceID(1))
+            if switchBeforeDucking { controller.defaultDeviceID = AudioDeviceID(2) }
+            service.duckAudio(to: 0.20)
+            XCTAssertEqual(controller.setCalls.count, switchBeforeDucking ? 0 : 1, scenario)
+            controller.defaultDeviceID = AudioDeviceID(2)
+            service.restoreAudio()
+
+            XCTAssertEqual(controller.setCalls.last, .init(deviceID: AudioDeviceID(1), volume: 0.75), scenario)
+            XCTAssertTrue(controller.setCalls.allSatisfy { $0.deviceID == AudioDeviceID(1) }, scenario)
+            XCTAssertEqual(controller.defaultOutputSnapshot()?.volume, 0.40, scenario)
+            controller.defaultDeviceID = AudioDeviceID(1)
+            XCTAssertEqual(controller.defaultOutputSnapshot()?.volume, 0.75, scenario)
+        }
+    }
 }
 
 private final class FakeAudioDeviceTransportResolver: AudioDeviceTransportResolving {
@@ -5077,6 +5773,11 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
     private var _prepareCalls: [StartCall] = []
     private var _startCalls: [StartCall] = []
     private var _createdSessions: [FakeAudioInputCaptureSession] = []
+    private var _bufferHandlers: [(AVAudioPCMBuffer) -> Void] = []
+
+    /// Delivery callbacks of every created session, in creation order.
+    var bufferHandlers: [(AVAudioPCMBuffer) -> Void] { lock.withLock { _bufferHandlers } }
+    var inputFormat: AVAudioFormat { format }
 
     var inputFormatError: Error? {
         get { lock.withLock { _inputFormatError } }
@@ -5143,7 +5844,10 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         }
         if let error = configuration.0 { throw error }
         let session = FakeAudioInputCaptureSession(startError: configuration.1)
-        lock.withLock { _createdSessions.append(session) }
+        lock.withLock {
+            _createdSessions.append(session)
+            _bufferHandlers.append(onBuffer)
+        }
         configuration.2?()
         return session
     }
@@ -5161,7 +5865,10 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         }
         if let error { throw error }
         let session = FakeAudioInputCaptureSession()
-        lock.withLock { _createdSessions.append(session) }
+        lock.withLock {
+            _createdSessions.append(session)
+            _bufferHandlers.append(onBuffer)
+        }
         return session
     }
 }
@@ -5367,6 +6074,7 @@ private final class FakeAudioOutputVolumeController: AudioOutputVolumeControllin
     var defaultDeviceID: AudioDeviceID?
     private var snapshots: [AudioDeviceID: AudioOutputVolumeSnapshot]
     private(set) var setCalls: [SetCall] = []
+    var volumeWritesSucceed = true
 
     init(defaultDeviceID: AudioDeviceID?, snapshots: [AudioDeviceID: AudioOutputVolumeSnapshot]) {
         self.defaultDeviceID = defaultDeviceID
@@ -5394,6 +6102,7 @@ private final class FakeAudioOutputVolumeController: AudioOutputVolumeControllin
 
     func setVolume(_ volume: Float, for deviceID: AudioDeviceID) -> Bool {
         setCalls.append(.init(deviceID: deviceID, volume: volume))
+        guard volumeWritesSucceed else { return false }
         updateVolume(volume, for: deviceID)
         return true
     }

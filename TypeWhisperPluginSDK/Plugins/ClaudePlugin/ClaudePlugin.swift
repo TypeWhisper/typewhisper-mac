@@ -579,6 +579,11 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             throw PluginChatError.apiError("Failed to parse response")
         }
 
+        // A reply stopped at max_tokens is incomplete; fail instead of returning it.
+        if (json["stop_reason"] as? String) == "max_tokens" {
+            throw PluginChatError.apiError("The reply was cut off at the output token limit (4096 tokens), so the text is incomplete.")
+        }
+
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -6,7 +6,9 @@ import Darwin
 #endif
 
 enum MCPResolvedTransport: Sendable {
+    #if !APPSTORE
     case stdio(executableURL: URL, environment: [String: String])
+    #endif
     case streamableHTTP(endpoint: URL, bearerToken: String?)
 }
 
@@ -15,6 +17,7 @@ struct MCPResolvedServer: Sendable {
     let transport: MCPResolvedTransport
     let secrets: [String]
 
+    #if !APPSTORE
     init(
         configuration: MCPServerConfiguration,
         executableURL: URL,
@@ -25,6 +28,7 @@ struct MCPResolvedServer: Sendable {
         transport = .stdio(executableURL: executableURL, environment: environment)
         self.secrets = secrets
     }
+    #endif
 
     init(
         configuration: MCPServerConfiguration,
@@ -72,15 +76,19 @@ actor MCPServerSession {
     private let resolvedServer: MCPResolvedServer
     private let connectionTimeout: Duration
     private let toolCallTimeout: Duration
+    #if !APPSTORE
     private var process: Process?
+    #endif
     private var client: Client?
     private var transport: (any Transport)?
     private var isConnected = false
     private var connectionTask: Task<Void, Error>?
     private var refreshTask: Task<Void, Error>?
+    #if !APPSTORE
     private var inputPipe: Pipe?
     private var outputPipe: Pipe?
     private var errorPipe: Pipe?
+    #endif
     private var cachedTools: [MCPToolDescriptor] = []
     private var catalogIsStale = true
     private var catalogGeneration = 0
@@ -114,8 +122,10 @@ actor MCPServerSession {
     private var hasUsableConnection: Bool {
         guard isConnected, client != nil, transport != nil else { return false }
         switch resolvedServer.transport {
+        #if !APPSTORE
         case .stdio:
             return process?.isRunning == true
+        #endif
         case .streamableHTTP:
             return true
         }
@@ -132,9 +142,11 @@ actor MCPServerSession {
 
         try await prepareTool(named: toolName, expectedSchemaFingerprint: expectedSchemaFingerprint)
 
+        #if !APPSTORE
         if case .stdio = resolvedServer.transport, process?.isRunning != true {
             try await prepareTool(named: toolName, expectedSchemaFingerprint: expectedSchemaFingerprint)
         }
+        #endif
 
         guard let client else {
             throw MCPClientError.indeterminateTransportFailure
@@ -187,6 +199,7 @@ actor MCPServerSession {
             await transport.disconnect()
         }
 
+        #if !APPSTORE
         errorPipe?.fileHandleForReading.readabilityHandler = nil
         inputPipe?.fileHandleForWriting.closeFile()
         outputPipe?.fileHandleForReading.closeFile()
@@ -201,13 +214,16 @@ actor MCPServerSession {
                 process.terminate()
             }
         }
+        #endif
 
         self.client = nil
         self.transport = nil
+        #if !APPSTORE
         self.process = nil
         inputPipe = nil
         outputPipe = nil
         errorPipe = nil
+        #endif
         cachedTools = []
         markCatalogStale()
     }
@@ -220,10 +236,12 @@ actor MCPServerSession {
 
         if isConnected, client != nil, transport != nil {
             switch resolvedServer.transport {
+            #if !APPSTORE
             case .stdio:
                 if process?.isRunning == true {
                     return
                 }
+            #endif
             case .streamableHTTP:
                 return
             }
@@ -246,6 +264,7 @@ actor MCPServerSession {
 
         let transport: any Transport
         switch resolvedServer.transport {
+        #if !APPSTORE
         case .stdio(let executableURL, let environment):
             let process = Process()
             let inputPipe = Pipe()
@@ -300,6 +319,7 @@ actor MCPServerSession {
             self.inputPipe = inputPipe
             self.outputPipe = outputPipe
             self.errorPipe = errorPipe
+        #endif
 
         case .streamableHTTP(let endpoint, let bearerToken):
             let authorization = bearerToken.map { "Bearer \($0)" }
@@ -428,6 +448,7 @@ actor MCPServerSession {
         }
     }
 
+    #if !APPSTORE
     private func processDidTerminate(processIdentifier: Int32) async {
         guard process?.processIdentifier == processIdentifier else { return }
         isConnected = false
@@ -438,6 +459,7 @@ actor MCPServerSession {
             await transport.disconnect()
         }
     }
+    #endif
 
     private func acquireCallSlot() async {
         if !callIsActive {

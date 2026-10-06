@@ -204,6 +204,15 @@ final class LicenseService: ObservableObject {
         case supporter
     }
 
+    #if APPSTORE
+    // The Mac App Store edition sells Premium through StoreKit only. Its access
+    // is mirrored into `licenseStatus` (see AppStorePremiumService), so Polar
+    // supporter tiers, license links and usage-intent prompts do not apply.
+    var isSupporter: Bool { false }
+    var hasCommercialLicense: Bool { licenseStatus == .active }
+    var commercialLicenseProofForAccountLink: CommercialLicenseLinkProof? { nil }
+    var canUseProTranscriptionFallback: Bool { hasCommercialLicense }
+    #else
     var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
     var hasCommercialLicense: Bool { licenseStatus == .active }
     var commercialLicenseProofForAccountLink: CommercialLicenseLinkProof? {
@@ -215,6 +224,7 @@ final class LicenseService: ObservableObject {
         )
     }
     var canUseProTranscriptionFallback: Bool { hasCommercialLicense || isSupporter }
+    #endif
     /// Throws when the supporter Keychain entry cannot be read right now, so callers keep claim state.
     func readSupporterClaimProof() throws -> SupporterClaimProof? {
         guard supporterStatus == .active,
@@ -228,6 +238,12 @@ final class LicenseService: ObservableObject {
         )
     }
 
+    #if APPSTORE
+    var needsWelcomeSheet: Bool { false }
+    var shouldShowReminder: Bool { false }
+    var requiresCommercialLicense: Bool { false }
+    var shouldShowWorkUsagePrompt: Bool { false }
+    #else
     var needsWelcomeSheet: Bool {
         !isLicenseManaged && !defaults.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
     }
@@ -243,6 +259,7 @@ final class LicenseService: ObservableObject {
     var shouldShowWorkUsagePrompt: Bool {
         !isLicenseManaged && usageIntent == .personalOSS && licenseStatus != .active
     }
+    #endif
 
     // MARK: - Init
 

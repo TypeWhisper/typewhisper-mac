@@ -506,6 +506,75 @@
           }
         }
       }
+    },
+    "Also send completed Recorder transcripts": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auch fertige Recorder-Transkripte senden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーの完成した文字起こしも送信"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同时发送录音器已完成的转录结果"
+          }
+        }
+      }
+    },
+    "Recordings": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufnahmen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音"
+          }
+        }
+      }
+    },
+    "Sends saved transcripts from manual, calendar, and API recordings, including retranscriptions. Independent of workflow filters.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet gespeicherte Transkripte manueller, Kalender- und API-Aufnahmen, auch nach erneuter Transkription. Unabhängig von Workflow-Filtern."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手動・カレンダー・APIによる録音の保存済み文字起こしを送信します。再文字起こしも対象です。ワークフローフィルターとは独立しています。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送手动、日历和 API 录音的已保存转录，包括重新转录的结果。不受工作流筛选条件影响。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

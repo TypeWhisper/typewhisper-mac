@@ -9,13 +9,14 @@ on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the
 result with reusable workflows. Your voice data stays on your Mac with local
 models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.6` is the current stable release for macOS. It adds a redesigned
-Settings experience, privacy-friendly statistics and portable backups, faster
-and more resilient recording, calendar-aware meeting automation, expanded
-workflow integrations, Simplified Chinese localization, and reliability
-improvements across dictation, Recorder, local models, and cloud providers.
+TypeWhisper `1.7.0` is the current stable release for macOS. It adds iCloud sync
+for History and Inbox, a visual keyboard shortcut editor, Undo Last Dictation
+and Restore Raw Transcript, new indicator styles, expanded dictation recovery,
+Finder transcription, and compatible local model imports.
 
-See the [1.6.0 release notes](docs/release-notes/1.6.0.md),
+Development on `main` targets `1.8`; daily builds use the `v1.8.0-daily.*` line.
+
+See the [1.7.0 release notes](docs/release-notes/1.7.0.md),
 [release readiness guide](docs/release-readiness.md),
 [support matrix](docs/support-matrix.md), and
 [release validation process](docs/release-checklist.md) for the shipped feature
@@ -211,13 +212,13 @@ brew install --cask typewhisper/tap/typewhisper
 
 Download the latest DMG from [GitHub Releases](https://github.com/TypeWhisper/typewhisper-mac/releases/latest).
 
-Stable direct-download releases use the default Sparkle channel. Release candidates such as `1.6.0-rc*` and daily builds such as `v1.6.0-daily.*` are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
+Stable direct-download releases use the default Sparkle channel. Release candidates and daily builds are published as GitHub prereleases, update the shared Sparkle appcast on their own channels, and are excluded from Homebrew.
 Installed builds can switch channels in `Settings -> About` via the `Update Channel` picker.
 
 ## Quick Start
 
 1. Install TypeWhisper from Homebrew or the latest DMG.
-2. Open Settings and grant Microphone plus Accessibility access.
+2. Open Settings and grant Microphone plus Accessibility access (System Settings > Privacy & Security > Accessibility, named Device Control and Data Access on macOS 27 and later).
 3. Pick an engine and, if needed, download a local model.
 4. Trigger the global hotkey and complete your first dictation.
 
@@ -475,7 +476,15 @@ curl --fail --silent --show-error -X POST http://localhost:8978/v1/settings/impo
   -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @typewhisper-settings.json
+
+# Import and overwrite workflows, profiles, prompt actions with the same name and hotkeys
+curl --fail --silent --show-error -X POST "http://localhost:8978/v1/settings/import?mode=replace" \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @typewhisper-settings.json
 ```
+
+An import skips history entries, workflows, profiles, and prompt actions that already exist unchanged, so importing a backup onto the Mac it came from does not duplicate them. The default `mode=merge` adds everything else and only fills empty hotkey slots. `mode=replace` also overwrites existing workflows, profiles, and prompt actions with the same name and the hotkeys contained in the backup. Neither mode deletes anything.
 
 ### Workflows
 
@@ -576,6 +585,54 @@ Conflict and lookup behavior:
 - Polling with a missing or invalid `id` returns `400 Bad Request`.
 - Polling a valid but unknown session id returns `404 Not Found`.
 
+### Completed Recorder Transcripts
+
+`GET /v1/recorder/recordings` returns the latest successfully saved transcript for each recording, including recordings started manually, by the calendar integration, or through the API. Results survive app restarts and do not depend on live preview or an API session.
+
+```bash
+curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"
+```
+
+```json
+{
+  "recordings": [
+    {
+      "source": "recorder",
+      "recording_id": "8F8C1F45-6D03-44D2-A38C-0C4DE4F7E5F7",
+      "completion_id": "59CBC40C-274A-47A9-804C-8774AB504401",
+      "completed_at": 1791100000.123456,
+      "text": "Meeting notes from the recording.",
+      "audio_file": "/Users/alex/Documents/TypeWhisper Recordings/Meeting.m4a",
+      "transcript_file": "/Users/alex/Documents/TypeWhisper Recordings/Meeting.txt"
+    }
+  ]
+}
+```
+
+`since` accepts Unix seconds or an ISO 8601 timestamp and filters **inclusively by successful completion time**, not the recording's start time. Results are ordered oldest completion first. After processing a response, retain its last `completed_at` and deduplicate by `completion_id`; querying inclusively avoids losing completions with equal timestamps. Invalid timestamps return `400`; unreadable completion receipts return `500` so a consumer does not silently advance past them.
+
+Each successful retranscription keeps the `recording_id`, assigns a new `completion_id`, and replaces the previous result. This is a list of the latest saved results, not a revision history. Failed attempts leave the last successful result available. `markdown_file` is included only when a Markdown transcript was saved and still exists; currently that applies to calendar recordings with meeting metadata. Audio and transcript paths refer to existing files.
+
+Completion receipts are saved alongside recordings as `<audio filename>.transcript-ready.json`. A separate `<audio filename>.recording-id.json` preserves the recording ID if the receipt is damaged, so retranscription can repair it without changing the ID. Both files are committed with the transcript and removed when the recording is deleted in TypeWhisper. Existing recordings become available here after their next successful transcription. Recordings without a saved transcript are omitted. The endpoint uses the same optional API token as the other private routes.
+
+The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
+
+In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
+
+In **Script Runner**, enable **Also run for completed Recorder transcripts** for each export command. Both options default to off, including for existing configurations, and operate independently of dictation rule/workflow filters. Recorder scripts receive the saved original through stdin and these environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `TYPEWHISPER_SOURCE` | `recorder` |
+| `TYPEWHISPER_RECORDING_ID` | Stable recording UUID |
+| `TYPEWHISPER_COMPLETION_ID` | UUID for this successful save |
+| `TYPEWHISPER_COMPLETED_AT` | Completion time in Unix seconds |
+| `TYPEWHISPER_AUDIO_FILE` | Audio file path |
+| `TYPEWHISPER_TRANSCRIPT_FILE` | Plain-text transcript path |
+| `TYPEWHISPER_MARKDOWN_FILE` | Markdown path, when available; otherwise unset |
+
+Recorder scripts export the original transcript independently; stdout is ignored and may be empty. A nonzero exit status is logged as a failure. The existing five-second script timeout applies, so enqueue longer processing in a separate worker. Ordinary dictation scripts continue to transform text through stdout.
+
 ## CLI Tool
 
 TypeWhisper includes a command-line tool for shell-friendly transcription. It is part of the advanced automation surface and connects to the running local API server.
@@ -605,6 +662,7 @@ typewhisper import settings.json # Import all categories in a backup
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 | `--no-corrections` | Return raw transcription text without Dictionary Corrections |
+| `--replace` | `import` only: overwrite workflows, profiles, and prompt actions with the same name and replace hotkeys |
 
 ### Examples
 
@@ -626,6 +684,9 @@ typewhisper export ~/.config/typewhisper/settings.json
 
 # Restore it and receive a machine-readable import summary
 typewhisper import ~/.config/typewhisper/settings.json --json
+
+# Apply edits made to that file, including changed hotkeys
+typewhisper import ~/.config/typewhisper/settings.json --replace
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.

@@ -1,0 +1,585 @@
+# Mac App Store edition of TypeWhisper.
+#
+# Builds the regular TypeWhisper app sources with the APPSTORE compilation
+# condition, the App Sandbox and a fixed set of first-party plugins that are
+# signed into Contents/PlugIns. Nothing in this project downloads or loads code
+# from outside the app bundle.
+#
+# Generate with: scripts/appstore/generate_project.sh
+name: TypeWhisperAppStore
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  minimumXcodeGenVersion: 2.44.1
+  developmentLanguage: en
+
+configFiles:
+  Debug: AppStore/Config/AppStore.xcconfig
+  Release: AppStore/Config/AppStore.xcconfig
+
+# Listed for editing in Xcode only; the StoreKit configuration is used by the
+# scheme for local testing and is never copied into the app.
+fileGroups:
+  - AppStore/Resources/TypeWhisperAppStore.storekit
+
+packages:
+  TypeWhisperPluginSDK:
+    path: TypeWhisperPluginSDK
+  WhisperKit:
+    url: https://github.com/argmaxinc/WhisperKit.git
+    revision: 80d96762fa727f816ffceab76a6529cd12c2726f
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio.git
+    exactVersion: 0.17.5
+  MLXAudio:
+    url: https://github.com/Blaizzy/mlx-audio-swift.git
+    revision: 01dec7c9bdce3088a6b6b7ab9f2e403458195efb
+  MLXSwiftLM:
+    url: https://github.com/ml-explore/mlx-swift-lm.git
+    exactVersion: 3.31.4
+  SwiftTransformers:
+    url: https://github.com/huggingface/swift-transformers.git
+    exactVersion: 1.3.4
+  ONNXRuntime:
+    url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
+    exactVersion: 1.24.2
+  MCP:
+    url: https://github.com/modelcontextprotocol/swift-sdk.git
+    exactVersion: 0.12.1
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    SWIFT_VERSION: "6.0"
+    SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) APPSTORE"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+    DEAD_CODE_STRIPPING: YES
+    CODE_SIGN_STYLE: Automatic
+  configs:
+    Debug:
+      # The base value would otherwise replace XcodeGen's Debug default.
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) DEBUG APPSTORE"
+    Release:
+      SWIFT_COMPILATION_MODE: wholemodule
+
+# Plugins that need Apple silicon set EXCLUDED_ARCHS: x86_64 instead of
+# ARCHS: arm64. Release builds pass ARCHS='arm64 x86_64' on the command line,
+# which overrides a target-level ARCHS but not EXCLUDED_ARCHS.
+targetTemplates:
+  AppStorePlugin:
+    type: bundle
+    platform: macOS
+    sources:
+      - path: TypeWhisperPluginSDK/Plugins/${target_name}
+        excludes:
+          - "Tests"
+          - "Tests/**"
+          - "*.md"
+    dependencies:
+      - package: TypeWhisperPluginSDK
+        product: TypeWhisperPluginSDK
+        embed: false
+    settings:
+      base:
+        PRODUCT_NAME: ${target_name}
+        PRODUCT_BUNDLE_IDENTIFIER: ${bundleId}
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSPrincipalClass: ${target_name}
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        WRAPPER_EXTENSION: bundle
+        INSTALL_PATH: "$(LOCAL_LIBRARY_DIR)/Bundles"
+        SKIP_INSTALL: YES
+        COMBINE_HIDPI_IMAGES: YES
+        SWIFT_EMIT_LOC_STRINGS: NO
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  TypeWhisperAppStore:
+    type: application
+    platform: macOS
+    sources:
+      - path: TypeWhisper
+        excludes:
+          - Resources/Info.plist
+          - Resources/TypeWhisper.entitlements
+          - Services/HTTPServer/APIHandlersTargetLanguageTests.swift
+          # Polar license UI; Premium is sold through StoreKit (AppStore/Sources).
+          - Views/LicenseSettingsView.swift
+          - Views/PostUpdateLicensePromptView.swift
+          - Views/WelcomeSheet.swift
+      - path: TypeWhisperWidgetShared/WidgetData.swift
+      - path: TypeWhisperICloudBridge/PremiumICloudBridgeShared.swift
+      - path: AppStore/Sources
+      - path: AppStore/Resources/AppStorePluginCatalog.json
+        buildPhase: resources
+    dependencies:
+      - package: TypeWhisperPluginSDK
+        product: TypeWhisperPluginSDK
+        embed: true
+      - target: TypeWhisperWidgetExtension
+        embed: true
+      - target: TypeWhisperTranscribeAction
+        embed: true
+      - target: AssemblyAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: CartesiaPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: CerebrasPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: ClaudePlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: CoherePlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: DeepgramPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: ElevenLabsPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: FireworksPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: GeminiPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: GladiaPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: GoogleCloudSTTPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: GroqPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: MetaPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: MicrosoftAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: OpenAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: OpenAICompatiblePlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: OpenRouterPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SmallestAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SonioxPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SpeechmaticsPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: VercelAIGatewayPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: XAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: WhisperKitPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: ParakeetPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SpeechAnalyzerPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: Qwen3Plugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: LocalLLMPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SupertonicPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: SystemTTSPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: FillerWordsPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: LiveTranscriptPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: FileMemoryPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: OpenAIVectorMemoryPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: WebhookPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: LinearPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: ObsidianPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: MCPClientPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: MistralAIPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: CloudflareASRPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: Reson8Plugin
+        embed: true
+        copy:
+          destination: plugins
+    settings:
+      base:
+        PRODUCT_NAME: $(TYPEWHISPER_APPSTORE_PRODUCT_NAME)
+        PRODUCT_MODULE_NAME: TypeWhisper
+        PRODUCT_BUNDLE_IDENTIFIER: $(TYPEWHISPER_APPSTORE_BUNDLE_ID)
+        INFOPLIST_FILE: AppStore/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: $(TYPEWHISPER_APPSTORE_ENTITLEMENTS)
+        PROVISIONING_PROFILE_SPECIFIER: "$(TW_APPSTORE_PROFILE)"
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_OBJC_BRIDGING_HEADER: TypeWhisper/TypeWhisper-Bridging-Header.h
+        SWIFT_EMIT_LOC_STRINGS: YES
+        SWIFT_STRICT_CONCURRENCY: targeted
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        COMBINE_HIDPI_IMAGES: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+    scheme:
+      gatherCoverageData: false
+      storeKitConfiguration: AppStore/Resources/TypeWhisperAppStore.storekit
+      testTargets:
+        - TypeWhisperAppStoreTests
+      archive:
+        config: Release
+
+  TypeWhisperAppStoreTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: AppStore/Tests
+    dependencies:
+      - target: TypeWhisperAppStore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(TYPEWHISPER_APPSTORE_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/$(TYPEWHISPER_APPSTORE_PRODUCT_NAME).app/Contents/MacOS/$(TYPEWHISPER_APPSTORE_PRODUCT_NAME)"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+  AssemblyAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.assemblyai
+  CartesiaPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.cartesia
+  CerebrasPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.cerebras
+  ClaudePlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.claude
+  CoherePlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.cohere
+  DeepgramPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.deepgram
+  ElevenLabsPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.elevenlabs
+  FireworksPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.fireworks
+  GeminiPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.gemini
+  GladiaPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.gladia
+  GoogleCloudSTTPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.google-cloud-stt
+  GroqPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.groq
+  MetaPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.meta
+  MicrosoftAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.microsoft-ai
+  OpenAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.openai
+  OpenAICompatiblePlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.openai-compatible
+  OpenRouterPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.openrouter
+  SmallestAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.smallest-pulse
+  SonioxPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.soniox
+  SpeechmaticsPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.speechmatics
+  VercelAIGatewayPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.vercel-ai-gateway
+  XAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.xai
+  WhisperKitPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.whisperkit
+    dependencies:
+      - package: WhisperKit
+        product: WhisperKit
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  ParakeetPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.parakeet
+    dependencies:
+      - package: FluidAudio
+        product: FluidAudio
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  SpeechAnalyzerPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.speechanalyzer
+    settings:
+      base:
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+  Qwen3Plugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.qwen3
+    dependencies:
+      - package: MLXAudio
+        product: MLXAudioSTT
+      - package: MLXAudio
+        product: MLXAudioCore
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  LocalLLMPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.local-llm-mlx
+    dependencies:
+      - package: MLXSwiftLM
+        product: MLXLLM
+      - package: SwiftTransformers
+        product: Transformers
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  SupertonicPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.tts.supertonic
+    dependencies:
+      - package: ONNXRuntime
+        product: onnxruntime
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  SystemTTSPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.tts.system
+  FillerWordsPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.filler-words
+  LiveTranscriptPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.livetranscript
+  FileMemoryPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.memory.file
+  OpenAIVectorMemoryPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.memory.openai-vector
+  WebhookPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.webhook
+  LinearPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.linear
+  ObsidianPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.obsidian
+  MCPClientPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.mcp-client
+    dependencies:
+      - package: MCP
+        product: MCP
+  MistralAIPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.minerale.mistralai
+  CloudflareASRPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.cloudflare-asr
+  Reson8Plugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.reson8
+
+  TypeWhisperWidgetExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: TypeWhisperWidgetExtension
+        excludes:
+          - Info.plist
+          - TypeWhisperWidgetExtension.entitlements
+      - path: TypeWhisperWidgetShared/WidgetData.swift
+    settings:
+      base:
+        PRODUCT_NAME: TypeWhisperWidgetExtension
+        # Shared with the iOS widget extension of the universal purchase record.
+        PRODUCT_BUNDLE_IDENTIFIER: $(TYPEWHISPER_APPSTORE_BUNDLE_ID).widget
+        PROVISIONING_PROFILE_SPECIFIER: "$(TW_APPSTORE_WIDGET_PROFILE)"
+        INFOPLIST_FILE: TypeWhisperWidgetExtension/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: TypeWhisper Widgets
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        CODE_SIGN_ENTITLEMENTS: TypeWhisperWidgetExtension/TypeWhisperWidgetExtension.entitlements
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME: WidgetBackground
+        SWIFT_EMIT_LOC_STRINGS: YES
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"
+
+  TypeWhisperTranscribeAction:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: TypeWhisperTranscribeAction
+        excludes:
+          - Info.plist
+          - TypeWhisperTranscribeAction.entitlements
+    settings:
+      base:
+        PRODUCT_NAME: TypeWhisperTranscribeAction
+        PRODUCT_BUNDLE_IDENTIFIER: $(TYPEWHISPER_APPSTORE_BUNDLE_ID).transcribe-action
+        PROVISIONING_PROFILE_SPECIFIER: "$(TW_APPSTORE_TRANSCRIBE_PROFILE)"
+        INFOPLIST_FILE: TypeWhisperTranscribeAction/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: TypeWhisperTranscribeAction/TypeWhisperTranscribeAction.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        ENABLE_USER_SELECTED_FILES: readonly
+        SWIFT_STRICT_CONCURRENCY: targeted
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS:
+          - "$(inherited)"
+          - "@executable_path/../Frameworks"
+          - "@executable_path/../../../../Frameworks"

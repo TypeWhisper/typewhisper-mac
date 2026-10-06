@@ -1,3 +1,5 @@
+import Network
+import os
 import XCTest
 @testable import TypeWhisperPluginSDK
 
@@ -244,4 +246,94 @@ final class OpenAIChatHelperTests: XCTestCase {
         XCTAssertEqual(PluginOpenAIChatHelper.chatMessageContent(from: message), "Answer two")
     }
 
+    // MARK: - Truncated replies
+
+    func testProcessThrowsWhenReplyStoppedAtTokenLimit() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"choices":[{"message":{"content":"half a sen"},"finish_reason":"length"}]}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+
+        do {
+            _ = try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+            XCTFail("Expected the truncated reply to throw")
+        } catch let error as PluginChatError {
+            guard case .apiError(let message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("4096"), message)
+        }
+    }
+
+    func testProcessThrowsWhenThinkingModelHitTokenLimitWithoutVisibleText() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"choices":[{"message":{"content":null},"finish_reason":"length"}]}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+
+        do {
+            _ = try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+            XCTFail("Expected the truncated reply to throw")
+        } catch is PluginChatError {
+        }
+    }
+
+    func testProcessReturnsReplyThatFinishedNormally() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"choices":[{"message":{"content":" done \n"},"finish_reason":"stop"}]}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+
+        let result = try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+
+        XCTAssertEqual(result, "done")
+    }
+}
+
+/// Minimal loopback HTTP server that answers every request with one JSON body.
+private final class ChatStubServer: @unchecked Sendable {
+    private let listener: NWListener
+    let baseURL: String
+
+    private init(listener: NWListener, port: UInt16) {
+        self.listener = listener
+        self.baseURL = "http://127.0.0.1:\(port)"
+    }
+
+    static func start(body: String) async throws -> ChatStubServer {
+        let listener = try NWListener(using: .tcp, on: .any)
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: .global())
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 20) { _, _, _, _ in
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            }
+        }
+        let port: UInt16 = try await withCheckedThrowingContinuation { continuation in
+            let finished = OSAllocatedUnfairLock(initialState: false)
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    if !finished.withLock({ let was = $0; $0 = true; return was }) {
+                        continuation.resume(returning: listener.port?.rawValue ?? 0)
+                    }
+                case .failed(let error):
+                    if !finished.withLock({ let was = $0; $0 = true; return was }) {
+                        continuation.resume(throwing: error)
+                    }
+                default:
+                    break
+                }
+            }
+            listener.start(queue: .global())
+        }
+        return ChatStubServer(listener: listener, port: port)
+    }
+
+    func stop() {
+        listener.cancel()
+    }
 }

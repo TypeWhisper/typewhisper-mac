@@ -5,6 +5,9 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data_path="$repo_root/.build/DerivedData-Dev"
 install_dir="$HOME/Applications"
 installed_app="$install_dir/TypeWhisper-Dev.app"
+# The Debug configuration builds "TypeWhisper Dev.app" (PRODUCT_NAME "TypeWhisper Dev").
+dev_app_name="TypeWhisper Dev.app"
+dev_executable_name="TypeWhisper Dev"
 lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/Current/Frameworks/LaunchServices.framework/Versions/Current/Support/lsregister"
 
 log() {
@@ -47,20 +50,28 @@ quit_running_typewhisper() {
 
 running_dev_typewhisper_pids() {
   local pid args
+  # Debug builds are named "TypeWhisper Dev". Also match the former
+  # "TypeWhisper" executable so dev builds from before the rename still quit.
   while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
     args="$(ps -p "$pid" -o args= 2>/dev/null || true)"
     case "$args" in
       "$installed_app/Contents/MacOS/TypeWhisper"*)
         printf '%s\n' "$pid"
         ;;
+      "$repo_root/.build/"*"/Build/Products/Debug/$dev_app_name/Contents/MacOS/$dev_executable_name"*|\
       "$repo_root/.build/"*"/Build/Products/Debug/TypeWhisper.app/Contents/MacOS/TypeWhisper"*)
         printf '%s\n' "$pid"
         ;;
+      "$HOME/Library/Developer/Xcode/DerivedData/"*"/Build/Products/Debug/$dev_app_name/Contents/MacOS/$dev_executable_name"*|\
       "$HOME/Library/Developer/Xcode/DerivedData/"*"/Build/Products/Debug/TypeWhisper.app/Contents/MacOS/TypeWhisper"*)
         printf '%s\n' "$pid"
         ;;
     esac
-  done < <(pgrep -x TypeWhisper 2>/dev/null || true)
+  done < <(
+    pgrep -x "$dev_executable_name" 2>/dev/null || true
+    pgrep -x TypeWhisper 2>/dev/null || true
+  )
 }
 
 trash_if_present() {
@@ -108,7 +119,7 @@ trash_stale_dev_apps() {
       [[ "$app_path" != "$keep_app" ]] || continue
       trash_if_present "$app_path"
       log "trashed stale app: $app_path"
-    done < <(find "$root" -path '*/Build/Products/Debug/TypeWhisper.app' -type d -print0 2>/dev/null)
+    done < <(find "$root" \( -path "*/Build/Products/Debug/$dev_app_name" -o -path '*/Build/Products/Debug/TypeWhisper.app' \) -type d -prune -print0 2>/dev/null)
   done
 }
 
@@ -125,12 +136,12 @@ xcodebuild build \
 
 "$repo_root/scripts/sync-dev-data-local.sh"
 
-app_path="$derived_data_path/Build/Products/Debug/TypeWhisper.app"
+app_path="$derived_data_path/Build/Products/Debug/$dev_app_name"
 if [[ ! -d "$app_path" ]]; then
-  app_path="$(find "$derived_data_path" -path '*/Build/Products/Debug/TypeWhisper.app' -type d -print -quit 2>/dev/null || true)"
+  app_path="$(find "$derived_data_path" -path "*/Build/Products/Debug/$dev_app_name" -type d -print -quit 2>/dev/null || true)"
 fi
 if [[ -z "${app_path:-}" ]] || [[ ! -d "$app_path" ]]; then
-  log "error: built TypeWhisper.app was not found"
+  log "error: built $dev_app_name was not found"
   exit 1
 fi
 

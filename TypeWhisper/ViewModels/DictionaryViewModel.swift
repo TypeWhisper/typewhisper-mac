@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import UniformTypeIdentifiers
 import Combine
+import TypeWhisperPluginSDK
 
 // MARK: - Activated Term Pack State
 
@@ -106,6 +107,46 @@ struct DictionaryResetRequest: Identifiable, Equatable {
     }
 }
 
+// MARK: - Dictionary Terms Setting Suggestion
+
+enum DictionaryTermsSettingActivation: Equatable {
+    case enabling
+    case failed(String)
+}
+
+struct DictionaryTermsSettingSuggestion: Equatable {
+    let providerId: String
+    let engineName: String
+    let summary: String
+    let activation: DictionaryTermsSettingActivation?
+}
+
+/// Decides when the Dictionary page suggests the plugin setting an engine needs for Terms.
+enum DictionaryTermsSettingSuggestionPolicy {
+    /// Adding Terms raises the suggestion when the selected engine ignores them until a
+    /// plugin setting is on, the plugin can turn it on, and the user has not declined.
+    static func shouldSuggest(
+        afterAdding addedType: DictionaryEntryType,
+        support: DictionaryTermsSupport?,
+        canEnable: Bool,
+        isDismissed: Bool
+    ) -> Bool {
+        addedType == .term && support == .requiresPluginSetting && canEnable && !isDismissed
+    }
+
+    /// A raised suggestion stays while the setting is off or while enabling runs or failed,
+    /// so download progress and errors remain visible after the plugin reports support.
+    static func isVisible(
+        support: DictionaryTermsSupport?,
+        canEnable: Bool,
+        isDismissed: Bool,
+        activation: DictionaryTermsSettingActivation?
+    ) -> Bool {
+        guard canEnable, !isDismissed else { return false }
+        return activation != nil || support == .requiresPluginSetting
+    }
+}
+
 // MARK: - Dictionary ViewModel
 
 @MainActor
@@ -165,6 +206,11 @@ class DictionaryViewModel: ObservableObject {
     // Term Packs
     @Published var activatedPackStates: [String: ActivatedTermPackState] = [:]
 
+    // Engine setting suggestion for Terms
+    @Published private(set) var termsSettingSuggestionProviderId: String?
+    @Published private(set) var termsSettingActivations: [String: DictionaryTermsSettingActivation] = [:]
+    @Published private var dismissedTermsSettingProviderIds: Set<String> = []
+
     static let strongCtcMinSimilarity: Double = 0.50
     static let balancedCtcMinSimilarity: Double = 0.65
     static let preciseCtcMinSimilarity: Double = 0.80
@@ -175,6 +221,8 @@ class DictionaryViewModel: ObservableObject {
     private let licenseService: LicenseService?
     private let termPackRegistryService: TermPackRegistryService?
     private let defaults: UserDefaults
+    private let selectedTranscriptionEngine: @MainActor () -> (any TranscriptionEnginePlugin)?
+    private let transcriptionEngineLookup: @MainActor (String) -> (any TranscriptionEnginePlugin)?
     private var cancellables = Set<AnyCancellable>()
     private var selectedEntry: DictionaryEntry?
 
@@ -261,13 +309,22 @@ class DictionaryViewModel: ObservableObject {
         dictionaryService: DictionaryService,
         licenseService: LicenseService? = nil,
         termPackRegistryService: TermPackRegistryService? = nil,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        selectedTranscriptionEngine: @escaping @MainActor () -> (any TranscriptionEnginePlugin)? = { nil },
+        transcriptionEngineLookup: @escaping @MainActor (String) -> (any TranscriptionEnginePlugin)? = {
+            PluginManager.shared?.transcriptionEngine(for: $0)
+        }
     ) {
         self.dictionaryService = dictionaryService
         self.licenseService = licenseService
         self.termPackRegistryService = termPackRegistryService
         self.defaults = defaults
+        self.selectedTranscriptionEngine = selectedTranscriptionEngine
+        self.transcriptionEngineLookup = transcriptionEngineLookup
         self.entries = dictionaryService.entries
+        self.dismissedTermsSettingProviderIds = Set(
+            defaults.stringArray(forKey: UserDefaultsKeys.dismissedDictionaryTermsSettingSuggestions) ?? []
+        )
         migrateLegacyActivatedPacks()
         loadActivatedPackStates()
         reconcileCommercialPackAccess()
@@ -378,6 +435,7 @@ class DictionaryViewModel: ObservableObject {
                 caseSensitive: editCaseSensitive,
                 ctcMinSimilarity: ctcMinSimilarity
             )
+            suggestTermsSettingIfNeeded(afterAdding: editType)
         } else if let entry = selectedEntry {
             dictionaryService.updateEntry(
                 entry,
@@ -594,6 +652,105 @@ class DictionaryViewModel: ObservableObject {
         return .advanced
     }
 
+    // MARK: - Engine Setting Suggestion
+
+    /// The suggestion shown above the dictionary, if the last added Terms raised one.
+    var visibleTermsSettingSuggestion: DictionaryTermsSettingSuggestion? {
+        guard let providerId = termsSettingSuggestionProviderId,
+              let engine = transcriptionEngineLookup(providerId),
+              let enabler = engine as? any DictionaryTermsSettingEnabling else {
+            return nil
+        }
+        let activation = termsSettingActivations[providerId]
+        guard DictionaryTermsSettingSuggestionPolicy.isVisible(
+            support: enabler.dictionaryTermsSupport,
+            canEnable: true,
+            isDismissed: dismissedTermsSettingProviderIds.contains(providerId),
+            activation: activation
+        ) else {
+            return nil
+        }
+        return DictionaryTermsSettingSuggestion(
+            providerId: providerId,
+            engineName: engine.providerDisplayName,
+            summary: enabler.dictionaryTermsSettingSummary,
+            activation: activation
+        )
+    }
+
+    func suggestTermsSettingIfNeeded(afterAdding addedType: DictionaryEntryType) {
+        guard addedType == .term, let engine = selectedTranscriptionEngine() else { return }
+        let providerId = engine.providerId
+        guard DictionaryTermsSettingSuggestionPolicy.shouldSuggest(
+            afterAdding: addedType,
+            support: (engine as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport,
+            canEnable: engine is any DictionaryTermsSettingEnabling,
+            isDismissed: dismissedTermsSettingProviderIds.contains(providerId)
+        ) else {
+            return
+        }
+        termsSettingSuggestionProviderId = providerId
+    }
+
+    func termsSettingActivation(for providerId: String) -> DictionaryTermsSettingActivation? {
+        termsSettingActivations[providerId]
+    }
+
+    func enableTermsSetting(for engine: any TranscriptionEnginePlugin) {
+        guard let enabler = engine as? any DictionaryTermsSettingEnabling else { return }
+        let providerId = engine.providerId
+        guard termsSettingActivations[providerId] != .enabling else { return }
+
+        termsSettingActivations[providerId] = .enabling
+        Task { [weak self] in
+            do {
+                try await enabler.enableDictionaryTermsSetting()
+                self?.finishTermsSettingActivation(providerId: providerId, failure: nil)
+            } catch {
+                self?.finishTermsSettingActivation(providerId: providerId, failure: error.localizedDescription)
+            }
+        }
+    }
+
+    func enableSuggestedTermsSetting() {
+        guard let providerId = termsSettingSuggestionProviderId,
+              let engine = transcriptionEngineLookup(providerId) else { return }
+        enableTermsSetting(for: engine)
+    }
+
+    /// "Not now" is remembered per engine, so adding more Terms does not ask again.
+    /// The engine overview keeps offering the setting.
+    func dismissTermsSettingSuggestion() {
+        guard let providerId = termsSettingSuggestionProviderId else { return }
+        termsSettingSuggestionProviderId = nil
+        if case .failed = termsSettingActivations[providerId] {
+            termsSettingActivations[providerId] = nil
+        }
+        dismissedTermsSettingProviderIds.insert(providerId)
+        defaults.set(
+            dismissedTermsSettingProviderIds.sorted(),
+            forKey: UserDefaultsKeys.dismissedDictionaryTermsSettingSuggestions
+        )
+    }
+
+    /// The suggestion belongs to the moment Terms were added; leaving the page ends it.
+    func clearTermsSettingSuggestion() {
+        guard let providerId = termsSettingSuggestionProviderId,
+              termsSettingActivations[providerId] == nil else { return }
+        termsSettingSuggestionProviderId = nil
+    }
+
+    private func finishTermsSettingActivation(providerId: String, failure: String?) {
+        if let failure {
+            termsSettingActivations[providerId] = .failed(failure)
+        } else {
+            termsSettingActivations[providerId] = nil
+            if termsSettingSuggestionProviderId == providerId {
+                termsSettingSuggestionProviderId = nil
+            }
+        }
+    }
+
     // MARK: - Export / Import
 
     func exportDictionary() {
@@ -616,7 +773,11 @@ class DictionaryViewModel: ObservableObject {
                 error = String(localized: "The file contains no dictionary entries.")
                 return
             }
+            let termsCountBeforeImport = dictionaryService.termsCount
             let result = DictionaryExporter.importEntries(parsed, into: dictionaryService)
+            if dictionaryService.termsCount > termsCountBeforeImport {
+                suggestTermsSettingIfNeeded(afterAdding: .term)
+            }
 
             if result.skipped > 0 {
                 importMessage = String(localized: "\(result.imported) entries imported, \(result.skipped) duplicates skipped.")
@@ -644,6 +805,9 @@ class DictionaryViewModel: ObservableObject {
             deactivatePack(pack)
         } else {
             activatePack(pack)
+            if isPackActivated(pack), !pack.terms.isEmpty {
+                suggestTermsSettingIfNeeded(afterAdding: .term)
+            }
         }
     }
 

@@ -1,0 +1,310 @@
+name: Mac App Store Upload
+
+# Archives, signs, audits and exports the Mac App Store edition and optionally
+# uploads it to App Store Connect (TestFlight). Runs manually or nightly, on
+# main only; the signing material lives in the protected `app-store` environment.
+# Nightly runs upload to the internal TestFlight group, but only when main
+# changed since the last successful nightly upload.
+# scripts/appstore/testflight-local.sh does the same on a Mac with the login keychain.
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: Optional build number (defaults to minutes since the Unix epoch)
+        required: false
+        type: string
+      confirm_upload:
+        description: Upload the signed package to App Store Connect
+        required: true
+        default: false
+        type: boolean
+      recreate_profiles:
+        description: Recreate the provisioning profiles (only after capability changes)
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-app-store-upload
+  cancel-in-progress: false
+
+env:
+  XCODE_VERSION: "26.6"
+  XCODEGEN_VERSION: "2.46.0"
+  XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+  PROJECT: TypeWhisperAppStore.xcodeproj
+  SCHEME: TypeWhisperAppStore
+  ARCHIVE_PATH: build/TypeWhisper.xcarchive
+  EXPORT_PATH: build/export
+  TEAM_ID: 2D8ALY3LCL
+  BUNDLE_IDENTIFIER: com.typewhisper.typewhisper-app
+  # App Store Connect record shared with the iOS app (universal purchase).
+  APPLE_ID: "6759319267"
+
+jobs:
+  changes:
+    name: Check for changes since the last nightly upload
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Compare with the last successful nightly run
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$EVENT" != "schedule" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last_sha=$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/appstore-testflight.yml/runs?event=schedule&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // ""')
+          if [[ "$last_sha" == "$GITHUB_SHA" ]]; then
+            echo "main is unchanged since the last nightly upload ($last_sha)."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build-and-upload:
+    name: Archive, export and upload
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
+    runs-on: macos-26
+    environment: app-store
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install XcodeGen
+        run: |
+          archive="$RUNNER_TEMP/xcodegen.zip"
+          curl -fsSL -o "$archive" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $archive" | shasum -a 256 -c -
+          unzip -q "$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Generate App Store project
+        run: scripts/appstore/generate_project.sh
+
+      - name: Set build number
+        env:
+          INPUT_BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          if [[ -n "$INPUT_BUILD_NUMBER" ]]; then
+            BUILD_NUMBER="$INPUT_BUILD_NUMBER"
+          else
+            BUILD_NUMBER=$(( $(date -u +%s) / 60 ))
+          fi
+          [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || { echo "Build number must be numeric"; exit 1; }
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+
+      - name: Import signing certificates
+        env:
+          SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
+          SIGNING_PASSWORD: ${{ secrets.MACOS_SIGNING_PASSWORD }}
+        run: |
+          keychain_path="$RUNNER_TEMP/typewhisper-appstore.keychain-db"
+          keychain_password="$(uuidgen)"
+          certificate_path="$RUNNER_TEMP/macos-signing.p12"
+          printf '%s' "$SIGNING_P12" | base64 --decode > "$certificate_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$certificate_path" -P "$SIGNING_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain_path" >/dev/null
+          security list-keychains -d user -s "$keychain_path" login.keychain-db
+          rm -f "$certificate_path"
+
+          # Sign with the p12's Apple Distribution identity; the pkg uses the installer identity.
+          signing_sha1=$(security find-identity -v -p codesigning "$keychain_path" \
+            | sed -nE 's/.*([0-9A-F]{40}) "Apple Distribution:.*/\1/p' | head -n 1)
+          installer_identity=$(security find-identity -v -p basic "$keychain_path" \
+            | sed -nE 's/.*"((3rd Party Mac Developer Installer|Mac Installer Distribution):[^"]*)".*/\1/p' \
+            | head -n 1)
+          if [[ -z "$signing_sha1" || -z "$installer_identity" ]]; then
+            echo "MACOS_SIGNING_P12 must contain an Apple Distribution and a Mac Installer Distribution identity." >&2
+            security find-identity -v -p basic "$keychain_path" >&2
+            exit 1
+          fi
+          certificate_serial=$(security find-certificate -a -Z -p "$keychain_path" \
+            | awk -v sha="$signing_sha1" '/^SHA-1 hash:/ {take = ($3 == sha)} take' \
+            | openssl x509 -noout -serial | cut -d= -f2)
+          {
+            echo "KEYCHAIN_PATH=$keychain_path"
+            echo "SIGNING_SHA1=$signing_sha1"
+            echo "CERTIFICATE_SERIAL=$certificate_serial"
+            echo "INSTALLER_IDENTITY=$installer_identity"
+          } >> "$GITHUB_ENV"
+
+      - name: Resolve Mac App Store profiles
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+          PROFILE_TYPE: MAC_APP_STORE
+          # Existing active profiles are reused; recreating revokes them for
+          # every other signer, so it only happens on request.
+          RECREATE_PROFILE: ${{ inputs.recreate_profiles && '1' || '' }}
+        run: |
+          profiles_dir="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          mkdir -p "$profiles_dir"
+          # One profile per signed bundle with an embedded provisioning profile.
+          for entry in "App:$BUNDLE_IDENTIFIER:TW_APPSTORE_PROFILE" \
+                       "Widget:$BUNDLE_IDENTIFIER.widget:TW_APPSTORE_WIDGET_PROFILE" \
+                       "TranscribeAction:$BUNDLE_IDENTIFIER.transcribe-action:TW_APPSTORE_TRANSCRIBE_PROFILE"; do
+            IFS=: read -r label identifier variable <<<"$entry"
+            output="$RUNNER_TEMP/$label.provisionprofile"
+            BUNDLE_IDENTIFIER="$identifier" \
+            PROFILE_NAME="TypeWhisper Mac AppStore ${CERTIFICATE_SERIAL: -8} $label" \
+            OUTPUT_PATH="$output" \
+              ruby scripts/appstore/create_app_store_profile.rb
+            security cms -D -i "$output" > "$RUNNER_TEMP/$label.plist"
+            uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/$label.plist")
+            name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$RUNNER_TEMP/$label.plist")
+            cp "$output" "$profiles_dir/$uuid.provisionprofile"
+            echo "$variable=$name" >> "$GITHUB_ENV"
+            echo "Installed $label profile: $name ($uuid)"
+          done
+
+      - name: Archive universal app
+        run: |
+          mkdir -p build
+          if ! xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            ARCHS='arm64 x86_64' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_IDENTITY="$SIGNING_SHA1" \
+            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN_PATH" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+            TW_APPSTORE_PROFILE="$TW_APPSTORE_PROFILE" \
+            TW_APPSTORE_WIDGET_PROFILE="$TW_APPSTORE_WIDGET_PROFILE" \
+            TW_APPSTORE_TRANSCRIBE_PROFILE="$TW_APPSTORE_TRANSCRIBE_PROFILE" \
+            > build/xcodebuild-archive.log 2>&1; then
+            grep -E ' error: ' build/xcodebuild-archive.log | sort -u | head -50
+            tail -n 40 build/xcodebuild-archive.log
+            exit 1
+          fi
+          tail -n 3 build/xcodebuild-archive.log
+
+          app_info="$ARCHIVE_PATH/Products/Applications/TypeWhisper.app/Contents/Info.plist"
+          echo "MARKETING_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app_info")" >> "$GITHUB_ENV"
+          archived_build=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app_info")
+          [[ "$archived_build" == "$BUILD_NUMBER" ]] || { echo "Archived build $archived_build != $BUILD_NUMBER"; exit 1; }
+
+      - name: Audit signed archive
+        run: |
+          scripts/appstore/audit_app_store_binary.sh \
+            --require-universal \
+            "$ARCHIVE_PATH/Products/Applications/TypeWhisper.app"
+
+      - name: Generate export options
+        run: |
+          options=build/ExportOptions.plist
+          plutil -create xml1 "$options"
+          plutil -insert method -string app-store-connect "$options"
+          plutil -insert teamID -string "$TEAM_ID" "$options"
+          plutil -insert signingStyle -string manual "$options"
+          plutil -insert signingCertificate -string "$SIGNING_SHA1" "$options"
+          plutil -insert installerSigningCertificate -string "$INSTALLER_IDENTITY" "$options"
+          plutil -insert uploadSymbols -bool YES "$options"
+          plutil -insert provisioningProfiles -dictionary "$options"
+          /usr/libexec/PlistBuddy \
+            -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER string '$TW_APPSTORE_PROFILE'" \
+            -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER.widget string '$TW_APPSTORE_WIDGET_PROFILE'" \
+            -c "Add :provisioningProfiles:$BUNDLE_IDENTIFIER.transcribe-action string '$TW_APPSTORE_TRANSCRIBE_PROFILE'" \
+            "$options"
+          plutil -p "$options"
+
+      - name: Export signed package
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportOptionsPlist build/ExportOptions.plist \
+            -exportPath "$EXPORT_PATH"
+          package_path=$(find "$EXPORT_PATH" -maxdepth 1 -name '*.pkg' -print -quit)
+          [[ -n "$package_path" ]] || { echo "Export did not create a pkg"; exit 1; }
+          pkgutil --check-signature "$package_path"
+          echo "PACKAGE_PATH=$package_path" >> "$GITHUB_ENV"
+
+      - name: Upload package to App Store Connect
+        if: ${{ github.event_name == 'schedule' || inputs.confirm_upload }}
+        env:
+          API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
+        run: |
+          keys_dir="$RUNNER_TEMP/private_keys"
+          mkdir -p "$keys_dir"
+          ( umask 077; printf '%s\n' "$API_KEY_P8" > "$keys_dir/AuthKey_${API_KEY_ID}.p8" )
+
+          set +e
+          upload_output=$(API_PRIVATE_KEYS_DIR="$keys_dir" xcrun altool --upload-package "$PACKAGE_PATH" \
+            --type macos \
+            --apple-id "$APPLE_ID" \
+            --bundle-id "$BUNDLE_IDENTIFIER" \
+            --bundle-version "$BUILD_NUMBER" \
+            --bundle-short-version-string "$MARKETING_VERSION" \
+            --apiKey "$API_KEY_ID" \
+            --apiIssuer "$API_ISSUER_ID" 2>&1)
+          upload_status=$?
+          set -e
+          echo "$upload_output"
+
+          if [[ "$upload_status" -ne 0 ]] || grep -Eq "UPLOAD FAILED|Validation failed" <<<"$upload_output"; then
+            echo "App Store Connect rejected the upload."
+            exit 1
+          fi
+
+      - name: Upload signed package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: TypeWhisper-Mac-AppStore-${{ env.BUILD_NUMBER }}
+          path: |
+            build/export/*.pkg
+            build/export/DistributionSummary.plist
+          retention-days: 14
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: TypeWhisper-Mac-AppStore-logs-${{ github.run_id }}
+          path: build/*.log
+          retention-days: 7
+
+      - name: Cleanup signing material
+        if: always()
+        run: |
+          if [[ -n "${KEYCHAIN_PATH:-}" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+          rm -rf "$RUNNER_TEMP/private_keys" "$RUNNER_TEMP"/*.provisionprofile

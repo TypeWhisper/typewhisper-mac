@@ -43,6 +43,53 @@ enum USBRecordingInputPreparationPolicy {
     }
 }
 
+/// Eligibility of an explicitly selected, non-Bluetooth input for the always-running
+/// microphone pre-roll. Any transport qualifies (USB, virtual, aggregate, ...) because these
+/// inputs are captured through the input-only HAL session. The system default built-in
+/// microphone uses `BuiltInRecordingInputPreparationPolicy` plus the same preference.
+enum MicrophonePrerollInputPolicy {
+    static func isEligibleForExplicitInput(
+        hasMicrophonePermission: Bool,
+        isEnabled: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool
+    ) -> Bool {
+        hasMicrophonePermission
+            && isEnabled
+            && selectedDeviceID != nil
+            && hasExplicitDeviceSelection
+            && !usesBluetoothTransport
+    }
+}
+
+extension MicrophonePrerollInputPolicy {
+    /// Automatic input selection (no explicit device) whose system default input is a
+    /// non-built-in, non-Bluetooth device such as USB, virtual, or aggregate. The built-in
+    /// default keeps using the engine path and Bluetooth stays excluded.
+    static func isEligibleForSystemDefaultInput(
+        hasMicrophonePermission: Bool,
+        isEnabled: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool,
+        defaultInputDeviceID: AudioDeviceID?,
+        defaultInputTransport: UInt32?
+    ) -> Bool {
+        guard hasMicrophonePermission,
+              isEnabled,
+              selectedDeviceID == nil,
+              !hasExplicitDeviceSelection,
+              !usesBluetoothTransport,
+              defaultInputDeviceID != nil,
+              let defaultInputTransport else {
+            return false
+        }
+        return !AudioDeviceService.isBuiltInTransportType(defaultInputTransport)
+            && !AudioDeviceService.isBluetoothTransportType(defaultInputTransport)
+    }
+}
+
 enum BluetoothRecordingInputPreparationPolicy {
     static func isEligible(
         hasMicrophonePermission: Bool,
@@ -420,11 +467,29 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let engine: AVAudioEngine
         let defaultInputDeviceID: AudioDeviceID
         let tapFormat: AVAudioFormat
+        /// True when the engine is already running and feeding the pre-roll ring buffer.
+        var isStreaming = false
     }
 
     private struct PreparedUSBInput {
         let session: AudioInputCaptureSession
         let deviceID: AudioDeviceID
+        /// True when the session is already running and feeding the pre-roll ring buffer.
+        var isStreaming = false
+    }
+
+    private struct PrerollLifecycleState {
+        /// Tracks sleep and screen lock; the input stays released while either is active.
+        var suspension = MicrophonePrerollSuspension()
+        var rearmPolicy = MicrophonePrerollRearmPolicy()
+        /// Built-in input that needs voice processing and therefore cannot stay armed.
+        var unsupportedBuiltInDeviceID: AudioDeviceID?
+
+        /// Forgets earlier failures after something external changed (setting, input, power).
+        mutating func resetFailures() {
+            rearmPolicy.reset()
+            unsupportedBuiltInDeviceID = nil
+        }
     }
 
     private struct PreparedBluetoothInput {
@@ -448,6 +513,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var preparedInputGeneration: UInt64 = 0
     private var startupConfigurationChangeGuard: StartupConfigurationChangeGuard?
     private var configChangeObserver: NSObjectProtocol?
+    private var armedConfigChangeObserver: NSObjectProtocol?
+    private var activeInputOnlyDeviceID: AudioDeviceID?
+    private var prerollWatchdog: DispatchSourceTimer?
     private var sampleBuffer: [Float] = []
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
@@ -458,6 +526,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let engineLock = NSLock()
     private let audioLevelPublishLock = NSLock()
     private let recordingActivityLock = OSAllocatedUnfairLock(initialState: false)
+    private let recordingStopTracker = OSAllocatedUnfairLock(initialState: RecordingStopTracker())
     private struct AsyncRecordingStartState {
         var nextRequestID: UInt64 = 0
         var activeRequestID: UInt64?
@@ -480,6 +549,32 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let inputTransportResolver: AudioDeviceTransportResolving
     private let bluetoothInputStartupTracker = BluetoothInputStartupTracker()
     private var _lastStopGraceCaptureApplied = false
+    /// Newest `prerollDuration` of converted audio while the input is armed between dictations.
+    private let prerollRing = MicrophonePrerollRingBuffer(
+        duration: AudioRecordingService.prerollDuration,
+        sampleRate: AudioRecordingService.targetSampleRate
+    )
+    /// While true, converted samples go only into `prerollRing`. Read and written on
+    /// `processingQueue` only, so the hand-off to a recording is atomic with sample delivery.
+    private var isPrerollCaptureArmed = false
+    /// Lock-protected mirror of `isPrerollCaptureArmed` for callers off `processingQueue`.
+    private let prerollArmedMirror = OSAllocatedUnfairLock(initialState: false)
+    /// Uptime of the newest buffer the armed stream delivered; 0 until it delivered one.
+    private let prerollLastBufferUptime = OSAllocatedUnfairLock(initialState: UInt64(0))
+    /// Uptime at which the stream was armed; the watchdog measures a never-started stream from here.
+    private let prerollArmedUptime = OSAllocatedUnfairLock(initialState: UInt64(0))
+    private let prerollLifecycle = OSAllocatedUnfairLock(initialState: PrerollLifecycleState())
+    /// Tokens of the live capture streams. A stream's token is retired when it is torn down so
+    /// that late callbacks of that stream are discarded (see `processConvertedSamples`).
+    private let captureStreams = CaptureStreamRegistry()
+    private let prerollHandoffState = OSAllocatedUnfairLock(initialState: PrerollHandoffState())
+    private struct PrerollHandoffState {
+        var prerollMilliseconds: Double = 0
+        var readinessSignalPending = false
+    }
+    /// Samples at the head of `sampleBuffer` that were captured before the recording request
+    /// (the handed-off pre-roll). Guarded by `bufferLock`.
+    private var prerollHeadSampleCount = 0
     private var recordingRequestUptimeNanoseconds: UInt64?
     private var hasLoggedFirstConvertedSample = false
     private var lastAudioLevelPublishUptimeNanoseconds: UInt64 = 0
@@ -487,6 +582,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var isAudioLevelPublishScheduled = false
 
     static let targetSampleRate: Double = 16000
+    /// How much audio the opt-in microphone pre-roll holds between dictations. Not a user setting.
+    static let prerollDuration: TimeInterval = 0.5
+    /// An armed stream that delivered nothing for this long is treated as dead.
+    private static let prerollStallThreshold: TimeInterval = 1.0
+    private static let prerollWatchdogInterval: TimeInterval = 2.0
+    /// An armed stream must have delivered audio this recently when a recording claims it.
+    private static let prerollClaimFreshness: TimeInterval = 0.25
     private static let bluetoothInputReadinessTimeout: TimeInterval = 5.0
     private static let captureTapFrames: AVAudioFrameCount = 256
     private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
@@ -505,7 +607,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
         defaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
         inputTransportResolver: AudioDeviceTransportResolving = CoreAudioDeviceTransportResolver(),
-        recoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore()
+        recoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
+        isScreenLocked: () -> Bool = { AppConstants.isRunningTests ? false : MicrophonePrerollScreenLockProbe.currentlyLocked() }
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.inputActivationGuard = inputActivationGuard
@@ -519,6 +622,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         self.recoverableRecordingURLs = recoveryURLs
         self.recoverableRecordingURL = recoveryURLs.first
         recoveryNotificationQueue.underlyingQueue = recoveryQueue
+        // The lock observers only report later transitions. Starting while the screen is
+        // already locked must not let launch-time preparation arm the microphone.
+        if isScreenLocked() {
+            prerollLifecycle.withLock { $0.suspension.suspend(for: .screenLock) }
+        }
     }
 
     var peakRawAudioLevel: Float {
@@ -529,6 +637,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private var isRecordingActive: Bool {
         recordingActivityLock.withLock { $0 }
+    }
+
+    /// False while a recording is active or a stop is still draining it (short-speech grace,
+    /// finalization, re-arming). Preparing or arming an input is only safe when this is true.
+    /// A request rejected while a stop drains is remembered and replayed when the last stop ends.
+    private var allowsInputPreparation: Bool {
+        let isActive = isRecordingActive
+        return recordingStopTracker.withLock { $0.evaluatePreparationRequest(isRecordingActive: isActive) }
     }
 
     private func setRecordingActive(_ active: Bool) {
@@ -611,6 +727,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return changed
         }
         if changed {
+            prerollLifecycle.withLock { $0.resetFailures() }
             invalidatePreparedRecordingInputs(reason: "input-selection-changed")
         }
     }
@@ -619,6 +736,62 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recordingStartQueue.async { [weak self] in
             guard let self else { return }
             self.invalidatePreparedRecordingInputs(reason: "bluetooth-instant-start-setting-changed")
+            self.performRecordingInputPreparationIfEligible()
+        }
+    }
+
+    /// Applies a change of the pre-roll setting: arms the input when it was turned on, and
+    /// releases the running input when it was turned off.
+    func handleMicrophonePrerollPreferenceChange() {
+        recordingStartQueue.async { [weak self] in
+            guard let self else { return }
+            self.prerollLifecycle.withLock { $0.resetFailures() }
+            self.invalidatePreparedRecordingInputs(reason: "microphone-preroll-setting-changed")
+            self.performRecordingInputPreparationIfEligible()
+        }
+    }
+
+    /// Releases the armed input before the Mac sleeps or the screen locks. Nothing else is
+    /// torn down, so the setting off keeps the existing prewarm behavior untouched.
+    func suspendMicrophonePreroll(reason: MicrophonePrerollSuspensionReason) {
+        // Track the reason even while the setting is off so that enabling it during a lock
+        // or sleep does not arm the microphone.
+        prerollLifecycle.withLock { $0.suspension.suspend(for: reason) }
+        guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else { return }
+        recordingStartQueue.async { [weak self] in
+            self?.invalidatePreparedRecordingInputs(reason: reason.rawValue)
+        }
+    }
+
+    /// Screen unlock. Clears only the lock reason, so a Mac that is still asleep stays released.
+    func resumeMicrophonePreroll() {
+        let didResume = prerollLifecycle.withLock { state -> Bool in
+            let didResume = state.suspension.resume(from: .screenLock)
+            state.resetFailures()
+            return didResume
+        }
+        guard didResume,
+              UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else { return }
+        prepareRecordingInputIfEligible()
+    }
+
+    /// Milliseconds of audio older than the recording request that the last start prepended
+    /// from the pre-roll buffer. Zero when the pre-roll is off or was not armed.
+    var lastPrerollMilliseconds: Double {
+        prerollHandoffState.withLock { $0.prerollMilliseconds }
+    }
+
+    /// Runs the preparation that the stop gate rejected, once the last stop has finished. It
+    /// uses the same delay as the stop's own follow-up and is skipped when that follow-up (or
+    /// any other pass) already ran, so the preparation is not duplicated. Unlike the stop's
+    /// follow-up it survives a preparation-generation change, which is how a rejected
+    /// preference-change preparation was lost. Eligibility is re-checked when it runs.
+    private func scheduleRecordingInputPreparationRejectedDuringStop() {
+        recordingStartQueue.asyncAfter(deadline: .now() + Self.postRecordingInputPreparationDelay) { [weak self] in
+            guard let self,
+                  self.recordingStopTracker.withLock({ $0.hasRejectedPreparation }) else {
+                return
+            }
             self.performRecordingInputPreparationIfEligible()
         }
     }
@@ -635,19 +808,137 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     func handleSystemWake() {
+        // Clears only the sleep reason: the screen may still be locked after waking, and the
+        // unlock notification re-arms the microphone then.
+        prerollLifecycle.withLock { state in
+            state.suspension.resume(from: .sleep)
+            state.resetFailures()
+        }
         invalidatePreparedRecordingInputs(reason: "system-wake")
         prepareRecordingInputIfEligible()
     }
 
     private func performRecordingInputPreparationIfEligible() {
-        guard !hasPendingRecordingStart else { return }
+        guard !hasPendingRecordingStart, allowsInputPreparation else { return }
+        // This pass re-checks eligibility itself, so it satisfies any request a stop rejected.
+        recordingStopTracker.withLock { $0.consumeRejectedPreparation() }
+        releaseStreamingInputIfNoLongerWanted()
         if bluetoothInputPreparationDeviceID() != nil {
             performBluetoothInputPreparationIfEligible()
         } else if builtInInputPreparationDeviceID() != nil {
             performBuiltInInputPreparationIfEligible()
-        } else if usbInputPreparationDeviceID() != nil {
+        } else if inputOnlyPreparationDeviceID() != nil {
             performUSBInputPreparationIfEligible()
         }
+    }
+
+    /// Releases a streaming pre-roll input that no longer matches the wanted one, for example
+    /// after the system default input changed. Returns true when something was released.
+    @discardableResult
+    private func releaseStreamingInputIfNoLongerWanted() -> Bool {
+        guard allowsInputPreparation else { return false }
+        let streaming = engineLock.withLock {
+            (builtIn: preparedBuiltInInput, inputOnly: preparedUSBInput)
+        }
+        let builtInIsStale = streaming.builtIn.map { input in
+            input.isStreaming
+                && (!isMicrophonePrerollActive
+                    || builtInInputPreparationDeviceID() != input.defaultInputDeviceID)
+        } ?? false
+        let inputOnlyIsStale = streaming.inputOnly.map { input in
+            input.isStreaming && prerollInputOnlyDeviceID() != input.deviceID
+        } ?? false
+        guard builtInIsStale || inputOnlyIsStale else { return false }
+        invalidatePreparedRecordingInputs(reason: "preroll-input-changed")
+        return true
+    }
+
+    /// A recording must never share the capture path with an armed input of another route. If
+    /// the system default input changed since arming, the selected route is a cold start while
+    /// the previous input stays armed, and the global armed flag would send the recording's
+    /// audio into the pre-roll ring. Release the stale input and disarm before capture starts.
+    private func releaseArmedPrerollInputIfRouteMismatch(route: AudioInputCaptureRoute) {
+        let armedInput = engineLock.withLock { () -> MicrophonePrerollRouteConsistencyPolicy.ArmedInput? in
+            if let input = preparedBuiltInInput, input.isStreaming {
+                return .engine(defaultInputDeviceID: input.defaultInputDeviceID)
+            }
+            if let input = preparedUSBInput, input.isStreaming {
+                return .inputOnly(deviceID: input.deviceID)
+            }
+            return nil
+        }
+        guard MicrophonePrerollRouteConsistencyPolicy.shouldInvalidate(
+            armedInput: armedInput,
+            route: route,
+            currentEngineDeviceID: builtInInputPreparationDeviceID()
+        ) else { return }
+        logger.info("Armed mic pre-roll input does not match the recording route; releasing it before capture starts")
+        invalidatePreparedRecordingInputs(reason: "preroll-route-mismatch")
+    }
+
+    /// Call from a stop before the armed input is kept or re-armed. A recording that delivered
+    /// audio lifts the re-arm failure state, so a pre-roll that gave up comes back after the
+    /// next working cold-start recording instead of staying off until an external event.
+    private func notePrerollRecoveryIfRecordingDeliveredAudio() {
+        // The last buffer may still be queued; its delivery sets the flag read below.
+        processingQueue.sync { }
+        let deliveredAudio = bufferLock.withLock { hasLoggedFirstConvertedSample }
+        guard deliveredAudio else { return }
+        prerollLifecycle.withLock { $0.rearmPolicy.noteWorkingRecording() }
+    }
+
+    /// Whether the user opted into the pre-roll and nothing currently keeps it released.
+    private var isMicrophonePrerollActive: Bool {
+        guard UserDefaults.standard.bool(forKey: UserDefaultsKeys.microphonePrerollEnabled) else {
+            return false
+        }
+        return prerollLifecycle.withLock { !$0.suspension.isSuspended && !$0.rearmPolicy.hasGivenUp }
+    }
+
+    /// Non-Bluetooth input that should stay running for the pre-roll through the input-only
+    /// session: the explicitly selected device, or with automatic selection the system default
+    /// input when it is not built-in (the built-in default uses the engine path).
+    private func prerollInputOnlyDeviceID() -> AudioDeviceID? {
+        let selection = configLock.withLock {
+            (
+                selectedDeviceID: _selectedDeviceID,
+                hasExplicitDeviceSelection: _hasExplicitDeviceSelection,
+                usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
+            )
+        }
+        let isEnabled = isMicrophonePrerollActive
+        if MicrophonePrerollInputPolicy.isEligibleForExplicitInput(
+            hasMicrophonePermission: hasMicrophonePermission,
+            isEnabled: isEnabled,
+            selectedDeviceID: selection.selectedDeviceID,
+            hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selection.usesBluetoothTransport
+        ) {
+            return selection.selectedDeviceID
+        }
+        guard isEnabled, selection.selectedDeviceID == nil else { return nil }
+        let defaultInputDeviceID = defaultInputController.defaultInputDeviceID()
+        let defaultInputTransport = defaultInputDeviceID.flatMap {
+            inputTransportResolver.transportType(for: $0)
+        }
+        guard MicrophonePrerollInputPolicy.isEligibleForSystemDefaultInput(
+            hasMicrophonePermission: hasMicrophonePermission,
+            isEnabled: isEnabled,
+            selectedDeviceID: selection.selectedDeviceID,
+            hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selection.usesBluetoothTransport,
+            defaultInputDeviceID: defaultInputDeviceID,
+            defaultInputTransport: defaultInputTransport
+        ) else {
+            return nil
+        }
+        return defaultInputDeviceID
+    }
+
+    /// Input-only HAL device that is prepared ahead of a dictation: a selected USB input, or
+    /// any explicitly selected non-Bluetooth input while the pre-roll keeps it running.
+    private func inputOnlyPreparationDeviceID() -> AudioDeviceID? {
+        usbInputPreparationDeviceID() ?? prerollInputOnlyDeviceID()
     }
 
     private func bluetoothInputPreparationDeviceID() -> AudioDeviceID? {
@@ -695,38 +986,59 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performBuiltInInputPreparationIfEligible() {
-        guard !isRecordingActive,
+        guard allowsInputPreparation,
               let defaultInputDeviceID = builtInInputPreparationDeviceID() else {
             return
         }
 
+        let wantsStreaming = isMicrophonePrerollActive
+            && prerollLifecycle.withLock { $0.unsupportedBuiltInDeviceID != defaultInputDeviceID }
         let alreadyPrepared = engineLock.withLock {
             preparedBuiltInInput?.defaultInputDeviceID == defaultInputDeviceID
+                && preparedBuiltInInput?.isStreaming == wantsStreaming
         }
         guard !alreadyPrepared else { return }
         let preparationGeneration = engineLock.withLock { preparedInputGeneration }
 
         let engine = AVAudioEngine()
         let preparationStart = CFAbsoluteTimeGetCurrent()
+        var isStreaming = false
         do {
             let configuredCapture = try configureEngineCapture(
                 engine,
-                label: "built-in-prewarm",
+                label: wantsStreaming ? "built-in-preroll" : "built-in-prewarm",
                 readinessDeadline: nil,
                 shouldCancel: { false }
             )
-            engine.prepare()
 
-            guard !isRecordingActive,
+            if wantsStreaming, configuredCapture.inputNode.isVoiceProcessingEnabled {
+                // A voice-processing engine ducks other apps' audio for as long as it runs,
+                // which is not acceptable while idle. Keep the normal prewarm for this input.
+                prerollLifecycle.withLock { $0.unsupportedBuiltInDeviceID = defaultInputDeviceID }
+                logger.info("Mic pre-roll unavailable for this built-in input: voice processing is required")
+                engine.prepare()
+            } else if wantsStreaming {
+                // The tap is installed, so samples must already be routed to the ring when the
+                // engine starts.
+                setPrerollCaptureArmed(true)
+                isStreaming = true
+                try engine.start()
+            } else {
+                engine.prepare()
+            }
+
+            guard allowsInputPreparation,
                   builtInInputPreparationDeviceID() == defaultInputDeviceID else {
                 teardownPreparedEngine(engine)
+                if isStreaming { setPrerollCaptureArmed(false) }
                 return
             }
 
             let preparedInput = PreparedBuiltInInput(
                 engine: engine,
                 defaultInputDeviceID: defaultInputDeviceID,
-                tapFormat: configuredCapture.tapFormat
+                tapFormat: configuredCapture.tapFormat,
+                isStreaming: isStreaming
             )
             let storageResult = engineLock.withLock { () -> (stored: Bool, replaced: PreparedBuiltInInput?) in
                 guard preparedInputGeneration == preparationGeneration,
@@ -740,15 +1052,32 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
             if let replacedInput = storageResult.replaced {
                 teardownPreparedEngine(replacedInput.engine)
+                if replacedInput.isStreaming, isStreaming { prerollRing.reset() }
             }
-            guard storageResult.stored else { return }
+            guard storageResult.stored else {
+                if isStreaming { setPrerollCaptureArmed(false) }
+                return
+            }
 
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
-            logger.info(
-                "Prepared built-in recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
-            )
+            if isStreaming {
+                installArmedConfigurationObserver(
+                    for: engine,
+                    tapFormat: configuredCapture.tapFormat,
+                    preparationGeneration: preparationGeneration
+                )
+                noteMicrophonePrerollArmed(transport: "builtIn", elapsedMs: elapsedMs)
+            } else {
+                logger.info(
+                    "Prepared built-in recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+                )
+            }
         } catch {
             teardownPreparedEngine(engine)
+            if isStreaming { setPrerollCaptureArmed(false) }
+            // Capture setup can fail before streaming starts (device format or route change),
+            // so retry whenever streaming was requested.
+            if wantsStreaming { handlePrerollArmingFailure(error) }
             logger.warning(
                 "Could not prepare built-in recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
@@ -779,23 +1108,42 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performUSBInputPreparationIfEligible() {
-        guard !isRecordingActive,
-              let deviceID = usbInputPreparationDeviceID() else {
+        guard allowsInputPreparation,
+              let deviceID = inputOnlyPreparationDeviceID() else {
             return
         }
 
+        let wantsStreaming = prerollInputOnlyDeviceID() == deviceID
         let alreadyPrepared = engineLock.withLock {
-            preparedUSBInput?.deviceID == deviceID
+            preparedUSBInput?.deviceID == deviceID && preparedUSBInput?.isStreaming == wantsStreaming
         }
         guard !alreadyPrepared else { return }
         let preparationGeneration = engineLock.withLock { preparedInputGeneration }
         let preparationStart = CFAbsoluteTimeGetCurrent()
+        var isStreaming = false
 
         do {
-            let preparedInput = try prepareInputOnlyRecording(deviceID: deviceID, label: "usb-prewarm")
-            guard !isRecordingActive,
-                  usbInputPreparationDeviceID() == deviceID else {
-                preparedInput.session.stop()
+            var preparedInput = try prepareInputOnlyRecording(
+                deviceID: deviceID,
+                label: wantsStreaming ? "preroll-prewarm" : "usb-prewarm"
+            )
+            if wantsStreaming {
+                // Slices are delivered on processingQueue as soon as the session starts, so
+                // they must already be routed to the ring.
+                setPrerollCaptureArmed(true)
+                isStreaming = true
+                do {
+                    try preparedInput.session.start()
+                } catch {
+                    stopCaptureSession(preparedInput.session)
+                    throw error
+                }
+                preparedInput.isStreaming = true
+            }
+            guard allowsInputPreparation,
+                  inputOnlyPreparationDeviceID() == deviceID else {
+                stopCaptureSession(preparedInput.session)
+                if isStreaming { setPrerollCaptureArmed(false) }
                 return
             }
 
@@ -809,14 +1157,30 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 preparedUSBInput = preparedInput
                 return (true, previous)
             }
-            storageResult.replaced?.session.stop()
-            guard storageResult.stored else { return }
+            if let replacedInput = storageResult.replaced { stopCaptureSession(replacedInput.session) }
+            if storageResult.replaced?.isStreaming == true, isStreaming { prerollRing.reset() }
+            guard storageResult.stored else {
+                if isStreaming { setPrerollCaptureArmed(false) }
+                return
+            }
 
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
-            logger.info(
-                "Prepared selected USB recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
-            )
+            if isStreaming {
+                let transport = inputTransportResolver.transportType(for: deviceID)
+                noteMicrophonePrerollArmed(
+                    transport: transport.map(AudioDeviceService.transportTypeName) ?? "unknown",
+                    elapsedMs: elapsedMs
+                )
+            } else {
+                logger.info(
+                    "Prepared selected USB recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+                )
+            }
         } catch {
+            if isStreaming { setPrerollCaptureArmed(false) }
+            // Format lookup and session preparation can fail before streaming starts, so
+            // retry whenever streaming was requested.
+            if wantsStreaming { handlePrerollArmingFailure(error) }
             logger.warning(
                 "Could not prepare selected USB recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
@@ -879,7 +1243,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func performBluetoothInputPreparationIfEligible() {
-        guard !isRecordingActive,
+        guard allowsInputPreparation,
               let deviceID = bluetoothInputPreparationDeviceID() else {
             return
         }
@@ -978,13 +1342,20 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return preparedInput
         }
         if let staleInput {
+            if staleInput.isStreaming { releaseArmedPrerollStream() }
             teardownPreparedEngine(staleInput.engine)
+            if staleInput.isStreaming { setPrerollCaptureArmed(false) }
+        }
+        if claimedInput?.isStreaming == true {
+            // The recording installs its own configuration observer for this engine.
+            removeArmedConfigurationObserver()
+            stopPrerollWatchdog()
         }
         return claimedInput
     }
 
     private func claimPreparedUSBInputIfEligible(deviceID: AudioDeviceID) -> PreparedUSBInput? {
-        guard usbInputPreparationDeviceID() == deviceID else {
+        guard inputOnlyPreparationDeviceID() == deviceID else {
             invalidatePreparedRecordingInputs(reason: "usb-recording-route-ineligible")
             return nil
         }
@@ -1001,7 +1372,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
             return preparedInput
         }
-        staleInput?.session.stop()
+        if let staleInput {
+            if staleInput.isStreaming { releaseArmedPrerollStream() }
+            stopCaptureSession(staleInput.session)
+            if staleInput.isStreaming { setPrerollCaptureArmed(false) }
+        }
+        if claimedInput?.isStreaming == true {
+            stopPrerollWatchdog()
+        }
         return claimedInput
     }
 
@@ -1049,17 +1427,397 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             preparedBluetoothInput = nil
             return (builtInInput, usbInput, bluetoothInput)
         }
+        let releasedStreamingInput = preparedInputs.0?.isStreaming == true
+            || preparedInputs.1?.isStreaming == true
+        if releasedStreamingInput {
+            // Stop delivering into the ring first so the released stream cannot leave stale audio behind.
+            removeArmedConfigurationObserver()
+            stopPrerollWatchdog()
+        }
         if let builtInInput = preparedInputs.0 {
             teardownPreparedEngine(builtInInput.engine)
         }
-        preparedInputs.1?.session.stop()
+        if let usbInput = preparedInputs.1 { stopCaptureSession(usbInput.session) }
         if let bluetoothInput = preparedInputs.2 {
             teardownPreparedEngine(bluetoothInput.engine)
             bluetoothInputStartupTracker.reset()
             inputActivationGuard.restore(reason: "bluetooth-instant-start-prewarm-invalidated")
         }
+        if releasedStreamingInput {
+            setPrerollCaptureArmed(false)
+        }
         guard preparedInputs.0 != nil || preparedInputs.1 != nil || preparedInputs.2 != nil else { return }
         logger.info("Invalidated prepared recording input: \(reason, privacy: .public)")
+    }
+
+    // MARK: - Microphone pre-roll
+
+    /// Routes converted samples to the pre-roll ring (armed) or to the recording (not armed).
+    /// Runs the switch on `processingQueue` so it is ordered against sample delivery: every
+    /// slice queued before this call belongs to the previous state, every later one to the new.
+    ///
+    /// The last-buffer timestamp stays unset until the stream delivers a buffer, so a recording
+    /// that claims a stream which never produced audio falls back to the cold start. Pass
+    /// `retainingLastBuffer` when re-arming a stream that just served a recording: the
+    /// timestamp of its last real buffer is kept (recordings keep updating it), so freshness is
+    /// never synthesized for a stream that stalled while the engine still reports running.
+    private func setPrerollCaptureArmed(_ armed: Bool, retainingLastBuffer: Bool = false) {
+        processingQueue.sync {
+            prerollRing.reset()
+            isPrerollCaptureArmed = armed
+            prerollArmedMirror.withLock { $0 = armed }
+            let now = DispatchTime.now().uptimeNanoseconds
+            prerollArmedUptime.withLock { $0 = armed ? now : 0 }
+            prerollLastBufferUptime.withLock {
+                $0 = MicrophonePrerollFreshnessPolicy.lastBufferUptimeAfterArming(
+                    armed: armed,
+                    retainingLastBuffer: retainingLastBuffer,
+                    previous: $0
+                )
+            }
+        }
+    }
+
+    /// Makes sure a recording that did not claim the armed stream does not feed the ring.
+    private func disarmPrerollCaptureIfNeeded() {
+        guard prerollArmedMirror.withLock({ $0 }) else { return }
+        setPrerollCaptureArmed(false)
+    }
+
+    private func noteMicrophonePrerollArmed(transport: String, elapsedMs: Double) {
+        logger.info(
+            "Mic pre-roll armed: transport=\(transport, privacy: .public), readyMs=\(String(format: "%.1f", elapsedMs), privacy: .public), ringMs=\(Int(Self.prerollDuration * 1000), privacy: .public)"
+        )
+        startPrerollWatchdogIfNeeded()
+    }
+
+    private func hasStreamingPreparedInput() -> Bool {
+        engineLock.withLock {
+            preparedBuiltInInput?.isStreaming == true || preparedUSBInput?.isStreaming == true
+        }
+    }
+
+    /// True when the armed stream delivered audio recently enough to trust it for a recording.
+    private func armedStreamIsFresh(within interval: TimeInterval) -> Bool {
+        MicrophonePrerollFreshnessPolicy.isFresh(
+            lastBufferUptime: prerollLastBufferUptime.withLock { $0 },
+            now: DispatchTime.now().uptimeNanoseconds,
+            within: interval
+        )
+    }
+
+    /// Watchdog variant of `armedStreamIsFresh`: a stream that has not delivered its first
+    /// buffer yet counts as active until it has been armed for `interval`.
+    private func armedStreamIsActive(within interval: TimeInterval) -> Bool {
+        let last = max(prerollLastBufferUptime.withLock { $0 }, prerollArmedUptime.withLock { $0 })
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard last != 0, now >= last else { return false }
+        return Double(now - last) / 1_000_000_000 <= interval
+    }
+
+    private func releaseArmedPrerollStream() {
+        removeArmedConfigurationObserver()
+        stopPrerollWatchdog()
+    }
+
+    /// `preparationGeneration` is the generation the armed stream was prepared in. A failure
+    /// reported by this observer only counts while that generation is current, so a callback
+    /// of an engine that an input or preference change already replaced cannot tear down the
+    /// replacement or use up its retry budget.
+    private func installArmedConfigurationObserver(
+        for engine: AVAudioEngine,
+        tapFormat: AVAudioFormat,
+        preparationGeneration: UInt64
+    ) {
+        removeArmedConfigurationObserver()
+        let observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: recoveryNotificationQueue
+        ) { [weak self, weak engine] _ in
+            if let engine {
+                let liveTapFormat = Self.tapFormat(for: engine.inputNode.outputFormat(forBus: 0))
+                if MicrophonePrerollConfigurationChangePolicy.isFormatPreserving(
+                    engineIsRunning: engine.isRunning,
+                    tapSampleRate: tapFormat.sampleRate,
+                    tapChannelCount: tapFormat.channelCount,
+                    liveSampleRate: liveTapFormat.sampleRate,
+                    liveChannelCount: liveTapFormat.channelCount
+                ) {
+                    logger.info("Ignoring format-preserving configuration change on the armed pre-roll input")
+                    return
+                }
+            }
+            self?.handlePrerollStreamFailure(
+                reason: "configuration-change",
+                streamGeneration: preparationGeneration
+            )
+        }
+        let isStillCurrent = engineLock.withLock { () -> Bool in
+            guard MicrophonePrerollStreamScopePolicy.isCurrent(
+                streamGeneration: preparationGeneration,
+                currentGeneration: preparedInputGeneration
+            ) else {
+                return false
+            }
+            armedConfigChangeObserver = observer
+            return true
+        }
+        // The stream was invalidated while the observer was being installed; nothing would
+        // remove it later.
+        if !isStillCurrent {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func removeArmedConfigurationObserver() {
+        let observer = engineLock.withLock { () -> NSObjectProtocol? in
+            let observer = armedConfigChangeObserver
+            armedConfigChangeObserver = nil
+            return observer
+        }
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    private func startPrerollWatchdogIfNeeded() {
+        engineLock.withLock {
+            guard prerollWatchdog == nil else { return }
+            let timer = DispatchSource.makeTimerSource(queue: recordingStartQueue)
+            timer.schedule(
+                deadline: .now() + Self.prerollWatchdogInterval,
+                repeating: Self.prerollWatchdogInterval,
+                leeway: .milliseconds(500)
+            )
+            timer.setEventHandler { [weak self] in
+                self?.checkPrerollStreamHealth()
+            }
+            prerollWatchdog = timer
+            timer.resume()
+        }
+    }
+
+    private func stopPrerollWatchdog() {
+        let timer = engineLock.withLock { () -> DispatchSourceTimer? in
+            let timer = prerollWatchdog
+            prerollWatchdog = nil
+            return timer
+        }
+        timer?.cancel()
+    }
+
+    /// Runs on `recordingStartQueue`. A dead armed stream delivers nothing, so the ring would
+    /// silently stay empty; detect that and re-arm within the failure budget.
+    private func checkPrerollStreamHealth() {
+        guard allowsInputPreparation, !hasPendingRecordingStart else { return }
+        guard hasStreamingPreparedInput() else {
+            stopPrerollWatchdog()
+            return
+        }
+        // Automatic selection follows the system default; a changed default is not a failure.
+        if releaseStreamingInputIfNoLongerWanted() {
+            performRecordingInputPreparationIfEligible()
+            return
+        }
+        guard !armedStreamIsActive(within: Self.prerollStallThreshold) else { return }
+        handlePrerollStreamFailure(reason: "stalled")
+    }
+
+    /// `streamGeneration` binds a callback to the stream that reported it. Callers that look at
+    /// the current stream (the watchdog) pass nil.
+    private func handlePrerollStreamFailure(reason: String, streamGeneration: UInt64? = nil) {
+        recordingStartQueue.async { [weak self] in
+            guard let self,
+                  self.allowsInputPreparation,
+                  !self.hasPendingRecordingStart,
+                  self.hasStreamingPreparedInput() else {
+                return
+            }
+            if let streamGeneration {
+                let currentGeneration = self.engineLock.withLock { self.preparedInputGeneration }
+                guard MicrophonePrerollStreamScopePolicy.isCurrent(
+                    streamGeneration: streamGeneration,
+                    currentGeneration: currentGeneration
+                ) else {
+                    logger.info("Ignoring \(reason, privacy: .public) of a pre-roll stream that was already replaced")
+                    return
+                }
+            }
+            self.invalidatePreparedRecordingInputs(reason: "preroll-stream-\(reason)")
+            self.scheduleRearmAfterPrerollFailure(reason: reason)
+        }
+    }
+
+    private func handlePrerollArmingFailure(_ error: Error) {
+        scheduleRearmAfterPrerollFailure(reason: "arming-failed: \(error.localizedDescription)")
+    }
+
+    private func scheduleRearmAfterPrerollFailure(reason: String) {
+        let decision = prerollLifecycle.withLock {
+            $0.rearmPolicy.recordFailure(at: CFAbsoluteTimeGetCurrent())
+        }
+        switch decision {
+        case .retry(let delay):
+            logger.warning(
+                "Mic pre-roll stream failed (\(reason, privacy: .public)); re-arming in \(delay, privacy: .public)s"
+            )
+            scheduleRecordingInputPreparation(after: delay)
+        case .giveUp:
+            logger.error(
+                "Mic pre-roll disarmed after repeated stream failures (\(reason, privacy: .public)); using the normal prewarm until the setting, input, or power state changes"
+            )
+            scheduleRecordingInputPreparation(after: 0)
+        }
+    }
+
+    /// Prepends the armed ring buffer to the recording that just claimed the running input.
+    /// Samples delivered from here on go straight to the recording, so the stitch is gapless.
+    private func handOffPrerollToRecording() {
+        let requestUptime = bufferLock.withLock { recordingRequestUptimeNanoseconds }
+        var handedOff = false
+        var heldSampleCount = 0
+        processingQueue.sync {
+            guard isPrerollCaptureArmed else { return }
+            isPrerollCaptureArmed = false
+            prerollArmedMirror.withLock { $0 = false }
+            handedOff = true
+            var samples = prerollRing.drain()
+            heldSampleCount = samples.count
+            guard !samples.isEmpty else { return }
+            let boostResult = microphoneBoostProcessor.processInPlace(&samples, enabled: microphoneBoostEnabled)
+            bufferLock.withLock {
+                sampleBuffer.append(contentsOf: samples)
+                if boostResult.inputRMS > _peakRawAudioLevel { _peakRawAudioLevel = boostResult.inputRMS }
+            }
+            recoveryAudioStore.append(samples)
+        }
+        guard handedOff else { return }
+
+        let requestAgeMs = Self.elapsedMilliseconds(
+            from: requestUptime,
+            to: DispatchTime.now().uptimeNanoseconds
+        ) ?? 0
+        let heldMs = Double(heldSampleCount) / Self.targetSampleRate * 1000
+        // Audio older than the request: the part of the ring that was captured before the press.
+        let prerollMs = max(0, heldMs - requestAgeMs)
+        bufferLock.withLock {
+            hasLoggedFirstConvertedSample = true
+            prerollHeadSampleCount = min(
+                sampleBuffer.count,
+                Int((prerollMs / 1000 * Self.targetSampleRate).rounded())
+            )
+        }
+        prerollHandoffState.withLock { state in
+            state.prerollMilliseconds = prerollMs
+            state.readinessSignalPending = true
+        }
+        logger.info(
+            "Mic pre-roll handed off: prerollMs=\(Self.formatMilliseconds(prerollMs), privacy: .public), heldMs=\(Self.formatMilliseconds(heldMs), privacy: .public), requestAgeMs=\(Self.formatMilliseconds(requestAgeMs), privacy: .public), sampleCount=\(heldSampleCount, privacy: .public)"
+        )
+        logger.info(
+            "First recording audio buffer appended: requestToFirstBufferMs=\(Self.formatMilliseconds(requestAgeMs), privacy: .public), sampleCount=\(heldSampleCount, privacy: .public), preroll=true"
+        )
+    }
+
+    /// The stream was already live, so readiness is signaled once the start is committed
+    /// instead of waiting for a new buffer.
+    private func signalPrerollReadinessIfNeeded() {
+        let isPending = prerollHandoffState.withLock { state -> Bool in
+            let isPending = state.readinessSignalPending
+            state.readinessSignalPending = false
+            return isPending
+        }
+        guard isPending else { return }
+        let readyUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        DispatchQueue.main.async { [weak self] in
+            self?.onFirstRecordingAudioBuffer?(readyUptimeNanoseconds)
+        }
+    }
+
+    /// Keeps the running built-in engine armed after a recording instead of tearing it down.
+    private func keepBuiltInPrerollInputArmed(_ engine: AVAudioEngine) -> Bool {
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
+        guard isMicrophonePrerollActive,
+              let deviceID = builtInInputPreparationDeviceID(),
+              prerollLifecycle.withLock({ $0.unsupportedBuiltInDeviceID != deviceID }),
+              engine.isRunning,
+              !engine.inputNode.isVoiceProcessingEnabled else {
+            return false
+        }
+        let format = engine.inputNode.outputFormat(forBus: 0)
+        // Everything delivered before this point belongs to the recording that just stopped.
+        setPrerollCaptureArmed(true, retainingLastBuffer: true)
+        var otherStreamingInputIsPrepared = false
+        let stored = engineLock.withLock { () -> Bool in
+            guard preparedInputGeneration == preparationGeneration,
+                  audioEngine == nil,
+                  preparedBuiltInInput == nil else {
+                otherStreamingInputIsPrepared = preparedBuiltInInput?.isStreaming == true
+                    || preparedUSBInput?.isStreaming == true
+                return false
+            }
+            preparedBuiltInInput = PreparedBuiltInInput(
+                engine: engine,
+                defaultInputDeviceID: deviceID,
+                tapFormat: Self.tapFormat(for: format),
+                isStreaming: true
+            )
+            return true
+        }
+        guard stored else {
+            // Never disarm a different prepared stream that is already feeding the ring.
+            if MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(
+                otherStreamingInputIsPrepared: otherStreamingInputIsPrepared
+            ) {
+                setPrerollCaptureArmed(false)
+            }
+            return false
+        }
+        installArmedConfigurationObserver(
+            for: engine,
+            tapFormat: Self.tapFormat(for: format),
+            preparationGeneration: preparationGeneration
+        )
+        startPrerollWatchdogIfNeeded()
+        logger.info("Mic pre-roll re-armed after recording: transport=builtIn")
+        return true
+    }
+
+    /// Keeps the running input-only session armed after a recording instead of stopping it.
+    private func keepInputOnlyPrerollArmed(_ session: AudioInputCaptureSession) -> Bool {
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
+        let sessionDeviceID = engineLock.withLock { activeInputOnlyDeviceID }
+        guard let deviceID = prerollInputOnlyDeviceID(), sessionDeviceID == deviceID else {
+            return false
+        }
+        setPrerollCaptureArmed(true, retainingLastBuffer: true)
+        var otherStreamingInputIsPrepared = false
+        let stored = engineLock.withLock { () -> Bool in
+            guard preparedInputGeneration == preparationGeneration,
+                  audioEngine == nil,
+                  inputCaptureSession == nil,
+                  preparedUSBInput == nil else {
+                otherStreamingInputIsPrepared = preparedBuiltInInput?.isStreaming == true
+                    || preparedUSBInput?.isStreaming == true
+                return false
+            }
+            preparedUSBInput = PreparedUSBInput(session: session, deviceID: deviceID, isStreaming: true)
+            activeInputOnlyDeviceID = nil
+            return true
+        }
+        guard stored else {
+            // Never disarm a different prepared stream that is already feeding the ring.
+            if MicrophonePrerollRearmStoreFailurePolicy.shouldDisarmCapture(
+                otherStreamingInputIsPrepared: otherStreamingInputIsPrepared
+            ) {
+                setPrerollCaptureArmed(false)
+            }
+            return false
+        }
+        startPrerollWatchdogIfNeeded()
+        logger.info("Mic pre-roll re-armed after recording: transport=inputOnly")
+        return true
     }
 
     private func waitForRecordingInputPreparationCleanup() async {
@@ -1102,6 +1860,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         return Double(sampleBuffer.count) / Self.targetSampleRate
+    }
+
+    /// Duration of audio captured since the recording was requested. Excludes the handed-off
+    /// pre-roll, so the short-speech stop grace still waits for audio from after the press.
+    private var postRequestBufferDuration: TimeInterval {
+        bufferLock.lock()
+        defer { bufferLock.unlock() }
+        return Double(max(0, sampleBuffer.count - prerollHeadSampleCount)) / Self.targetSampleRate
     }
 
     /// Build a mono tap format from a (possibly multi-channel) input format.
@@ -1260,6 +2026,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         try validateRecordingInputAvailability()
         try throwIfRecordingStartCancelled(shouldCancel)
         try throwIfRecordingStartExpired(readinessDeadline)
+        prerollHandoffState.withLock { $0 = PrerollHandoffState() }
         clearRecordingBuffer(requestUptimeNanoseconds: requestUptimeNanoseconds)
         recoveryAudioStore.startNewRecording()
         publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
@@ -1313,6 +2080,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         if let startRecordingOverride {
             bufferLock.lock()
             sampleBuffer.removeAll()
+            prerollHeadSampleCount = 0
             _peakRawAudioLevel = 0
             bufferLock.unlock()
             do {
@@ -1332,7 +2100,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        if case .inputOnlyDevice(let inputOnlyDeviceID) = selectedCaptureRoute {
+        // Evaluate the route once: the system default can change at any time, and the armed
+        // input must match the route this recording actually uses.
+        let captureRoute = effectiveCaptureRoute
+        releaseArmedPrerollInputIfRouteMismatch(route: captureRoute)
+
+        if case .inputOnlyDevice(let inputOnlyDeviceID) = captureRoute {
             do {
                 if let preparedInput = claimPreparedUSBInputIfEligible(deviceID: inputOnlyDeviceID) {
                     do {
@@ -1341,6 +2114,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                         logger.warning(
                             "recording prepared USB input was stale; retrying with cold-start fallback: \(error.localizedDescription, privacy: .public)"
                         )
+                        disarmPrerollCaptureIfNeeded()
                         try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording-usb-cold-fallback")
                     }
                 } else {
@@ -1348,12 +2122,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 }
                 try throwIfRecordingStartCancelled(shouldCancel)
                 guard commitStart() else { throw CancellationError() }
+                signalPrerollReadinessIfNeeded()
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start")
                 outputVolumeGuard.clear()
                 setRecordingActive(true)
             } catch {
                 cleanupAfterFailedInputOnlyStart()
                 discardActiveRecoveryRecording(keepingLatest: true)
+                rearmMicrophonePrerollAfterFailedStartIfNeeded()
                 throw error
             }
             return
@@ -1428,6 +2204,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try throwIfRecordingStartCancelled(shouldCancel)
             guard commitStart() else { throw CancellationError() }
             finishBluetoothInputStartupIfNeeded()
+            signalPrerollReadinessIfNeeded()
             outputVolumeGuard.restoreIfRaised(reason: "recording-start")
             outputVolumeGuard.clear()
             setRecordingActive(true)
@@ -1435,6 +2212,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let failedEngine = engineLock.withLock { audioEngine } ?? engine
             cleanupAfterFailedStart(failedEngine)
             discardActiveRecoveryRecording(keepingLatest: true)
+            rearmMicrophonePrerollAfterFailedStartIfNeeded()
             throw error
         }
     }
@@ -1474,6 +2252,19 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return samples
         }
 
+        // From here until the stop has finished (grace wait, re-arm, finalization) input
+        // preparation stays blocked: the recording is inactive and its engine detached, but a
+        // second armed stream would collide with the re-arm below.
+        // A Bluetooth release stop re-arms nothing and cancels in-flight preparation itself
+        // (see below), so it does not block preparation and never replays a rejected one.
+        let stopBlocksPreparation = bluetoothBehavior != .release
+        recordingStopTracker.withLock { $0.begin(blocksPreparation: stopBlocksPreparation) }
+        defer {
+            if recordingStopTracker.withLock({ $0.end(blocksPreparation: stopBlocksPreparation) }) {
+                scheduleRecordingInputPreparationRejectedDuringStop()
+            }
+        }
+
         // Atomically claim the engine - only the first concurrent caller proceeds
         let capture: (engine: AVAudioEngine?, inputCaptureSession: AudioInputCaptureSession?) = engineLock.withLock {
             let capture = (engine: audioEngine, inputCaptureSession: inputCaptureSession)
@@ -1484,7 +2275,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         setRecordingActive(false)
         if let inputCaptureSession = capture.inputCaptureSession {
-            let bufferedDuration = totalBufferDuration
+            let bufferedDuration = postRequestBufferDuration
             var graceApplied = false
 
             if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
@@ -1492,7 +2283,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 let deadline = Date().addingTimeInterval(maxExtraCapture)
                 graceApplied = true
 
-                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+                while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
                     try? await Task.sleep(for: .seconds(pollInterval))
                 }
             }
@@ -1501,7 +2292,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
             outputVolumeGuard.captureBaseline()
-            inputCaptureSession.stop()
+            notePrerollRecoveryIfRecordingDeliveredAudio()
+            if !keepInputOnlyPrerollArmed(inputCaptureSession) {
+                stopCaptureSession(inputCaptureSession)
+            }
+            engineLock.withLock { activeInputOnlyDeviceID = nil }
             outputVolumeGuard.restoreIfRaised(reason: "recording-stop")
             outputVolumeGuard.clear()
             inputActivationGuard.restore(reason: "recording-stop")
@@ -1529,7 +2324,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return []
         }
 
-        let bufferedDuration = totalBufferDuration
+        let bufferedDuration = postRequestBufferDuration
         var graceApplied = false
 
         if policy.shouldApplyGracePeriod(bufferedDuration: bufferedDuration),
@@ -1537,7 +2332,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let deadline = Date().addingTimeInterval(maxExtraCapture)
             graceApplied = true
 
-            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: totalBufferDuration) {
+            while Date() < deadline, policy.shouldApplyGracePeriod(bufferedDuration: postRequestBufferDuration) {
                 try? await Task.sleep(for: .seconds(pollInterval))
             }
         }
@@ -1551,9 +2346,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release")
             await waitForRecordingInputPreparationCleanup()
         }
+        notePrerollRecoveryIfRecordingDeliveredAudio()
         let keptPreparedInput = bluetoothBehavior == .keepPrepared
             && keepBluetoothInputPrepared(engine)
-        if !keptPreparedInput {
+        let keptPrerollInput = !keptPreparedInput
+            && bluetoothBehavior == .keepPrepared
+            && keepBuiltInPrerollInputArmed(engine)
+        if !keptPreparedInput && !keptPrerollInput {
             processingQueue.sync {
                 bluetoothInputStartupTracker.reset()
             }
@@ -1691,6 +2490,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let recoveryURL = preserveActiveRecoveryRecording()
         let recoveryURLs = recoveryRecordingURLs
         clearRecordingBuffer()
+        // The stop that follows finds no engine and returns before it schedules its own
+        // preparation, so bring the input back here. The usual rules still apply: a stop that
+        // is running by then blocks it and replays it afterwards, and a Bluetooth release
+        // stop invalidates the preparation generation, which drops this request.
+        scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.recoveryError = error
@@ -1807,6 +2611,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 current: engine.inputNode.outputFormat(forBus: 0)
             )
 
+            if preparedInput.isStreaming {
+                // The engine has been running since it was armed. Reuse it as is and
+                // prepend what the ring buffer captured before the request.
+                guard engine.isRunning else {
+                    throw AudioRecordingError.engineStartFailed("Armed built-in audio engine stopped")
+                }
+                guard armedStreamIsFresh(within: Self.prerollClaimFreshness) else {
+                    throw AudioRecordingError.engineStartFailed("Armed built-in audio engine stopped delivering audio")
+                }
+                recoveryCoordinator.noteEngineStarted()
+                prerollLifecycle.withLock { $0.rearmPolicy.reset() }
+                handOffPrerollToRecording()
+                logger.info("\(label, privacy: .public) claimed armed built-in audio engine")
+                return
+            }
+
             let engineStartTime = CFAbsoluteTimeGetCurrent()
             try engine.start()
             armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: preparedInput.tapFormat)
@@ -1822,6 +2642,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             logger.warning(
                 "\(label, privacy: .public) prepared built-in audio engine was stale; retrying with cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
+        }
+
+        if preparedInput.isStreaming {
+            // The cold-start engine must not feed the ring.
+            setPrerollCaptureArmed(false)
         }
 
         recoveryCoordinator.consumePendingConfigurationChangeForEngineReplacement()
@@ -2014,6 +2839,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let bluetoothInputGeneration = requiresInitialInputReadiness
             ? bluetoothInputStartupTracker.beginGeneration()
             : nil
+        let streamToken = CaptureStreamToken()
         inputNode.removeTap(onBus: 0)
 
         do {
@@ -2036,7 +2862,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                         normalizedBuffer,
                         converter: converter,
                         targetFormat: targetFormat,
-                        bluetoothInputGeneration: captureGeneration
+                        bluetoothInputGeneration: captureGeneration,
+                        stream: streamToken
                     )
                 }
             }
@@ -2051,6 +2878,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw tapError
         }
 
+        captureStreams.register(streamToken, for: engine)
         return ConfiguredEngineCapture(
             inputNode: inputNode,
             tapFormat: tapFormat,
@@ -2094,6 +2922,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         } catch {
             configuredCapture.inputNode.removeTap(onBus: 0)
             engine.stop()
+            retireCaptureStream(engine)
             throw error
         }
     }
@@ -2128,6 +2957,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 )
             )
         }
+    }
+
+    /// The selected route, except that automatic selection on a non-built-in system default
+    /// input uses the input-only session while the pre-roll is on, so it can stay armed.
+    private var effectiveCaptureRoute: AudioInputCaptureRoute {
+        let route = selectedCaptureRoute
+        guard case .avAudioEngine(let preferredDeviceID) = route,
+              preferredDeviceID == nil,
+              let defaultInputDeviceID = prerollInputOnlyDeviceID() else {
+            return route
+        }
+        return .inputOnlyDevice(defaultInputDeviceID)
     }
 
     private var selectedCaptureRoute: AudioInputCaptureRoute {
@@ -2211,7 +3052,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Retires the stream's token once the teardown is done. The retirement runs on
+    /// `processingQueue`, behind every slice the stream already queued, so the audio of a
+    /// recording that is stopping is kept while later callbacks of the dead stream are dropped.
+    private func retireCaptureStream(_ stream: AnyObject) {
+        guard let token = captureStreams.take(for: stream) else { return }
+        processingQueue.async { token.retire() }
+    }
+
+    private func stopCaptureSession(_ session: AudioInputCaptureSession) {
+        session.stop()
+        retireCaptureStream(session)
+    }
+
     private func teardownEngine(_ engine: AVAudioEngine) {
+        defer { retireCaptureStream(engine) }
         if let engineTeardownOverride {
             engineTeardownOverride(engine)
             return
@@ -2238,7 +3093,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return didReplace ? replacementEngine : nil
     }
 
+    /// A failed start tears the armed stream down; bring the pre-roll back without a loop.
+    private func rearmMicrophonePrerollAfterFailedStartIfNeeded() {
+        guard isMicrophonePrerollActive else { return }
+        scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
+    }
+
     private func cleanupAfterFailedStart(_ engine: AVAudioEngine) {
+        disarmPrerollCaptureIfNeeded()
         setRecordingActive(false)
         bluetoothInputStartupTracker.reset()
         recoveryCoordinator.transitionToIdle()
@@ -2291,6 +3153,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         bufferLock.lock()
         sampleBuffer.removeAll()
+        prerollHeadSampleCount = 0
         _peakRawAudioLevel = 0
         recordingRequestUptimeNanoseconds = requestUptimeNanoseconds
         hasLoggedFirstConvertedSample = false
@@ -2343,7 +3206,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ buffer: AVAudioPCMBuffer,
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat,
-        bluetoothInputGeneration: UInt64? = nil
+        bluetoothInputGeneration: UInt64? = nil,
+        stream: CaptureStreamToken? = nil
     ) {
         // Convert sample rate on the render thread (AVAudioConverter requires thread consistency)
         let frameCount = AVAudioFrameCount(
@@ -2383,7 +3247,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             var samples = samples
             self?.processConvertedSamples(
                 &samples,
-                bluetoothInputGeneration: bluetoothInputGeneration
+                bluetoothInputGeneration: bluetoothInputGeneration,
+                stream: stream
             )
         }
     }
@@ -2400,20 +3265,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             // Slices arrive on processingQueue, so conversion and downstream processing
             // stay on one serial queue and off the realtime IO thread.
+            let streamToken = CaptureStreamToken()
             let session = try inputCaptureFactory.startInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
                 bufferSize: Self.captureTapFrames,
                 deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                self?.processInputOnlySlice(buffer, converter: sliceConverter)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter, stream: streamToken)
             }
+            captureStreams.register(streamToken, for: session)
 
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
             engineLock.withLock {
                 audioEngine = nil
                 inputCaptureSession = session
+                activeInputOnlyDeviceID = deviceID
                 startupConfigurationChangeGuard = nil
             }
         } catch let error as SelectedInputDeviceError {
@@ -2438,14 +3306,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 throw AudioRecordingError.engineStartFailed("Cannot create prepared input-only audio converter")
             }
 
+            let streamToken = CaptureStreamToken()
             let session = try inputCaptureFactory.prepareInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
                 bufferSize: Self.captureTapFrames,
                 deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                self?.processInputOnlySlice(buffer, converter: sliceConverter)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter, stream: streamToken)
             }
+            captureStreams.register(streamToken, for: session)
             return PreparedUSBInput(session: session, deviceID: deviceID)
         } catch let error as SelectedInputDeviceError {
             throw mapSelectedInputDeviceError(error)
@@ -2462,37 +3332,54 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ) throws {
         do {
             let startTime = CFAbsoluteTimeGetCurrent()
-            try preparedInput.session.start()
+            if preparedInput.isStreaming {
+                // The session has been running since it was armed.
+                guard armedStreamIsFresh(within: Self.prerollClaimFreshness) else {
+                    throw AudioRecordingError.engineStartFailed("Armed input stopped delivering audio")
+                }
+            } else {
+                try preparedInput.session.start()
+            }
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
             logger.info(
-                "\(label, privacy: .public) prepared USB capture started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+                "\(label, privacy: .public) prepared USB capture \(preparedInput.isStreaming ? "claimed" : "started", privacy: .public) in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
             )
             recoveryCoordinator.transitionToIdle()
             removeConfigurationObserver()
             engineLock.withLock {
                 audioEngine = nil
                 inputCaptureSession = preparedInput.session
+                activeInputOnlyDeviceID = preparedInput.deviceID
                 startupConfigurationChangeGuard = nil
             }
+            if preparedInput.isStreaming {
+                prerollLifecycle.withLock { $0.rearmPolicy.reset() }
+                handOffPrerollToRecording()
+            }
         } catch let error as SelectedInputDeviceError {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw mapSelectedInputDeviceError(error)
         } catch let error as AudioRecordingError {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw error
         } catch {
-            preparedInput.session.stop()
+            stopCaptureSession(preparedInput.session)
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
     }
 
     /// Runs on processingQueue for every slice delivered by an input-only HAL session.
-    private func processInputOnlySlice(_ buffer: AVAudioPCMBuffer, converter: AudioInputSliceConverter) {
+    private func processInputOnlySlice(
+        _ buffer: AVAudioPCMBuffer,
+        converter: AudioInputSliceConverter,
+        stream: CaptureStreamToken
+    ) {
         guard var samples = converter.convert(buffer) else { return }
-        processConvertedSamples(&samples)
+        processConvertedSamples(&samples, stream: stream)
     }
 
     private func cleanupAfterFailedInputOnlyStart() {
+        disarmPrerollCaptureIfNeeded()
         setRecordingActive(false)
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
@@ -2503,7 +3390,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             startupConfigurationChangeGuard = nil
             return session
         }
-        session?.stop()
+        if let session { stopCaptureSession(session) }
         outputVolumeGuard.restoreIfRaised(reason: "recording-start-failed")
         outputVolumeGuard.clear()
         inputActivationGuard.restore(reason: "recording-start-failed")
@@ -2516,8 +3403,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func processConvertedSamples(
         _ samples: inout [Float],
-        bluetoothInputGeneration: UInt64? = nil
+        bluetoothInputGeneration: UInt64? = nil,
+        stream: CaptureStreamToken? = nil
     ) {
+        // A torn-down stream can still deliver a callback that was in flight. Its samples must
+        // not become recording audio while idle or land in the ring of another input.
+        if stream?.isRetired == true { return }
+        // An active recording always owns its audio, whatever the armed state says.
+        if isPrerollCaptureArmed, !isRecordingActive {
+            // Armed between dictations: the audio only fills the bounded ring. It does not
+            // reach the recording, the recovery store, the level meter, or any consumer.
+            prerollRing.append(samples)
+            prerollLastBufferUptime.withLock { $0 = DispatchTime.now().uptimeNanoseconds }
+            return
+        }
+        // Keep the timestamp of the last real buffer current while recording, so a re-arm
+        // after this recording reflects whether the stream was actually delivering.
+        prerollLastBufferUptime.withLock { $0 = DispatchTime.now().uptimeNanoseconds }
         if let bluetoothInputGeneration,
            !bluetoothInputStartupTracker.isActiveGeneration(bluetoothInputGeneration) {
             return
@@ -2676,6 +3578,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         defer { bufferLock.unlock() }
         let samples = sampleBuffer
         sampleBuffer.removeAll()
+        prerollHeadSampleCount = 0
         return samples
     }
 
@@ -3175,15 +4078,33 @@ extension AudioRecordingService {
         }
     }
 
-    func testingSetPreparedBuiltInInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
+    func testingSetPreparedBuiltInInput(
+        _ engine: AVAudioEngine,
+        deviceID: AudioDeviceID,
+        isStreaming: Bool = false
+    ) {
         let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
         engineLock.withLock {
             preparedBuiltInInput = PreparedBuiltInInput(
                 engine: engine,
                 defaultInputDeviceID: deviceID,
-                tapFormat: format
+                tapFormat: format,
+                isStreaming: isStreaming
             )
         }
+    }
+
+    func testingHandlePrerollStreamFailure(reason: String, streamGeneration: UInt64?) {
+        handlePrerollStreamFailure(reason: reason, streamGeneration: streamGeneration)
+    }
+
+    func testingHasStreamingBuiltInInput() -> Bool {
+        engineLock.withLock { preparedBuiltInInput?.isStreaming == true }
+    }
+
+    func testingInstallArmedConfigurationObserver(for engine: AVAudioEngine, preparationGeneration: UInt64) {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        installArmedConfigurationObserver(for: engine, tapFormat: format, preparationGeneration: preparationGeneration)
     }
 
     func testingClaimPreparedBluetoothInputIfEligible() -> Bool {
@@ -3208,6 +4129,20 @@ extension AudioRecordingService {
 
     func testingCurrentAudioEngine() -> AVAudioEngine? {
         engineLock.withLock { audioEngine }
+    }
+
+    var testingIsMicrophonePrerollActive: Bool { isMicrophonePrerollActive }
+
+    func testingGiveUpPrerollRearm() {
+        prerollLifecycle.withLock { state in
+            for attempt in 0...MicrophonePrerollRearmPolicy.maximumFailuresInWindow {
+                _ = state.rearmPolicy.recordFailure(at: TimeInterval(attempt))
+            }
+        }
+    }
+
+    var testingPrerollRearmHasGivenUp: Bool {
+        prerollLifecycle.withLock { $0.rearmPolicy.hasGivenUp }
     }
 
     func testingHasPreparedBluetoothInput() -> Bool {

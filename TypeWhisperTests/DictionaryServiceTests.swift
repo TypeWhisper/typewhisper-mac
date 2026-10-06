@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -72,6 +73,210 @@ private final class UnsupportedDictionaryEnginePlugin: NSObject, TranscriptionEn
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+private struct SettingEnablingTestError: LocalizedError {
+    var errorDescription: String? { "Download failed" }
+}
+
+private final class SettingEnablingDictionaryEnginePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsSettingEnabling, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.setting-enabling-dictionary-engine"
+    static let pluginName = "Setting Enabling Dictionary Engine"
+    var isSettingEnabled = false
+    var failsToEnable = false
+    private(set) var enableCallCount = 0
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "setting-enabling" }
+    var providerDisplayName: String { "Setting Enabling Mock" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var dictionaryTermsSupport: DictionaryTermsSupport { isSettingEnabled ? .supported : .requiresPluginSetting }
+    var dictionaryTermsSettingSummary: String { "Recognizes terms better (about 100 MB download)." }
+
+    func enableDictionaryTermsSetting() async throws {
+        enableCallCount += 1
+        // Like Parakeet: the setting turns on before its model download can fail.
+        isSettingEnabled = true
+        if failsToEnable {
+            throw SettingEnablingTestError()
+        }
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+final class DictionaryTermsSettingSuggestionTests: XCTestCase {
+    private var defaults: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "DictionaryTermsSettingSuggestionTests-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)
+    }
+
+    override func tearDown() {
+        defaults.removePersistentDomain(forName: suiteName)
+        PluginManager.shared = nil
+        super.tearDown()
+    }
+
+    func testPolicySuggestsOnlyForAddedTermsOnEnablableEnginesNeedingTheSetting() {
+        typealias Policy = DictionaryTermsSettingSuggestionPolicy
+
+        XCTAssertTrue(Policy.shouldSuggest(afterAdding: .term, support: .requiresPluginSetting, canEnable: true, isDismissed: false))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .correction, support: .requiresPluginSetting, canEnable: true, isDismissed: false))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .term, support: .requiresPluginSetting, canEnable: false, isDismissed: false))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .term, support: .requiresPluginSetting, canEnable: true, isDismissed: true))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .term, support: .supported, canEnable: true, isDismissed: false))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .term, support: .unsupported, canEnable: true, isDismissed: false))
+        XCTAssertFalse(Policy.shouldSuggest(afterAdding: .term, support: nil, canEnable: true, isDismissed: false))
+    }
+
+    func testPolicyKeepsSuggestionVisibleWhileEnablingOrAfterFailure() {
+        typealias Policy = DictionaryTermsSettingSuggestionPolicy
+
+        XCTAssertTrue(Policy.isVisible(support: .requiresPluginSetting, canEnable: true, isDismissed: false, activation: nil))
+        XCTAssertFalse(Policy.isVisible(support: .supported, canEnable: true, isDismissed: false, activation: nil))
+        XCTAssertTrue(Policy.isVisible(support: .supported, canEnable: true, isDismissed: false, activation: .enabling))
+        XCTAssertTrue(Policy.isVisible(support: .supported, canEnable: true, isDismissed: false, activation: .failed("x")))
+        XCTAssertFalse(Policy.isVisible(support: .requiresPluginSetting, canEnable: true, isDismissed: true, activation: nil))
+        XCTAssertFalse(Policy.isVisible(support: .requiresPluginSetting, canEnable: false, isDismissed: false, activation: nil))
+    }
+
+    @MainActor
+    func testAddingTermSuggestsSettingAndEnablingHidesSuggestion() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let plugin = SettingEnablingDictionaryEnginePlugin()
+        let viewModel = makeViewModel(selecting: plugin, appSupportDirectory: appSupportDirectory)
+
+        addEntry(.correction, "teh", to: viewModel)
+        XCTAssertNil(viewModel.visibleTermsSettingSuggestion)
+
+        addEntry(.term, "Kubernetes", to: viewModel)
+        let suggestion = try XCTUnwrap(viewModel.visibleTermsSettingSuggestion)
+        XCTAssertEqual(suggestion.providerId, plugin.providerId)
+        XCTAssertEqual(suggestion.engineName, "Setting Enabling Mock")
+        XCTAssertEqual(suggestion.summary, plugin.dictionaryTermsSettingSummary)
+        XCTAssertNil(suggestion.activation)
+
+        let finished = expectation(description: "Enabling finished")
+        let observation = viewModel.$termsSettingActivations
+            .dropFirst()
+            .sink { activations in
+                if activations.isEmpty { finished.fulfill() }
+            }
+        viewModel.enableSuggestedTermsSetting()
+        XCTAssertEqual(viewModel.visibleTermsSettingSuggestion?.activation, .enabling)
+        await fulfillment(of: [finished], timeout: 5)
+        observation.cancel()
+
+        XCTAssertEqual(plugin.enableCallCount, 1)
+        XCTAssertNil(viewModel.visibleTermsSettingSuggestion)
+        XCTAssertNil(viewModel.termsSettingSuggestionProviderId)
+
+        // Turning the setting off elsewhere does not bring the old suggestion back.
+        plugin.isSettingEnabled = false
+        XCTAssertNil(viewModel.visibleTermsSettingSuggestion)
+    }
+
+    @MainActor
+    func testFailedEnablingStaysVisibleAndNotNowIsRememberedPerEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let plugin = SettingEnablingDictionaryEnginePlugin()
+        plugin.failsToEnable = true
+        let viewModel = makeViewModel(selecting: plugin, appSupportDirectory: appSupportDirectory)
+
+        addEntry(.term, "Kubernetes", to: viewModel)
+        let failed = expectation(description: "Enabling failed")
+        let observation = viewModel.$termsSettingActivations
+            .sink { activations in
+                if case .failed = activations[plugin.providerId] { failed.fulfill() }
+            }
+        viewModel.enableSuggestedTermsSetting()
+        await fulfillment(of: [failed], timeout: 5)
+        observation.cancel()
+
+        XCTAssertEqual(viewModel.visibleTermsSettingSuggestion?.activation, .failed("Download failed"))
+
+        viewModel.dismissTermsSettingSuggestion()
+        XCTAssertNil(viewModel.visibleTermsSettingSuggestion)
+        XCTAssertNil(viewModel.termsSettingActivations[plugin.providerId])
+        XCTAssertEqual(
+            defaults.stringArray(forKey: UserDefaultsKeys.dismissedDictionaryTermsSettingSuggestions),
+            [plugin.providerId]
+        )
+
+        plugin.isSettingEnabled = false
+        let reloadedDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(reloadedDirectory) }
+        let reloadedViewModel = makeViewModel(selecting: plugin, appSupportDirectory: reloadedDirectory)
+        addEntry(.term, "Kustomize", to: reloadedViewModel)
+        XCTAssertNil(reloadedViewModel.visibleTermsSettingSuggestion)
+    }
+
+    @MainActor
+    func testEnginesWithoutEnableActionDoNotRaiseSuggestion() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let plugin = UnsupportedDictionaryEnginePlugin()
+        plugin.supportValue = .requiresPluginSetting
+        let viewModel = makeViewModel(selecting: plugin, appSupportDirectory: appSupportDirectory)
+
+        addEntry(.term, "Kubernetes", to: viewModel)
+
+        XCTAssertNil(viewModel.termsSettingSuggestionProviderId)
+        XCTAssertNil(viewModel.visibleTermsSettingSuggestion)
+    }
+
+    @MainActor
+    private func makeViewModel(
+        selecting plugin: any TranscriptionEnginePlugin,
+        appSupportDirectory: URL
+    ) -> DictionaryViewModel {
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.tests.\(plugin.providerId)",
+                    name: plugin.providerDisplayName,
+                    version: "1.0.0",
+                    principalClass: "DictionaryTermsSettingSuggestionTestsPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        return DictionaryViewModel(
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            defaults: defaults,
+            selectedTranscriptionEngine: { plugin }
+        )
+    }
+
+    @MainActor
+    private func addEntry(_ type: DictionaryEntryType, _ original: String, to viewModel: DictionaryViewModel) {
+        viewModel.startCreating(type: type)
+        viewModel.editOriginal = original
+        if type == .correction {
+            viewModel.editReplacement = "the"
+        }
+        viewModel.saveEditing()
     }
 }
 

@@ -644,6 +644,12 @@ jobs:
     if: "!contains(needs.prepare.outputs.tag, '-')"
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    # Overlapping runs for the same release would close each other's tap pull
+    # request. A pending duplicate for that tag may be dropped; it would write
+    # the same cask.
+    concurrency:
+      group: homebrew-tap-${{ needs.prepare.outputs.tag }}
+      cancel-in-progress: false
     steps:
       - name: Update Homebrew Cask
         env:
@@ -682,7 +688,28 @@ jobs:
           # The tap's main branch requires status checks, so a direct push is
           # rejected. The update goes through a pull request that is merged once
           # the required checks and the cask validation have passed.
-          BRANCH="release/typewhisper-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          BRANCH_PREFIX="release/typewhisper-${VERSION}-"
+
+          PR_ORIGIN="Opened by the release workflow of TypeWhisper/typewhisper-mac"
+
+          # A rerun after a failed check or merge would otherwise leave the pull
+          # request of an earlier attempt open next to a new one. Close those
+          # first; the new pull request runs every check from scratch. Only pull
+          # requests this workflow opened qualify: a tap branch (never a fork)
+          # named exactly like ours, with our body.
+          stale_prs=$(gh pr list --repo "$TAP_REPO" --state open --base main --limit 1000 \
+              --json number,headRefName,isCrossRepository,body |
+            jq -r --arg prefix "$BRANCH_PREFIX" --arg origin "$PR_ORIGIN" \
+              '.[] | select(.isCrossRepository == false
+                and (.headRefName | startswith($prefix))
+                and (.headRefName[($prefix | length):] | test("^[0-9]+-[0-9]+$"))
+                and (.body | contains($origin))) | .number')
+          for number in $stale_prs; do
+            gh pr close "$number" --repo "$TAP_REPO" --delete-branch \
+              --comment "Superseded by a rerun of the TypeWhisper/typewhisper-mac release workflow for ${RELEASE_TAG}."
+          done
+
+          BRANCH="${BRANCH_PREFIX}${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
@@ -692,7 +719,7 @@ jobs:
 
           PR_URL=$(gh pr create --repo "$TAP_REPO" --base main --head "$BRANCH" \
             --title "Update TypeWhisper to ${VERSION}" \
-            --body "Updates the cask to TypeWhisper ${VERSION} with the SHA-256 of the published DMG. Opened by the release workflow of TypeWhisper/typewhisper-mac for ${RELEASE_TAG}.")
+            --body "Updates the cask to TypeWhisper ${VERSION} with the SHA-256 of the published DMG. ${PR_ORIGIN} for ${RELEASE_TAG}.")
           echo "Opened $PR_URL"
 
           deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))

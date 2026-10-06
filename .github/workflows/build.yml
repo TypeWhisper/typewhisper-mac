@@ -205,11 +205,81 @@ jobs:
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
+  # Mac App Store edition: compile check of the APPSTORE build with bundled plugins.
+  # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
+  # builds the universal Release binary and audits it. See docs/appstore/README.md.
+  appstore:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      APPSTORE_DERIVED_DATA: build/appstore
+      XCODEGEN_VERSION: "2.46.0"
+      XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Install XcodeGen
+        run: |
+          archive="$RUNNER_TEMP/xcodegen.zip"
+          curl -fsSL -o "$archive" \
+            "https://github.com/yonaskolb/XcodeGen/releases/download/${XCODEGEN_VERSION}/xcodegen.zip"
+          echo "${XCODEGEN_SHA256}  $archive" | shasum -a 256 -c -
+          unzip -q "$archive" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/xcodegen/bin" >> "$GITHUB_PATH"
+
+      - name: Generate App Store project
+        run: scripts/appstore/generate_project.sh
+
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/AppStoreSourcePackages
+          key: appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('appstore-project.yml', 'TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'TypeWhisperPluginSDK/Package.resolved') }}
+          restore-keys: |
+            appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
+
+      - name: Build App Store app (Debug, arm64, unsigned)
+        run: |
+          mkdir -p build
+          if ! xcodebuild build \
+            -project TypeWhisperAppStore.xcodeproj \
+            -scheme TypeWhisperAppStore \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath "$APPSTORE_DERIVED_DATA" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/AppStoreSourcePackages" \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            > build/appstore-xcodebuild.log 2>&1; then
+            grep -E ' error: ' build/appstore-xcodebuild.log | sort -u | head -50
+            tail -n 40 build/appstore-xcodebuild.log
+            exit 1
+          fi
+          tail -n 3 build/appstore-xcodebuild.log
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: appstore-xcodebuild-log
+          path: build/appstore-xcodebuild.log
+          retention-days: 7
+
   # Single required status check for the main ruleset.
   ci-ok:
     name: CI ok
     if: always()
-    needs: [checks, release-build, app-tests, plugin-sdk-tests]
+    needs: [checks, release-build, app-tests, plugin-sdk-tests, appstore]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed

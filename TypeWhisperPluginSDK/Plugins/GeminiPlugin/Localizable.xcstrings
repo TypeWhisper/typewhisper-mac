@@ -352,6 +352,94 @@
           }
         }
       }
+    },
+    "Transcription Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodus"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモード"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模式"
+          }
+        }
+      }
+    },
+    "Verbatim": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wortgetreu"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐語"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐字"
+          }
+        }
+      }
+    },
+    "Smart": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スマート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "智能"
+          }
+        }
+      }
+    },
+    "Verbatim preserves fillers, repetitions, and self-corrections. Smart cleans up and formats the text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wortgetreu behält Füllwörter, Wiederholungen und Selbstkorrekturen bei. Smart bereinigt und formatiert den Text."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐語モードは、フィラー、繰り返し、言い直しをそのまま残します。スマートモードはテキストを整理し、読みやすく整えます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "逐字模式保留语气词、重复内容和说话时的改口。智能模式会整理文本并调整格式。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

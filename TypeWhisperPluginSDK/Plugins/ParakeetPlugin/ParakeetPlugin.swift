@@ -5,9 +5,12 @@ import SwiftUI
 import FluidAudio
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
-private actor AsyncTranscriptionGate {
+actor AsyncTranscriptionGate {
     private var isLocked = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    /// Callers queued behind the current holder.
+    var waitingCount: Int { waiters.count }
 
     func withLock<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
         await acquire()
@@ -40,7 +43,7 @@ private actor AsyncTranscriptionGate {
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     static let vocabularyAssetFileName = "parakeet_vocab.json"
@@ -70,7 +73,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate var vocabSizeConfig: ContextBiasingConstants.VocabSizeConfig?
     fileprivate var vocabularyBoostingEnabled: Bool = false
     private let transcriptionGate = AsyncTranscriptionGate()
+    /// Serializes every CTC model download, so file-only and in-memory downloads
+    /// never overlap or overwrite each other's state.
+    let ctcDownloadGate = AsyncTranscriptionGate()
     var ctcModelState: CtcModelState = .notDownloaded
+    /// Test hook replacing the CTC download I/O while keeping `ctcDownloadGate`.
+    /// Receives whether the model would also be loaded into memory.
+    var ctcModelDownloadOverrideForTests: (@Sendable (_ loadIntoMemory: Bool) async -> Void)?
     var lastConfiguredPrompt: String?
     var lastBoostingTermCount: Int = 0
 
@@ -175,6 +184,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var supportsTranslation: Bool { false }
     var dictionaryTermsSupport: DictionaryTermsSupport {
         vocabularyBoostingEnabled ? .supported : .requiresPluginSetting
+    }
+
+    var dictionaryTermsSettingSummary: String {
+        String(
+            localized: "Parakeet recognizes your terms better with Vocabulary Boosting (about 100 MB download).",
+            bundle: Bundle(for: ParakeetPlugin.self)
+        )
+    }
+
+    /// Turns on Vocabulary Boosting and fetches its CTC model, so the first dictation
+    /// after enabling does not wait for the download.
+    func enableDictionaryTermsSetting() async throws {
+        setBoostingEnabled(true)
+        try await prepareVocabularyBoostingModel()
+        host?.notifyCapabilitiesChanged()
     }
 
     var supportedLanguages: [String] {
@@ -417,21 +441,59 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     // MARK: - Vocabulary Boosting
 
-    fileprivate func downloadCtcModel() async {
+    /// Downloads and loads the CTC model, waiting for any CTC download in progress.
+    func downloadCtcModel() async {
+        _ = try? await ctcDownloadGate.withLock { [self] in
+            await performCtcModelDownload(loadIntoMemory: true)
+        }
+    }
+
+    /// Loads the CTC model when Parakeet is loaded. Otherwise only its files are
+    /// downloaded; the next model load picks them up without holding memory now.
+    /// A download already running from the settings view or a first transcription
+    /// finishes first, and the decision is made again afterwards.
+    func prepareVocabularyBoostingModel() async throws {
+        let state = try await ctcDownloadGate.withLock { [self] in
+            await performCtcModelDownload(loadIntoMemory: isConfigured)
+        }
+        if case .error(let message) = state {
+            throw ParakeetVocabularyBoostingError(message: message)
+        }
+    }
+
+    /// Call only while holding `ctcDownloadGate`. Returns the resulting state.
+    private func performCtcModelDownload(loadIntoMemory: Bool) async -> CtcModelState {
+        guard ctcModels == nil else { return ctcModelState }
+
+        if let ctcModelDownloadOverrideForTests {
+            await ctcModelDownloadOverrideForTests(loadIntoMemory)
+            return ctcModelState
+        }
+
         ctcModelState = .downloading
         do {
             applyHuggingFaceTokenToEnvironment()
             let spaceReservation = try await reserveCtcDownloadSpace()
             defer { spaceReservation?.release() }
-            let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
             let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
-            let tokenizer = try await CtcTokenizer.load(from: cacheDir)
-            ctcModels = models
-            ctcTokenizer = tokenizer
-            ctcModelState = .ready
+            if loadIntoMemory {
+                let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+                let tokenizer = try await CtcTokenizer.load(from: cacheDir)
+                ctcModels = models
+                ctcTokenizer = tokenizer
+                ctcModelState = .ready
+            } else {
+                try await CtcModels.download(variant: .ctc110m)
+                // Only the files are cached. Never replace a state another path
+                // set meanwhile, such as an unload resetting it.
+                if ctcModelState == .downloading {
+                    ctcModelState = .notDownloaded
+                }
+            }
         } catch {
             ctcModelState = .error(error.localizedDescription)
         }
+        return ctcModelState
     }
 
     static func vocabularyHints(
@@ -1142,6 +1204,12 @@ enum CtcModelState: Equatable {
     case downloading
     case ready
     case error(String)
+}
+
+struct ParakeetVocabularyBoostingError: LocalizedError, Equatable, Sendable {
+    let message: String
+
+    var errorDescription: String? { message }
 }
 
 private struct ParakeetVocabularyAssetHTTPError: LocalizedError, Sendable {

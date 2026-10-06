@@ -329,7 +329,11 @@ struct SettingsView: View {
         case .advanced:
             AdvancedSettingsView()
         case .license:
+            #if APPSTORE
+            PremiumSettingsView()
+            #else
             LicenseSettingsView()
+            #endif
         case .about:
             AboutSettingsView()
         case .installedPlugin(let pluginId):
@@ -693,6 +697,20 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
 
     let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
 
+    #if APPSTORE
+    // Premium is bought on the Premium page, so there is no License page.
+    let systemDestinations = [
+        settingsDestination(destinations, .advanced),
+        settingsDestination(destinations, .about)
+    ]
+    #else
+    let systemDestinations = [
+        settingsDestination(destinations, .advanced),
+        settingsDestination(destinations, .license),
+        settingsDestination(destinations, .about)
+    ]
+    #endif
+
     return [
         SettingsDestinationSection(
             id: "home",
@@ -712,11 +730,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         ),
         SettingsDestinationSection(
             id: "system",
-            destinations: [
-                settingsDestination(destinations, .advanced),
-                settingsDestination(destinations, .license),
-                settingsDestination(destinations, .about)
-            ]
+            destinations: systemDestinations
         )
     ]
 }
@@ -890,6 +904,7 @@ struct RecordingSettingsView: View {
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var bluetoothInstantStartEnabled = false
+    @AppStorage(UserDefaultsKeys.microphonePrerollEnabled) private var microphonePrerollEnabled = false
     @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationEnabled) private var numberNormalizationEnabled = true
     @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
     private var numberNormalizationMinimumValue = TranscriptionNormalizationService.defaultNumberNormalizationMinimumValue
@@ -897,7 +912,12 @@ struct RecordingSettingsView: View {
     private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
     private var needsPermissions: Bool {
+#if APPSTORE
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
+            || dictation.needsInputMonitoringPermission
+#else
+        dictation.needsMicPermission || dictation.needsAccessibilityPermission
+#endif
     }
 
     private var usesBluetoothInput: Bool {
@@ -1187,6 +1207,22 @@ struct RecordingSettingsView: View {
                     Text(String(localized: "Keeps the Bluetooth microphone active between dictations. Audio between dictations is discarded. This shows the orange microphone indicator, uses more battery, and keeps headset audio in call-quality mode."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                } else {
+                    Toggle(
+                        String(localized: "Start speaking right away"),
+                        isOn: $microphonePrerollEnabled
+                    )
+                    .onChange(of: microphonePrerollEnabled) { _, _ in
+                        audioRecordingService.handleMicrophonePrerollPreferenceChange()
+                    }
+
+                    Text(String(localized: "Keeps the microphone running between dictations and holds the last half second of audio in memory only, so your first words are not cut off. Nothing is saved, sent, or processed until you start dictating. The orange microphone indicator stays on while this is enabled."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text(String(localized: "On Macs where the built-in microphone needs voice processing, it cannot stay active between dictations. This setting has no effect there; choose another microphone to use it."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 if let message = audioDevice.selectedDeviceStatusMessage {
@@ -1348,10 +1384,29 @@ struct RecordingSettingsView: View {
                         }
                     }
 
+#if APPSTORE
+                    if dictation.needsAccessibilityPermission {
+                        AppStorePermissionRow(
+                            dictation: dictation,
+                            kind: .accessibility,
+                            titleStyle: .short,
+                            labelColor: .orange
+                        )
+                    }
+
+                    if dictation.needsInputMonitoringPermission {
+                        AppStorePermissionRow(
+                            dictation: dictation,
+                            kind: .inputMonitoring,
+                            titleStyle: .short,
+                            labelColor: .orange
+                        )
+                    }
+#else
                     if dictation.needsAccessibilityPermission {
                         HStack {
                             Label(
-                                String(localized: "Accessibility"),
+                                AccessibilityPermissionPane.localizedName(),
                                 systemImage: "lock.shield"
                             )
                             .foregroundStyle(.orange)
@@ -1365,6 +1420,7 @@ struct RecordingSettingsView: View {
                             .controlSize(.small)
                         }
                     }
+#endif
                     }
                 }
             }
@@ -1535,10 +1591,19 @@ struct PermissionsBanner: View {
                 }
             }
 
+#if APPSTORE
+            if dictation.needsAccessibilityPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .accessibility, labelColor: .red)
+            }
+
+            if dictation.needsInputMonitoringPermission {
+                AppStorePermissionRow(dictation: dictation, kind: .inputMonitoring, labelColor: .red)
+            }
+#else
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
-                        String(localized: "Accessibility access required"),
+                        AccessibilityPermissionPane.accessRequiredText(),
                         systemImage: "lock.shield"
                     )
                     .foregroundStyle(.red)
@@ -1552,6 +1617,7 @@ struct PermissionsBanner: View {
                     .controlSize(.small)
                 }
             }
+#endif
         }
     }
 }

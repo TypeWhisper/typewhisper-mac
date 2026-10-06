@@ -73,11 +73,12 @@ struct BackupExportSheet: View {
 /// Advanced settings. Unlike export, there's no live data to show until a
 /// backup file has been chosen and parsed, so this sheet has two steps.
 struct BackupImportSheet: View {
-    let onImport: (SettingsBackupExporter.SettingsBackup, Set<SettingsBackupExporter.Category>) -> Void
+    let onImport: (SettingsBackupExporter.SettingsBackup, Set<SettingsBackupExporter.Category>, SettingsBackupExporter.ImportMode) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var backup: SettingsBackupExporter.SettingsBackup?
     @State private var selected: Set<SettingsBackupExporter.Category> = []
+    @State private var replaceExisting = false
     @State private var loadErrorMessage: String?
 
     var body: some View {
@@ -106,6 +107,31 @@ struct BackupImportSheet: View {
                     ScrollView {
                         BackupCategoryList(backup: backup, selected: $selected)
                     }
+
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(
+                            localizedAppText(
+                                "Replace existing items",
+                                de: "Vorhandene Einträge ersetzen",
+                                ja: "既存の項目を置き換える",
+                                zh: "替换现有项目"
+                            ),
+                            isOn: $replaceExisting
+                        )
+                        Text(localizedAppText(
+                            "Overwrites workflows, profiles, and prompt actions with the same name, and replaces hotkeys with the ones in this file. Nothing is deleted. When off, only new items are added and only empty hotkey slots are filled.",
+                            de: "Überschreibt Workflows, Profile und Prompt-Aktionen mit gleichem Namen und ersetzt die Tastenkürzel durch die aus dieser Datei. Es wird nichts gelöscht. Ausgeschaltet kommen nur neue Einträge hinzu, und nur leere Tastenkürzel-Plätze werden belegt.",
+                            ja: "同じ名前のワークフロー、プロファイル、プロンプトアクションを上書きし、ホットキーをこのファイルの内容に置き換えます。削除される項目はありません。オフの場合は新しい項目のみを追加し、未設定のホットキーにのみ適用します。",
+                            zh: "覆盖同名的工作流、配置文件和提示词操作，并用此文件中的快捷键替换当前快捷键。不会删除任何内容。关闭时仅添加新项目，并且只填充空白的快捷键位置。"
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding()
             } else {
@@ -122,7 +148,7 @@ struct BackupImportSheet: View {
             ) {
                 guard let backup else { return }
                 dismiss()
-                onImport(backup, selected)
+                onImport(backup, selected, replaceExisting ? .replace : .merge)
             } onCancel: {
                 dismiss()
             }

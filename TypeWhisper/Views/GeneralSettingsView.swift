@@ -122,14 +122,37 @@ struct GeneralSettingsView: View {
 
 @MainActor
 enum ApplicationRelauncher {
+    #if APPSTORE
+    private static var pendingTermination: DispatchWorkItem?
+    #endif
+
     static func relaunch() {
         let bundleURL = Bundle.main.bundleURL
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
+        #if APPSTORE
+        // The new instance waits for this one to quit before it checks in, so
+        // waiting for the launch completion here would stall both until the
+        // single-instance timeout. Quit right after handing the launch over.
+        AppStoreSingleInstance.markRelaunch()
+        let terminate = DispatchWorkItem { NSApplication.shared.terminate(nil) }
+        pendingTermination = terminate
+        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, error in
+            guard error != nil else { return }
+            // Keep running if the new instance could not be launched.
+            Task { @MainActor in
+                ApplicationRelauncher.pendingTermination?.cancel()
+                ApplicationRelauncher.pendingTermination = nil
+                AppStoreSingleInstance.clearRelaunchMark()
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: terminate)
+        #else
         NSWorkspace.shared.openApplication(
             at: bundleURL,
             configuration: config,
             completionHandler: completeApplicationRelaunch
         )
+        #endif
     }
 }

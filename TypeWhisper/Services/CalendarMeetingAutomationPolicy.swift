@@ -63,9 +63,18 @@ struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
     let selectedCalendarIDs: Set<String>
     let enabledProviders: Set<MeetingProvider>
     let suppressedOccurrenceDigests: Set<String>
+    var detectAdHocMeetings = false
 
     var isOperational: Bool {
-        hasPremiumAccess && startMode != .off && calendarAuthorization == .fullAccess
+        hasPremiumAccess && startMode != .off
+            && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
+    }
+
+    func permits(_ occurrence: CalendarMeetingOccurrence) -> Bool {
+        let sourceEnabled = occurrence.isAdHoc
+            ? detectAdHocMeetings
+            : calendarAuthorization == .fullAccess && selectedCalendarIDs.contains(occurrence.calendarID)
+        return sourceEnabled && !occurrence.providers.isDisjoint(with: enabledProviders)
     }
 }
 
@@ -88,7 +97,11 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
         occurrences: [CalendarMeetingOccurrence],
         now: Date
     )
-    case activity([CalendarMeetingJoinSignal], now: Date)
+    case activity(
+        [CalendarMeetingJoinSignal],
+        detectedOccurrences: [CalendarMeetingOccurrence]? = nil,
+        now: Date
+    )
     case activityUnavailable(now: Date)
     case cameraActivity(isRunning: Bool, now: Date)
     case cameraActivityUnavailable(now: Date)
@@ -150,6 +163,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         let occurrenceDigest: String
         let identity: CalendarMeetingCanonicalLink
         var autoStopArmed: Bool
+        var idleGrace: TimeInterval = 0
         var missingSince: Date?
         var stopDeadline: Date?
         var signalReturnSince: Date?
@@ -199,11 +213,10 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                         || previousConfiguration.calendarAuthorization != configuration.calendarAuthorization
                         || previousConfiguration.selectedCalendarIDs != configuration.selectedCalendarIDs
                         || previousConfiguration.enabledProviders != configuration.enabledProviders
+                        || previousConfiguration.detectAdHocMeetings != configuration.detectAdHocMeetings
                 )
             self.configuration = configuration
-            self.occurrences = occurrences
-                .filter { configuration.selectedCalendarIDs.contains($0.calendarID) }
-                .filter { !$0.providers.isDisjoint(with: configuration.enabledProviders) }
+            self.occurrences = occurrences.filter(configuration.permits)
             pruneArmedOccurrences(at: now)
             effects.append(.replaceScheduledReminders(reminderOccurrences(at: now)))
 
@@ -227,8 +240,13 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             evaluateStart(at: now, effects: &effects)
             evaluateAutoStop(at: now, effects: &effects)
 
-        case .activity(let signals, let now):
+        case .activity(let signals, let detectedOccurrences, let now):
             self.signals = signals
+            if let detectedOccurrences {
+                occurrences.removeAll(where: \.isAdHoc)
+                occurrences.append(contentsOf: detectedOccurrences.filter(configuration.permits))
+                pruneSessionState()
+            }
             if let candidate = pendingIdleCandidate,
                !startEvidenceIsPresent(
                    digest: candidate.digest,
@@ -304,6 +322,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 occurrenceDigest: occurrenceDigest,
                 identity: identity,
                 autoStopArmed: autoStopArmed && configuration.autoStopEnabled,
+                idleGrace: occurrence(for: occurrenceDigest)?.isAdHoc == true ? 90 : 0,
                 missingSince: nil,
                 stopDeadline: nil,
                 signalReturnSince: nil,
@@ -353,6 +372,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         guard configuration.isOperational else { return [] }
         let horizon = now.addingTimeInterval(7 * 24 * 60 * 60)
         return occurrences
+            .filter { !$0.isAdHoc }
             .filter { $0.participationStatus.permitsReminder }
             .filter { !configuration.suppressedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !recordedOccurrenceDigests.contains($0.occurrenceDigest) }
@@ -380,7 +400,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 && !permanentStartFailureDigests.contains($0.occurrenceDigest)
         }
         let shouldCollectAudio = configuration.isOperational
-            && (needsAutoStopSignal || hasOpenJoinWindow)
+            && (needsAutoStopSignal || hasOpenJoinWindow || configuration.detectAdHocMeetings)
         if shouldCollectAudio != collectorRequested {
             collectorRequested = shouldCollectAudio
             effects.append(
@@ -388,7 +408,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             )
         }
 
-        let shouldCollectCamera = configuration.isOperational && hasOpenJoinWindow
+        let shouldCollectCamera = configuration.isOperational && activeRecording == nil
+            && occurrences.contains { !$0.isAdHoc && $0.isInsideJoinWindow(at: now) }
+            && hasOpenJoinWindow
         if shouldCollectCamera != cameraCollectorRequested {
             cameraCollectorRequested = shouldCollectCamera
             effects.append(
@@ -455,8 +477,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             )]
             return
         }
+        let dwell: TimeInterval = candidate.occurrence.isAdHoc
+            ? (candidate.signal.quality == .exactBrowserIdentity ? 20 : 5)
+            : 3
         guard let dwellState = dwellStates[digest],
-              now.timeIntervalSince(dwellState.startedAt) >= 3 else {
+              now.timeIntervalSince(dwellState.startedAt) >= dwell else {
             return
         }
 
@@ -507,7 +532,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                           digest: signal.occurrenceDigest,
                           identity: signal.meetingIdentity,
                           at: now
-                      ) else {
+                      ), !occurrence.isAdHoc else {
                     return nil
                 }
                 return (
@@ -523,7 +548,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 )
             })
             eligible.append(contentsOf: occurrences.compactMap { occurrence in
-                guard occurrence.meetingLinks.count == 1,
+                guard !occurrence.isAdHoc, occurrence.meetingLinks.count == 1,
                       let identity = occurrence.meetingLinks.first,
                       eligibleStartOccurrence(
                           digest: occurrence.occurrenceDigest,
@@ -752,7 +777,10 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         }
 
         if recording.stopDeadline == nil {
-            recording.missingSince = now
+            if recording.missingSince == nil { recording.missingSince = now }
+            activeRecording = recording
+            guard let missingSince = recording.missingSince,
+                  now.timeIntervalSince(missingSince) >= recording.idleGrace else { return }
             let deadline = now.addingTimeInterval(15)
             recording.stopDeadline = deadline
             activeRecording = recording
@@ -811,5 +839,15 @@ struct CalendarMeetingAutomationPolicy: Sendable {
 
     private func occurrence(for digest: String) -> CalendarMeetingOccurrence? {
         occurrences.first { $0.occurrenceDigest == digest }
+    }
+
+    private mutating func pruneSessionState() {
+        var retained = Set(occurrences.map(\.occurrenceDigest))
+        if let activeRecording { retained.insert(activeRecording.occurrenceDigest) }
+        detectedNotificationDigests.formIntersection(retained)
+        armedOccurrenceDigests.formIntersection(retained)
+        permanentStartFailureDigests.formIntersection(retained)
+        recordedOccurrenceDigests.formIntersection(retained)
+        idleRetryDigests.formIntersection(retained)
     }
 }

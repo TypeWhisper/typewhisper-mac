@@ -271,7 +271,29 @@ private struct DiagnosticsReport: Encodable {
 
     struct PermissionsInfo: Encodable {
         let microphoneGranted: Bool
+        /// In the App Store edition: PostEvent access, which System Settings lists under
+        /// Accessibility.
         let accessibilityGranted: Bool
+#if APPSTORE
+        let inputMonitoringGranted: Bool
+        let autoPasteEnabled: Bool
+#endif
+
+        static func current(accessibilityGranted: Bool) -> PermissionsInfo {
+#if APPSTORE
+            PermissionsInfo(
+                microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
+                accessibilityGranted: accessibilityGranted,
+                inputMonitoringGranted: AppStoreInputAccess.canListenToEvents,
+                autoPasteEnabled: AppStoreInputAccess.isAutoPasteEnabled
+            )
+#else
+            PermissionsInfo(
+                microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
+                accessibilityGranted: accessibilityGranted
+            )
+#endif
+        }
     }
 
     struct ModelInfo: Encodable {
@@ -584,8 +606,7 @@ final class ErrorLogService: ObservableObject {
                 timeZoneIdentifier: TimeZone.current.identifier,
                 cpuArchitecture: RuntimeArchitecture.current
             ),
-            permissions: .init(
-                microphoneGranted: AVAudioApplication.shared.recordPermission == .granted,
+            permissions: .current(
                 accessibilityGranted: container.textInsertionService.isAccessibilityGranted
             ),
             secureInput: SecureInputDiagnosticsProvider.snapshot(),

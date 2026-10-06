@@ -15,6 +15,10 @@ struct DictationLatencyTrace: Sendable, Equatable {
         case actionPlugin = "action-plugin"
         /// The dictation finished without inserting text.
         case notInserted = "not-inserted"
+#if APPSTORE
+        /// Left on the clipboard for a manual paste.
+        case clipboard
+#endif
     }
 
     enum PasteVerification: Equatable, Sendable {
@@ -42,6 +46,9 @@ struct DictationLatencyTrace: Sendable, Equatable {
     /// For Bluetooth input, when the stream was confirmed ready. Buffers staged before that
     /// are kept, but the start cue waits for readiness, so that is when dictation can begin.
     var firstAudioBufferUptimeNanoseconds: UInt64?
+    /// Milliseconds of audio older than the start request that the microphone pre-roll
+    /// prepended to the recording. Zero when the pre-roll is off or was not armed.
+    var prerollMs: Double = 0
     var stopUptimeNanoseconds: UInt64?
     var recordingSeconds: Double?
     var finalTranscriptUptimeNanoseconds: UInt64?
@@ -88,6 +95,10 @@ struct DictationLatencyTrace: Sendable, Equatable {
         case .pasted(let verification):
             insertion = .paste
             recordPasteVerification(verification, at: verifiedUptime)
+#if APPSTORE
+        case .copiedToClipboard:
+            insertion = .clipboard
+#endif
         }
     }
 
@@ -138,6 +149,7 @@ struct DictationLatencyTrace: Sendable, Equatable {
             "engineReadyAtStart=\(flag(engineReadyAtStart))",
             "inputTransport=\(inputTransport ?? "nil")",
             "requestToFirstAudioBufferMs=\(ms(requestToFirstAudioBufferMs))",
+            "prerollMs=\(ms(prerollMs))",
             "recordingSeconds=\(recordingSeconds.map { String(format: "%.2f", $0) } ?? "nil")",
             "stopToFinalTranscriptMs=\(ms(stopToFinalTranscriptMs))",
             "postProcessingMs=\(ms(postProcessingMs))",

@@ -12,6 +12,9 @@ final class PromptPaletteHandler {
         case failed
         case insertedViaAccessibility
         case insertedViaPaste
+#if APPSTORE
+        case copiedToClipboard
+#endif
     }
 
     private struct PaletteContext {
@@ -289,6 +292,12 @@ final class PromptPaletteHandler {
                 autoEnter: false,
                 awaitPasteVerification: true
             )
+#if APPSTORE
+            if result == .copiedToClipboard {
+                onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
+                return
+            }
+#endif
             if result.leftFocusedTextUnchanged {
                 onShowNotchFeedback?(
                     String(localized: "Text may not have been inserted"),
@@ -404,13 +413,34 @@ final class PromptPaletteHandler {
                         ? .insertedViaAccessibility
                         : .failed
                 } else {
+#if APPSTORE
+                    // The sandbox cannot reach the focused element, so paste at the caret instead.
+                    insertionOutcome = try await activateAndInsertText(
+                        result,
+                        bundleId: ctx.activeApp.bundleId,
+                        preserveClipboard: preserveClipboard,
+                        autoEnter: workflow.output.autoEnter,
+                        outputFormat: resolvedOutputFormat,
+                        deferredClipboardRestore: ctx.deferredClipboardRestore
+                    )
+#else
                     insertionOutcome = .failed
+#endif
                 }
 
                 if workflow.output.autoEnter, insertionOutcome == .insertedViaAccessibility {
                     try? await Task.sleep(for: .milliseconds(50))
                     textInsertionService.simulateReturn()
                 }
+
+#if APPSTORE
+                if insertionOutcome == .copiedToClipboard {
+                    soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
+                    self.accessibilityAnnouncementService.announcePromptComplete()
+                    onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
+                    return
+                }
+#endif
 
                 if insertionOutcome == .failed && !preserveClipboard {
                     copyWorkflowResultToClipboard(result, outputFormat: resolvedOutputFormat)
@@ -506,14 +536,14 @@ final class PromptPaletteHandler {
             guard await activateAppForInsertionOverride(bundleId) else {
                 return .failed
             }
-            _ = try await textInsertionService.insertText(
+            let result = try await textInsertionService.insertText(
                 text,
                 preserveClipboard: preserveClipboard,
                 autoEnter: autoEnter,
                 outputFormat: outputFormat,
                 deferredClipboardRestore: deferredClipboardRestore
             )
-            return .insertedViaPaste
+            return Self.insertionOutcome(forPasteResult: result)
         }
 
         guard let bundleId,
@@ -537,13 +567,24 @@ final class PromptPaletteHandler {
             }
         }
 
-        _ = try await textInsertionService.insertText(
+        let result = try await textInsertionService.insertText(
             text,
             preserveClipboard: preserveClipboard,
             autoEnter: autoEnter,
             outputFormat: outputFormat,
             deferredClipboardRestore: deferredClipboardRestore
         )
+        return Self.insertionOutcome(forPasteResult: result)
+    }
+
+    private static func insertionOutcome(
+        forPasteResult result: TextInsertionService.InsertionResult
+    ) -> InsertionOutcome {
+#if APPSTORE
+        if result == .copiedToClipboard {
+            return .copiedToClipboard
+        }
+#endif
         return .insertedViaPaste
     }
 }

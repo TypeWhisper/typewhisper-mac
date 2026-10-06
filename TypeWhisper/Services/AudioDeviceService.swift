@@ -1717,7 +1717,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             || transportType == kAudioDeviceTransportTypeAutoAggregate
     }
 
-    private static func transportTypeName(_ transportType: UInt32) -> String {
+    static func transportTypeName(_ transportType: UInt32) -> String {
         switch transportType {
         case kAudioDeviceTransportTypeBuiltIn:
             return "builtIn"

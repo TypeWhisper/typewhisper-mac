@@ -266,10 +266,17 @@ final class DictationRecoveryViewModel: ObservableObject {
 
     var automaticFallbackUnavailableMessage: String? {
         guard !canUseAutomaticFallback else { return nil }
+        #if APPSTORE
+        return localizedAppText(
+            "Automatic fallback requires TypeWhisper Premium.",
+            de: "Automatischer Fallback benötigt TypeWhisper Premium."
+        )
+        #else
         return localizedAppText(
             "Automatic fallback requires a commercial license or active supporter status.",
             de: "Automatischer Fallback benötigt eine kommerzielle Lizenz oder aktiven Supporter-Status."
         )
+        #endif
     }
 
     /// Re-reads the recovery preferences after a settings-backup import wrote

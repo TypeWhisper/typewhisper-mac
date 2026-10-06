@@ -18,6 +18,40 @@ final class ParakeetPluginTests: XCTestCase {
         }
     }
 
+    /// Records CTC download hook calls; the first call can be held until released.
+    private actor CtcDownloadRecorder {
+        private(set) var events: [String] = []
+        private var holdsFirstDownload: Bool
+        private var firstDownloadRelease: CheckedContinuation<Void, Never>?
+        private var startWaiter: CheckedContinuation<Void, Never>?
+
+        init(holdsFirstDownload: Bool = false) {
+            self.holdsFirstDownload = holdsFirstDownload
+        }
+
+        func download(loadIntoMemory: Bool) async {
+            let kind = loadIntoMemory ? "load" : "files"
+            events.append("start \(kind)")
+            startWaiter?.resume()
+            startWaiter = nil
+            if holdsFirstDownload {
+                holdsFirstDownload = false
+                await withCheckedContinuation { firstDownloadRelease = $0 }
+            }
+            events.append("end \(kind)")
+        }
+
+        func waitForFirstStart() async {
+            guard events.isEmpty else { return }
+            await withCheckedContinuation { startWaiter = $0 }
+        }
+
+        func releaseFirstDownload() {
+            firstDownloadRelease?.resume()
+            firstDownloadRelease = nil
+        }
+    }
+
     private actor VocabularyFetchRecorder {
         private var requests: [(url: URL, description: String)] = []
         private let data: Data?
@@ -681,6 +715,88 @@ final class ParakeetPluginTests: XCTestCase {
         plugin.setBoostingEnabled(true)
 
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testEnablingDictionaryTermsSettingTurnsOnBoostingAndDownloadsFilesOnlyWhileUnloaded() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        let recorder = CtcDownloadRecorder()
+        plugin.ctcModelDownloadOverrideForTests = { loadIntoMemory in
+            XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+            await recorder.download(loadIntoMemory: loadIntoMemory)
+        }
+
+        XCTAssertTrue((plugin as Any) is any DictionaryTermsSettingEnabling)
+        XCTAssertFalse(plugin.dictionaryTermsSettingSummary.isEmpty)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+
+        try await plugin.enableDictionaryTermsSetting()
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["start files", "end files"])
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(host.userDefault(forKey: "vocabularyBoostingEnabled") as? Bool, true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 2)
+    }
+
+    func testEnablingDictionaryTermsSettingThrowsDownloadFailureAndKeepsBoostingOn() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        plugin.ctcModelDownloadOverrideForTests = { _ in
+            plugin.ctcModelState = .error("Not enough disk space")
+        }
+
+        do {
+            try await plugin.enableDictionaryTermsSetting()
+            XCTFail("Expected the download failure to be thrown")
+        } catch let error as ParakeetVocabularyBoostingError {
+            XCTAssertEqual(error.localizedDescription, "Not enough disk space")
+        }
+
+        // Same as the settings toggle: boosting stays on and the download is retried later.
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.ctcModelDownloadOverrideForTests = { _ in
+            plugin.ctcModelState = .notDownloaded
+        }
+        try await plugin.enableDictionaryTermsSetting()
+        XCTAssertEqual(host.capabilitiesChangedCount, 2)
+    }
+
+    func testCtcDownloadsFromEnablingAndFirstUseRunOneAfterAnother() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        let recorder = CtcDownloadRecorder(holdsFirstDownload: true)
+        plugin.ctcModelDownloadOverrideForTests = { loadIntoMemory in
+            await recorder.download(loadIntoMemory: loadIntoMemory)
+        }
+
+        let enabling = Task { try await plugin.enableDictionaryTermsSetting() }
+        await recorder.waitForFirstStart()
+
+        // A first transcription asks for the in-memory model while the files download.
+        let firstUse = Task { await plugin.downloadCtcModel() }
+        var yields = 0
+        while await plugin.ctcDownloadGate.waitingCount == 0, yields < 10_000 {
+            await Task.yield()
+            yields += 1
+        }
+        let waitingCount = await plugin.ctcDownloadGate.waitingCount
+        XCTAssertEqual(waitingCount, 1)
+        let eventsWhileHeld = await recorder.events
+        XCTAssertEqual(eventsWhileHeld, ["start files"])
+
+        await recorder.releaseFirstDownload()
+        try await enabling.value
+        await firstUse.value
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["start files", "end files", "start load", "end load"])
     }
 
     func testDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {

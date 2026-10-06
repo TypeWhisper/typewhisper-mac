@@ -24,6 +24,7 @@ echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
 - **Contributor machine:** macOS 15.0+ recommended for the current Xcode toolchain
 - **Swift 6** with strict concurrency
 - Debug builds use a separate data directory (`TypeWhisper-Dev`) and keychain prefix, so they don't interfere with release builds
+- Debug builds produce `TypeWhisper Dev.app` (bundle ID `com.typewhisper.mac.dev`, Swift module still `TypeWhisper`), so macOS privacy lists show them separately from the release `TypeWhisper.app`
 
 ## Pull Requests
 
@@ -46,6 +47,17 @@ swift test --package-path TypeWhisperPluginSDK
 - MVVM architecture with `ServiceContainer` for dependency injection
 - Localization: use `String(localized:)` for all user-facing strings
 - SwiftData for persistence, Combine for reactive updates
+
+## Mac App Store Edition
+
+The Mac App Store edition builds the same sources from `appstore-project.yml`
+(XcodeGen) with the `APPSTORE` compilation condition, the App Sandbox and the
+first-party plugins listed there. CI compiles it for every pull request.
+Code that the sandbox cannot run (launching processes, Apple Events,
+Accessibility access to other apps, downloading code) needs an `#if APPSTORE`
+alternative; keep such blocks small and explain them in a comment. Details,
+build commands and the plugin list are in
+[docs/appstore/README.md](docs/appstore/README.md).
 
 ## Credentials and Test Fixtures
 

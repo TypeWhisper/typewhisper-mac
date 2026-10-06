@@ -1741,6 +1741,12 @@ public struct PluginOpenAIChatHelper: Sendable {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
+        // A reply cut off at the token limit is not the finished text. Failing
+        // here lets the caller fall back instead of pasting a partial result.
+        if (first["finish_reason"] as? String) == "length" {
+            throw PluginChatError.outputTruncated(limit: maxOutputTokens)
+        }
+
         return Self.chatMessageContent(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

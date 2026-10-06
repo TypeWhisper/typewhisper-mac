@@ -46,8 +46,9 @@ python3 scripts/validate_plugin_release_manifest.py path/to/manifest.json --vers
 
 The release workflow rejects older minimum hosts before building and verifies
 the resulting binary against the SDK shipped by the declared host release.
-Until stable 1.7.0 is published, manual preview releases require the explicit
-`allow_prerelease_host` option to use a matching 1.7.0 daily host for that check.
+Manual preview releases targeting a host version without a published stable
+release require the explicit `allow_prerelease_host` option to use a matching
+daily or RC host for that check.
 Previously published plugin binaries and registry releases retain their original
 host requirements. Use a new plugin version for a new build; preserve old release
 entries so TypeWhisper 1.6 can keep selecting its newest compatible release.
@@ -178,6 +179,30 @@ extension MyTranscriptionEngine: DictionaryTermsBudgetProviding {
 This protocol is optional. Legacy plugins that do not adopt it remain compatible on
 `sdkCompatibilityVersion = "v1"` and automatically continue to use TypeWhisper's
 default 600-character fallback when building dictionary prompts.
+
+If your engine reports `.requiresPluginSetting` through
+`DictionaryTermsCapabilityProviding` and can turn that setting on by itself, adopt
+`DictionaryTermsSettingEnabling`. When a user adds a dictionary term while your
+engine is selected, TypeWhisper suggests the setting with an Enable button and
+offers the same action in the dictionary's engine overview:
+
+```swift
+extension MyTranscriptionEngine: DictionaryTermsSettingEnabling {
+    var dictionaryTermsSettingSummary: String {
+        String(localized: "My Engine recognizes your terms better with term boosting (about 50 MB download).")
+    }
+
+    func enableDictionaryTermsSetting() async throws {
+        setTermBoostingEnabled(true)         // dictionaryTermsSupport now returns .supported
+        host?.notifyCapabilitiesChanged()
+        try await downloadTermBoostingModel() // throw a localized error on failure
+    }
+}
+```
+
+`DictionaryTermsSettingEnabling` requires TypeWhisper 1.8.0 or later; declare
+`"minHostVersion": "1.8.0"` when you adopt it. Plugins without it keep working and
+TypeWhisper continues to show its static plugin-setting hint for them.
 
 ### LLMProviderPlugin
 
@@ -394,16 +419,32 @@ func activate(host: HostServices) {
             print("Recording started at \(payload.timestamp)")
         case .recordingStopped(let payload):
             print("Duration: \(payload.durationSeconds)s")
+        case .recorderTranscriptReady(let payload):
+            print("Saved Recorder transcript: \(payload.transcriptFilePath)")
+            print("Completion: \(payload.completionID)")
         case .textInserted(let payload):
             print("Inserted: \(payload.text)")
         case .actionCompleted(let payload):
             print("Action \(payload.actionId): \(payload.message)")
         case .transcriptionFailed(let payload):
             print("Error: \(payload.error)")
+        default:
+            break
         }
     }
 }
 ```
+
+`recorderTranscriptReady` requires TypeWhisper 1.8.0 or later. It is separate from
+`transcriptionCompleted`, so existing dictation subscribers do not receive meetings.
+Subscribe only with an explicit Recorder opt-in. The payload contains the saved text,
+stable `recordingID`, per-save `completionID`, `completedAt`, `audioFilePath`,
+`transcriptFilePath`, and an optional `markdownFilePath`. It is emitted after a
+successful save, including retranscription, regardless of live-preview settings.
+Its JSON uses snake_case keys, `source: "recorder"`, and Unix seconds for `completed_at`.
+Delivery is best effort; `/v1/recorder/recordings?since=...` provides the latest durable
+completion per recording for catch-up. Retain the subscription ID and unsubscribe
+when deactivating your plugin.
 
 ---
 

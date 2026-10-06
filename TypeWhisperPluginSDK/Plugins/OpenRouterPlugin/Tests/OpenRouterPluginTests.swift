@@ -107,6 +107,18 @@ final class OpenRouterPluginTests: XCTestCase {
         ])
     }
 
+    func testParseChatResponseThrowsWhenReplyStoppedAtTokenLimit() {
+        XCTAssertThrowsError(try OpenRouterPlugin.parseChatResponse(
+            Data(#"{"choices":[{"message":{"content":"half a sen"},"finish_reason":"length"}]}"#.utf8)
+        )) { error in
+            guard let pluginError = error as? PluginChatError,
+                  case .apiError(let message) = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("cut off"), message)
+        }
+    }
+
     func testChatHTTPErrorMapping() {
         XCTAssertThrowsError(try OpenRouterPlugin.validateChatResponse(
             data: Data(#"{"error":{"message":"bad key"}}"#.utf8),

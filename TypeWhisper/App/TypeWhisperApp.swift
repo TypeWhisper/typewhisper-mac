@@ -3,7 +3,9 @@ import AVFoundation
 import Combine
 import Foundation
 import TypeWhisperPluginSDK
+#if !APPSTORE
 @preconcurrency import Sparkle
+#endif
 
 extension UserDefaults {
     @objc dynamic var showMenuBarIcon: Bool {
@@ -436,7 +438,11 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                 .sheet(item: $startupSheet, onDismiss: handleStartupSheetDismissed) { route in
                     switch route {
                     case .welcome:
+                        #if APPSTORE
+                        EmptyView()
+                        #else
                         WelcomeSheet()
+                        #endif
                     case .iOSCompanion:
                         IOSCompanionPromoView(
                             appStoreURL: AppConstants.IOSCompanion.appStoreURL,
@@ -444,6 +450,9 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                             onDismiss: handleIOSCompanionDismissal
                         )
                     case .postUpdateLicensing:
+                        #if APPSTORE
+                        EmptyView()
+                        #else
                         PostUpdateLicensePromptView(
                             onPersonalOSS: handlePersonalOSSSelection,
                             onWorkUsage: handleWorkUsageSelection,
@@ -451,6 +460,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                             onBecomeSupporter: handleSupporterSelection,
                             onNotNow: handlePromptDismissalAction
                         )
+                        #endif
                     }
                 }
                 .task {
@@ -730,21 +740,25 @@ final class ManagedAppWindowOpener {
 // MARK: - App Delegate
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     private var indicatorCoordinator: IndicatorCoordinator?
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
     private var dockIconBehaviorObserver: NSKeyValueObservation?
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
+    private var workspaceSleepObserver: NSObjectProtocol?
+    private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
     private let finderTranscriptionService = FinderTranscriptionService()
+    #if !APPSTORE
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
         .sparkle(updaterController.updater)
     }
+    #endif
 
     private var showMenuBarIconPreference: Bool {
         UserDefaults.standard.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
@@ -775,6 +789,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
             UserDefaultsKeys.calendarMeetingStartMode: CalendarMeetingStartMode.off.rawValue,
             UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,
+            UserDefaultsKeys.calendarMeetingDetectAdHoc: false,
             UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests: [String](),
             UserDefaultsKeys.calendarMeetingReminderRequestDigests: [String](),
             UserDefaultsKeys.calendarMeetingNotificationsConfigured: false,
@@ -807,7 +822,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         NSApp.servicesProvider = finderTranscriptionService
         NSUpdateDynamicServices()
 
+        #if !APPSTORE
         UpdateChecker.shared = updateChecker
+        #endif
         applyActivationPolicy()
 
         let coordinator = IndicatorCoordinator(
@@ -911,6 +928,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
                 ServiceContainer.shared.calendarMeetingAutomationController.handleWake()
             }
         }
+
+        // The optional microphone pre-roll keeps the input open, so release it while the
+        // Mac sleeps or the screen is locked and re-arm afterwards.
+        workspaceSleepObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: .sleep)
+            }
+        }
+        screenLockObservers = [
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.apple.screenIsLocked"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    ServiceContainer.shared.audioRecordingService.suspendMicrophonePreroll(reason: .screenLock)
+                }
+            },
+            DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name("com.apple.screenIsUnlocked"),
+                object: nil,
+                queue: .main
+            ) { _ in
+                Task { @MainActor in
+                    ServiceContainer.shared.audioRecordingService.resumeMicrophonePreroll()
+                }
+            },
+        ]
 
         // Observe settings window lifecycle
         NotificationCenter.default.addObserver(
@@ -1162,6 +1211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
+        #if !APPSTORE
         guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
 
         openSettingsWindow()
@@ -1169,6 +1219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         Task { @MainActor in
             await SupporterDiscordService.shared?.handleCallbackURL(url)
         }
+        #endif
     }
 
     private func isManagedWindow(_ window: NSWindow) -> Bool {
@@ -1218,8 +1269,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             self.applyActivationPolicy()
         }
     }
+}
 
+#if !APPSTORE
+extension AppDelegate: SPUUpdaterDelegate {
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         AppConstants.effectiveUpdateChannel.sparkleChannels
     }
 }
+#endif

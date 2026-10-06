@@ -943,3 +943,176 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         )
     }
 }
+
+extension CalendarMeetingAutomationPolicyTests {
+    private func adHocConfiguration(
+        mode: CalendarMeetingStartMode = .automatic,
+        premium: Bool = true,
+        enabled: Bool = true,
+        providers: Set<MeetingProvider> = [.zoom, .teams, .googleMeet]
+    ) -> CalendarMeetingAutomationConfiguration {
+        CalendarMeetingAutomationConfiguration(
+            hasPremiumAccess: premium,
+            startMode: mode,
+            autoStopEnabled: true,
+            calendarAuthorization: .denied,
+            selectedCalendarIDs: [],
+            enabledProviders: providers,
+            suppressedOccurrenceDigests: [],
+            detectAdHocMeetings: enabled
+        )
+    }
+
+    private func detectedSession(
+        at now: Date,
+        provider: MeetingProvider = .zoom,
+        input: Bool = true,
+        output: Bool = false
+    ) -> (CalendarMeetingOccurrence, CalendarMeetingJoinSignal) {
+        let activity = DetectedMeetingActivity(
+            sourceID: provider == .googleMeet ? "browser:chrome" : "native:\(provider.rawValue)",
+            link: CalendarMeetingCanonicalLink(provider: provider, identity: "call"),
+            isRunningInput: true,
+            isRunningOutput: false
+        )
+        var sessions = AdHocMeetingSessionTracker()
+        sessions.update(activities: [activity], now: now, activeRecordingDigest: nil)
+        let occurrence = sessions.occurrence(for: activity)!
+        return (occurrence, CalendarMeetingJoinSignal(
+            occurrenceDigest: occurrence.id,
+            meetingIdentity: activity.link,
+            quality: provider == .googleMeet ? .exactBrowserIdentity : .nativeProvider,
+            isRunningInput: input,
+            isRunningOutput: output
+        ))
+    }
+
+    func testAdHocCollectorNeedsOptInAndEntitlementButNoCalendarPermission() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        for config in [
+            adHocConfiguration(enabled: false),
+            adHocConfiguration(mode: .off),
+            adHocConfiguration(premium: false)
+        ] {
+            var policy = CalendarMeetingAutomationPolicy()
+            let effects = policy.reduce(.configure(config, occurrences: [], now: now))
+            XCTAssertFalse(effects.contains(.startActivityCollector))
+        }
+        var policy = CalendarMeetingAutomationPolicy()
+        let effects = policy.reduce(.configure(adHocConfiguration(), occurrences: [], now: now))
+        XCTAssertTrue(effects.contains(.startActivityCollector))
+        XCTAssertFalse(effects.contains(.startCameraActivityCollector))
+    }
+
+    func testAdHocNativeCallStartsWithoutCalendarAfterDwellAndCancellableCountdown() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let (occurrence, signal) = detectedSession(at: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(adHocConfiguration(), occurrences: [], now: now))
+        _ = policy.reduce(.activity([signal], detectedOccurrences: [occurrence], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(4))).isEmpty)
+        XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(5))), [
+            .showStartCountdown(occurrence, deadline: now.addingTimeInterval(10))
+        ])
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(10))).contains(
+            .startRecording(occurrence, signal.meetingIdentity)
+        ))
+    }
+
+    func testAdHocBrowserRequiresLongerMicDwellAndNoCameraOrOutputOnlyFallback() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let (occurrence, input) = detectedSession(at: now, provider: .googleMeet)
+        let output = CalendarMeetingJoinSignal(
+            occurrenceDigest: occurrence.id, meetingIdentity: input.meetingIdentity,
+            quality: .exactBrowserIdentity, isRunningInput: false, isRunningOutput: true
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(adHocConfiguration(), occurrences: [], now: now))
+        _ = policy.reduce(.activity([output], detectedOccurrences: [occurrence], now: now))
+        _ = policy.reduce(.cameraActivity(isRunning: true, now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(30))).isEmpty)
+        _ = policy.reduce(.activity([input], now: now.addingTimeInterval(30)))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(49))).isEmpty)
+        XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(50))), [
+            .showStartCountdown(occurrence, deadline: now.addingTimeInterval(55))
+        ])
+        XCTAssertTrue(policy.reduce(.activity([], now: now.addingTimeInterval(51))).contains(.dismissStartCountdown))
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(60))).contains {
+            if case .startRecording = $0 { return true }; return false
+        })
+    }
+
+    func testAdHocReminderWaitsForExplicitStartAndDoesNotScheduleCalendarReminder() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let (occurrence, signal) = detectedSession(at: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        let configured = policy.reduce(.configure(adHocConfiguration(mode: .reminder), occurrences: [occurrence], now: now))
+        XCTAssertTrue(configured.contains(.replaceScheduledReminders([])))
+        _ = policy.reduce(.activity([signal], now: now))
+        XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(5))), [.publishDetectedMeeting(occurrence)])
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(50))).contains {
+            if case .startRecording = $0 { return true }; return false
+        })
+        XCTAssertTrue(policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now.addingTimeInterval(50))).contains {
+            if case .showStartCountdown = $0 { return true }; return false
+        })
+    }
+
+    func testAdHocDisabledProviderAndCompetingMeetingsNeverStart() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let (zoom, zoomSignal) = detectedSession(at: now)
+        let (teams, teamsSignal) = detectedSession(at: now, provider: .teams)
+        for (config, meetings, signals) in [
+            (adHocConfiguration(providers: [.teams]), [zoom], [zoomSignal]),
+            (adHocConfiguration(), [zoom, teams], [zoomSignal, teamsSignal])
+        ] {
+            var policy = CalendarMeetingAutomationPolicy()
+            _ = policy.reduce(.configure(config, occurrences: [], now: now))
+            _ = policy.reduce(.activity(signals, detectedOccurrences: meetings, now: now))
+            XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(60))).isEmpty)
+        }
+    }
+
+    func testAdHocAutoStopWaitsThroughShortGapsAndKeepsContinueVeto() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let (occurrence, signal) = detectedSession(at: now)
+        let handle = CalendarMeetingRecordingHandle(id: UUID(), outputURL: URL(fileURLWithPath: "/tmp/ad-hoc.wav"))
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(adHocConfiguration(), occurrences: [occurrence], now: now))
+        _ = policy.reduce(.activity([signal], now: now))
+        _ = policy.reduce(.recordingStarted(handle: handle, occurrenceDigest: occurrence.id,
+            identity: signal.meetingIdentity, autoStopArmed: true, now: now))
+        XCTAssertTrue(policy.reduce(.activity([], now: now)).isEmpty)
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(89))).isEmpty)
+        _ = policy.reduce(.activity([signal], now: now.addingTimeInterval(89)))
+        _ = policy.reduce(.activity([], now: now.addingTimeInterval(90)))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(179))).isEmpty)
+        XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(180))), [
+            .showStopCountdown(handle, deadline: now.addingTimeInterval(195))
+        ])
+        XCTAssertTrue(policy.reduce(.userAction(.continueRecording(handle), now: now.addingTimeInterval(181)))
+            .contains(.dismissStopCountdown))
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(300))).contains(.stopRecording(handle)))
+    }
+
+    func testAdHocSessionsRequireInputAndRetainIdentityAcrossBriefMute() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let link = CalendarMeetingCanonicalLink(provider: .teams, identity: "native-call")
+        let input = DetectedMeetingActivity(sourceID: "teams", link: link, isRunningInput: true, isRunningOutput: false)
+        let output = DetectedMeetingActivity(sourceID: "teams", link: link, isRunningInput: false, isRunningOutput: true)
+        var sessions = AdHocMeetingSessionTracker()
+        sessions.update(activities: [output], now: now, activeRecordingDigest: nil)
+        XCTAssertTrue(sessions.occurrences.isEmpty)
+        sessions.update(activities: [input], now: now, activeRecordingDigest: nil)
+        let first = try XCTUnwrap(sessions.occurrence(for: input))
+        sessions.update(activities: [], now: now.addingTimeInterval(20), activeRecordingDigest: nil)
+        sessions.update(activities: [output], now: now.addingTimeInterval(30), activeRecordingDigest: nil)
+        XCTAssertEqual(sessions.occurrence(for: input)?.id, first.id)
+        sessions.update(activities: [], now: now.addingTimeInterval(121), activeRecordingDigest: first.id)
+        XCTAssertEqual(sessions.occurrence(for: input)?.id, first.id)
+        sessions.update(activities: [], now: now.addingTimeInterval(122), activeRecordingDigest: nil)
+        XCTAssertTrue(sessions.occurrences.isEmpty)
+        sessions.update(activities: [input], now: now.addingTimeInterval(123), activeRecordingDigest: nil)
+        XCTAssertNotEqual(sessions.occurrence(for: input)?.id, first.id)
+    }
+}

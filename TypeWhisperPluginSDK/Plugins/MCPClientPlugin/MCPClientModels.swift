@@ -260,6 +260,26 @@ enum MCPServerTransport: String, Codable, CaseIterable, Identifiable, Sendable {
             MCPClientLocalization.string("Streamable HTTP")
         }
     }
+
+    /// Whether this build can connect through the transport. The App Store
+    /// edition runs in the App Sandbox and cannot launch local server processes.
+    var isSupported: Bool {
+        #if APPSTORE
+        self == .streamableHTTP
+        #else
+        true
+        #endif
+    }
+
+    static var supportedCases: [MCPServerTransport] {
+        allCases.filter(\.isSupported)
+    }
+
+    static var unsupportedError: MCPClientError {
+        .invalidConfiguration(
+            MCPClientLocalization.string("This edition of TypeWhisper can only connect to Streamable HTTP MCP servers.")
+        )
+    }
 }
 
 enum MCPHTTPAuthentication: String, Codable, CaseIterable, Identifiable, Sendable {
@@ -471,6 +491,7 @@ struct MCPStoredConfiguration: Codable, Equatable, Sendable {
     var actions: [MCPActionConfiguration] = []
 }
 
+#if !APPSTORE
 enum MCPExecutableResolver {
     static func resolve(
         command: String,
@@ -519,6 +540,7 @@ enum MCPExecutableResolver {
         throw MCPClientError.executableNotFound(trimmed)
     }
 }
+#endif
 
 enum MCPHTTPEndpointResolver {
     private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]

@@ -60,6 +60,7 @@ final class ProfileService: ObservableObject {
         fetchProfiles()
     }
 
+    @discardableResult
     func addProfile(
         name: String,
         isEnabled: Bool = true,
@@ -78,7 +79,7 @@ final class ProfileService: ObservableObject {
         inlineCommandsEnabled: Bool = false,
         autoEnterEnabled: Bool = false,
         priority: Int = 0
-    ) {
+    ) -> Profile {
         let profile = Profile(
             name: name,
             isEnabled: isEnabled,
@@ -101,6 +102,7 @@ final class ProfileService: ObservableObject {
         modelContext.insert(profile)
         save()
         fetchProfiles()
+        return profile
     }
 
     func nextPriority() -> Int {

@@ -1,0 +1,107 @@
+{
+  "identifier" : "12608490-6CDB-4F02-AF2C-E61C4EA8D0F9",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "99.99",
+      "familyShareable" : false,
+      "internalID" : "6DBFC14B-1B2E-426B-9490-0AFC700D505A",
+      "localizations" : [
+        {
+          "description" : "Text, E-Mail-Entwürfe und Geräte-Sync.",
+          "displayName" : "TypeWhisper Premium auf Lebenszeit",
+          "locale" : "de_DE"
+        },
+        {
+          "description" : "Improve text, email drafts, and device sync.",
+          "displayName" : "TypeWhisper Premium Lifetime",
+          "locale" : "en_US"
+        },
+        {
+          "description" : "Texto, borradores de correo y sincronización.",
+          "displayName" : "TypeWhisper Premium de por vida",
+          "locale" : "es_ES"
+        },
+        {
+          "description" : "Texte, e-mails et synchro entre appareils.",
+          "displayName" : "TypeWhisper Premium à vie",
+          "locale" : "fr_FR"
+        },
+        {
+          "description" : "Testi, bozze e-mail e sincronizzazione.",
+          "displayName" : "TypeWhisper Premium a vita",
+          "locale" : "it_IT"
+        }
+      ],
+      "productID" : "com.typewhisper.premium.individual.lifetime",
+      "referenceName" : "TypeWhisper Premium Lifetime",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6759319267",
+    "_developerTeamID" : "2D8ALY3LCL",
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "de_DE",
+    "_storefront" : "DEU",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "DF788752-F512-4B58-9EBB-F022296B2EC7",
+      "localizations" : [],
+      "name" : "TypeWhisper Premium",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "5.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "3BA7484C-25A2-42D6-8C39-5E36C304CEFC",
+          "introductoryOffer" : {
+            "internalID" : "77353D5E-10F0-49F2-9BC0-25913D2C50E6",
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P2W"
+          },
+          "localizations" : [
+            {
+              "description" : "Text, E-Mail-Entwürfe und Geräte-Sync.",
+              "displayName" : "TypeWhisper Premium monatlich",
+              "locale" : "de_DE"
+            },
+            {
+              "description" : "Improve text, email drafts, and device sync.",
+              "displayName" : "TypeWhisper Premium Monthly",
+              "locale" : "en_US"
+            },
+            {
+              "description" : "Texto, borradores de correo y sincronización.",
+              "displayName" : "TypeWhisper Premium mensual",
+              "locale" : "es_ES"
+            },
+            {
+              "description" : "Texte, e-mails et synchro entre appareils.",
+              "displayName" : "TypeWhisper Premium mensuel",
+              "locale" : "fr_FR"
+            },
+            {
+              "description" : "Testi, bozze e-mail e sincronizzazione.",
+              "displayName" : "TypeWhisper Premium mensile",
+              "locale" : "it_IT"
+            }
+          ],
+          "productID" : "com.typewhisper.premium.individual.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "TypeWhisper Premium Monthly",
+          "subscriptionGroupID" : "DF788752-F512-4B58-9EBB-F022296B2EC7",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

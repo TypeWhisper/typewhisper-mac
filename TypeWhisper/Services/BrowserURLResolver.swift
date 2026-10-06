@@ -10,21 +10,28 @@ private let browserURLResolutionQueue = DispatchQueue(
     label: "com.typewhisper.browser-url-resolution",
     qos: .utility
 )
+private let meetingTabResolutionQueue: OperationQueue = {
+    let queue = OperationQueue()
+    queue.name = "com.typewhisper.meeting-tab-resolution"
+    queue.qualityOfService = .utility
+    queue.maxConcurrentOperationCount = 2
+    return queue
+}()
 
-private final class BrowserResolutionCompletion: @unchecked Sendable {
+private final class BrowserResolutionCompletion<Value: Sendable>: @unchecked Sendable {
     private struct State {
-        var continuation: CheckedContinuation<BrowserResolution, Never>?
+        var continuation: CheckedContinuation<Value, Never>?
     }
 
     private let state: OSAllocatedUnfairLock<State>
 
-    init(continuation: CheckedContinuation<BrowserResolution, Never>) {
+    init(continuation: CheckedContinuation<Value, Never>) {
         state = OSAllocatedUnfairLock(initialState: State(continuation: continuation))
     }
 
     @discardableResult
-    func resume(returning resolution: BrowserResolution) -> Bool {
-        let continuation = state.withLock { state -> CheckedContinuation<BrowserResolution, Never>? in
+    func resume(returning resolution: Value) -> Bool {
+        let continuation = state.withLock { state -> CheckedContinuation<Value, Never>? in
             defer { state.continuation = nil }
             return state.continuation
         }
@@ -40,13 +47,29 @@ struct BrowserResolution: Equatable, Sendable {
 
 final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
     typealias ResolutionProvider = @Sendable (String, Bool) -> BrowserResolution
+    typealias MeetingTabProvider = @Sendable (String) -> [URL]?
 
     private let resolutionProvider: ResolutionProvider
+    private let meetingTabProvider: MeetingTabProvider
 
-    init(resolutionProvider: ResolutionProvider? = nil) {
+    init(
+        resolutionProvider: ResolutionProvider? = nil,
+        meetingTabProvider: MeetingTabProvider? = nil
+    ) {
+#if APPSTORE
+        // The App Store edition cannot send Apple Events or run osascript, so browsers report
+        // no URL and no open tabs. Website workflows do not match; meeting detection keeps
+        // its native signals.
+        self.resolutionProvider = resolutionProvider ?? { _, _ in
+            BrowserResolution(url: nil, title: nil)
+        }
+        self.meetingTabProvider = meetingTabProvider ?? { _ in [] }
+#else
         self.resolutionProvider = resolutionProvider ?? { bundleIdentifier, includeTitle in
             Self.resolve(bundleIdentifier: bundleIdentifier, includeTitle: includeTitle)
         }
+        self.meetingTabProvider = meetingTabProvider ?? Self.resolveMeetingTabs
+#endif
     }
 
     func activeURL(for bundleIdentifier: String) async -> URL? {
@@ -56,6 +79,103 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
     func activeBrowserInfo(for bundleIdentifier: String) async -> BrowserResolution {
         await resolve(bundleIdentifier: bundleIdentifier, includeTitle: true)
     }
+
+    func meetingTabURLs(for bundleIdentifier: String) async -> [URL]? {
+        let provider = meetingTabProvider
+        return await withCheckedContinuation { continuation in
+            let completion = BrowserResolutionCompletion(continuation: continuation)
+            meetingTabResolutionQueue.addOperation {
+                // Queue admission is not a browser failure. Give each query its
+                // full execution budget once a bounded worker is available.
+                DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                    if completion.resume(returning: nil) {
+                        browserURLResolverLogger.warning("Browser meeting-tab resolution timed out")
+                    }
+                }
+                completion.resume(returning: provider(bundleIdentifier))
+            }
+        }
+    }
+
+#if !APPSTORE
+    private static func resolveMeetingTabs(bundleIdentifier: String) -> [URL]? {
+        let browserType = identifyBrowser(bundleIdentifier)
+        guard browserType != .notABrowser, browserType != .unsupportedURLBrowser else {
+            return nil
+        }
+        guard !NSRunningApplication.runningApplications(withBundleIdentifier: bundleIdentifier).isEmpty else {
+            return []
+        }
+        // This separate query is only used by meeting detection. Dictation and
+        // website workflows must continue to resolve the active tab exclusively.
+        let identifier = bundleIdentifier.replacingOccurrences(of: "\"", with: "\\\"")
+        let script = """
+            with timeout of 2 seconds
+                tell application id "\(identifier)"
+                    set tabURLs to {}
+                    set windowURLs to get URL of every tab of every window
+                    repeat with urlsInWindow in windowURLs
+                        repeat with tabURL in urlsInWindow
+                            set tabValue to contents of tabURL
+                            if class of tabValue is text then
+                                if tabValue contains linefeed or tabValue contains return then error "Invalid tab URL"
+                                if (length of tabValue) < 2048 then set end of tabURLs to tabValue
+                            end if
+                            if (count of tabURLs) > 512 then error "Too many tabs"
+                        end repeat
+                    end repeat
+                    set AppleScript's text item delimiters to linefeed
+                    return tabURLs as text
+                end tell
+            end timeout
+            """
+        guard let output = executeMeetingTabScript(script) else { return nil }
+        return output.split(separator: "\n").compactMap { validURL(String($0)) }
+    }
+
+    // Isolate the AppleScript runtime as well as the queue: concurrent in-process
+    // NSAppleScript calls must not contend with a stalled dictation URL query.
+    static func executeMeetingTabScript(_ source: String) -> String? {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = ["-e", source]
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        defer { try? output.fileHandleForReading.close() }
+        do {
+            try process.run()
+        } catch {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript could not start")
+            return nil
+        }
+
+        let timeout = DispatchWorkItem {
+            if process.isRunning {
+                browserURLResolverLogger.warning("Browser meeting-tab AppleScript timed out")
+                process.terminate()
+            }
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2, execute: timeout)
+        defer { timeout.cancel() }
+
+        let data: Data
+        do {
+            data = try output.fileHandleForReading.readToEnd() ?? Data()
+        } catch {
+            process.terminate()
+            process.waitUntilExit()
+            return nil
+        }
+        process.waitUntilExit()
+        guard process.terminationReason == .exit, process.terminationStatus == 0 else {
+            browserURLResolverLogger.warning("Browser meeting-tab AppleScript failed")
+            return nil
+        }
+        return String(data: data, encoding: .utf8)
+    }
+#endif
 
     private func resolve(
         bundleIdentifier: String,
@@ -75,6 +195,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
     }
 
+#if !APPSTORE
     private enum BrowserType {
         case safari
         case arc
@@ -189,6 +310,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         }
         return descriptor?.stringValue?.nilIfEmpty
     }
+#endif
 
     nonisolated private static func validURL(_ value: String) -> URL? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -37,12 +37,6 @@ func requestCalendarMeetingCalendarAccess(
     }
 }
 
-enum CalendarMeetingBrowserURLResolution: Equatable, Sendable {
-    case unavailable
-    case nonMeeting
-    case meeting(CalendarMeetingCanonicalLink)
-}
-
 @MainActor
 final class CalendarMeetingAutomationController: ObservableObject {
     nonisolated static func shouldActivateOSServices(
@@ -57,14 +51,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
             && SupportedMeetingBrowser.supportsAutomaticURLResolution(process.bundleIdentifier)
     }
 
-    nonisolated static func browserURLResolution(
-        for resolvedURL: URL?
-    ) -> CalendarMeetingBrowserURLResolution {
-        guard let resolvedURL else { return .unavailable }
-        guard let link = MeetingLinkParser().parse(url: resolvedURL) else {
-            return .nonMeeting
-        }
-        return .meeting(link)
+    nonisolated static func meetingLinks(in tabURLs: [URL]) -> Set<CalendarMeetingCanonicalLink> {
+        Set(tabURLs.compactMap { MeetingLinkParser().parse(url: $0) })
     }
 
     nonisolated static func aggregatedBrowserProcesses(
@@ -124,11 +112,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
     nonisolated static func shouldRequestNotifications(
         hasPremiumAccess: Bool,
         startMode: CalendarMeetingStartMode,
-        calendarAuthorization: CalendarMeetingCalendarAuthorization
+        calendarAuthorization: CalendarMeetingCalendarAuthorization,
+        detectAdHocMeetings: Bool = false
     ) -> Bool {
         hasPremiumAccess
             && startMode != .off
-            && calendarAuthorization == .fullAccess
+            && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
     }
 
     nonisolated static func automationUserAction(
@@ -153,6 +142,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     @Published private(set) var hasPremiumAccess: Bool
     @Published private(set) var startMode: CalendarMeetingStartMode
     @Published private(set) var autoStopEnabled: Bool
+    @Published private(set) var detectAdHocMeetings: Bool
     @Published private(set) var selectedCalendarIDs: Set<String>
     @Published private(set) var enabledProviders: Set<MeetingProvider>
     @Published private(set) var calendars: [CalendarMeetingCalendar] = []
@@ -164,7 +154,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         CalendarMeetingCalendarAccessRequestFailure?
 
     var canEnableAutoStop: Bool {
-        Self.canUseAutoStopNotifications(authorization: notificationAuthorization)
+        hasPremiumAccess && startMode != .off
+            && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
     }
 
     private struct ActiveCalendarRecordingContext {
@@ -189,6 +180,11 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private var policy = CalendarMeetingAutomationPolicy()
     private var currentOccurrences: [CalendarMeetingOccurrence] = []
+    private var adHocMeetings = AdHocMeetingSessionTracker()
+    private var allOccurrences: [CalendarMeetingOccurrence] {
+        currentOccurrences + adHocMeetings.occurrences
+    }
+    private var latestActivitySnapshot: MeetingActivitySnapshot?
     private var eventProvider: (any CalendarMeetingEventProviding)?
     private var audioCollector: (any MeetingAudioActivityCollecting)?
     private var cameraCollector: (any MeetingCameraActivityCollecting)?
@@ -197,8 +193,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var activeCalendarRecording: ActiveCalendarRecordingContext?
     private var activeAutoStopWarningDigest: String?
     private var activeAutoStopWarningHandle: CalendarMeetingRecordingHandle?
-    private var browserMeetingIdentityByBundleIdentifier:
-        [String: CalendarMeetingCanonicalLink] = [:]
     private var calendarAutoStopTrackingActive = false
     private var notificationRouterInstalled = false
     private var initialized = false
@@ -267,6 +261,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             rawValue: defaults.string(forKey: UserDefaultsKeys.calendarMeetingStartMode) ?? ""
         ) ?? .off
         autoStopEnabled = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
+        detectAdHocMeetings = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
         selectedCalendarIDs = Set(
             defaults.stringArray(forKey: UserDefaultsKeys.calendarMeetingSelectedCalendarIDs) ?? []
         )
@@ -281,6 +276,22 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     #if DEBUG
+    func testingRefresh() async {
+        await refreshAndWaitForCurrentGeneration()
+    }
+
+    func testingActivity(_ snapshot: MeetingActivitySnapshot) async {
+        await processActivitySnapshot(snapshot)
+        await recordingStartTask?.value
+        await notificationTask?.value
+    }
+
+    func testingAdvanceTime() async {
+        await advancePolicyTime()
+        await recordingStartTask?.value
+        await notificationTask?.value
+    }
+
     func prepareScreenshotFixture(
         hasPremiumAccess: Bool,
         calendars: [CalendarMeetingCalendar]
@@ -371,10 +382,27 @@ final class CalendarMeetingAutomationController: ObservableObject {
         }
         if mode == .off {
             persistStartMode(.off)
+            applyPolicyConfiguration(now: nowProvider())
             requestRefresh()
             return
         }
         persistStartMode(mode)
+        applyPolicyConfiguration(now: nowProvider())
+        requestRefresh()
+    }
+
+    func setDetectAdHocMeetings(_ enabled: Bool) {
+        guard enabled != detectAdHocMeetings else { return }
+        invalidatePendingRecordingStart()
+        activityGeneration += 1
+        detectAdHocMeetings = enabled
+        defaults.set(enabled, forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
+        if !enabled { adHocMeetings = AdHocMeetingSessionTracker() }
+        if activeCalendarRecording != nil {
+            calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
+        }
+        applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
     }
 
@@ -420,18 +448,20 @@ final class CalendarMeetingAutomationController: ObservableObject {
             guard Self.shouldRequestNotifications(
                 hasPremiumAccess: self.premiumAccessProvider(),
                 startMode: self.startMode,
-                calendarAuthorization: outcome.authorization
+                calendarAuthorization: outcome.authorization,
+                detectAdHocMeetings: self.detectAdHocMeetings
             ) else {
                 self.requestRefresh()
                 return
             }
 
-            await self.initializeCalendarSelectionIfNeeded(provider: provider)
+            if outcome.authorization == .fullAccess {
+                await self.initializeCalendarSelectionIfNeeded(provider: provider)
+            }
             let notificationService = self.notificationServiceInstance()
             self.ensureNotificationRouterInstalled()
             self.notificationAuthorization = await notificationService
                 .configureAndRequestAuthorization()
-            self.disableAutoStopIfNotificationsUnavailable()
             self.requestRefresh()
         }
     }
@@ -471,6 +501,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             true,
             forKey: UserDefaultsKeys.calendarMeetingCalendarSelectionInitialized
         )
+        applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
     }
 
@@ -489,6 +520,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             enabledProviders.map(\.rawValue).sorted(),
             forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs
         )
+        applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
     }
 
@@ -564,7 +596,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         self.cameraCollector = nil
         eventProvider = nil
         browserResolver = nil
-        browserMeetingIdentityByBundleIdentifier.removeAll()
+        latestActivitySnapshot = nil
+        adHocMeetings = AdHocMeetingSessionTracker()
         calendarAutoStopTrackingActive = false
         currentOccurrences = []
         policy = CalendarMeetingAutomationPolicy()
@@ -584,6 +617,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             dismissAutoStopWarning()
         }
         hasPremiumAccess = access
+        applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
     }
 
@@ -617,6 +651,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             await deactivateLiveServices(removeReminders: true)
             guard generation == refreshGeneration else { return }
             currentOccurrences = []
+            adHocMeetings = AdHocMeetingSessionTracker()
             calendars = []
             isAutomationActive = false
             applyPolicyConfiguration(now: now)
@@ -627,39 +662,40 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let authorization = await provider.authorizationStatus()
         guard generation == refreshGeneration else { return }
         calendarAuthorization = authorization
-        guard authorization == .fullAccess else {
-            invalidatePendingRecordingStart()
-            calendarAutoStopTrackingActive = false
-            collectorShouldBeRunning = false
-            cameraCollectorShouldBeRunning = false
-            await stopCollector()
-            await stopCameraCollector()
+        if authorization == .fullAccess {
+            do {
+                let loadedCalendars = try await provider.calendars()
+                guard generation == refreshGeneration else { return }
+                calendars = loadedCalendars
+                initializeCalendarSelectionIfNeeded(calendars: loadedCalendars)
+                let interval = DateInterval(
+                    start: now.addingTimeInterval(-24 * 60 * 60),
+                    end: now.addingTimeInterval(7 * 24 * 60 * 60 + 5 * 60)
+                )
+                let loadedOccurrences = try await provider.occurrences(
+                    in: interval,
+                    calendarIDs: selectedCalendarIDs
+                )
+                guard generation == refreshGeneration else { return }
+                currentOccurrences = loadedOccurrences
+                isAutomationActive = true
+                startEventChangeObservationIfNeeded(provider: provider)
+            } catch {
+                guard generation == refreshGeneration else { return }
+                currentOccurrences = []
+                isAutomationActive = detectAdHocMeetings
+            }
+        } else {
             currentOccurrences = []
             calendars = []
-            isAutomationActive = false
-            applyPolicyConfiguration(now: now)
-            return
+            isAutomationActive = detectAdHocMeetings
+            eventChangesTask?.cancel()
+            eventChangesTask = nil
+            eventChangesSessionID = nil
+            if !detectAdHocMeetings { invalidatePendingRecordingStart() }
         }
 
-        do {
-            let loadedCalendars = try await provider.calendars()
-            guard generation == refreshGeneration else { return }
-            calendars = loadedCalendars
-            initializeCalendarSelectionIfNeeded(calendars: loadedCalendars)
-
-            let interval = DateInterval(
-                start: now.addingTimeInterval(-24 * 60 * 60),
-                end: now.addingTimeInterval(7 * 24 * 60 * 60 + 5 * 60)
-            )
-            let loadedOccurrences = try await provider.occurrences(
-                in: interval,
-                calendarIDs: selectedCalendarIDs
-            )
-            guard generation == refreshGeneration else { return }
-            currentOccurrences = loadedOccurrences
-            isAutomationActive = true
-            startEventChangeObservationIfNeeded(provider: provider)
-
+        if isAutomationActive {
             let notificationService = notificationServiceInstance()
             ensureNotificationRouterInstalled()
             await notificationService.refreshAuthorizationStatus()
@@ -671,15 +707,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 notificationAuthorization = notificationService.authorization
             }
             guard generation == refreshGeneration else { return }
-            disableAutoStopIfNotificationsUnavailable()
-            applyPolicyConfiguration(now: now)
             scheduleRollingHorizonRefresh()
-        } catch {
-            guard generation == refreshGeneration else { return }
-            currentOccurrences = []
-            isAutomationActive = false
-            applyPolicyConfiguration(now: now)
         }
+        applyPolicyConfiguration(now: now)
     }
 
     private func initializeCalendarSelectionIfNeeded(
@@ -721,13 +751,14 @@ final class CalendarMeetingAutomationController: ObservableObject {
             calendarAuthorization: calendarAuthorization,
             selectedCalendarIDs: selectedCalendarIDs,
             enabledProviders: enabledProviders,
-            suppressedOccurrenceDigests: suppressedDigests
+            suppressedOccurrenceDigests: suppressedDigests,
+            detectAdHocMeetings: detectAdHocMeetings
         )
         if activeCalendarRecording != nil,
            (!configuration.isOperational || !configuration.autoStopEnabled) {
             calendarAutoStopTrackingActive = false
         }
-        applyPolicy(.configure(configuration, occurrences: currentOccurrences, now: now))
+        applyPolicy(.configure(configuration, occurrences: allOccurrences, now: now))
     }
 
     private func applyPolicy(_ event: CalendarMeetingAutomationEvent) {
@@ -825,11 +856,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
               activeCalendarRecording.handle == handle else {
             return
         }
-        guard canEnableAutoStop else {
-            disableAutoStop()
-            applyPolicyConfiguration(now: nowProvider())
-            return
-        }
+        guard canEnableAutoStop else { return }
 
         let digest = activeCalendarRecording.occurrenceDigest
         activeAutoStopWarningDigest = digest
@@ -867,14 +894,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 }
                 return
             }
-            guard published else {
-                self.activeAutoStopWarningDigest = nil
-                self.activeAutoStopWarningHandle = nil
-                self.countdownModel.dismissAutoStop()
-                self.disableAutoStop()
-                self.applyPolicyConfiguration(now: self.nowProvider())
-                return
-            }
+            // The indicator is the primary warning surface. A denied permission
+            // or failed notification must not discard its countdown or veto action.
         }
     }
 
@@ -910,18 +931,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         ))
     }
 
-    private func disableAutoStopIfNotificationsUnavailable() {
-        guard !canEnableAutoStop else { return }
-        disableAutoStop()
-    }
-
-    private func disableAutoStop() {
-        guard autoStopEnabled else { return }
-        autoStopEnabled = false
-        calendarAutoStopTrackingActive = false
-        defaults.set(false, forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
-    }
-
     private func startRecording(
         occurrence: CalendarMeetingOccurrence,
         identity: CalendarMeetingCanonicalLink
@@ -935,8 +944,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
             guard self.hasPremiumAccess,
                   self.startMode != .off,
-                  self.calendarAuthorization == .fullAccess,
-                  self.currentOccurrences.contains(where: {
+                  (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess),
+                  self.allOccurrences.contains(where: {
                       $0.occurrenceDigest == occurrence.occurrenceDigest
                           && $0.isInsideJoinWindow(at: self.nowProvider())
                   }) else {
@@ -964,13 +973,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
             do {
                 let handle = try await self.recorderViewModel.startCalendarMeetingRecording(
                     preferredBaseName: preferredBaseName,
-                    transcriptMetadata: occurrence.transcriptMetadata
+                    transcriptMetadata: occurrence.isAdHoc ? nil : occurrence.transcriptMetadata
                 )
                 guard generation == self.recordingStartGeneration,
                       self.hasPremiumAccess,
                       self.startMode != .off,
-                      self.calendarAuthorization == .fullAccess,
-                      self.currentOccurrences.contains(where: {
+                      (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess),
+                      self.allOccurrences.contains(where: {
                           $0.occurrenceDigest == occurrence.occurrenceDigest
                               && $0.isInsideJoinWindow(at: self.nowProvider())
                       }) else {
@@ -990,7 +999,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     && self.canEnableAutoStop
                     && self.hasPremiumAccess
                     && self.startMode != .off
-                    && self.calendarAuthorization == .fullAccess
+                    && (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess)
                 self.calendarAutoStopTrackingActive = autoStopArmed
                 self.applyPolicy(.recordingStarted(
                     handle: handle,
@@ -1103,7 +1112,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let collectorToStop = audioCollector
         audioCollector = nil
         browserResolver = nil
-        browserMeetingIdentityByBundleIdentifier.removeAll()
+        latestActivitySnapshot = nil
         if let collectorToStop {
             await collectorToStop.stopCollecting()
         }
@@ -1165,58 +1174,86 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func processActivitySnapshot(_ snapshot: MeetingActivitySnapshot) async {
+        guard collectorShouldBeRunning else { return }
+        latestActivitySnapshot = snapshot
         activityGeneration += 1
         let generation = activityGeneration
         guard snapshot.availability == .available else {
-            browserMeetingIdentityByBundleIdentifier.removeAll()
+            calendarAutoStopTrackingActive = false
             applyPolicy(.activityUnavailable(now: snapshot.capturedAt))
             return
         }
 
         var signals: [CalendarMeetingJoinSignal] = []
+        var detectedActivities: [DetectedMeetingActivity] = []
         var activeBrowserResolutionFailed = false
         let activeProcesses = snapshot.processes.filter {
             $0.isRunningInput || $0.isRunningOutput
         }
         for process in activeProcesses {
-            if let provider = nativeProvider(for: process.bundleIdentifier) {
-                appendNativeSignals(process: process, provider: provider, to: &signals)
+            guard let provider = nativeProvider(for: process.bundleIdentifier) else { continue }
+            appendNativeSignals(process: process, provider: provider, to: &signals)
+            // Shared FaceTime/telephony services are only trustworthy in the
+            // context of a matching calendar event, not as ad-hoc call identity.
+            if detectAdHocMeetings, enabledProviders.contains(provider),
+               provider == .zoom || provider == .teams,
+               !hasCalendarMatch(provider: provider, link: nil, at: snapshot.capturedAt) {
+                detectedActivities.append(DetectedMeetingActivity(
+                    sourceID: "native:\(provider.rawValue)",
+                    link: CalendarMeetingCanonicalLink(provider: provider, identity: "native-call"),
+                    isRunningInput: process.isRunningInput,
+                    isRunningOutput: process.isRunningOutput
+                ))
             }
         }
 
-        let browserProcesses = Self.aggregatedBrowserProcesses(activeProcesses)
-        let activeBrowserBundleIdentifiers = Set(browserProcesses.map(\.bundleIdentifier))
-        browserMeetingIdentityByBundleIdentifier =
-            browserMeetingIdentityByBundleIdentifier.filter {
-                activeBrowserBundleIdentifiers.contains($0.key)
-            }
-        for process in browserProcesses {
+        for process in Self.aggregatedBrowserProcesses(activeProcesses) {
             guard Self.shouldResolveBrowserURL(for: process) else { continue }
-            let resolver = browserResolverInstance()
-            let resolvedURL = await resolver.activeURL(for: process.bundleIdentifier)
+            let urls = await browserResolverInstance().meetingTabURLs(for: process.bundleIdentifier)
             guard generation == activityGeneration else { return }
-            switch Self.browserURLResolution(for: resolvedURL) {
-            case .unavailable:
-                browserMeetingIdentityByBundleIdentifier.removeValue(
-                    forKey: process.bundleIdentifier
-                )
-                if activeCalendarRecording != nil {
-                    activeBrowserResolutionFailed = true
-                }
+            guard let urls else {
+                if activeCalendarRecording != nil { activeBrowserResolutionFailed = true }
                 continue
-
-            case .nonMeeting:
-                browserMeetingIdentityByBundleIdentifier.removeValue(
-                    forKey: process.bundleIdentifier
-                )
+            }
+            let links = Self.meetingLinks(in: urls)
+            // CoreAudio identifies the browser, not the tab. Multiple meeting
+            // identities cannot authorize a start. An existing recording can
+            // retain its identity while that tab remains open in the background.
+            let link: CalendarMeetingCanonicalLink
+            if links.count == 1, let onlyLink = links.first {
+                link = onlyLink
+            } else if let active = activeCalendarRecording, links.contains(active.identity) {
+                link = active.identity
+            } else {
                 continue
-
-            case .meeting(let link):
-                browserMeetingIdentityByBundleIdentifier[process.bundleIdentifier] = link
-                appendBrowserSignals(process: process, link: link, to: &signals)
+            }
+            appendBrowserSignals(process: process, link: link, to: &signals)
+            if detectAdHocMeetings, links.count == 1, enabledProviders.contains(link.provider),
+               !hasCalendarMatch(provider: link.provider, link: link, at: snapshot.capturedAt) {
+                detectedActivities.append(DetectedMeetingActivity(
+                    sourceID: "browser:\(process.bundleIdentifier)",
+                    link: link,
+                    isRunningInput: process.isRunningInput,
+                    isRunningOutput: process.isRunningOutput
+                ))
             }
         }
         guard generation == activityGeneration else { return }
+        adHocMeetings.update(
+            activities: detectedActivities,
+            now: snapshot.capturedAt,
+            activeRecordingDigest: activeCalendarRecording?.occurrenceDigest
+        )
+        for activity in detectedActivities {
+            guard let occurrence = adHocMeetings.occurrence(for: activity) else { continue }
+            appendUniqueSignal(CalendarMeetingJoinSignal(
+                occurrenceDigest: occurrence.id,
+                meetingIdentity: activity.link,
+                quality: activity.sourceID.hasPrefix("browser:") ? .exactBrowserIdentity : .nativeProvider,
+                isRunningInput: activity.isRunningInput,
+                isRunningOutput: activity.isRunningOutput
+            ), to: &signals)
+        }
         let activeIdentitySignalPresent = activeCalendarRecording.map { active in
             signals.contains {
                 $0.occurrenceDigest == active.occurrenceDigest
@@ -1225,10 +1262,27 @@ final class CalendarMeetingAutomationController: ObservableObject {
             }
         } ?? false
         if activeBrowserResolutionFailed && !activeIdentitySignalPresent {
+            calendarAutoStopTrackingActive = false
             applyPolicy(.activityUnavailable(now: snapshot.capturedAt))
             return
         }
-        applyPolicy(.activity(signals, now: snapshot.capturedAt))
+        applyPolicy(.activity(
+            signals,
+            detectedOccurrences: adHocMeetings.occurrences,
+            now: snapshot.capturedAt
+        ))
+    }
+
+    private func hasCalendarMatch(
+        provider: MeetingProvider,
+        link: CalendarMeetingCanonicalLink?,
+        at now: Date
+    ) -> Bool {
+        currentOccurrences.contains { occurrence in
+            selectedCalendarIDs.contains(occurrence.calendarID)
+                && occurrence.isInsideJoinWindow(at: now)
+                && (link.map(occurrence.meetingLinks.contains) ?? occurrence.providers.contains(provider))
+        }
     }
 
     private func appendNativeSignals(
@@ -1315,7 +1369,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         policyTimerTask = nil
         guard hasPremiumAccess,
               startMode != .off,
-              calendarAuthorization == .fullAccess else {
+              (calendarAuthorization == .fullAccess || detectAdHocMeetings) else {
             return
         }
 
@@ -1338,8 +1392,23 @@ final class CalendarMeetingAutomationController: ObservableObject {
         policyTimerTask = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: nanoseconds)
             guard !Task.isCancelled, let self else { return }
-            self.applyPolicy(.timeAdvanced(self.nowProvider()))
+            self.policyTimerTask = nil
+            await self.advancePolicyTime()
         }
+    }
+
+    private func advancePolicyTime() async {
+        // CoreAudio deduplicates unchanged process snapshots. Refresh tab
+        // identity independently so switching/closing a tab is still observed.
+        if let snapshot = latestActivitySnapshot {
+            await processActivitySnapshot(MeetingActivitySnapshot(
+                capturedAt: nowProvider(),
+                availability: snapshot.availability,
+                processes: snapshot.processes
+            ))
+        }
+        guard !Task.isCancelled else { return }
+        applyPolicy(.timeAdvanced(nowProvider()))
     }
 
     private func persistSuppression(_ digest: String) {
@@ -1388,7 +1457,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.refreshAndWaitForCurrentGeneration()
-                guard self.currentOccurrences.contains(where: {
+                guard self.allOccurrences.contains(where: {
                     $0.occurrenceDigest == digest
                         && $0.isInsideJoinWindow(at: self.nowProvider())
                 }) else {

@@ -668,6 +668,34 @@ final class PremiumAccountService: ObservableObject {
     }
 }
 
+#if APPSTORE
+extension PremiumAccountService {
+    /// Links an App Store transaction to the signed-in account, so Premium
+    /// bought on this Mac is also available on the account's other devices.
+    func syncStoreKitTransaction(_ transactionID: UInt64) async throws {
+        let response: EntitlementResponse = try await request(
+            path: "/v1/entitlements/storekit/sync",
+            method: "POST",
+            body: try encoder.encode([
+                "transactionId": String(transactionID),
+                // "app" names the App Store record, not the platform. The Mac
+                // edition is a universal purchase of the iOS app record
+                // (com.typewhisper.typewhisper-app); the platform is sent in
+                // the X-TypeWhisper-Platform header.
+                "app": "ios",
+            ])
+        )
+        guard let synced = response.entitlement else { throw URLError(.badServerResponse) }
+        defaults.set(Date(), forKey: Keys.lastRefresh)
+        // A subscription answer must not replace an active lifetime entitlement.
+        if let entitlement, entitlement.isActive, entitlement.isLifetime, !synced.isLifetime {
+            return
+        }
+        try acceptEntitlement(synced)
+    }
+}
+#endif
+
 @MainActor
 final class CloudFolderSyncController: ObservableObject {
     private enum Keys {
@@ -683,7 +711,14 @@ final class CloudFolderSyncController: ObservableObject {
     private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
     private let automaticICloudBridge: any PremiumICloudBridging
-    private let automaticICloudAvailable: Bool
+    private let automaticICloudAvailableOverride: Bool?
+    private var automaticICloudAvailable: Bool {
+        automaticICloudAvailableOverride
+            ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
+    }
+    #if APPSTORE
+    private var ubiquityIdentityObserver: NSObjectProtocol?
+    #endif
     private let historyService: HistoryService?
     let historySyncPreferences: HistorySyncPreferences?
     private var customState: CloudFolderSyncState
@@ -719,12 +754,24 @@ final class CloudFolderSyncController: ObservableObject {
     @Published var statusMessage: String?
 
     var canUseSync: Bool {
+        #if APPSTORE
+        // An App Store purchase also unlocks sync; the account connects the devices.
+        AppConstants.isPremiumSyncSmokeTest
+            || (premiumAccountService.isSignedIn && AppStorePremiumService.shared?.hasPremiumAccess == true)
+        #else
         AppConstants.isPremiumSyncSmokeTest
             || (premiumAccountService.isSignedIn && premiumAccountService.hasPremiumEntitlement)
+        #endif
     }
 
     var availableModes: [PremiumSyncMode] {
+        #if APPSTORE
+        // Keep a chosen automatic iCloud sync selectable while iCloud is signed out.
+        automaticICloudAvailable || mode == .automaticICloud
+            ? PremiumSyncMode.allCases : [.off, .cloudFolder]
+        #else
         automaticICloudAvailable ? PremiumSyncMode.allCases : [.off, .cloudFolder]
+        #endif
     }
 
     var selectedFolderDisplayName: String {
@@ -744,7 +791,7 @@ final class CloudFolderSyncController: ObservableObject {
         historyService: HistoryService? = nil,
         historySyncPreferences: HistorySyncPreferences? = nil,
         defaults: UserDefaults = .standard,
-        automaticICloudBridge: any PremiumICloudBridging = PremiumICloudBridgeClient(),
+        automaticICloudBridge: any PremiumICloudBridging = PremiumICloudBridgeFactory.makeDefault(),
         automaticICloudAvailable: Bool? = nil
     ) {
         self.premiumAccountService = premiumAccountService
@@ -753,27 +800,54 @@ final class CloudFolderSyncController: ObservableObject {
         self.historySyncPreferences = historySyncPreferences
         self.defaults = defaults
         self.automaticICloudBridge = automaticICloudBridge
-        self.automaticICloudAvailable = automaticICloudAvailable
+        self.automaticICloudAvailableOverride = automaticICloudAvailable
+        #if !APPSTORE
+        let isAutomaticICloudAvailable = automaticICloudAvailable
             ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
+        #endif
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
         self.automaticState = Self.loadState(from: defaults, key: Keys.automaticSyncState)
         let storedMode = defaults.string(forKey: Keys.mode).flatMap(PremiumSyncMode.init(rawValue:))
         let requestedMode = AppConstants.isPremiumSyncSmokeTest
             ? PremiumSyncMode.automaticICloud
             : storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
-        self.mode = requestedMode == .automaticICloud && !self.automaticICloudAvailable ? .off : requestedMode
+        #if APPSTORE
+        // iCloud can be signed out only temporarily; syncs report it until it returns.
+        self.mode = requestedMode
+        #else
+        self.mode = requestedMode == .automaticICloud && !isAutomaticICloudAvailable ? .off : requestedMode
+        #endif
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
         if mode == .automaticICloud { provider = .iCloudDrive }
         installLocalChangeObserver()
         updateICloudObservation()
+        #if APPSTORE
+        // Offer automatic iCloud once the user signs in to iCloud while TypeWhisper runs,
+        // and resume a chosen automatic iCloud sync.
+        ubiquityIdentityObserver = NotificationCenter.default.addObserver(
+            forName: .NSUbiquityIdentityDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handleUbiquityIdentityChange() }
+        }
+        #endif
         // Entitlement refreshes republish unchanged values; only gaining access starts a sync.
-        entitlementCancellable = premiumAccountService.$entitlement
+        #if APPSTORE
+        let premiumAccess = AppStorePremiumService.shared?.$hasPremiumAccess.eraseToAnyPublisher()
+            ?? Just(false).eraseToAnyPublisher()
+        #else
+        let premiumAccess = premiumAccountService.$entitlement
+            .map { $0?.isActive == true }
+            .eraseToAnyPublisher()
+        #endif
+        entitlementCancellable = premiumAccess
             .combineLatest(premiumAccountService.$isSignedIn)
-            .map { entitlement, isSignedIn in
+            .map { hasPremium, isSignedIn in
                 AppConstants.isPremiumSyncSmokeTest
-                    || (isSignedIn && entitlement?.isActive == true)
+                    || (isSignedIn && hasPremium)
             }
             .removeDuplicates()
             .dropFirst()
@@ -1099,6 +1173,16 @@ final class CloudFolderSyncController: ObservableObject {
             }
         }
     }
+
+    #if APPSTORE
+    private func handleUbiquityIdentityChange() {
+        objectWillChange.send()
+        updateICloudObservation()
+        guard mode == .automaticICloud, automaticICloudAvailable else { return }
+        errorMessage = nil
+        Task { await syncNow() }
+    }
+    #endif
 
     private func updateICloudObservation() {
         stopICloudObservation()

@@ -23,6 +23,67 @@ private enum SystemTTSPluginError: LocalizedError {
     }
 }
 
+#if APPSTORE
+/// Speaks in-process with NSSpeechSynthesizer. The App Sandbox does not allow
+/// launching /usr/bin/say; NSSpeechSynthesizer uses the same voice identifiers
+/// and words-per-minute rates.
+private final class SystemTTSPlaybackSession: NSObject, TTSPlaybackSession, NSSpeechSynthesizerDelegate, @unchecked Sendable {
+    private struct State {
+        var isActive = true
+        var onFinish: (@Sendable () -> Void)?
+    }
+
+    private let synthesizer: NSSpeechSynthesizer
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(synthesizer: NSSpeechSynthesizer) {
+        self.synthesizer = synthesizer
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    var isActive: Bool {
+        state.withLock { $0.isActive }
+    }
+
+    var onFinish: (@Sendable () -> Void)? {
+        get { state.withLock { $0.onFinish } }
+        set {
+            let shouldNotify = state.withLock { state in
+                state.onFinish = newValue
+                return !state.isActive
+            }
+            if shouldNotify {
+                newValue?()
+            }
+        }
+    }
+
+    func stop() {
+        if Thread.isMainThread {
+            synthesizer.stopSpeaking()
+        } else {
+            DispatchQueue.main.async {
+                self.synthesizer.stopSpeaking()
+            }
+        }
+        finish()
+    }
+
+    func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+        finish()
+    }
+
+    private func finish() {
+        let callback: (@Sendable () -> Void)? = state.withLock { state in
+            guard state.isActive else { return nil }
+            state.isActive = false
+            return state.onFinish
+        }
+        callback?()
+    }
+}
+#else
 private final class SystemTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
     private struct State {
         var isActive = true
@@ -72,6 +133,7 @@ private final class SystemTTSPlaybackSession: TTSPlaybackSession, @unchecked Sen
         callback?()
     }
 }
+#endif
 
 @objc(SystemTTSPlugin)
 final class SystemTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
@@ -155,6 +217,27 @@ final class SystemTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
             throw SystemTTSPluginError.unavailable
         }
 
+        #if APPSTORE
+        let voiceId = selectedVoiceId
+        let rateWPM = selectedRateWPM
+        return try await MainActor.run {
+            let voice = voiceId.flatMap { $0.isEmpty ? nil : NSSpeechSynthesizer.VoiceName(rawValue: $0) }
+            guard let synthesizer = NSSpeechSynthesizer(voice: voice) ?? NSSpeechSynthesizer(voice: nil) else {
+                throw SystemTTSPluginError.unavailable
+            }
+            if let rateWPM {
+                synthesizer.rate = Float(rateWPM)
+            }
+
+            let session = SystemTTSPlaybackSession(synthesizer: synthesizer)
+            guard synthesizer.startSpeaking(request.text) else {
+                logger.error("Failed to start speech synthesis")
+                session.stop()
+                throw SystemTTSPluginError.processLaunchFailed
+            }
+            return session
+        }
+        #else
         let process = Process()
         let inputPipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/say")
@@ -177,6 +260,7 @@ final class SystemTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
             inputPipe.fileHandleForWriting.closeFile()
             throw SystemTTSPluginError.processLaunchFailed
         }
+        #endif
     }
 
     private var selectedVoice: PluginVoiceInfo? {
@@ -184,6 +268,7 @@ final class SystemTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
         return availableVoices.first { $0.id == selectedVoiceId }
     }
 
+    #if !APPSTORE
     private func sayArguments() -> [String] {
         var arguments: [String] = []
         if let selectedVoiceId, !selectedVoiceId.isEmpty {
@@ -195,6 +280,7 @@ final class SystemTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
         arguments.append(contentsOf: ["-f", "-"])
         return arguments
     }
+    #endif
 }
 
 private struct SystemTTSSettingsView: View {

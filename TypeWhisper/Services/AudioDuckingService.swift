@@ -235,6 +235,13 @@ class AudioDuckingService {
         self.volumeController = volumeController
     }
 
+    /// Saves the output volume before microphone startup can change a shared audio device.
+    /// Capturing the baseline does not lower the volume or interrupt the recording start sound.
+    func prepareDucking() {
+        guard savedSnapshot == nil else { return }
+        savedSnapshot = volumeController.defaultOutputSnapshot()
+    }
+
     /// Reduces the system output volume to the given factor (0.0–1.0)
     func duckAudio(to factor: Float) {
         guard !isDucked else { return }
@@ -244,24 +251,27 @@ class AudioDuckingService {
             return
         }
 
-        savedSnapshot = current
-        let targetVolume = max(0, min(1, current.volume * factor))
+        let baseline = savedSnapshot ?? current
+        guard baseline.deviceID == current.deviceID else {
+            logger.info("Skipping audio ducking because the output device changed")
+            return
+        }
+        savedSnapshot = baseline
+        let targetVolume = max(0, min(1, baseline.volume * factor))
         guard volumeController.setVolume(targetVolume, for: current.deviceID) else {
-            savedSnapshot = nil
             logger.warning("Could not duck audio output volume")
             return
         }
 
         isDucked = true
-        logger.info("Audio ducked: \(current.volume, privacy: .public) -> \(targetVolume, privacy: .public)")
+        logger.info("Audio ducked: \(baseline.volume, privacy: .public) -> \(targetVolume, privacy: .public)")
     }
 
     /// Restores the previously saved volume
     func restoreAudio() {
-        guard isDucked, let savedSnapshot else { return }
+        guard let savedSnapshot else { return }
 
-        let restoreDeviceID = volumeController.defaultOutputSnapshot()?.deviceID ?? savedSnapshot.deviceID
-        if volumeController.setVolume(savedSnapshot.volume, for: restoreDeviceID) {
+        if volumeController.setVolume(savedSnapshot.volume, for: savedSnapshot.deviceID) {
             logger.info("Audio restored to \(savedSnapshot.volume, privacy: .public)")
         } else {
             logger.warning("Could not restore audio output volume")

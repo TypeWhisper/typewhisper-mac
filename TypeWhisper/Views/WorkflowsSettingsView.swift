@@ -1308,7 +1308,7 @@ private struct WorkflowEditorPage: View {
                                     localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"),
                                     selection: $draft.autoEnterMode
                                 ) {
-                                    ForEach(WorkflowAutoEnterMode.allCases) { mode in
+                                    ForEach(WorkflowAutoEnterMode.allCases.filter { $0.isAvailable || $0 == draft.autoEnterMode }) { mode in
                                         Text(mode.displayName)
                                             .tag(mode)
                                     }
@@ -1870,6 +1870,9 @@ private struct WorkflowEditorPage: View {
                 appTriggerEditor
             }
 
+            // The sandboxed App Store edition cannot read browser URLs, so a
+            // website trigger would never match.
+            #if !APPSTORE
             Divider()
 
             triggerComponentEditor(
@@ -1878,6 +1881,7 @@ private struct WorkflowEditorPage: View {
             ) {
                 websiteTriggerEditor
             }
+            #endif
 
             Divider()
 

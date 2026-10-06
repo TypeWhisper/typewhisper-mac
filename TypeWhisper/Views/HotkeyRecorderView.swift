@@ -259,6 +259,13 @@ struct HotkeyRecorderView: View {
         return parts.joined()
     }
 
+#if APPSTORE
+    /// Key codes of F1 to F20.
+    static let functionKeyCodes: Set<UInt16> = [
+        122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90,
+    ]
+#endif
+
     private func startRecording() {
         if let activeId = Self.activeRecorder, activeId != id {
             return
@@ -278,9 +285,12 @@ struct HotkeyRecorderView: View {
         }
 
         // Global monitor - captures events intercepted by macOS (e.g. Ctrl+Space for input switching)
+        // Global key monitors need Accessibility, which the App Store edition cannot get.
+#if !APPSTORE
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { event in
             handleRecorderEvent(event)
         }
+#endif
     }
 
     /// Shared event processing for both local and global monitors.
@@ -410,7 +420,17 @@ struct HotkeyRecorderView: View {
             }
 
             let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
+#if APPSTORE
+            // macOS sets the Fn flag on every F-key event. The App Store edition
+            // registers these keys as Carbon hotkeys, which ignore it, so record
+            // F13 as "F13" rather than "Fn F13".
+            let recordedMask = HotkeyRecorderView.functionKeyCodes.contains(event.keyCode)
+                ? relevantMask.subtracting(.function)
+                : relevantMask
+            let modifiers = event.modifierFlags.intersection(recordedMask).rawValue
+#else
             let modifiers = event.modifierFlags.intersection(relevantMask).rawValue
+#endif
 
             finishRecording(UnifiedHotkey(keyCode: event.keyCode, modifierFlags: modifiers, isFn: false))
             return true

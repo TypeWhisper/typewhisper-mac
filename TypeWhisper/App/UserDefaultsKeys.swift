@@ -73,6 +73,9 @@ enum UserDefaultsKeys {
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
     static let inputDevicePriorityList = "inputDevicePriorityList"
     static let airPodsInstantStartEnabled = "airPodsInstantStartEnabled"
+    /// Keeps a built-in or wired/USB input running between dictations and prepends the last
+    /// half second to the next recording. Default off; the macOS microphone indicator stays on.
+    static let microphonePrerollEnabled = "microphonePrerollEnabled"
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
@@ -88,6 +91,7 @@ enum UserDefaultsKeys {
     static let activatedTermPackStates = "activatedTermPackStates"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
+    static let dismissedDictionaryTermsSettingSuggestions = "dismissedDictionaryTermsSettingSuggestions"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
     static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
     static let targetAppCorrectionLearningRequiredObservations = "targetAppCorrectionLearningRequiredObservations"
@@ -96,6 +100,7 @@ enum UserDefaultsKeys {
     // MARK: - Calendar Meeting Automation (machine-local; intentionally not synced/exported)
     static let calendarMeetingStartMode = "calendarMeetingStartMode"
     static let calendarMeetingAutoStopEnabled = "calendarMeetingAutoStopEnabled"
+    static let calendarMeetingDetectAdHoc = "calendarMeetingDetectAdHoc"
     static let calendarMeetingSelectedCalendarIDs = "calendarMeetingSelectedCalendarIDs"
     static let calendarMeetingCalendarSelectionInitialized = "calendarMeetingCalendarSelectionInitialized"
     static let calendarMeetingEnabledProviderIDs = "calendarMeetingEnabledProviderIDs"

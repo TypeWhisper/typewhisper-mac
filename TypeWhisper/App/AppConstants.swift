@@ -138,7 +138,11 @@ enum AppConstants {
         if isScreenshotAutomation {
             return "com.typewhisper.mac.screenshots.apikey."
         }
-        #if DEBUG
+        #if APPSTORE && DEBUG
+        return "com.typewhisper.typewhisper-app.dev.apikey."
+        #elseif APPSTORE
+        return "com.typewhisper.typewhisper-app.apikey."
+        #elseif DEBUG
         return "com.typewhisper.mac.dev.apikey."
         #else
         return "com.typewhisper.mac.apikey."
@@ -162,10 +166,17 @@ enum AppConstants {
         if isRunningTests {
             return "com.typewhisper.mac.tests.premium-account"
         }
+        #if APPSTORE
+        if isDevelopment {
+            return "com.typewhisper.typewhisper-app.dev.premium-account"
+        }
+        return "com.typewhisper.typewhisper-app.premium-account"
+        #else
         if isDevelopment {
             return "com.typewhisper.mac.dev.premium-account"
         }
         return "com.typewhisper.mac.premium-account"
+        #endif
     }
 
     static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"

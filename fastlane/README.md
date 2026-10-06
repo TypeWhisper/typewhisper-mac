@@ -71,6 +71,14 @@ Optimize and publish generated plugin screenshots into a typewhisper.com checkou
 
 Capture plugin screenshots and publish their PNG/WebP website assets
 
+### mac appstore_screenshots
+
+```sh
+[bundle exec] fastlane mac appstore_screenshots
+```
+
+Capture the Mac App Store edition in screenshot mode (raw window images)
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
