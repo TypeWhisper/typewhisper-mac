@@ -330,7 +330,7 @@ The `X-TypeWhisper-API-Token` header works as well. Every endpoint except `GET /
 
 Installations that already ran the API server without a token before 1.8.0 keep doing so until **Require API Token** is turned on. Settings shows a warning while it is off.
 
-Independent of the token, the server rejects requests that browsers send on behalf of other websites: a `Host` header other than `127.0.0.1`, `localhost`, or `[::1]`, an `Origin` from a website not served from this Mac (including `null`), and `Sec-Fetch-Site: cross-site`. Such requests get `403`. Requests without these headers, such as those from `curl` or scripts, are not affected.
+Independent of the token, the server rejects requests that browsers send on behalf of other websites: a `Host` header other than `127.0.0.1`, `localhost`, or `[::1]`, an `Origin` from a website not served from this Mac (including `null`), and `Sec-Fetch-Site: cross-site` unless the `Origin` is a page served from this Mac. Such requests get `403`. Requests without these headers, such as those from `curl` or scripts, are not affected.
 
 ### Check Status
 

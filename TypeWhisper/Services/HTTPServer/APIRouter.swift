@@ -75,11 +75,16 @@ final class APIRouter: Sendable {
             return "Requests must be addressed to 127.0.0.1 or localhost"
         }
 
-        if let origin = request.headers["origin"], !isAllowedOrigin(origin) {
+        let origin = request.headers["origin"]
+        if let origin, !isAllowedOrigin(origin) {
             return "Requests from web pages on other sites are not allowed"
         }
 
-        if request.headers["sec-fetch-site"]?.lowercased() == "cross-site" {
+        // Browsers treat localhost and 127.0.0.1 as different sites, so a
+        // page on localhost also arrives as cross-site. Only a loopback
+        // Origin vouches for it; navigations and embeds send none.
+        if request.headers["sec-fetch-site"]?.lowercased() == "cross-site",
+           !(origin.map(isLoopbackWebOrigin) ?? false) {
             return "Requests from web pages on other sites are not allowed"
         }
 
@@ -109,7 +114,16 @@ final class APIRouter: Sendable {
         }
 
         guard scheme == "http" || scheme == "https" else { return true }
-        guard let host = components.host else { return false }
+        return isLoopbackWebOrigin(origin)
+    }
+
+    private static func isLoopbackWebOrigin(_ origin: String) -> Bool {
+        guard let components = URLComponents(string: origin.trimmingCharacters(in: .whitespaces)),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host else {
+            return false
+        }
         return isLoopbackHostName(host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")))
     }
 

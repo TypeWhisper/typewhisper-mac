@@ -2085,6 +2085,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             ["host": "LOCALHOST"],
             ["host": "[::1]:8978"],
             ["host": "127.0.0.1:8978", "origin": "http://localhost:3000", "sec-fetch-site": "same-site"],
+            ["host": "127.0.0.1:8978", "origin": "http://localhost:3000", "sec-fetch-site": "cross-site"],
             ["host": "127.0.0.1:8978", "origin": "http://[::1]:5173"],
             ["host": "127.0.0.1:8978", "origin": "chrome-extension://abcdefghijklmnop"],
             ["host": "127.0.0.1:8978", "sec-fetch-site": "none"],
@@ -2097,6 +2098,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             ["host": "127.0.0.1:8978", "origin": "http://localhost.attacker.example"],
             ["host": "127.0.0.1:8978", "origin": "null"],
             ["host": "127.0.0.1:8978", "sec-fetch-site": "cross-site"],
+            ["host": "127.0.0.1:8978", "origin": "chrome-extension://abcdefghijklmnop", "sec-fetch-site": "cross-site"],
         ]
 
         for headers in accepted {
