@@ -17778,6 +17778,123 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.isEventTapEnabledForTesting)
     }
 
+    func testEventTapReleasesInputWhileMainThreadIsBlocked() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+        nonisolated(unsafe) let escapeDown = try XCTUnwrap(
+            CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true)
+        )
+        final class Answers: @unchecked Sendable {
+            var suppressed: [Bool] = []
+            var durations: [TimeInterval] = []
+        }
+        let answers = Answers()
+        let finished = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            for _ in 0..<2 {
+                let start = Date()
+                answers.suppressed.append(service.decideEventTapEventForTesting(escapeDown))
+                answers.durations.append(Date().timeIntervalSince(start))
+            }
+            finished.signal()
+        }
+        // Deliberately block the main thread: the tap must give up on it instead of holding input.
+        XCTAssertEqual(finished.wait(timeout: .now() + 2), .success)
+        XCTAssertEqual(answers.suppressed, [false, false])
+        XCTAssertLessThan(answers.durations[0], 0.5)
+        XCTAssertLessThan(answers.durations[1], 0.05, "A known stall must release input without waiting")
+
+        // Released events are left to the NSEvent monitors; the late main-thread work must not act on them.
+        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        XCTAssertEqual(cancelCount, 0)
+
+        DispatchQueue.global().async {
+            answers.suppressed.append(service.decideEventTapEventForTesting(escapeDown))
+            finished.signal()
+        }
+        let deadline = Date().addingTimeInterval(2)
+        while finished.wait(timeout: .now()) == .timedOut, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(answers.suppressed, [false, false, true], "A responsive main thread decides again")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
+    func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let decision = try XCTUnwrap(gate.makeDecision())
+        XCTAssertEqual(gate.claim(decision), .handle)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            gate.resolve(decision, suppress: true)
+        }
+        // Picked up before the first deadline, finished after it: the handler's decision stands.
+        let answer = gate.wait(
+            for: decision,
+            requestedAt: DispatchTime.now().uptimeNanoseconds,
+            timeout: 0.05,
+            claimedTimeout: 1
+        )
+        XCTAssertEqual(answer, .decided(suppress: true))
+        XCTAssertNotNil(gate.makeDecision(), "A finished handler must not leave a stall behind")
+    }
+
+    func testEventTapGateTreatsAbandonedHandlerAsStall() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let decision = try XCTUnwrap(gate.makeDecision())
+        XCTAssertEqual(gate.claim(decision), .handle)
+        let start = Date()
+        let answer = gate.wait(
+            for: decision,
+            requestedAt: DispatchTime.now().uptimeNanoseconds,
+            timeout: 0.05,
+            claimedTimeout: 0.05
+        )
+        XCTAssertEqual(answer, .released(stallStarted: true))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5, "One deadline covers both waits")
+        XCTAssertNil(gate.makeDecision(), "Later events pass at once while the handler is stuck")
+
+        let stall = try XCTUnwrap(gate.resolve(decision, suppress: true))
+        XCTAssertEqual(stall.releasedEvents, 2)
+        XCTAssertNotNil(gate.makeDecision(), "The late handler ends the stall")
+    }
+
+    func testEventTapReenableBackoffAfterRepeatedTimeouts() {
+        let second: UInt64 = 1_000_000_000
+        var backoff = HotkeyService.EventTapReenableBackoff()
+        XCTAssertEqual(backoff.recordTimeout(at: 0), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 40 * second), .reenable, "Timeouts outside the window do not add up")
+        XCTAssertEqual(backoff.recordTimeout(at: 50 * second), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 60 * second), .backingOff(seconds: 30))
+        XCTAssertFalse(backoff.allowsReenable(at: 89 * second))
+        XCTAssertEqual(backoff.recordTimeout(at: 89 * second), .backingOff(seconds: nil))
+        XCTAssertTrue(backoff.allowsReenable(at: 90 * second))
+
+        // Timeouts soon after a backoff double the next one.
+        XCTAssertEqual(backoff.recordTimeout(at: 91 * second), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 92 * second), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 93 * second), .backingOff(seconds: 60))
+
+        // A long quiet period starts over.
+        XCTAssertEqual(backoff.recordTimeout(at: 1_000 * second), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 1_001 * second), .reenable)
+        XCTAssertEqual(backoff.recordTimeout(at: 1_002 * second), .backingOff(seconds: 30))
+
+        // The quiet period also counts when a lone timeout followed the last backoff.
+        var lone = HotkeyService.EventTapReenableBackoff()
+        for t: UInt64 in [0, 1, 2] { _ = lone.recordTimeout(at: t * second) }
+        for t: UInt64 in [33, 34] { _ = lone.recordTimeout(at: t * second) }
+        XCTAssertEqual(lone.recordTimeout(at: 35 * second), .backingOff(seconds: 60))
+        XCTAssertEqual(lone.recordTimeout(at: 96 * second), .reenable)
+        XCTAssertEqual(lone.recordTimeout(at: 4_000 * second), .reenable)
+        XCTAssertEqual(lone.recordTimeout(at: 4_001 * second), .reenable)
+        XCTAssertEqual(lone.recordTimeout(at: 4_002 * second), .backingOff(seconds: 30))
+    }
+
     @MainActor
     func testRecoveryStopsWorkflowAfterLostRelease() async throws {
         let service = HotkeyService()
