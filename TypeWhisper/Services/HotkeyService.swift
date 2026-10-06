@@ -405,6 +405,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         private var port: CFMachPort?
         private var watchdogGeneration: UUID?
         private var reenableBackoff = EventTapReenableBackoff()
+        /// Changes whenever a tap is installed or torn down, so work queued for an earlier tap
+        /// can tell it is stale.
+        private var tapGeneration: UInt64 = 0
 
         enum WatchdogAction { case none, retrySetup, recovered }
 
@@ -444,7 +447,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             lock.withLock {
                 port = tap
                 reenableBackoff = EventTapReenableBackoff()
+                tapGeneration &+= 1
             }
+        }
+
+        var generation: UInt64 {
+            lock.withLock { tapGeneration }
         }
 
         /// Disables and invalidates the tap under the lock so the watchdog can
@@ -460,6 +468,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 // system's double-tap-modifier detection (e.g. Apple Dictation).
                 CFMachPortInvalidate(tap)
                 port = nil
+                tapGeneration &+= 1
             }
         }
 
@@ -548,7 +557,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// released undecided are left to the NSEvent monitors, which see every delivered event.
     nonisolated final class EventTapMainThreadGate: @unchecked Sendable {
         final class Decision: @unchecked Sendable {
-            fileprivate enum State { case pending, claimed, resolved(suppress: Bool), released }
+            fileprivate enum State { case pending, claimed, resolved(suppress: Bool), released, abandoned }
             // Guarded by the gate's lock.
             fileprivate var state = State.pending
             fileprivate let resolved = DispatchSemaphore(value: 0)
@@ -593,41 +602,80 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     decision.state = .claimed
                     return .handle
                 }
-                guard let startedAt = stallStartedAt else { return .skip(stall: nil) }
-                let stall = Stall(
-                    duration: TimeInterval(now &- startedAt) / 1_000_000_000,
-                    releasedEvents: releasedEvents
-                )
-                stallStartedAt = nil
-                releasedEvents = 0
-                return .skip(stall: stall)
+                return .skip(stall: endStall(now: now))
             }
         }
 
-        /// Main thread.
-        func resolve(_ decision: Decision, suppress: Bool) {
-            lock.withLock { decision.state = .resolved(suppress: suppress) }
+        /// Main thread. Returns the stall that ends here if the tap stopped waiting for this
+        /// event while its handler ran.
+        @discardableResult
+        func resolve(
+            _ decision: Decision,
+            suppress: Bool,
+            now: UInt64 = DispatchTime.now().uptimeNanoseconds
+        ) -> Stall? {
+            let stall = lock.withLock { () -> Stall? in
+                if case .abandoned = decision.state { return endStall(now: now) }
+                decision.state = .resolved(suppress: suppress)
+                return nil
+            }
             decision.resolved.signal()
+            return stall
         }
 
-        /// Tap thread.
-        func wait(for decision: Decision, requestedAt: UInt64, timeout: TimeInterval) -> Answer {
-            if decision.resolved.wait(timeout: .now() + timeout) == .success {
+        /// Tap thread. The main thread has until `requestedAt + timeout` to pick the event up.
+        /// A handler that is already running gets up to `claimedTimeout` more, because its side
+        /// effects (a cancelled dictation, a consumed Return) assume its decision is honored.
+        func wait(
+            for decision: Decision,
+            requestedAt: UInt64,
+            timeout: TimeInterval,
+            claimedTimeout: TimeInterval
+        ) -> Answer {
+            let deadline = DispatchTime(uptimeNanoseconds: requestedAt) + timeout
+            if decision.resolved.wait(timeout: deadline) == .success {
                 return answer(for: decision)
             }
-            let released = lock.withLock { () -> Bool in
-                guard case .pending = decision.state else { return false }
-                decision.state = .released
+            if releaseIfStillIn(.pending, decision, requestedAt: requestedAt) {
+                return .released(stallStarted: true)
+            }
+            if decision.resolved.wait(timeout: deadline + claimedTimeout) == .success {
+                return answer(for: decision)
+            }
+            if releaseIfStillIn(.claimed, decision, requestedAt: requestedAt) {
+                return .released(stallStarted: true)
+            }
+            return answer(for: decision)
+        }
+
+        private enum WaitPhase { case pending, claimed }
+
+        private func releaseIfStillIn(_ phase: WaitPhase, _ decision: Decision, requestedAt: UInt64) -> Bool {
+            lock.withLock {
+                switch (phase, decision.state) {
+                case (.pending, .pending):
+                    decision.state = .released
+                case (.claimed, .claimed):
+                    decision.state = .abandoned
+                default:
+                    return false
+                }
                 stallStartedAt = requestedAt
                 releasedEvents = 1
                 return true
             }
-            if released { return .released(stallStarted: true) }
-            // The main thread picked the event up just after the timeout; handling it is short.
-            guard decision.resolved.wait(timeout: .now() + timeout) == .success else {
-                return .released(stallStarted: false)
-            }
-            return answer(for: decision)
+        }
+
+        /// Call with the lock held.
+        private func endStall(now: UInt64) -> Stall? {
+            guard let startedAt = stallStartedAt else { return nil }
+            let stall = Stall(
+                duration: TimeInterval(now &- startedAt) / 1_000_000_000,
+                releasedEvents: releasedEvents
+            )
+            stallStartedAt = nil
+            releasedEvents = 0
+            return stall
         }
 
         private func answer(for decision: Decision) -> Answer {
@@ -682,8 +730,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private let eventTapHandle = EventTapHandle()
     private let eventTapMainThreadGate = EventTapMainThreadGate()
-    /// How long one keystroke may wait for the main thread before the tap lets it through.
+    /// How long one keystroke may wait for the main thread to pick it up before the tap lets it through.
     private nonisolated static let eventTapDecisionTimeout: TimeInterval = 0.1
+    /// Extra time for a hotkey handler that is already running. Stays well below the roughly
+    /// one second after which the system disables a tap for holding input.
+    private nonisolated static let eventTapClaimedDecisionTimeout: TimeInterval = 0.5
     private var eventTap: CFMachPort? { eventTapHandle.current }
 #if DEBUG
     private(set) var monitorSetupCountForTesting = 0
@@ -1779,13 +1830,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         return handleEventTapEvent(nsEvent)
     }
 
-    /// Tap thread. Asks the main thread whether to consume `event`, but never holds the
-    /// session's input for longer than `eventTapDecisionTimeout`.
+    /// Tap thread. Asks the main thread whether to consume `event`, but lets it through if the
+    /// main thread does not pick it up within `eventTapDecisionTimeout`.
     private nonisolated func decideEventTapEvent(_ event: CGEvent) -> Bool {
         nonisolated(unsafe) let event = event
 #if APPSTORE
         // A listen-only tap ignores the result, so it never has to wait for the main thread.
+        let generation = eventTapHandle.generation
         DispatchQueue.main.async { [self] in
+            // Monitoring may have been suspended, e.g. for the shortcut recorder, since this was queued.
+            guard eventTapHandle.generation == generation else { return }
             _ = handleEventTapCallback(event)
         }
         return false
@@ -1795,20 +1849,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async { [self] in
             switch eventTapMainThreadGate.claim(decision) {
             case .handle:
-                eventTapMainThreadGate.resolve(decision, suppress: handleEventTapCallback(event))
+                let suppress = handleEventTapCallback(event)
+                if let stall = eventTapMainThreadGate.resolve(decision, suppress: suppress) {
+                    finishEventTapMainThreadStall(stall)
+                }
             case .skip(let stall):
-                guard let stall else { return }
-                logger.warning(
-                    "Main thread was unresponsive for \(Int(stall.duration * 1000))ms; \(stall.releasedEvents) input event(s) passed the hotkey event tap undecided"
-                )
-                resyncHotkeyStateAfterEventTapRecovery()
-                recoverReleasedActiveHotkeyAfterEventTapDisable()
+                if let stall { finishEventTapMainThreadStall(stall) }
             }
         }
         switch eventTapMainThreadGate.wait(
             for: decision,
             requestedAt: requestedAt,
-            timeout: Self.eventTapDecisionTimeout
+            timeout: Self.eventTapDecisionTimeout,
+            claimedTimeout: Self.eventTapClaimedDecisionTimeout
         ) {
         case .decided(let suppress):
             return suppress
@@ -1821,6 +1874,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return false
         }
 #endif
+    }
+
+    private func finishEventTapMainThreadStall(_ stall: EventTapMainThreadGate.Stall) {
+        logger.warning(
+            "Main thread was unresponsive for \(Int(stall.duration * 1000))ms; \(stall.releasedEvents) input event(s) passed the hotkey event tap undecided"
+        )
+        resyncHotkeyStateAfterEventTapRecovery()
+        recoverReleasedActiveHotkeyAfterEventTapDisable()
     }
 
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
