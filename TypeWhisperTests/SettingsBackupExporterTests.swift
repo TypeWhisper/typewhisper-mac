@@ -1570,4 +1570,99 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(fixture.workflowService.workflows.count, 2)
         XCTAssertEqual(fixture.workflowService.workflows.filter { $0.template == .summary }.count, 1)
     }
+
+    func testReimportKeepsProfileReferenceToBuiltInPreset() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.promptActionService.addPreset(PromptAction.presets[0])
+        let preset = try XCTUnwrap(fixture.promptActionService.promptActions.first { $0.isPreset })
+        fixture.profileService.addProfile(
+            name: "Mail",
+            bundleIdentifiers: ["com.apple.mail", "com.microsoft.Outlook"],
+            promptActionId: preset.id.uuidString
+        )
+        let backup = try exportBackup(from: fixture)
+        XCTAssertTrue(backup.promptActions.isEmpty)
+        let profile = try XCTUnwrap(backup.profiles.first)
+        // The same apps in another order are still the same profile.
+        let reordered = editedBackup(backup, profiles: [SettingsBackupExporter.ProfileDTO(
+            name: profile.name,
+            isEnabled: profile.isEnabled,
+            priority: profile.priority,
+            bundleIdentifiers: profile.bundleIdentifiers.reversed(),
+            urlPatterns: profile.urlPatterns,
+            inputLanguage: profile.inputLanguage,
+            translationEnabled: profile.translationEnabled,
+            translationTargetLanguage: profile.translationTargetLanguage,
+            selectedTask: profile.selectedTask,
+            engineOverride: profile.engineOverride,
+            cloudModelOverride: profile.cloudModelOverride,
+            promptActionId: profile.promptActionId,
+            memoryEnabled: profile.memoryEnabled,
+            outputFormat: profile.outputFormat,
+            hotkey: profile.hotkey,
+            inlineCommandsEnabled: profile.inlineCommandsEnabled,
+            autoEnterEnabled: profile.autoEnterEnabled
+        )])
+
+        for mode in [SettingsBackupExporter.ImportMode.merge, .replace] {
+            let result = await importBackup(reordered, into: fixture, mode: mode)
+
+            XCTAssertEqual(result.profilesSkipped, 1, "\(mode)")
+            XCTAssertEqual(fixture.profileService.profiles.count, 1, "\(mode)")
+            XCTAssertEqual(fixture.profileService.profiles.first?.promptActionId, preset.id.uuidString, "\(mode)")
+        }
+    }
+
+    func testReplacePrefersExportedPromptActionIdOverMatchingContent() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let first = try XCTUnwrap(fixture.promptActionService.addAction(name: "Shorten", prompt: "Shorten the text"))
+        let second = try XCTUnwrap(fixture.promptActionService.addAction(name: "Translate", prompt: "Translate to English"))
+        let backup = try exportBackup(from: fixture)
+        let exportedFirst = try XCTUnwrap(backup.promptActions.first { $0.localId == first.id.uuidString })
+        // The first action is edited to look exactly like the second one.
+        let edited = editedBackup(backup, promptActions: [SettingsBackupExporter.PromptActionDTO(
+            localId: exportedFirst.localId,
+            name: second.name,
+            prompt: second.prompt,
+            icon: second.icon,
+            isEnabled: exportedFirst.isEnabled,
+            providerType: exportedFirst.providerType,
+            cloudModel: exportedFirst.cloudModel,
+            temperatureModeRaw: exportedFirst.temperatureModeRaw,
+            temperatureValue: exportedFirst.temperatureValue,
+            targetActionPluginId: exportedFirst.targetActionPluginId
+        )])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.promptActionsUpdated, 1)
+        let actions = fixture.promptActionService.promptActions.filter { !$0.isPreset }
+        XCTAssertEqual(actions.first { $0.id == first.id }?.prompt, "Translate to English")
+        XCTAssertEqual(actions.first { $0.id == second.id }?.prompt, "Translate to English")
+        XCTAssertEqual(actions.count, 2)
+    }
+
+    func testImportedHotkeyThatConflictsWithAnotherSlotIsSkipped() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let pttHotkey = UnifiedHotkey(keyCode: 9, modifierFlags: 0x200, isFn: false)
+        let toggleHotkey = UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([pttHotkey]), forKey: UserDefaultsKeys.pttHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([toggleHotkey]), forKey: UserDefaultsKeys.toggleHotkeys)
+        let backup = try exportBackup(from: fixture)
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [pttHotkey],
+            UserDefaultsKeys.hybridHotkeys: [UnifiedHotkey(keyCode: 5, modifierFlags: 0x100, isFn: false)],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 1)
+        XCTAssertEqual(result.hotkeysSkipped, 1)
+        let toggleData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: toggleData), [toggleHotkey])
+        XCTAssertNotNil(fixture.userDefaults.data(forKey: UserDefaultsKeys.hybridHotkeys))
+    }
 }

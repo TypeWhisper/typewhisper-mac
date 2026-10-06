@@ -798,6 +798,14 @@ struct AdvancedSettingsView: View {
         if result.historySkippedByRetention > 0 {
             lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
         }
+        if result.historySkippedUnreadableDestination > 0 {
+            lines.append(String(format: localizedAppText(
+                "History: %d skipped (the existing history could not be read)",
+                de: "Verlauf: %d übersprungen (der vorhandene Verlauf konnte nicht gelesen werden)",
+                ja: "履歴: %d件をスキップ（既存の履歴を読み込めませんでした）",
+                zh: "历史记录：已跳过 %d 条（无法读取现有历史记录）"
+            ), result.historySkippedUnreadableDestination))
+        }
         if result.historySkippedAsDuplicate > 0 {
             lines.append(String(format: localizedAppText(
                 "History: %d skipped (already present)",

@@ -308,6 +308,9 @@ enum SettingsBackupExporter {
         /// Entries already in this Mac's history, e.g. when a backup is
         /// imported onto the Mac it was exported from.
         var historySkippedAsDuplicate = 0
+        /// Entries not imported because this Mac's history could not be read
+        /// to check for duplicates.
+        var historySkippedUnreadableDestination = 0
         var updateChannelApplied = false
         var preferencesApplied = 0
     }
@@ -771,7 +774,12 @@ enum SettingsBackupExporter {
 
         var matchedProfileIds = Set<UUID>()
         for profile in backup.profiles {
-            let remappedPromptActionId = profile.promptActionId.flatMap { promptActionIdMap[$0] }
+            let remappedPromptActionId = profile.promptActionId.flatMap { localId in
+                // Built-in presets are never exported. On the Mac the backup
+                // came from, a reference to one is still valid as it is.
+                promptActionIdMap[localId]
+                    ?? (promptActionService.promptActions.contains { $0.id.uuidString == localId } ? localId : nil)
+            }
             let remappedProfile = profile.withPromptActionId(remappedPromptActionId)
             if let match = existingMatch(
                 in: profileService.profiles,
@@ -826,15 +834,30 @@ enum SettingsBackupExporter {
         // destination Mac's existing bindings; replace overwrites the slots
         // contained in the backup. A backup is user-editable JSON, so only
         // known hotkey slots are written.
+        var hotkeysBySlot: [String: [UnifiedHotkey]] = [:]
+        for key in hotkeySlotKeys {
+            hotkeysBySlot[key] = userDefaults.data(forKey: key)
+                .flatMap { try? JSONDecoder().decode([UnifiedHotkey].self, from: $0) } ?? []
+        }
+        var hotkeyWrites: [String: [UnifiedHotkey]] = [:]
         for (key, hotkeys) in backup.hotkeys {
-            let existingData = userDefaults.data(forKey: key)
-            let existingHotkeys = existingData.flatMap { try? JSONDecoder().decode([UnifiedHotkey].self, from: $0) }
             let canWrite = switch mode {
-            case .merge: existingData == nil
-            case .replace: existingHotkeys != hotkeys
+            case .merge: userDefaults.data(forKey: key) == nil
+            case .replace: hotkeysBySlot[key] != hotkeys
             }
-            guard hotkeySlotKeys.contains(key), canWrite, !hotkeys.isEmpty,
-                  let data = try? JSONEncoder().encode(hotkeys) else {
+            guard hotkeySlotKeys.contains(key), canWrite, !hotkeys.isEmpty else {
+                result.hotkeysSkipped += 1
+                continue
+            }
+            hotkeyWrites[key] = hotkeys
+        }
+        hotkeysBySlot.merge(hotkeyWrites) { _, imported in imported }
+        for (key, hotkeys) in hotkeyWrites {
+            // Every slot reacts to a matching key press, so an imported binding
+            // that another slot already uses would trigger both actions.
+            let otherHotkeys = hotkeysBySlot.filter { $0.key != key }.values.flatMap { $0 }
+            let usable = hotkeys.filter { hotkey in !otherHotkeys.contains { $0.conflicts(with: hotkey) } }
+            guard !usable.isEmpty, let data = try? JSONEncoder().encode(usable) else {
                 result.hotkeysSkipped += 1
                 continue
             }
@@ -882,11 +905,27 @@ enum SettingsBackupExporter {
         // History entries have no stable id in the backup, so an entry counts
         // as already present when its texts match and its timestamp is within
         // a second: the ISO 8601 export drops fractional seconds.
-        var existingHistory = backup.history.isEmpty
-            ? HistoryDuplicateIndex()
-            : HistoryDuplicateIndex((try? historyService.allRecordsThrowing()) ?? [])
+        var existingHistory = HistoryDuplicateIndex()
+        var historyToImport = backup.history
+        if !historyToImport.isEmpty {
+            do {
+                existingHistory = HistoryDuplicateIndex(try historyService.allRecordsThrowing())
+            } catch {
+                // Without the existing entries every backup entry would look
+                // new and could be inserted a second time.
+                result.historySkippedUnreadableDestination = historyToImport.count
+                historyToImport = []
+            }
+        }
 
-        for (index, entry) in backup.history.enumerated() {
+        for (index, entry) in historyToImport.enumerated() {
+            // A large imported history is a tight, otherwise-uninterrupted
+            // loop of SwiftData work on the main actor; yield periodically so
+            // the UI (the import spinner, in particular) stays responsive,
+            // also when most entries are skipped.
+            if index % 25 == 24 {
+                await Task.yield()
+            }
             if let retentionCutoff, entry.timestamp < retentionCutoff {
                 result.historySkippedByRetention += 1
                 continue
@@ -928,13 +967,6 @@ enum SettingsBackupExporter {
                     engineUsed: entry.engineUsed,
                     modelUsed: entry.modelUsed
                 )
-            }
-
-            // A large imported history is a tight, otherwise-uninterrupted
-            // loop of SwiftData writes on the main actor; yield periodically
-            // so the UI (the import spinner, in particular) stays responsive.
-            if index % 25 == 24 {
-                await Task.yield()
             }
         }
         if let updateChannel = backup.updateChannel,
@@ -1029,9 +1061,9 @@ enum SettingsBackupExporter {
     // MARK: - Import matching
 
     /// Finds the existing item a backup entry corresponds to, skipping items
-    /// already matched by an earlier entry. An item with the same content
-    /// always matches. In `.replace` mode, the item with `preferredId` and
-    /// then the first item with the same name match as well.
+    /// already matched by an earlier entry. In `.replace` mode the item with
+    /// `preferredId` wins. Otherwise an item with the same content matches,
+    /// and in `.replace` mode the first item with the same name as well.
     private static func existingMatch<Item>(
         in items: [Item],
         excluding matchedIds: Set<UUID>,
@@ -1043,13 +1075,13 @@ enum SettingsBackupExporter {
         hasSameContent: (Item) -> Bool
     ) -> (item: Item, hasSameContent: Bool)? {
         let candidates = items.filter { !matchedIds.contains(id($0)) }
+        if mode == .replace, let preferredId, let item = candidates.first(where: { id($0) == preferredId }) {
+            return (item, hasSameContent(item))
+        }
         if let item = candidates.first(where: hasSameContent) {
             return (item, true)
         }
         guard mode == .replace else { return nil }
-        if let preferredId, let item = candidates.first(where: { id($0) == preferredId }) {
-            return (item, false)
-        }
         if let item = candidates.first(where: { itemName($0) == name }) {
             return (item, false)
         }
@@ -1216,8 +1248,8 @@ extension SettingsBackupExporter.ProfileDTO {
 
     func hasSameContent(as other: Self) -> Bool {
         name == other.name
-            && bundleIdentifiers == other.bundleIdentifiers
-            && urlPatterns == other.urlPatterns
+            && Set(bundleIdentifiers) == Set(other.bundleIdentifiers)
+            && Set(urlPatterns) == Set(other.urlPatterns)
             && inputLanguage == other.inputLanguage
             && translationEnabled == other.translationEnabled
             && translationTargetLanguage == other.translationTargetLanguage

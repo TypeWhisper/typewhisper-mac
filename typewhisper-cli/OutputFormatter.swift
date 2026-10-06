@@ -117,6 +117,9 @@ enum OutputFormatter {
             "History: \(integer("historyImported")) imported, \(integer("historySkippedAsDuplicate")) skipped as duplicates, \(integer("historySkippedByRetention")) skipped by retention",
             "Preferences: \(integer("preferencesApplied")) applied",
         ]
+        if integer("historySkippedUnreadableDestination") > 0 {
+            lines.append("Warning: \(integer("historySkippedUnreadableDestination")) history entries were skipped because the existing history could not be read.")
+        }
         if result["updateChannelApplied"] as? Bool == true {
             lines.append("Update channel applied")
         }
