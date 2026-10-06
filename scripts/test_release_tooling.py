@@ -175,6 +175,107 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertIn("trap 'exit 130' INT", command)
                 self.assertIn("trap 'exit 143' TERM", command)
 
+    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None):
+        """Run the Homebrew step against a local tap and a mocked GitHub CLI."""
+        script = next(step["run"] for step in self.workflow["jobs"]["update-homebrew"]["steps"]
+                      if step["name"] == "Update Homebrew Cask")
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        real_git = subprocess.run(["which", "git"], check=True, capture_output=True, text=True).stdout.strip()
+        git_env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@example.com",
+                       GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@example.com")
+
+        seed = root / "seed"
+        (seed / "Casks").mkdir(parents=True)
+        (seed / "Casks/typewhisper.rb").write_text(
+            cask_text or f'cask "typewhisper" do\n  version "{cask_version}"\n  sha256 "{cask_sha}"\nend\n')
+        for command in (["init", "-q", "-b", "main"], ["add", "."], ["commit", "-q", "-m", "seed"]):
+            subprocess.run([real_git, *command], cwd=seed, env=git_env, check=True)
+        tap = root / "tap.git"
+        subprocess.run([real_git, "clone", "-q", "--bare", str(seed), str(tap)], check=True)
+
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        mocks = {
+            # Stands in for the published DMG download.
+            "curl": '#!/bin/sh\nwhile [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done\nprintf dmg > "$out"\n',
+            # Clones the local tap instead of github.com; every other command is real git.
+            "git": f'#!/bin/sh\nif [ "$1" = "clone" ]; then exec "{real_git}" clone -q "{tap}" homebrew-tap; fi\nexec "{real_git}" "$@"\n',
+            "gh": f"""#!/bin/sh
+echo "$*" >> "{root}/gh.log"
+case "$1 $2" in
+  "pr create") echo "https://github.com/TypeWhisper/homebrew-tap/pull/99" ;;
+  "pr checks")
+    case "$*" in
+      *--required*) echo '[{{"name":"CLA","bucket":"pass"}}]' ;;
+      *)
+        count=$(cat "{root}/polls" 2>/dev/null || echo 0)
+        echo $((count + 1)) > "{root}/polls"
+        bucket=$(echo "{" ".join(validation_buckets)}" | cut -d' ' -f$((count + 1)))
+        [ -n "$bucket" ] || bucket=$(echo "{" ".join(validation_buckets)}" | awk '{{print $NF}}')
+        echo '[{{"name":"CLA","bucket":"pass"}},{{"name":"Validate Homebrew Cask","bucket":"'"$bucket"'"}}]' ;;
+    esac ;;
+  "pr merge") touch "{root}/merged" ;;
+esac
+""",
+        }
+        for name, body in mocks.items():
+            (bin_dir / name).write_text(body)
+            (bin_dir / name).chmod(0o700)
+
+        work = root / "work"
+        work.mkdir()
+        env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", GH_TOKEN="dummy",
+                   RELEASE_TAG="v9.9.9", TAP_REPO="TypeWhisper/homebrew-tap",
+                   VALIDATION_CHECK="Validate Homebrew Cask", CHECK_TIMEOUT_SECONDS="20",
+                   CHECK_POLL_SECONDS="0", GITHUB_RUN_ID="1", GITHUB_RUN_ATTEMPT="1")
+        result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=work, env=env,
+                                capture_output=True, text=True, timeout=60)
+        branches = subprocess.run([real_git, "--git-dir", str(tap), "branch", "--format=%(refname:short)"],
+                                  check=True, capture_output=True, text=True).stdout.split()
+        main_cask = subprocess.run([real_git, "--git-dir", str(tap), "show", "main:Casks/typewhisper.rb"],
+                                   check=True, capture_output=True, text=True).stdout
+        log = (root / "gh.log").read_text() if (root / "gh.log").exists() else ""
+        return result, branches, main_cask, log, (root / "merged").exists()
+
+    def test_homebrew_update_goes_through_a_pull_request(self):
+        result, branches, main_cask, log, merged = self.run_homebrew_update("1.0.0", ["pending", "pass"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # The tap's main branch is never pushed to; the change waits on a release branch.
+        self.assertIn('version "1.0.0"', main_cask)
+        self.assertEqual(branches, ["main", "release/typewhisper-9.9.9-1-1"])
+        self.assertIn("pr create --repo TypeWhisper/homebrew-tap --base main --head release/typewhisper-9.9.9-1-1", log)
+        self.assertTrue(merged)
+        self.assertLess(log.index("pr checks"), log.index("pr merge"))
+
+    def test_homebrew_update_does_not_merge_when_cask_validation_fails(self):
+        result, _, _, log, merged = self.run_homebrew_update("1.0.0", ["pending", "fail"])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("Validate Homebrew Cask", result.stderr)
+        self.assertFalse(merged)
+        self.assertNotIn("pr merge", log)
+
+    def test_homebrew_update_is_a_no_op_when_the_cask_is_current(self):
+        result, branches, _, log, merged = self.run_homebrew_update(
+            "9.9.9", ["pass"], cask_sha=hashlib.sha256(b"dmg").hexdigest())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("nothing to update", result.stdout)
+        self.assertEqual(branches, ["main"])
+        self.assertEqual(log, "")
+        self.assertFalse(merged)
+
+    def test_homebrew_update_fails_when_the_cask_lines_cannot_be_rewritten(self):
+        # Single quotes are valid Ruby but do not match the patterns the step rewrites.
+        reformatted = "cask 'typewhisper' do\n  version '1.0.0'\n  sha256 '" + "0" * 64 + "'\nend\n"
+        result, branches, main_cask, log, merged = self.run_homebrew_update("1.0.0", ["pass"], cask_text=reformatted)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Could not set the cask version or SHA-256", result.stderr)
+        self.assertEqual(branches, ["main"])
+        self.assertEqual(main_cask, reformatted)
+        self.assertEqual(log, "")
+        self.assertFalse(merged)
+
 
 if __name__ == "__main__":
     unittest.main()
