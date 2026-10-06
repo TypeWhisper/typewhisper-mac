@@ -644,9 +644,11 @@ jobs:
     if: "!contains(needs.prepare.outputs.tag, '-')"
     needs: [prepare, build]
     runs-on: ubuntu-latest
-    # Runs that overlap would close each other's tap pull request.
+    # Overlapping runs for the same release would close each other's tap pull
+    # request. A pending duplicate for that tag may be dropped; it would write
+    # the same cask.
     concurrency:
-      group: homebrew-tap-update
+      group: homebrew-tap-${{ needs.prepare.outputs.tag }}
       cancel-in-progress: false
     steps:
       - name: Update Homebrew Cask

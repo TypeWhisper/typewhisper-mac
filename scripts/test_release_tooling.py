@@ -256,9 +256,10 @@ esac
         self.assertTrue(merged)
         self.assertLess(log.index("pr checks"), log.index("pr merge"))
 
-    def test_homebrew_updates_never_overlap(self):
+    def test_homebrew_updates_for_one_release_never_overlap(self):
         concurrency = self.workflow["jobs"]["update-homebrew"]["concurrency"]
-        self.assertEqual(concurrency, {"group": "homebrew-tap-update", "cancel-in-progress": False})
+        self.assertEqual(concurrency, {"group": "homebrew-tap-${{ needs.prepare.outputs.tag }}",
+                                       "cancel-in-progress": False})
 
     def test_homebrew_update_closes_pull_requests_of_earlier_attempts(self):
         ours = "Updates the cask. Opened by the release workflow of TypeWhisper/typewhisper-mac for v9.9.9."
