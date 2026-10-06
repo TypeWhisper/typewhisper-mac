@@ -851,11 +851,10 @@ enum SettingsBackupExporter {
             }
             hotkeyWrites[key] = hotkeys
         }
-        // Every slot reacts to a matching key press, so an imported binding
-        // that another slot uses afterwards would trigger both actions. Drop
-        // such bindings until the slots that will actually be written agree
-        // with the slots that keep their current bindings; dropping one can
-        // expose another conflict with the binding it would have replaced.
+        // Every slot reacts to a matching key press, so a slot whose imported
+        // bindings another slot uses afterwards would trigger both actions.
+        // Such a slot keeps its current bindings. Repeat until nothing else is
+        // dropped: a dropped slot's current bindings can conflict in turn.
         let proposedWriteCount = hotkeyWrites.count
         var droppedWrite = true
         while droppedWrite {
@@ -863,9 +862,10 @@ enum SettingsBackupExporter {
             let finalHotkeys = hotkeysBySlot.merging(hotkeyWrites) { _, imported in imported }
             for (key, hotkeys) in hotkeyWrites {
                 let otherHotkeys = finalHotkeys.filter { $0.key != key }.values.flatMap { $0 }
-                let usable = hotkeys.filter { hotkey in !otherHotkeys.contains { $0.conflicts(with: hotkey) } }
-                guard usable != hotkeys else { continue }
-                hotkeyWrites[key] = usable.isEmpty ? nil : usable
+                guard hotkeys.contains(where: { hotkey in otherHotkeys.contains { $0.conflicts(with: hotkey) } }) else {
+                    continue
+                }
+                hotkeyWrites[key] = nil
                 droppedWrite = true
                 break
             }

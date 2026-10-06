@@ -1652,8 +1652,9 @@ final class SettingsBackupExporterTests: XCTestCase {
         fixture.userDefaults.set(try JSONEncoder().encode([pttHotkey]), forKey: UserDefaultsKeys.pttHotkeys)
         fixture.userDefaults.set(try JSONEncoder().encode([toggleHotkey]), forKey: UserDefaultsKeys.toggleHotkeys)
         let backup = try exportBackup(from: fixture)
+        // A slot with one conflicting binding keeps all of its current bindings.
         let edited = editedBackup(backup, hotkeys: [
-            UserDefaultsKeys.toggleHotkeys: [pttHotkey],
+            UserDefaultsKeys.toggleHotkeys: [UnifiedHotkey(keyCode: 11, modifierFlags: 0x100, isFn: false), pttHotkey],
             UserDefaultsKeys.hybridHotkeys: [UnifiedHotkey(keyCode: 5, modifierFlags: 0x100, isFn: false)],
         ])
 
