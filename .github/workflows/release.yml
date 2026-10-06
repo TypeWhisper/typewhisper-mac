@@ -644,6 +644,10 @@ jobs:
     if: "!contains(needs.prepare.outputs.tag, '-')"
     needs: [prepare, build]
     runs-on: ubuntu-latest
+    # Runs that overlap would close each other's tap pull request.
+    concurrency:
+      group: homebrew-tap-update
+      cancel-in-progress: false
     steps:
       - name: Update Homebrew Cask
         env:
