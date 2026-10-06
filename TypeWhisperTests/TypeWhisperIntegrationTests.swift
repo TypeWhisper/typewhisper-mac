@@ -17825,6 +17825,44 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(cancelCount, 1)
     }
 
+    func testEventTapGateWaitsForClaimedHandlerWithinItsOwnBound() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let decision = try XCTUnwrap(gate.makeDecision())
+        XCTAssertEqual(gate.claim(decision), .handle)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.1) {
+            gate.resolve(decision, suppress: true)
+        }
+        // Picked up before the first deadline, finished after it: the handler's decision stands.
+        let answer = gate.wait(
+            for: decision,
+            requestedAt: DispatchTime.now().uptimeNanoseconds,
+            timeout: 0.05,
+            claimedTimeout: 1
+        )
+        XCTAssertEqual(answer, .decided(suppress: true))
+        XCTAssertNotNil(gate.makeDecision(), "A finished handler must not leave a stall behind")
+    }
+
+    func testEventTapGateTreatsAbandonedHandlerAsStall() throws {
+        let gate = HotkeyService.EventTapMainThreadGate()
+        let decision = try XCTUnwrap(gate.makeDecision())
+        XCTAssertEqual(gate.claim(decision), .handle)
+        let start = Date()
+        let answer = gate.wait(
+            for: decision,
+            requestedAt: DispatchTime.now().uptimeNanoseconds,
+            timeout: 0.05,
+            claimedTimeout: 0.05
+        )
+        XCTAssertEqual(answer, .released(stallStarted: true))
+        XCTAssertLessThan(Date().timeIntervalSince(start), 0.5, "One deadline covers both waits")
+        XCTAssertNil(gate.makeDecision(), "Later events pass at once while the handler is stuck")
+
+        let stall = try XCTUnwrap(gate.resolve(decision, suppress: true))
+        XCTAssertEqual(stall.releasedEvents, 2)
+        XCTAssertNotNil(gate.makeDecision(), "The late handler ends the stall")
+    }
+
     func testEventTapReenableBackoffAfterRepeatedTimeouts() {
         let second: UInt64 = 1_000_000_000
         var backoff = HotkeyService.EventTapReenableBackoff()
