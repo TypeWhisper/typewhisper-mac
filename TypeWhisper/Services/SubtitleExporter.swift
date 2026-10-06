@@ -105,18 +105,29 @@ enum SubtitleExporter {
     }
 
     private static func formatSRTTime(_ time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        let millis = Int((time.truncatingRemainder(dividingBy: 1)) * 1000)
-        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
+        formatTime(time, millisecondSeparator: ",")
     }
 
     private static func formatVTTTime(_ time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        let millis = Int((time.truncatingRemainder(dividingBy: 1)) * 1000)
-        return String(format: "%02d:%02d:%02d.%03d", hours, minutes, seconds, millis)
+        formatTime(time, millisecondSeparator: ".")
+    }
+
+    /// About 31,700 years: beyond any recording, and safely inside `Int`'s range.
+    private static let maximumMilliseconds = 1e15
+
+    /// Rounds to whole milliseconds before splitting the time. 18.72 is
+    /// 18.7199… as a Double; truncating it wrote 18.719, a millisecond before
+    /// the end of the previous cue. The value is clamped first because
+    /// `Int(_:)` traps on NaN, infinity and out-of-range values.
+    private static func formatTime(_ time: TimeInterval, millisecondSeparator: String) -> String {
+        let rounded = (time * 1000).rounded()
+        let totalMilliseconds = rounded.isNaN
+            ? 0
+            : Int(min(max(rounded, 0), maximumMilliseconds))
+        let hours = totalMilliseconds / 3_600_000
+        let minutes = totalMilliseconds / 60_000 % 60
+        let seconds = totalMilliseconds / 1000 % 60
+        let milliseconds = totalMilliseconds % 1000
+        return String(format: "%02d:%02d:%02d%@%03d", hours, minutes, seconds, millisecondSeparator, milliseconds)
     }
 }
