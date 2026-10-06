@@ -917,6 +917,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         slots[slotType]?.compactMap(\.hotkey) ?? []
     }
 
+    /// Re-reads every slot after the hotkey defaults were written elsewhere,
+    /// e.g. by a settings import, so the new bindings work without a relaunch.
+    func reloadHotkeysFromDefaults() {
+        cancelPendingHybridModifierHold()
+        loadHotkeys()
+        tearDownMonitor()
+        setupMonitor()
+    }
+
     func updateHotkey(_ hotkey: UnifiedHotkey, for slotType: HotkeySlotType) {
         setHotkeys([hotkey], for: slotType)
     }

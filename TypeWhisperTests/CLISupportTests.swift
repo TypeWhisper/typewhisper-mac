@@ -213,11 +213,15 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(result, responseBody)
         let request = try XCTUnwrap(recorder.recordedRequest)
         XCTAssertEqual(request.url?.path, "/v1/settings/import")
+        XCTAssertEqual(request.url?.query, "mode=merge")
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.timeoutInterval, 300)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
         XCTAssertEqual(request.httpBody, backup)
+
+        _ = try await client.importSettings(backup, replaceExisting: true)
+        XCTAssertEqual(recorder.recordedRequest?.url?.query, "mode=replace")
     }
 
     func testCLIClientTranscribeStdinKeepsMultipartUploadPath() async throws {

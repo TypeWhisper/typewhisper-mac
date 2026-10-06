@@ -277,12 +277,20 @@ enum SettingsBackupExporter {
 
     struct ImportResult: Encodable, Sendable {
         var workflowsImported = 0
+        /// Existing workflows overwritten in `.replace` mode.
+        var workflowsUpdated = 0
+        /// Backup workflows that already exist unchanged on this Mac.
+        var workflowsSkipped = 0
         var dictionaryImported = 0
         var dictionarySkipped = 0
         var snippetsImported = 0
         var snippetsSkipped = 0
         var promptActionsImported = 0
+        var promptActionsUpdated = 0
+        var promptActionsSkipped = 0
         var profilesImported = 0
+        var profilesUpdated = 0
+        var profilesSkipped = 0
         var hotkeysApplied = 0
         var hotkeysSkipped = 0
         var pluginsInstalled = 0
@@ -297,8 +305,23 @@ enum SettingsBackupExporter {
         /// retention window, excluded so they wouldn't just be silently
         /// purged again on the next launch.
         var historySkippedByRetention = 0
+        /// Entries already in this Mac's history, e.g. when a backup is
+        /// imported onto the Mac it was exported from.
+        var historySkippedAsDuplicate = 0
         var updateChannelApplied = false
         var preferencesApplied = 0
+    }
+
+    /// How an import treats workflows, profiles, prompt actions, and hotkeys
+    /// that already exist on this Mac. The backup stores no IDs for them, so
+    /// existing items are recognized by content or, in `.replace`, by name.
+    enum ImportMode: String, Sendable {
+        /// Skip items that already exist with the same content, add the
+        /// rest, and only fill empty hotkey slots.
+        case merge
+        /// Additionally overwrite existing items with the same name and the
+        /// hotkey slots contained in the backup. Nothing is deleted.
+        case replace
     }
 
     enum ImportError: LocalizedError {
@@ -356,7 +379,12 @@ enum SettingsBackupExporter {
             case .snippets: return String(localized: "Trigger-to-text expansion shortcuts.")
             case .profiles: return String(localized: "Per-app / per-URL settings profiles.")
             case .promptActions: return String(localized: "Custom AI prompt actions. Built-in presets are never exported.")
-            case .hotkeys: return String(localized: "Global keyboard shortcuts. Only fills empty slots on import — never overwrites existing bindings.")
+            case .hotkeys: return localizedAppText(
+                    "Global keyboard shortcuts. Only fills empty slots on import unless Replace existing items is on.",
+                    de: "Globale Tastenkombinationen. Beim Import werden nur leere Plätze befüllt, außer „Vorhandene Einträge ersetzen“ ist eingeschaltet.",
+                    ja: "アプリ共通のキーボードショートカット。「既存の項目を置き換える」がオフの場合、取込み時は未設定の項目にのみ適用します。",
+                    zh: "全局键盘快捷键。除非开启“替换现有项目”，导入时仅填充空白位置。"
+                )
             case .plugins: return localizedAppText(
                     "Installed community plugins. Reinstalling requires network access and fetches the latest marketplace version.",
                     de: "Installierte Community-Plugins. Die Neuinstallation erfordert eine Internetverbindung und lädt die aktuelle Marketplace-Version."
@@ -441,17 +469,7 @@ enum SettingsBackupExporter {
         historyService: HistoryService,
         userDefaults: UserDefaults = .standard
     ) throws -> SettingsBackup {
-        let workflows = workflowService.workflows.map { workflow in
-            WorkflowDTO(
-                name: workflow.name,
-                isEnabled: workflow.isEnabled,
-                sortOrder: workflow.sortOrder,
-                template: workflow.template,
-                trigger: workflow.trigger ?? .manual(),
-                behavior: workflow.behavior,
-                output: workflow.output
-            )
-        }
+        let workflows = workflowService.workflows.map(WorkflowDTO.init)
 
         let dictionaryEntries = dictionaryService.entries.map { entry in
             DictionaryEntryDTO(
@@ -476,42 +494,9 @@ enum SettingsBackupExporter {
 
         let promptActions = promptActionService.promptActions
             .filter { !$0.isPreset }
-            .map { action in
-                PromptActionDTO(
-                    localId: action.id.uuidString,
-                    name: action.name,
-                    prompt: action.prompt,
-                    icon: action.icon,
-                    isEnabled: action.isEnabled,
-                    providerType: action.providerType,
-                    cloudModel: action.cloudModel,
-                    temperatureModeRaw: action.temperatureModeRaw,
-                    temperatureValue: action.temperatureValue,
-                    targetActionPluginId: action.targetActionPluginId
-                )
-            }
+            .map(PromptActionDTO.init)
 
-        let profiles = profileService.profiles.map { profile in
-            ProfileDTO(
-                name: profile.name,
-                isEnabled: profile.isEnabled,
-                priority: profile.priority,
-                bundleIdentifiers: profile.bundleIdentifiers,
-                urlPatterns: profile.urlPatterns,
-                inputLanguage: profile.inputLanguage,
-                translationEnabled: profile.translationEnabled,
-                translationTargetLanguage: profile.translationTargetLanguage,
-                selectedTask: profile.selectedTask,
-                engineOverride: profile.engineOverride,
-                cloudModelOverride: profile.cloudModelOverride,
-                promptActionId: profile.promptActionId,
-                memoryEnabled: profile.memoryEnabled,
-                outputFormat: profile.outputFormat,
-                hotkey: profile.hotkey,
-                inlineCommandsEnabled: profile.inlineCommandsEnabled,
-                autoEnterEnabled: profile.autoEnterEnabled
-            )
-        }
+        let profiles = profileService.profiles.map(ProfileDTO.init)
 
         var hotkeys: [String: [UnifiedHotkey]] = [:]
         for key in hotkeySlotKeys {
@@ -638,6 +623,7 @@ enum SettingsBackupExporter {
     @discardableResult
     static func importBackup(
         _ backup: SettingsBackup,
+        mode: ImportMode = .merge,
         workflowService: WorkflowService,
         dictionaryService: DictionaryService,
         snippetService: SnippetService,
@@ -652,19 +638,49 @@ enum SettingsBackupExporter {
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
-        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
+        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
+        hotkeysDidChange: (() -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
+        var matchedWorkflowIds = Set<UUID>()
         for workflow in backup.workflows {
-            workflowService.addWorkflow(
+            if let match = existingMatch(
+                in: workflowService.workflows,
+                excluding: matchedWorkflowIds,
+                name: workflow.name,
+                mode: mode,
+                id: \.id,
+                itemName: \.name,
+                hasSameContent: { WorkflowDTO($0).hasSameContent(as: workflow) }
+            ) {
+                matchedWorkflowIds.insert(match.item.id)
+                guard mode == .replace, !(match.hasSameContent && match.item.isEnabled == workflow.isEnabled) else {
+                    result.workflowsSkipped += 1
+                    continue
+                }
+                let existing = match.item
+                existing.name = workflow.name
+                existing.isEnabled = workflow.isEnabled
+                existing.template = workflow.template
+                existing.trigger = workflow.trigger
+                existing.behavior = workflow.behavior
+                existing.output = workflow.output
+                workflowService.updateWorkflow(existing)
+                result.workflowsUpdated += 1
+                continue
+            }
+
+            if let added = workflowService.addWorkflow(
                 name: workflow.name,
                 template: workflow.template,
                 trigger: workflow.trigger,
                 behavior: workflow.behavior,
                 output: workflow.output,
                 isEnabled: workflow.isEnabled
-            )
+            ) {
+                matchedWorkflowIds.insert(added.id)
+            }
             result.workflowsImported += 1
         }
 
@@ -697,9 +713,46 @@ enum SettingsBackupExporter {
         }
 
         // Prompt actions must be imported first so profiles can remap their
-        // promptActionId references to the freshly-generated UUIDs below.
+        // promptActionId references to the matched or freshly-generated
+        // UUIDs below. Built-in presets are never exported, so they are never
+        // matched or overwritten either.
         var promptActionIdMap: [String: String] = [:]
+        var matchedPromptActionIds = Set<UUID>()
         for action in backup.promptActions {
+            if let match = existingMatch(
+                in: promptActionService.promptActions.filter { !$0.isPreset },
+                excluding: matchedPromptActionIds,
+                name: action.name,
+                mode: mode,
+                id: \.id,
+                itemName: \.name,
+                // On the Mac the backup came from, the exported id still
+                // identifies the action even after a rename.
+                preferredId: UUID(uuidString: action.localId),
+                hasSameContent: { PromptActionDTO($0).hasSameContent(as: action) }
+            ) {
+                matchedPromptActionIds.insert(match.item.id)
+                promptActionIdMap[action.localId] = match.item.id.uuidString
+                guard mode == .replace, !(match.hasSameContent && match.item.isEnabled == action.isEnabled) else {
+                    result.promptActionsSkipped += 1
+                    continue
+                }
+                promptActionService.updateAction(
+                    match.item,
+                    name: action.name,
+                    prompt: action.prompt,
+                    icon: action.icon,
+                    isEnabled: action.isEnabled,
+                    providerType: action.providerType,
+                    cloudModel: action.cloudModel,
+                    temperatureModeRaw: action.temperatureModeRaw,
+                    temperatureValue: action.temperatureValue,
+                    targetActionPluginId: action.targetActionPluginId
+                )
+                result.promptActionsUpdated += 1
+                continue
+            }
+
             guard let imported = promptActionService.addAction(
                 name: action.name,
                 prompt: action.prompt,
@@ -711,13 +764,37 @@ enum SettingsBackupExporter {
                 temperatureValue: action.temperatureValue,
                 targetActionPluginId: action.targetActionPluginId
             ) else { continue }
+            matchedPromptActionIds.insert(imported.id)
             promptActionIdMap[action.localId] = imported.id.uuidString
             result.promptActionsImported += 1
         }
 
+        var matchedProfileIds = Set<UUID>()
         for profile in backup.profiles {
             let remappedPromptActionId = profile.promptActionId.flatMap { promptActionIdMap[$0] }
-            profileService.addProfile(
+            let remappedProfile = profile.withPromptActionId(remappedPromptActionId)
+            if let match = existingMatch(
+                in: profileService.profiles,
+                excluding: matchedProfileIds,
+                name: profile.name,
+                mode: mode,
+                id: \.id,
+                itemName: \.name,
+                hasSameContent: { ProfileDTO($0).hasSameContent(as: remappedProfile) }
+            ) {
+                matchedProfileIds.insert(match.item.id)
+                guard mode == .replace, !(match.hasSameContent && match.item.isEnabled == profile.isEnabled) else {
+                    result.profilesSkipped += 1
+                    continue
+                }
+                // The destination keeps its own priority, as on append below.
+                remappedProfile.apply(to: match.item)
+                profileService.updateProfile(match.item)
+                result.profilesUpdated += 1
+                continue
+            }
+
+            let added = profileService.addProfile(
                 name: profile.name,
                 isEnabled: profile.isEnabled,
                 bundleIdentifiers: profile.bundleIdentifiers,
@@ -741,23 +818,31 @@ enum SettingsBackupExporter {
                 // one wins for a shared app/URL match.
                 priority: profileService.nextPriority()
             )
+            matchedProfileIds.insert(added.id)
             result.profilesImported += 1
         }
 
-        // Only fill empty hotkey slots; never overwrite the destination Mac's
-        // existing bindings.
+        // Merge only fills empty hotkey slots and never overwrites the
+        // destination Mac's existing bindings; replace overwrites the slots
+        // contained in the backup. A backup is user-editable JSON, so only
+        // known hotkey slots are written.
         for (key, hotkeys) in backup.hotkeys {
-            let isSlotEmpty = userDefaults.data(forKey: key) == nil
-            guard isSlotEmpty, !hotkeys.isEmpty else {
+            let existingData = userDefaults.data(forKey: key)
+            let existingHotkeys = existingData.flatMap { try? JSONDecoder().decode([UnifiedHotkey].self, from: $0) }
+            let canWrite = switch mode {
+            case .merge: existingData == nil
+            case .replace: existingHotkeys != hotkeys
+            }
+            guard hotkeySlotKeys.contains(key), canWrite, !hotkeys.isEmpty,
+                  let data = try? JSONEncoder().encode(hotkeys) else {
                 result.hotkeysSkipped += 1
                 continue
             }
-            if let data = try? JSONEncoder().encode(hotkeys) {
-                userDefaults.set(data, forKey: key)
-                result.hotkeysApplied += 1
-            } else {
-                result.hotkeysSkipped += 1
-            }
+            userDefaults.set(data, forKey: key)
+            result.hotkeysApplied += 1
+        }
+        if result.hotkeysApplied > 0 {
+            hotkeysDidChange?()
         }
 
         if !backup.plugins.isEmpty {
@@ -794,9 +879,20 @@ enum SettingsBackupExporter {
             ? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())
             : nil
 
+        // History entries have no stable id in the backup, so an entry counts
+        // as already present when its texts match and its timestamp is within
+        // a second: the ISO 8601 export drops fractional seconds.
+        var existingHistory = backup.history.isEmpty
+            ? HistoryDuplicateIndex()
+            : HistoryDuplicateIndex((try? historyService.allRecordsThrowing()) ?? [])
+
         for (index, entry) in backup.history.enumerated() {
             if let retentionCutoff, entry.timestamp < retentionCutoff {
                 result.historySkippedByRetention += 1
+                continue
+            }
+            if existingHistory.contains(entry) {
+                result.historySkippedAsDuplicate += 1
                 continue
             }
 
@@ -822,6 +918,7 @@ enum SettingsBackupExporter {
             // visible in History.
             if inserted {
                 result.historyImported += 1
+                existingHistory.insert(entry)
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
                     wordsCount: entry.finalText.split(separator: " ").count,
@@ -929,6 +1026,62 @@ enum SettingsBackupExporter {
         return result
     }
 
+    // MARK: - Import matching
+
+    /// Finds the existing item a backup entry corresponds to, skipping items
+    /// already matched by an earlier entry. An item with the same content
+    /// always matches. In `.replace` mode, the item with `preferredId` and
+    /// then the first item with the same name match as well.
+    private static func existingMatch<Item>(
+        in items: [Item],
+        excluding matchedIds: Set<UUID>,
+        name: String,
+        mode: ImportMode,
+        id: (Item) -> UUID,
+        itemName: (Item) -> String,
+        preferredId: UUID? = nil,
+        hasSameContent: (Item) -> Bool
+    ) -> (item: Item, hasSameContent: Bool)? {
+        let candidates = items.filter { !matchedIds.contains(id($0)) }
+        if let item = candidates.first(where: hasSameContent) {
+            return (item, true)
+        }
+        guard mode == .replace else { return nil }
+        if let preferredId, let item = candidates.first(where: { id($0) == preferredId }) {
+            return (item, false)
+        }
+        if let item = candidates.first(where: { itemName($0) == name }) {
+            return (item, false)
+        }
+        return nil
+    }
+
+    private struct HistoryDuplicateIndex {
+        private struct Texts: Hashable {
+            let rawText: String
+            let finalText: String
+        }
+
+        private var timestampsByTexts: [Texts: [Date]] = [:]
+
+        init(_ records: [TranscriptionRecord] = []) {
+            for record in records {
+                timestampsByTexts[Texts(rawText: record.rawText, finalText: record.finalText), default: []]
+                    .append(record.timestamp)
+            }
+        }
+
+        func contains(_ entry: HistoryEntryDTO) -> Bool {
+            let timestamps = timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText)] ?? []
+            return timestamps.contains { abs($0.timeIntervalSince(entry.timestamp)) < 1 }
+        }
+
+        mutating func insert(_ entry: HistoryEntryDTO) {
+            timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText), default: []]
+                .append(entry.timestamp)
+        }
+    }
+
     // MARK: - Panels
 
     static func presentSavePanel(suggestedName: String = defaultFilename()) -> URL? {
@@ -958,6 +1111,148 @@ enum SettingsBackupExporter {
     }
 }
 
+// MARK: - DTO mapping
+
+// Content comparisons ignore the enabled state and the position, which the
+// destination Mac may have changed since the export without making the item a
+// different one.
+
+extension SettingsBackupExporter.WorkflowDTO {
+    init(_ workflow: Workflow) {
+        self.init(
+            name: workflow.name,
+            isEnabled: workflow.isEnabled,
+            sortOrder: workflow.sortOrder,
+            template: workflow.template,
+            trigger: workflow.trigger ?? .manual(),
+            behavior: workflow.behavior,
+            output: workflow.output
+        )
+    }
+
+    func hasSameContent(as other: Self) -> Bool {
+        name == other.name
+            && template == other.template
+            && trigger == other.trigger
+            && behavior == other.behavior
+            && output == other.output
+    }
+}
+
+extension SettingsBackupExporter.PromptActionDTO {
+    init(_ action: PromptAction) {
+        self.init(
+            localId: action.id.uuidString,
+            name: action.name,
+            prompt: action.prompt,
+            icon: action.icon,
+            isEnabled: action.isEnabled,
+            providerType: action.providerType,
+            cloudModel: action.cloudModel,
+            temperatureModeRaw: action.temperatureModeRaw,
+            temperatureValue: action.temperatureValue,
+            targetActionPluginId: action.targetActionPluginId
+        )
+    }
+
+    func hasSameContent(as other: Self) -> Bool {
+        name == other.name
+            && prompt == other.prompt
+            && icon == other.icon
+            && providerType == other.providerType
+            && cloudModel == other.cloudModel
+            && temperatureModeRaw == other.temperatureModeRaw
+            && temperatureValue == other.temperatureValue
+            && targetActionPluginId == other.targetActionPluginId
+    }
+}
+
+extension SettingsBackupExporter.ProfileDTO {
+    init(_ profile: Profile) {
+        self.init(
+            name: profile.name,
+            isEnabled: profile.isEnabled,
+            priority: profile.priority,
+            bundleIdentifiers: profile.bundleIdentifiers,
+            urlPatterns: profile.urlPatterns,
+            inputLanguage: profile.inputLanguage,
+            translationEnabled: profile.translationEnabled,
+            translationTargetLanguage: profile.translationTargetLanguage,
+            selectedTask: profile.selectedTask,
+            engineOverride: profile.engineOverride,
+            cloudModelOverride: profile.cloudModelOverride,
+            promptActionId: profile.promptActionId,
+            memoryEnabled: profile.memoryEnabled,
+            outputFormat: profile.outputFormat,
+            hotkey: profile.hotkey,
+            inlineCommandsEnabled: profile.inlineCommandsEnabled,
+            autoEnterEnabled: profile.autoEnterEnabled
+        )
+    }
+
+    /// Profiles reference prompt actions by id, so a backup profile is
+    /// compared after its reference has been remapped to this Mac.
+    func withPromptActionId(_ promptActionId: String?) -> Self {
+        Self(
+            name: name,
+            isEnabled: isEnabled,
+            priority: priority,
+            bundleIdentifiers: bundleIdentifiers,
+            urlPatterns: urlPatterns,
+            inputLanguage: inputLanguage,
+            translationEnabled: translationEnabled,
+            translationTargetLanguage: translationTargetLanguage,
+            selectedTask: selectedTask,
+            engineOverride: engineOverride,
+            cloudModelOverride: cloudModelOverride,
+            promptActionId: promptActionId,
+            memoryEnabled: memoryEnabled,
+            outputFormat: outputFormat,
+            hotkey: hotkey,
+            inlineCommandsEnabled: inlineCommandsEnabled,
+            autoEnterEnabled: autoEnterEnabled
+        )
+    }
+
+    func hasSameContent(as other: Self) -> Bool {
+        name == other.name
+            && bundleIdentifiers == other.bundleIdentifiers
+            && urlPatterns == other.urlPatterns
+            && inputLanguage == other.inputLanguage
+            && translationEnabled == other.translationEnabled
+            && translationTargetLanguage == other.translationTargetLanguage
+            && selectedTask == other.selectedTask
+            && engineOverride == other.engineOverride
+            && cloudModelOverride == other.cloudModelOverride
+            && promptActionId == other.promptActionId
+            && memoryEnabled == other.memoryEnabled
+            && outputFormat == other.outputFormat
+            && hotkey == other.hotkey
+            && inlineCommandsEnabled == other.inlineCommandsEnabled
+            && autoEnterEnabled == other.autoEnterEnabled
+    }
+
+    /// Writes every field except the priority onto an existing profile.
+    func apply(to profile: Profile) {
+        profile.name = name
+        profile.isEnabled = isEnabled
+        profile.bundleIdentifiers = bundleIdentifiers
+        profile.urlPatterns = urlPatterns
+        profile.inputLanguage = inputLanguage
+        profile.translationEnabled = translationEnabled
+        profile.translationTargetLanguage = translationTargetLanguage
+        profile.selectedTask = selectedTask
+        profile.engineOverride = engineOverride
+        profile.cloudModelOverride = cloudModelOverride
+        profile.promptActionId = promptActionId
+        profile.memoryEnabled = memoryEnabled
+        profile.outputFormat = outputFormat
+        profile.hotkey = hotkey
+        profile.inlineCommandsEnabled = inlineCommandsEnabled
+        profile.autoEnterEnabled = autoEnterEnabled
+    }
+}
+
 /// Main-actor bridge used by headless automation surfaces. It keeps the HTTP
 /// layer independent from the individual settings stores while guaranteeing
 /// that exports and imports use the same schema and side effects as the UI.
@@ -978,6 +1273,7 @@ final class SettingsBackupAutomationService {
     private let cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)?
     private let indicatorThemeDidChange: ((IndicatorTheme) -> Void)?
     private let dictationRecoveryPreferencesDidChange: (() -> Void)?
+    private let hotkeysDidChange: (() -> Void)?
 
     init(
         workflowService: WorkflowService,
@@ -994,7 +1290,8 @@ final class SettingsBackupAutomationService {
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
         indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
-        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
+        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil,
+        hotkeysDidChange: (() -> Void)? = nil
     ) {
         self.workflowService = workflowService
         self.dictionaryService = dictionaryService
@@ -1011,6 +1308,7 @@ final class SettingsBackupAutomationService {
         self.cancellationBehaviorDidChange = cancellationBehaviorDidChange
         self.indicatorThemeDidChange = indicatorThemeDidChange
         self.dictationRecoveryPreferencesDidChange = dictationRecoveryPreferencesDidChange
+        self.hotkeysDidChange = hotkeysDidChange
     }
 
     func exportData() throws -> Data {
@@ -1027,10 +1325,14 @@ final class SettingsBackupAutomationService {
         return try SettingsBackupExporter.encodedJSON(backup)
     }
 
-    func importData(_ data: Data) async throws -> SettingsBackupExporter.ImportResult {
+    func importData(
+        _ data: Data,
+        mode: SettingsBackupExporter.ImportMode = .merge
+    ) async throws -> SettingsBackupExporter.ImportResult {
         let backup = try SettingsBackupExporter.parse(data)
         return await SettingsBackupExporter.importBackup(
             backup,
+            mode: mode,
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             snippetService: snippetService,
@@ -1045,7 +1347,8 @@ final class SettingsBackupAutomationService {
             cancellationBehaviorDidChange: cancellationBehaviorDidChange,
             indicatorThemeDidChange: indicatorThemeDidChange,
             recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange,
-            dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange
+            dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange,
+            hotkeysDidChange: hotkeysDidChange
         )
     }
 }

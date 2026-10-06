@@ -327,6 +327,9 @@ final class ServiceContainer: ObservableObject {
             },
             dictationRecoveryPreferencesDidChange: { [recoveryViewModel] in
                 recoveryViewModel.reloadPreferencesFromDefaults()
+            },
+            hotkeysDidChange: { [dictationViewModel] in
+                dictationViewModel.reloadHotkeysFromDefaults()
             }
         )
         let handlers = APIHandlers(

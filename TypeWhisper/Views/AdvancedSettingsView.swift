@@ -592,10 +592,10 @@ struct AdvancedSettingsView: View {
             }
         }
         .sheet(isPresented: $showImportSheet) {
-            BackupImportSheet { backup, categories in
+            BackupImportSheet { backup, categories, mode in
                 isImportingBackup = true
                 Task {
-                    await performBackupImport(backup, categories: categories)
+                    await performBackupImport(backup, categories: categories, mode: mode)
                     isImportingBackup = false
                 }
             }
@@ -719,10 +719,15 @@ struct AdvancedSettingsView: View {
         }
     }
 
-    private func performBackupImport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) async {
+    private func performBackupImport(
+        _ backup: SettingsBackupExporter.SettingsBackup,
+        categories: Set<SettingsBackupExporter.Category>,
+        mode: SettingsBackupExporter.ImportMode
+    ) async {
         let container = ServiceContainer.shared
         let result = await SettingsBackupExporter.importBackup(
             SettingsBackupExporter.filtered(backup, to: categories),
+            mode: mode,
             workflowService: container.workflowService,
             dictionaryService: container.dictionaryService,
             snippetService: container.snippetService,
@@ -746,6 +751,9 @@ struct AdvancedSettingsView: View {
             },
             dictationRecoveryPreferencesDidChange: {
                 DictationRecoveryViewModel.shared.reloadPreferencesFromDefaults()
+            },
+            hotkeysDidChange: {
+                dictation.reloadHotkeysFromDefaults()
             }
         )
 
@@ -756,10 +764,28 @@ struct AdvancedSettingsView: View {
     private func backupImportSummary(_ result: SettingsBackupExporter.ImportResult) -> String {
         var lines: [String] = []
         lines.append(String(format: String(localized: "Workflows: %d imported"), result.workflowsImported))
+        appendUpdatedAndSkipped(
+            to: &lines,
+            updated: result.workflowsUpdated,
+            skipped: result.workflowsSkipped,
+            category: String(localized: "Workflows")
+        )
         lines.append(String(format: String(localized: "Dictionary: %d imported, %d skipped (already present)"), result.dictionaryImported, result.dictionarySkipped))
         lines.append(String(format: String(localized: "Snippets: %d imported, %d skipped (already present)"), result.snippetsImported, result.snippetsSkipped))
         lines.append(String(format: String(localized: "Prompt Actions: %d imported"), result.promptActionsImported))
+        appendUpdatedAndSkipped(
+            to: &lines,
+            updated: result.promptActionsUpdated,
+            skipped: result.promptActionsSkipped,
+            category: String(localized: "Prompt Actions")
+        )
         lines.append(String(format: String(localized: "Profiles: %d imported"), result.profilesImported))
+        appendUpdatedAndSkipped(
+            to: &lines,
+            updated: result.profilesUpdated,
+            skipped: result.profilesSkipped,
+            category: String(localized: "Profiles")
+        )
         lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
         lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
         if result.pluginsRegistryFetchFailed {
@@ -772,6 +798,14 @@ struct AdvancedSettingsView: View {
         if result.historySkippedByRetention > 0 {
             lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
         }
+        if result.historySkippedAsDuplicate > 0 {
+            lines.append(String(format: localizedAppText(
+                "History: %d skipped (already present)",
+                de: "Verlauf: %d übersprungen (bereits vorhanden)",
+                ja: "履歴: %d件をスキップ（登録済み）",
+                zh: "历史记录：已跳过 %d 条（已存在）"
+            ), result.historySkippedAsDuplicate))
+        }
         if result.updateChannelApplied {
             lines.append(String(localized: "Update channel applied"))
         }
@@ -779,6 +813,16 @@ struct AdvancedSettingsView: View {
             lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func appendUpdatedAndSkipped(to lines: inout [String], updated: Int, skipped: Int, category: String) {
+        guard updated > 0 || skipped > 0 else { return }
+        lines.append(String(format: localizedAppText(
+            "%@: %d updated, %d skipped (already present)",
+            de: "%@: %d aktualisiert, %d übersprungen (bereits vorhanden)",
+            ja: "%@: %d件を更新、%d件をスキップ（登録済み）",
+            zh: "%@：已更新 %d 个，跳过 %d 个（已存在）"
+        ), category, updated, skipped))
     }
 
     // MARK: - Your Data

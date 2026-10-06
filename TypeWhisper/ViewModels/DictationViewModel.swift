@@ -3832,6 +3832,7 @@ final class DictationViewModel: ObservableObject {
     func removeHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) { settingsHandler.removeHotkey(hotkey, for: slot) }
     func removeConflictingHotkey(_ hotkey: UnifiedHotkey, for slot: HotkeySlotType) { settingsHandler.removeConflictingHotkey(hotkey, for: slot) }
     func clearHotkey(for slot: HotkeySlotType) { settingsHandler.clearHotkey(for: slot) }
+    func reloadHotkeysFromDefaults() { settingsHandler.reloadHotkeysFromDefaults() }
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? { settingsHandler.isHotkeyAssigned(hotkey, excluding: excluding) }
 
     private static func loadHotkeyLabel(for slotType: HotkeySlotType) -> String {

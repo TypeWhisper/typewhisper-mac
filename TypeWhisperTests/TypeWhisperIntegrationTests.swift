@@ -2227,9 +2227,40 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(importResponse.status, 200)
         let importResult = try Self.jsonObject(importResponse)
-        XCTAssertEqual(importResult["workflowsImported"] as? Int, 1)
+        XCTAssertEqual(importResult["workflowsImported"] as? Int, 0)
+        XCTAssertEqual(importResult["workflowsSkipped"] as? Int, 1)
         let workflowCount = await MainActor.run { apiContext.workflowService.workflows.count }
-        XCTAssertEqual(workflowCount, 2)
+        XCTAssertEqual(workflowCount, 1)
+
+        var editedBackup = try XCTUnwrap(JSONSerialization.jsonObject(with: exportResponse.body) as? [String: Any])
+        var editedWorkflows = try XCTUnwrap(editedBackup["workflows"] as? [[String: Any]])
+        editedWorkflows[0]["template"] = "summary"
+        editedBackup["workflows"] = editedWorkflows
+        let replaceResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/settings/import",
+                queryParams: ["mode": "replace"],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: editedBackup)
+            )
+        )
+        XCTAssertEqual(replaceResponse.status, 200)
+        let replaceResult = try Self.jsonObject(replaceResponse)
+        XCTAssertEqual(replaceResult["workflowsUpdated"] as? Int, 1)
+        let replacedTemplates = await MainActor.run { apiContext.workflowService.workflows.map(\.template) }
+        XCTAssertEqual(replacedTemplates, [.summary])
+
+        let invalidModeResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/settings/import",
+                queryParams: ["mode": "mirror"],
+                headers: ["content-type": "application/json"],
+                body: exportResponse.body
+            )
+        )
+        XCTAssertEqual(invalidModeResponse.status, 400)
 
         let invalidResponse = await router.route(
             HTTPRequest(
