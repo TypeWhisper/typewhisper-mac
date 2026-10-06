@@ -504,8 +504,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     ? reenableBackoff.recordTimeout(at: DispatchTime.now().uptimeNanoseconds)
                     : .reenable
 #endif
-                if case .reenable = outcome, let tap = port {
-                    CGEvent.tapEnable(tap: tap, enable: true)
+                if let tap = port {
+                    // Also switch the tap off when backing off: a watchdog tick may already have
+                    // re-enabled it after this disable.
+                    CGEvent.tapEnable(tap: tap, enable: outcome == .reenable)
                 }
                 return outcome
             }
