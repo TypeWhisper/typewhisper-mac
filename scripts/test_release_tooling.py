@@ -251,22 +251,29 @@ esac
         self.assertIn('version "1.0.0"', main_cask)
         self.assertEqual(branches, ["main", "release/typewhisper-9.9.9-1-1"])
         self.assertIn("pr create --repo TypeWhisper/homebrew-tap --base main --head release/typewhisper-9.9.9-1-1", log)
+        # A rerun recognizes its own earlier pull requests by this body.
+        self.assertIn("Opened by the release workflow of TypeWhisper/typewhisper-mac for v9.9.9", log)
         self.assertTrue(merged)
         self.assertLess(log.index("pr checks"), log.index("pr merge"))
 
     def test_homebrew_update_closes_pull_requests_of_earlier_attempts(self):
+        ours = "Updates the cask. Opened by the release workflow of TypeWhisper/typewhisper-mac for v9.9.9."
         open_prs = [
-            {"number": 97, "headRefName": "release/typewhisper-9.9.9-0-1", "isCrossRepository": False},
-            # A fork can reuse the branch name; it is not ours to close.
-            {"number": 96, "headRefName": "release/typewhisper-9.9.9-5-1", "isCrossRepository": True},
-            {"number": 95, "headRefName": "release/typewhisper-9.9.10-1-1", "isCrossRepository": False},
-            {"number": 94, "headRefName": "seofood/unrelated", "isCrossRepository": False},
+            {"number": 97, "headRefName": "release/typewhisper-9.9.9-0-1", "isCrossRepository": False, "body": ours},
+            # None of these were opened by the workflow, so none may be closed.
+            {"number": 96, "headRefName": "release/typewhisper-9.9.9-5-1", "isCrossRepository": True, "body": ours},
+            {"number": 93, "headRefName": "release/typewhisper-9.9.9-hotfix", "isCrossRepository": False,
+             "body": ours},
+            {"number": 92, "headRefName": "release/typewhisper-9.9.9-7-1", "isCrossRepository": False,
+             "body": "Manual cask fix."},
+            {"number": 95, "headRefName": "release/typewhisper-9.9.10-1-1", "isCrossRepository": False, "body": ours},
+            {"number": 94, "headRefName": "seofood/unrelated", "isCrossRepository": False, "body": ""},
         ]
         result, branches, _, log, merged = self.run_homebrew_update("1.0.0", ["pass"], open_prs=open_prs)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pr list --repo TypeWhisper/homebrew-tap --state open --base main --limit 1000", log)
         self.assertIn("pr close 97 --repo TypeWhisper/homebrew-tap --delete-branch", log)
-        for number in (96, 95, 94):
+        for number in (96, 95, 94, 93, 92):
             self.assertNotIn(f"pr close {number} ", log)
         # The fresh pull request is opened only after the stale one is closed.
         self.assertLess(log.index("pr close 97"), log.index("pr create"))
