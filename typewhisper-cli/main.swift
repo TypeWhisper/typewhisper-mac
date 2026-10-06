@@ -89,7 +89,8 @@ while let arg = argIterator.next() {
             _ = argIterator.next() // skip value if present
             continue
         }
-        if arg.hasPrefix("-") && command != nil {
+        // A bare "-" is the positional stdin marker, not an option.
+        if arg.hasPrefix("-") && arg != "-" && command != nil {
             printError("Error: Unknown option '\(arg)'.")
             exit(1)
         }
