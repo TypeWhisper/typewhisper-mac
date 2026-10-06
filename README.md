@@ -328,7 +328,7 @@ curl -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" http://localhost:8978/v1/
 
 The `X-TypeWhisper-API-Token` header works as well. Every endpoint except `GET /v1/status` needs the token; the examples below leave the header out for brevity. Settings > Advanced > Copy API Token copies it to the clipboard.
 
-Installations that already ran the API server without a token before 1.8.0 keep doing so until **Require API Token** is turned on. Settings shows a warning while it is off.
+If the API server is turned on without a token when you update to 1.8.0, it keeps running without one until **Require API Token** is turned on, and Settings shows a warning. A server that was off during the update requires the token once it is turned on.
 
 Independent of the token, the server rejects requests that browsers send on behalf of other websites: a `Host` header other than `127.0.0.1`, `localhost`, or `[::1]`, an `Origin` from a website not served from this Mac (including `null`), and `Sec-Fetch-Site: cross-site` unless the `Origin` is a page served from this Mac. Such requests get `403`. Requests without these headers, such as those from `curl` or scripts, are not affected.
 
