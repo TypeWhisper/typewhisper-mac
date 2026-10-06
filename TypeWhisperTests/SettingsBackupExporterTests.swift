@@ -1405,9 +1405,71 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         let result = await importBackup(backupWithLaterEntry, into: fixture)
 
-        XCTAssertEqual(result.historyImported, 1)
-        XCTAssertEqual(result.historySkippedAsDuplicate, 2)
-        XCTAssertEqual(try fixture.historyService.allRecordsThrowing().count, 2)
+        // The existing record covers the first entry. The two later entries are
+        // separate records in the backup, so both are kept.
+        XCTAssertEqual(result.historyImported, 2)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 1)
+        XCTAssertEqual(try fixture.historyService.allRecordsThrowing().count, 3)
+    }
+
+    func testHistoryRecordsSharingTextAndSecondAreAllKept() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        for (offset, app) in [(0.1, "Notes"), (0.6, "Mail")] {
+            source.historyService.addRecord(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + offset),
+                rawText: "ok",
+                finalText: "OK.",
+                appName: app,
+                appBundleIdentifier: "com.apple.\(app)",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "whisperkit"
+            )
+        }
+        let backup = try exportBackup(from: source)
+        XCTAssertEqual(backup.history.count, 2)
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        let firstImport = await importBackup(backup, into: destination)
+        XCTAssertEqual(firstImport.historyImported, 2)
+        XCTAssertEqual(firstImport.historySkippedAsDuplicate, 0)
+
+        let secondImport = await importBackup(backup, into: destination)
+        XCTAssertEqual(secondImport.historyImported, 0)
+        XCTAssertEqual(secondImport.historySkippedAsDuplicate, 2)
+        XCTAssertEqual(try destination.historyService.allRecordsThrowing().count, 2)
+    }
+
+    func testWorkflowWithLegacyAutoEnterFlagMatchesExplicitMode() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(
+            name: "Send",
+            template: .cleanedText,
+            trigger: .app("com.apple.MobileSMS"),
+            output: WorkflowOutput(autoEnter: true)
+        )
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        XCTAssertNil(workflow.output.autoEnterModeRaw)
+        var explicitOutput = workflow.output
+        explicitOutput.autoEnterMode = .always
+        let edited = editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+            name: workflow.name,
+            isEnabled: workflow.isEnabled,
+            sortOrder: workflow.sortOrder,
+            template: workflow.template,
+            trigger: workflow.trigger,
+            behavior: workflow.behavior,
+            output: explicitOutput
+        )])
+
+        let result = await importBackup(edited, into: fixture)
+
+        XCTAssertEqual(result.workflowsSkipped, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
     }
 
     func testMergeAddsEditedItemsAndKeepsHotkeysAndEnabledState() async throws {
@@ -1732,5 +1794,68 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertEqual(result.workflowsSkipped, 1)
         XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+    }
+
+    func testHistoryMatchRequiresSameApp() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        for (offset, app) in [(0.2, "Mail"), (0.3, "Notes"), (1.5, "Notes")] {
+            source.historyService.addRecord(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + offset),
+                rawText: "ok",
+                finalText: "OK.",
+                appName: app,
+                appBundleIdentifier: "com.apple.\(app)",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "whisperkit"
+            )
+        }
+        let backup = try exportBackup(from: source)
+
+        // The destination only has the Notes record at 1.5 s.
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.historyService.addRecord(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_001.5),
+            rawText: "ok",
+            finalText: "OK.",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "whisperkit"
+        )
+
+        let result = await importBackup(backup, into: destination)
+
+        XCTAssertEqual(result.historyImported, 2)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 1)
+        let records = try destination.historyService.allRecordsThrowing()
+        XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Mail" }.count, 1)
+        XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Notes" }.count, 2)
+    }
+
+    func testHistoryRecordsStraddlingASecondBoundaryAreBothRecognized() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        for offset in [0.99, 1.9] {
+            fixture.historyService.addRecord(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + offset),
+                rawText: "ok",
+                finalText: "OK.",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "whisperkit"
+            )
+        }
+        let backup = try exportBackup(from: fixture)
+
+        let result = await importBackup(backup, into: fixture)
+
+        XCTAssertEqual(result.historyImported, 0)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 2)
     }
 }

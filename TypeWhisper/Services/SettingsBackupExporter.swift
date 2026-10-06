@@ -918,8 +918,8 @@ enum SettingsBackupExporter {
             : nil
 
         // History entries have no stable id in the backup, so an entry counts
-        // as already present when its texts match and its timestamp is within
-        // a second: the ISO 8601 export drops fractional seconds.
+        // as already present when a record with the same texts and app exists
+        // in the same second: the ISO 8601 export drops fractional seconds.
         var existingHistory = HistoryDuplicateIndex()
         var historyToImport = backup.history
         if !historyToImport.isEmpty {
@@ -945,7 +945,7 @@ enum SettingsBackupExporter {
                 result.historySkippedByRetention += 1
                 continue
             }
-            if existingHistory.contains(entry) {
+            if existingHistory.consumeMatch(for: entry) {
                 result.historySkippedAsDuplicate += 1
                 continue
             }
@@ -972,7 +972,6 @@ enum SettingsBackupExporter {
             // visible in History.
             if inserted {
                 result.historyImported += 1
-                existingHistory.insert(entry)
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
                     wordsCount: entry.finalText.split(separator: " ").count,
@@ -1103,29 +1102,51 @@ enum SettingsBackupExporter {
         return nil
     }
 
+    /// Counts existing history records by text, app, and timestamp second.
+    /// The ISO 8601 export truncates timestamps to whole seconds, so a record
+    /// and its exported entry always fall into the same second.
     private struct HistoryDuplicateIndex {
-        private struct Texts: Hashable {
+        private struct Key: Hashable {
             let rawText: String
             let finalText: String
-        }
+            let appBundleIdentifier: String?
+            let second: Int64
 
-        private var timestampsByTexts: [Texts: [Date]] = [:]
-
-        init(_ records: [TranscriptionRecord] = []) {
-            for record in records {
-                timestampsByTexts[Texts(rawText: record.rawText, finalText: record.finalText), default: []]
-                    .append(record.timestamp)
+            init(rawText: String, finalText: String, appBundleIdentifier: String?, timestamp: Date) {
+                self.rawText = rawText
+                self.finalText = finalText
+                self.appBundleIdentifier = appBundleIdentifier
+                second = Int64(timestamp.timeIntervalSince1970.rounded(.down))
             }
         }
 
-        func contains(_ entry: HistoryEntryDTO) -> Bool {
-            let timestamps = timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText)] ?? []
-            return timestamps.contains { abs($0.timeIntervalSince(entry.timestamp)) < 1 }
+        private var unmatchedCounts: [Key: Int] = [:]
+
+        init(_ records: [TranscriptionRecord] = []) {
+            for record in records {
+                let key = Key(
+                    rawText: record.rawText,
+                    finalText: record.finalText,
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    timestamp: record.timestamp
+                )
+                unmatchedCounts[key, default: 0] += 1
+            }
         }
 
-        mutating func insert(_ entry: HistoryEntryDTO) {
-            timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText), default: []]
-                .append(entry.timestamp)
+        /// Each existing record covers at most one backup entry, so two
+        /// distinct records with the same text in the same second are both
+        /// kept, while re-importing them onto their source Mac adds nothing.
+        mutating func consumeMatch(for entry: HistoryEntryDTO) -> Bool {
+            let key = Key(
+                rawText: entry.rawText,
+                finalText: entry.finalText,
+                appBundleIdentifier: entry.appBundleIdentifier,
+                timestamp: entry.timestamp
+            )
+            guard let count = unmatchedCounts[key], count > 0 else { return false }
+            unmatchedCounts[key] = count - 1
+            return true
         }
     }
 
@@ -1182,7 +1203,19 @@ extension SettingsBackupExporter.WorkflowDTO {
             && template == other.template
             && Self.hasSameSelectors(trigger, other.trigger)
             && behavior == other.behavior
-            && output == other.output
+            && Self.hasSameEffect(output, other.output)
+    }
+
+    /// Older workflows store the auto-enter mode only as a flag. Saving them
+    /// in the current editor writes the equivalent explicit mode, which must
+    /// not make an unchanged workflow look different.
+    private static func hasSameEffect(_ lhs: WorkflowOutput, _ rhs: WorkflowOutput) -> Bool {
+        lhs.format == rhs.format
+            && lhs.autoEnterMode == rhs.autoEnterMode
+            // The prompt palette still reads the flag directly.
+            && lhs.autoEnter == rhs.autoEnter
+            && lhs.targetActionPluginId == rhs.targetActionPluginId
+            && lhs.numberNormalizationMode == rhs.numberNormalizationMode
     }
 
     /// Workflow matching checks apps, websites, and hotkeys with `contains`,
