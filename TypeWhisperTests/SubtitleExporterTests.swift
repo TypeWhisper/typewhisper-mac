@@ -42,14 +42,25 @@ final class SubtitleExporterTests: XCTestCase {
         )
     }
 
-    func testHugeTimesStopAtTheLargestTwoDigitHour() {
+    func testHoursGrowBeyondTwoDigits() {
+        let segments = [
+            TranscriptionSegment(text: "long", start: 359_999.9996, end: 360_001.5),
+        ]
+
+        XCTAssertEqual(
+            SubtitleExporter.exportVTT(segments: segments),
+            "WEBVTT\n\n1\n100:00:00.000 --> 100:00:01.500\nlong\n"
+        )
+    }
+
+    func testHugeAndInfiniteTimesAreClampedInsteadOfTrapping() {
         let segments = [
             TranscriptionSegment(text: "huge", start: 1e20, end: .infinity),
         ]
 
         XCTAssertEqual(
             SubtitleExporter.exportSRT(segments: segments),
-            "1\n99:59:59,999 --> 99:59:59,999\nhuge"
+            "1\n277777777:46:40,000 --> 277777777:46:40,000\nhuge"
         )
     }
 }

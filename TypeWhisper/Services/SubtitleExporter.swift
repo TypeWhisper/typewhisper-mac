@@ -112,8 +112,8 @@ enum SubtitleExporter {
         formatTime(time, millisecondSeparator: ".")
     }
 
-    /// The largest time with two-digit hours, 99:59:59.999.
-    private static let maximumMilliseconds = 359_999_999.0
+    /// About 31,700 years: beyond any recording, and safely inside `Int`'s range.
+    private static let maximumMilliseconds = 1e15
 
     /// Rounds to whole milliseconds before splitting the time. 18.72 is
     /// 18.7199… as a Double; truncating it wrote 18.719, a millisecond before
