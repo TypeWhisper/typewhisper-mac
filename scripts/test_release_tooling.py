@@ -175,8 +175,13 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertIn("trap 'exit 130' INT", command)
                 self.assertIn("trap 'exit 143' TERM", command)
 
-    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None):
-        """Run the Homebrew step against a local tap and a mocked GitHub CLI."""
+    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None,
+                            existing_branch=None, existing_branch_sha=None):
+        """Run the Homebrew step against a local tap and a mocked GitHub CLI.
+
+        `existing_branch` adds a tap branch with an open pull request, as an earlier
+        attempt would leave behind; its cask lists 9.9.9 with `existing_branch_sha`.
+        """
         script = next(step["run"] for step in self.workflow["jobs"]["update-homebrew"]["steps"]
                       if step["name"] == "Update Homebrew Cask")
         directory = tempfile.TemporaryDirectory()
@@ -192,6 +197,15 @@ class WorkflowPolicyTests(unittest.TestCase):
             cask_text or f'cask "typewhisper" do\n  version "{cask_version}"\n  sha256 "{cask_sha}"\nend\n')
         for command in (["init", "-q", "-b", "main"], ["add", "."], ["commit", "-q", "-m", "seed"]):
             subprocess.run([real_git, *command], cwd=seed, env=git_env, check=True)
+        open_prs = []
+        if existing_branch:
+            subprocess.run([real_git, "checkout", "-q", "-b", existing_branch], cwd=seed, env=git_env, check=True)
+            (seed / "Casks/typewhisper.rb").write_text(
+                f'cask "typewhisper" do\n  version "9.9.9"\n  sha256 "{existing_branch_sha}"\nend\n')
+            for command in (["commit", "-q", "-am", "earlier attempt"], ["checkout", "-q", "main"]):
+                subprocess.run([real_git, *command], cwd=seed, env=git_env, check=True)
+            open_prs.append({"url": "https://github.com/TypeWhisper/homebrew-tap/pull/98",
+                             "headRefName": existing_branch})
         tap = root / "tap.git"
         subprocess.run([real_git, "clone", "-q", "--bare", str(seed), str(tap)], check=True)
 
@@ -205,6 +219,7 @@ class WorkflowPolicyTests(unittest.TestCase):
             "gh": f"""#!/bin/sh
 echo "$*" >> "{root}/gh.log"
 case "$1 $2" in
+  "pr list") echo '{json.dumps(open_prs)}' ;;
   "pr create") echo "https://github.com/TypeWhisper/homebrew-tap/pull/99" ;;
   "pr checks")
     case "$*" in
@@ -232,8 +247,8 @@ esac
                    CHECK_POLL_SECONDS="0", GITHUB_RUN_ID="1", GITHUB_RUN_ATTEMPT="1")
         result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=work, env=env,
                                 capture_output=True, text=True, timeout=60)
-        branches = subprocess.run([real_git, "--git-dir", str(tap), "branch", "--format=%(refname:short)"],
-                                  check=True, capture_output=True, text=True).stdout.split()
+        branches = sorted(subprocess.run([real_git, "--git-dir", str(tap), "branch", "--format=%(refname:short)"],
+                                         check=True, capture_output=True, text=True).stdout.split())
         main_cask = subprocess.run([real_git, "--git-dir", str(tap), "show", "main:Casks/typewhisper.rb"],
                                    check=True, capture_output=True, text=True).stdout
         log = (root / "gh.log").read_text() if (root / "gh.log").exists() else ""
@@ -248,6 +263,30 @@ esac
         self.assertIn("pr create --repo TypeWhisper/homebrew-tap --base main --head release/typewhisper-9.9.9-1-1", log)
         self.assertTrue(merged)
         self.assertLess(log.index("pr checks"), log.index("pr merge"))
+
+    def test_homebrew_update_reuses_an_open_pull_request_from_an_earlier_attempt(self):
+        earlier = "release/typewhisper-9.9.9-1-1"
+        result, branches, main_cask, log, merged = self.run_homebrew_update(
+            "1.0.0", ["pass"], existing_branch=earlier, existing_branch_sha=hashlib.sha256(b"dmg").hexdigest())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Reusing https://github.com/TypeWhisper/homebrew-tap/pull/98", result.stdout)
+        # A rerun pushes no second branch and opens no second pull request.
+        self.assertEqual(branches, ["main", earlier])
+        self.assertNotIn("pr create", log)
+        self.assertIn("pr checks https://github.com/TypeWhisper/homebrew-tap/pull/98", log)
+        self.assertTrue(merged)
+        self.assertIn('version "1.0.0"', main_cask)
+
+    def test_homebrew_update_rejects_an_open_pull_request_with_a_different_cask(self):
+        earlier = "release/typewhisper-9.9.9-1-1"
+        result, branches, _, log, merged = self.run_homebrew_update(
+            "1.0.0", ["pass"], existing_branch=earlier, existing_branch_sha="1" * 64)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("does not carry this cask", result.stderr)
+        self.assertEqual(branches, ["main", earlier])
+        self.assertNotIn("pr create", log)
+        self.assertNotIn("pr merge", log)
+        self.assertFalse(merged)
 
     def test_homebrew_update_does_not_merge_when_cask_validation_fails(self):
         result, _, _, log, merged = self.run_homebrew_update("1.0.0", ["pending", "fail"])

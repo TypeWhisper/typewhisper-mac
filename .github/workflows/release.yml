@@ -682,18 +682,37 @@ jobs:
           # The tap's main branch requires status checks, so a direct push is
           # rejected. The update goes through a pull request that is merged once
           # the required checks and the cask validation have passed.
-          BRANCH="release/typewhisper-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git checkout -b "$BRANCH"
-          git add Casks/typewhisper.rb
-          git commit -m "Update TypeWhisper to ${VERSION}"
-          git push origin "$BRANCH"
+          BRANCH_PREFIX="release/typewhisper-${VERSION}-"
 
-          PR_URL=$(gh pr create --repo "$TAP_REPO" --base main --head "$BRANCH" \
-            --title "Update TypeWhisper to ${VERSION}" \
-            --body "Updates the cask to TypeWhisper ${VERSION} with the SHA-256 of the published DMG. Opened by the release workflow of TypeWhisper/typewhisper-mac for ${RELEASE_TAG}.")
-          echo "Opened $PR_URL"
+          # A rerun after a failed check or merge reuses the pull request an
+          # earlier attempt opened, as long as it carries exactly this cask.
+          open_prs=$(gh pr list --repo "$TAP_REPO" --state open --base main --json url,headRefName)
+          existing=$(jq -r --arg prefix "$BRANCH_PREFIX" \
+            '[.[] | select(.headRefName | startswith($prefix))][0] // empty | "\(.url) \(.headRefName)"' <<<"$open_prs")
+
+          if [ -n "$existing" ]; then
+            PR_URL="${existing%% *}"
+            existing_branch="${existing#* }"
+            git fetch origin "$existing_branch"
+            if ! git diff --quiet FETCH_HEAD -- Casks/typewhisper.rb; then
+              echo "Open pull request $PR_URL does not carry this cask for TypeWhisper ${VERSION}. Close it and rerun." >&2
+              exit 1
+            fi
+            echo "Reusing $PR_URL"
+          else
+            BRANCH="${BRANCH_PREFIX}${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$BRANCH"
+            git add Casks/typewhisper.rb
+            git commit -m "Update TypeWhisper to ${VERSION}"
+            git push origin "$BRANCH"
+
+            PR_URL=$(gh pr create --repo "$TAP_REPO" --base main --head "$BRANCH" \
+              --title "Update TypeWhisper to ${VERSION}" \
+              --body "Updates the cask to TypeWhisper ${VERSION} with the SHA-256 of the published DMG. Opened by the release workflow of TypeWhisper/typewhisper-mac for ${RELEASE_TAG}.")
+            echo "Opened $PR_URL"
+          fi
 
           deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))
           while :; do
