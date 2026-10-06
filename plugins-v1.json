@@ -2129,6 +2129,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/script-runner/",
       "releases": [
         {
+          "version": "1.2.0",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 272394,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-script-v1.2.0/ScriptPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.6",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
