@@ -1796,7 +1796,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(fixture.workflowService.workflows.count, 1)
     }
 
-    func testHistoryMatchRequiresSameAppAndPrefersClosestTimestamp() async throws {
+    func testHistoryMatchRequiresSameApp() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
         for (offset, app) in [(0.2, "Mail"), (0.3, "Notes"), (1.5, "Notes")] {
@@ -1834,5 +1834,28 @@ final class SettingsBackupExporterTests: XCTestCase {
         let records = try destination.historyService.allRecordsThrowing()
         XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Mail" }.count, 1)
         XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Notes" }.count, 2)
+    }
+
+    func testHistoryRecordsStraddlingASecondBoundaryAreBothRecognized() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        for offset in [0.99, 1.9] {
+            fixture.historyService.addRecord(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + offset),
+                rawText: "ok",
+                finalText: "OK.",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "whisperkit"
+            )
+        }
+        let backup = try exportBackup(from: fixture)
+
+        let result = await importBackup(backup, into: fixture)
+
+        XCTAssertEqual(result.historyImported, 0)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 2)
     }
 }

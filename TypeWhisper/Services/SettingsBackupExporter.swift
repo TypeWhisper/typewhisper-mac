@@ -918,8 +918,8 @@ enum SettingsBackupExporter {
             : nil
 
         // History entries have no stable id in the backup, so an entry counts
-        // as already present when its texts match and its timestamp is within
-        // a second: the ISO 8601 export drops fractional seconds.
+        // as already present when a record with the same texts and app exists
+        // in the same second: the ISO 8601 export drops fractional seconds.
         var existingHistory = HistoryDuplicateIndex()
         var historyToImport = backup.history
         if !historyToImport.isEmpty {
@@ -1102,46 +1102,50 @@ enum SettingsBackupExporter {
         return nil
     }
 
+    /// Counts existing history records by text, app, and timestamp second.
+    /// The ISO 8601 export truncates timestamps to whole seconds, so a record
+    /// and its exported entry always fall into the same second.
     private struct HistoryDuplicateIndex {
-        /// What a record has to share with a backup entry, apart from the
-        /// timestamp, to count as the same record.
-        private struct Identity: Hashable {
+        private struct Key: Hashable {
             let rawText: String
             let finalText: String
             let appBundleIdentifier: String?
+            let second: Int64
+
+            init(rawText: String, finalText: String, appBundleIdentifier: String?, timestamp: Date) {
+                self.rawText = rawText
+                self.finalText = finalText
+                self.appBundleIdentifier = appBundleIdentifier
+                second = Int64(timestamp.timeIntervalSince1970.rounded(.down))
+            }
         }
 
-        private var timestampsByIdentity: [Identity: [Date]] = [:]
+        private var unmatchedCounts: [Key: Int] = [:]
 
         init(_ records: [TranscriptionRecord] = []) {
             for record in records {
-                let identity = Identity(
+                let key = Key(
                     rawText: record.rawText,
                     finalText: record.finalText,
-                    appBundleIdentifier: record.appBundleIdentifier
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    timestamp: record.timestamp
                 )
-                timestampsByIdentity[identity, default: []].append(record.timestamp)
+                unmatchedCounts[key, default: 0] += 1
             }
         }
 
         /// Each existing record covers at most one backup entry, so two
         /// distinct records with the same text in the same second are both
         /// kept, while re-importing them onto their source Mac adds nothing.
-        /// The closest timestamp wins, so an entry doesn't take a record that
-        /// fits another entry better.
         mutating func consumeMatch(for entry: HistoryEntryDTO) -> Bool {
-            let identity = Identity(
+            let key = Key(
                 rawText: entry.rawText,
                 finalText: entry.finalText,
-                appBundleIdentifier: entry.appBundleIdentifier
+                appBundleIdentifier: entry.appBundleIdentifier,
+                timestamp: entry.timestamp
             )
-            let distances = (timestampsByIdentity[identity] ?? []).enumerated().map {
-                (index: $0.offset, distance: abs($0.element.timeIntervalSince(entry.timestamp)))
-            }
-            guard let closest = distances.filter({ $0.distance < 1 }).min(by: { $0.distance < $1.distance }) else {
-                return false
-            }
-            timestampsByIdentity[identity]?.remove(at: closest.index)
+            guard let count = unmatchedCounts[key], count > 0 else { return false }
+            unmatchedCounts[key] = count - 1
             return true
         }
     }
