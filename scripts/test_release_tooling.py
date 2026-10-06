@@ -175,8 +175,12 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertIn("trap 'exit 130' INT", command)
                 self.assertIn("trap 'exit 143' TERM", command)
 
-    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None):
-        """Run the Homebrew step against a local tap and a mocked GitHub CLI."""
+    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None,
+                            open_prs=()):
+        """Run the Homebrew step against a local tap and a mocked GitHub CLI.
+
+        `open_prs` is what `gh pr list` reports as open pull requests against the tap's main.
+        """
         script = next(step["run"] for step in self.workflow["jobs"]["update-homebrew"]["steps"]
                       if step["name"] == "Update Homebrew Cask")
         directory = tempfile.TemporaryDirectory()
@@ -205,6 +209,7 @@ class WorkflowPolicyTests(unittest.TestCase):
             "gh": f"""#!/bin/sh
 echo "$*" >> "{root}/gh.log"
 case "$1 $2" in
+  "pr list") echo '{json.dumps(list(open_prs))}' ;;
   "pr create") echo "https://github.com/TypeWhisper/homebrew-tap/pull/99" ;;
   "pr checks")
     case "$*" in
@@ -232,8 +237,8 @@ esac
                    CHECK_POLL_SECONDS="0", GITHUB_RUN_ID="1", GITHUB_RUN_ATTEMPT="1")
         result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", script], cwd=work, env=env,
                                 capture_output=True, text=True, timeout=60)
-        branches = subprocess.run([real_git, "--git-dir", str(tap), "branch", "--format=%(refname:short)"],
-                                  check=True, capture_output=True, text=True).stdout.split()
+        branches = sorted(subprocess.run([real_git, "--git-dir", str(tap), "branch", "--format=%(refname:short)"],
+                                         check=True, capture_output=True, text=True).stdout.split())
         main_cask = subprocess.run([real_git, "--git-dir", str(tap), "show", "main:Casks/typewhisper.rb"],
                                    check=True, capture_output=True, text=True).stdout
         log = (root / "gh.log").read_text() if (root / "gh.log").exists() else ""
@@ -246,8 +251,39 @@ esac
         self.assertIn('version "1.0.0"', main_cask)
         self.assertEqual(branches, ["main", "release/typewhisper-9.9.9-1-1"])
         self.assertIn("pr create --repo TypeWhisper/homebrew-tap --base main --head release/typewhisper-9.9.9-1-1", log)
+        # A rerun recognizes its own earlier pull requests by this body.
+        self.assertIn("Opened by the release workflow of TypeWhisper/typewhisper-mac for v9.9.9", log)
         self.assertTrue(merged)
         self.assertLess(log.index("pr checks"), log.index("pr merge"))
+
+    def test_homebrew_updates_for_one_release_never_overlap(self):
+        concurrency = self.workflow["jobs"]["update-homebrew"]["concurrency"]
+        self.assertEqual(concurrency, {"group": "homebrew-tap-${{ needs.prepare.outputs.tag }}",
+                                       "cancel-in-progress": False})
+
+    def test_homebrew_update_closes_pull_requests_of_earlier_attempts(self):
+        ours = "Updates the cask. Opened by the release workflow of TypeWhisper/typewhisper-mac for v9.9.9."
+        open_prs = [
+            {"number": 97, "headRefName": "release/typewhisper-9.9.9-0-1", "isCrossRepository": False, "body": ours},
+            # None of these were opened by the workflow, so none may be closed.
+            {"number": 96, "headRefName": "release/typewhisper-9.9.9-5-1", "isCrossRepository": True, "body": ours},
+            {"number": 93, "headRefName": "release/typewhisper-9.9.9-hotfix", "isCrossRepository": False,
+             "body": ours},
+            {"number": 92, "headRefName": "release/typewhisper-9.9.9-7-1", "isCrossRepository": False,
+             "body": "Manual cask fix."},
+            {"number": 95, "headRefName": "release/typewhisper-9.9.10-1-1", "isCrossRepository": False, "body": ours},
+            {"number": 94, "headRefName": "seofood/unrelated", "isCrossRepository": False, "body": ""},
+        ]
+        result, branches, _, log, merged = self.run_homebrew_update("1.0.0", ["pass"], open_prs=open_prs)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("pr list --repo TypeWhisper/homebrew-tap --state open --base main --limit 1000", log)
+        self.assertIn("pr close 97 --repo TypeWhisper/homebrew-tap --delete-branch", log)
+        for number in (96, 95, 94, 93, 92):
+            self.assertNotIn(f"pr close {number} ", log)
+        # The fresh pull request is opened only after the stale one is closed.
+        self.assertLess(log.index("pr close 97"), log.index("pr create"))
+        self.assertEqual(branches, ["main", "release/typewhisper-9.9.9-1-1"])
+        self.assertTrue(merged)
 
     def test_homebrew_update_does_not_merge_when_cask_validation_fails(self):
         result, _, _, log, merged = self.run_homebrew_update("1.0.0", ["pending", "fail"])
