@@ -30,14 +30,26 @@ final class SubtitleExporterTests: XCTestCase {
         )
     }
 
-    func testNegativeAndNonFiniteTimesStartAtZero() {
+    func testNegativeTimesAndNaNStartAtZero() {
         let segments = [
-            TranscriptionSegment(text: "clamped", start: -0.2, end: .infinity),
+            TranscriptionSegment(text: "negative", start: -0.2, end: -.infinity),
+            TranscriptionSegment(text: "nan", start: .nan, end: .nan),
         ]
 
         XCTAssertEqual(
             SubtitleExporter.exportVTT(segments: segments),
-            "WEBVTT\n\n1\n00:00:00.000 --> 00:00:00.000\nclamped\n"
+            "WEBVTT\n\n1\n00:00:00.000 --> 00:00:00.000\nnegative\n\n2\n00:00:00.000 --> 00:00:00.000\nnan\n"
+        )
+    }
+
+    func testHugeTimesStopAtTheLargestTwoDigitHour() {
+        let segments = [
+            TranscriptionSegment(text: "huge", start: 1e20, end: .infinity),
+        ]
+
+        XCTAssertEqual(
+            SubtitleExporter.exportSRT(segments: segments),
+            "1\n99:59:59,999 --> 99:59:59,999\nhuge"
         )
     }
 }

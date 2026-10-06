@@ -112,11 +112,18 @@ enum SubtitleExporter {
         formatTime(time, millisecondSeparator: ".")
     }
 
+    /// The largest time with two-digit hours, 99:59:59.999.
+    private static let maximumMilliseconds = 359_999_999.0
+
     /// Rounds to whole milliseconds before splitting the time. 18.72 is
     /// 18.7199… as a Double; truncating it wrote 18.719, a millisecond before
-    /// the end of the previous cue.
+    /// the end of the previous cue. The value is clamped first because
+    /// `Int(_:)` traps on NaN, infinity and out-of-range values.
     private static func formatTime(_ time: TimeInterval, millisecondSeparator: String) -> String {
-        let totalMilliseconds = time.isFinite ? max(Int((time * 1000).rounded()), 0) : 0
+        let rounded = (time * 1000).rounded()
+        let totalMilliseconds = rounded.isNaN
+            ? 0
+            : Int(min(max(rounded, 0), maximumMilliseconds))
         let hours = totalMilliseconds / 3_600_000
         let minutes = totalMilliseconds / 60_000 % 60
         let seconds = totalMilliseconds / 1000 % 60
