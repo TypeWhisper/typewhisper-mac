@@ -1795,4 +1795,44 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(result.workflowsSkipped, 1)
         XCTAssertEqual(fixture.workflowService.workflows.count, 1)
     }
+
+    func testHistoryMatchRequiresSameAppAndPrefersClosestTimestamp() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        for (offset, app) in [(0.2, "Mail"), (0.3, "Notes"), (1.5, "Notes")] {
+            source.historyService.addRecord(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + offset),
+                rawText: "ok",
+                finalText: "OK.",
+                appName: app,
+                appBundleIdentifier: "com.apple.\(app)",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "whisperkit"
+            )
+        }
+        let backup = try exportBackup(from: source)
+
+        // The destination only has the Notes record at 1.5 s.
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.historyService.addRecord(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_001.5),
+            rawText: "ok",
+            finalText: "OK.",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "whisperkit"
+        )
+
+        let result = await importBackup(backup, into: destination)
+
+        XCTAssertEqual(result.historyImported, 2)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 1)
+        let records = try destination.historyService.allRecordsThrowing()
+        XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Mail" }.count, 1)
+        XCTAssertEqual(records.filter { $0.appBundleIdentifier == "com.apple.Notes" }.count, 2)
+    }
 }

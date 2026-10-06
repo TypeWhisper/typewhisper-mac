@@ -1103,29 +1103,45 @@ enum SettingsBackupExporter {
     }
 
     private struct HistoryDuplicateIndex {
-        private struct Texts: Hashable {
+        /// What a record has to share with a backup entry, apart from the
+        /// timestamp, to count as the same record.
+        private struct Identity: Hashable {
             let rawText: String
             let finalText: String
+            let appBundleIdentifier: String?
         }
 
-        private var timestampsByTexts: [Texts: [Date]] = [:]
+        private var timestampsByIdentity: [Identity: [Date]] = [:]
 
         init(_ records: [TranscriptionRecord] = []) {
             for record in records {
-                timestampsByTexts[Texts(rawText: record.rawText, finalText: record.finalText), default: []]
-                    .append(record.timestamp)
+                let identity = Identity(
+                    rawText: record.rawText,
+                    finalText: record.finalText,
+                    appBundleIdentifier: record.appBundleIdentifier
+                )
+                timestampsByIdentity[identity, default: []].append(record.timestamp)
             }
         }
 
         /// Each existing record covers at most one backup entry, so two
         /// distinct records with the same text in the same second are both
         /// kept, while re-importing them onto their source Mac adds nothing.
+        /// The closest timestamp wins, so an entry doesn't take a record that
+        /// fits another entry better.
         mutating func consumeMatch(for entry: HistoryEntryDTO) -> Bool {
-            let texts = Texts(rawText: entry.rawText, finalText: entry.finalText)
-            guard let index = timestampsByTexts[texts]?.firstIndex(where: {
-                abs($0.timeIntervalSince(entry.timestamp)) < 1
-            }) else { return false }
-            timestampsByTexts[texts]?.remove(at: index)
+            let identity = Identity(
+                rawText: entry.rawText,
+                finalText: entry.finalText,
+                appBundleIdentifier: entry.appBundleIdentifier
+            )
+            let distances = (timestampsByIdentity[identity] ?? []).enumerated().map {
+                (index: $0.offset, distance: abs($0.element.timeIntervalSince(entry.timestamp)))
+            }
+            guard let closest = distances.filter({ $0.distance < 1 }).min(by: { $0.distance < $1.distance }) else {
+                return false
+            }
+            timestampsByIdentity[identity]?.remove(at: closest.index)
             return true
         }
     }
@@ -1192,6 +1208,8 @@ extension SettingsBackupExporter.WorkflowDTO {
     private static func hasSameEffect(_ lhs: WorkflowOutput, _ rhs: WorkflowOutput) -> Bool {
         lhs.format == rhs.format
             && lhs.autoEnterMode == rhs.autoEnterMode
+            // The prompt palette still reads the flag directly.
+            && lhs.autoEnter == rhs.autoEnter
             && lhs.targetActionPluginId == rhs.targetActionPluginId
             && lhs.numberNormalizationMode == rhs.numberNormalizationMode
     }
