@@ -994,7 +994,16 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canStartAPIRecording: Bool {
-        state == .idle
+        state == .idle || isOfferingUndeliveredTranscript
+    }
+
+    /// The Insert offer stays up for a while, so a new dictation replaces it, as the dictation
+    /// hotkey does.
+    private var isOfferingUndeliveredTranscript: Bool {
+        guard state == .inserting, case .insertUndeliveredTranscript? = actionFeedbackAction else {
+            return false
+        }
+        return true
     }
 
     var activeWorkflowId: UUID? {
@@ -1021,6 +1030,9 @@ final class DictationViewModel: ObservableObject {
     }
 
     func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
+        if isOfferingUndeliveredTranscript {
+            indicatorFeedbackLifetime.finishImmediately()
+        }
         let sessionID = UUID()
         startRecording(
             forcedWorkflowId: forcedWorkflowId,

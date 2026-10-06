@@ -9408,6 +9408,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pastedTexts, ["transcribed", "transcribed"])
         XCTAssertTrue(viewModel.actionFeedbackMessage?.hasPrefix(noTextFieldMessage) == true)
         XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+        // A new API dictation may replace the offer, as the dictation hotkey does.
+        XCTAssertTrue(viewModel.canStartAPIRecording)
 
         isTextFieldFocused = true
         viewModel.performActionFeedbackAction()
