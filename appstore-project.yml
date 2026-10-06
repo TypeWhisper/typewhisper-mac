@@ -221,6 +221,10 @@ targets:
         embed: true
         copy:
           destination: plugins
+      - target: SpeakerDiarizationPlugin
+        embed: true
+        copy:
+          destination: plugins
       - target: SpeechAnalyzerPlugin
         embed: true
         copy:
@@ -428,6 +432,16 @@ targets:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.parakeet
+    dependencies:
+      - package: FluidAudio
+        product: FluidAudio
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
+  SpeakerDiarizationPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.speaker-diarization
     dependencies:
       - package: FluidAudio
         product: FluidAudio

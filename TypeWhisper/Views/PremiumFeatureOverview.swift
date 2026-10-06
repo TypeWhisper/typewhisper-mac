@@ -51,7 +51,7 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     /// text fields through Accessibility, which the App Sandbox does not allow.
     static var editionFeatures: [PremiumFeatureID] {
         #if APPSTORE
-        [.calendarMeeting, .cloudSync]
+        [.calendarMeeting, .cloudSync, .speakerWorkspace]
         #else
         allCases
         #endif
