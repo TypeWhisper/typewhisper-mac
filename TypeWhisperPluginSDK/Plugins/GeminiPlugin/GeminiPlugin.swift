@@ -1327,15 +1327,16 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var serverSpeechEnded = false
     private var serverTurnCompletedAt: ContinuousClock.Instant?
     private var serverTurnHasFinalTranscript = false
-    // Transcripts carry no turn reference. Once a turn ends without a final
-    // transcript, later finals cannot be assigned to a turn, so the dictation
-    // falls back to the bounded wait instead of settling on server VAD.
+    // Transcripts and completions carry no turn reference. Once a new turn
+    // starts before the previous one delivered its final transcript and its
+    // completion, later events cannot be assigned to a turn, so the dictation
+    // falls back to the bounded wait instead of settling early.
     private var serverTurnStarted = false
     private var serverTurnAttributionAmbiguous = false
     // An interrupted turn ends with interrupted, then turnComplete, and a
     // generationComplete may be followed by a delayed turnComplete. Either
     // turnComplete belongs to the earlier turn, not to resumed speech.
-    private var awaitingInterruptedTurnComplete = false
+    private var interruptedTurnCompletesAwaited = 0
     private var turnCompletesAwaitedAfterGeneration = 0
     private var latestError: String?
     private var socketClosed = false
@@ -1601,7 +1602,8 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     }
 
     var hasSettledCompletion: Bool {
-        guard !collector.hasUncommittedInterimText, !collector.resultText.isEmpty else { return false }
+        guard !serverTurnAttributionAmbiguous,
+              !collector.hasUncommittedInterimText, !collector.resultText.isEmpty else { return false }
         return hasSettledAttributedCompletion || hasSettledServerTurn
     }
 
@@ -1618,7 +1620,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     // after audioStreamEnd arrived 0.22-0.47 s after release in live tests, so
     // the default leaves margin for a late start.
     private var hasSettledServerTurn: Bool {
-        guard !serverTurnAttributionAmbiguous, serverSpeechEnded, serverTurnHasFinalTranscript,
+        guard serverSpeechEnded, serverTurnHasFinalTranscript,
               let serverTurnCompletedAt, let endSignalSentAt,
               now() >= endSignalSentAt.advanced(by: speechResumeGrace) else { return false }
         return isSettled(after: serverTurnCompletedAt)
@@ -1687,7 +1689,9 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         }
         switch response.voiceActivity?.type {
         case "ACTIVITY_START":
-            if serverTurnStarted, !serverTurnHasFinalTranscript { serverTurnAttributionAmbiguous = true }
+            if serverTurnStarted, !serverTurnHasFinalTranscript || serverTurnCompletedAt == nil {
+                serverTurnAttributionAmbiguous = true
+            }
             serverTurnStarted = true
             serverSpeechEnded = false
             serverTurnCompletedAt = nil
@@ -1711,13 +1715,13 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         if content.inputTranscription?.text?.contains(where: { !$0.isWhitespace }) == true {
             serverTurnHasFinalTranscript = true
         }
-        if content.interrupted == true { awaitingInterruptedTurnComplete = true }
+        if content.interrupted == true { interruptedTurnCompletesAwaited += 1 }
         var isCompletion = content.generationComplete == true
         // A combined generationComplete + turnComplete completes its own turn
         // and leaves earlier pending turnCompletes untouched.
         if content.turnComplete == true, content.generationComplete != true {
-            if awaitingInterruptedTurnComplete {
-                awaitingInterruptedTurnComplete = false
+            if interruptedTurnCompletesAwaited > 0 {
+                interruptedTurnCompletesAwaited -= 1
             } else if turnCompletesAwaitedAfterGeneration > 0 {
                 turnCompletesAwaitedAfterGeneration -= 1
             } else {
