@@ -222,6 +222,7 @@ final class DictationViewModel: ObservableObject {
         case undoLearnedCorrections([LearnedDictionaryCorrection])
         case openDictationRecovery
         case openSettings(SettingsTab)
+        case insertUndeliveredTranscript(UndeliveredTranscript)
 
         var title: String {
             switch self {
@@ -231,9 +232,27 @@ final class DictationViewModel: ObservableObject {
                 String(localized: "Open Recovery")
             case .openSettings:
                 String(localized: "Open Settings")
+            case .insertUndeliveredTranscript:
+                String(localized: "Insert")
             }
         }
     }
+
+    /// A finished transcript that did not reach a text field. The indicator offers to insert it
+    /// into the field the user focuses next.
+    private struct UndeliveredTranscript {
+        enum Reason {
+            case noTextField
+            case textFieldChanged
+        }
+
+        let text: String
+        let outputFormat: String?
+        let reason: Reason
+    }
+
+    /// Long enough to focus another text field before clicking Insert. Hovering pauses it.
+    static let undeliveredTranscriptFeedbackDuration: TimeInterval = 30
 
     private struct PendingHotkeyDictationStart {
         let forcedWorkflowId: UUID?
@@ -352,6 +371,7 @@ final class DictationViewModel: ObservableObject {
     private var actionDisplayDuration: TimeInterval = 3.5
     private let indicatorFeedbackLifetime = IndicatorFeedbackLifetime()
     private var actionFeedbackAction: ActionFeedbackAction?
+    private var isInsertingUndeliveredTranscript = false
 
     @Published var indicatorStyle: IndicatorStyle {
         didSet { Self.persistIndicatorStyle(indicatorStyle) }
@@ -2929,6 +2949,7 @@ final class DictationViewModel: ObservableObject {
 
                 partialText = ""
                 var insertedTextForCorrectionTracking: String?
+                var undeliveredTranscript: UndeliveredTranscript?
                 var targetAppCorrectionBaseline: TextInsertionService.FocusedTextObservation?
                 let modelDisplayName = transcription.modelDisplayName
                 var pipelineSteps = ppResult.appliedSteps
@@ -2983,7 +3004,11 @@ final class DictationViewModel: ObservableObject {
                         shouldUseNormalInsertion = await textInsertionService
                             .focusPinnedInsertionTarget(pinnedInsertionTarget)
                         if !shouldUseNormalInsertion {
-                            showLiveFieldRecoveryFeedback()
+                            undeliveredTranscript = UndeliveredTranscript(
+                                text: text,
+                                outputFormat: nil,
+                                reason: .textFieldChanged
+                            )
                             cancelLiveFieldTranscriptSession()
                         }
                     }
@@ -3021,12 +3046,23 @@ final class DictationViewModel: ObservableObject {
                             shouldUseNormalInsertion = !hadAttemptedMutation
                                 && (allowsFocusedFallback || pinnedInsertionTarget != nil)
                             if !shouldUseNormalInsertion {
-                                showLiveFieldRecoveryFeedback()
+                                undeliveredTranscript = UndeliveredTranscript(
+                                    text: text,
+                                    outputFormat: nil,
+                                    reason: .textFieldChanged
+                                )
                             }
                         }
                         self.liveFieldTranscriptSession = nil
                     } else if liveFieldTranscriptSession != nil {
                         shouldUseNormalInsertion = prepareLiveFieldSessionForNormalInsertion()
+                        if !shouldUseNormalInsertion {
+                            undeliveredTranscript = UndeliveredTranscript(
+                                text: text,
+                                outputFormat: resolvedOutputFormat,
+                                reason: .textFieldChanged
+                            )
+                        }
                     }
 
                     if shouldUseNormalInsertion,
@@ -3035,7 +3071,11 @@ final class DictationViewModel: ObservableObject {
                         shouldUseNormalInsertion = await textInsertionService
                             .focusPinnedInsertionTarget(pinnedInsertionTarget)
                         if !shouldUseNormalInsertion {
-                            showLiveFieldRecoveryFeedback()
+                            undeliveredTranscript = UndeliveredTranscript(
+                                text: text,
+                                outputFormat: resolvedOutputFormat,
+                                reason: .textFieldChanged
+                            )
                         }
                     }
 
@@ -3050,7 +3090,8 @@ final class DictationViewModel: ObservableObject {
                             preserveClipboard: preserveClipboard,
                             autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat,
-                            awaitPasteVerification: learningPreInsertionObservation != nil
+                            awaitPasteVerification: learningPreInsertionObservation != nil,
+                            detectMissedTextField: true
                         )
                         if let insertionResult {
                             let timing = textInsertionService.lastInsertionTiming
@@ -3072,6 +3113,13 @@ final class DictationViewModel: ObservableObject {
                             showManualPasteFeedback()
                         }
 #endif
+                        if insertionResult?.missedTextField == true {
+                            undeliveredTranscript = UndeliveredTranscript(
+                                text: text,
+                                outputFormat: resolvedOutputFormat,
+                                reason: .noTextField
+                            )
+                        }
                         targetAppCorrectionBaseline = learningPreInsertionObservation.flatMap {
                             textInsertionService.recaptureFocusedTextObservation(matching: $0)
                         }
@@ -3168,6 +3216,10 @@ final class DictationViewModel: ObservableObject {
                         icon: "exclamationmark.triangle.fill",
                         duration: 4.0
                     )
+                }
+                // Shown last so it is not replaced: the transcript still needs a text field.
+                if let undeliveredTranscript {
+                    showUndeliveredTranscriptFeedback(undeliveredTranscript)
                 }
 
                 schedulePostInsertionPersistence(
@@ -4015,7 +4067,6 @@ final class DictationViewModel: ObservableObject {
         case .detached(let hadAttemptedMutation, let allowsFocusedFallback):
             if hadAttemptedMutation
                 || (!allowsFocusedFallback && pinnedInsertionTarget == nil) {
-                showLiveFieldRecoveryFeedback()
                 return false
             }
             return true
@@ -4036,14 +4087,72 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func showLiveFieldRecoveryFeedback() {
+    private func showUndeliveredTranscriptFeedback(_ transcript: UndeliveredTranscript) {
+        var message = switch transcript.reason {
+        case .noTextField:
+            String(localized: "No text field detected")
+        case .textFieldChanged:
+            String(localized: "The text field changed")
+        }
+        let hotkeyLabel = pasteLastTranscriptionHotkeyLabel
+        if !hotkeyLabel.isEmpty {
+            message += "\n" + String.localizedStringWithFormat(String(localized: "Or press %@"), hotkeyLabel)
+        }
         showNotchFeedback(
-            message: String(localized: "The text field changed. The final transcript is available in Recent Transcriptions."),
+            message: message,
             icon: "text.badge.xmark",
-            duration: 3.0,
+            duration: Self.undeliveredTranscriptFeedbackDuration,
             isError: true,
-            errorCategory: "insertion"
+            errorCategory: "insertion",
+            action: .insertUndeliveredTranscript(transcript)
         )
+    }
+
+    private func insertUndeliveredTranscript(_ transcript: UndeliveredTranscript) {
+        guard !isInsertingUndeliveredTranscript else { return }
+        isInsertingUndeliveredTranscript = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.isInsertingUndeliveredTranscript = false }
+            let result: TextInsertionService.InsertionResult
+            do {
+                // No Auto Enter: the focused field may belong to another app than the dictation.
+                result = try await textInsertionService.insertText(
+                    transcript.text,
+                    preserveClipboard: preserveClipboard,
+                    outputFormat: transcript.outputFormat,
+                    detectMissedTextField: true
+                )
+            } catch {
+                guard state == .idle || state == .inserting else { return }
+                showNotchFeedback(
+                    message: error.localizedDescription,
+                    icon: "xmark.circle.fill",
+                    isError: true,
+                    errorCategory: "insertion"
+                )
+                return
+            }
+
+            // A dictation started in the meantime owns the indicator.
+            guard state == .idle || state == .inserting else { return }
+#if APPSTORE
+            if result == .copiedToClipboard {
+                showManualPasteFeedback()
+                return
+            }
+#endif
+            if result.missedTextField {
+                showUndeliveredTranscriptFeedback(UndeliveredTranscript(
+                    text: transcript.text,
+                    outputFormat: transcript.outputFormat,
+                    reason: .noTextField
+                ))
+            } else {
+                showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
+            }
+        }
     }
 
     /// Whether an engine is usable as the live preview engine: auth-available and
@@ -4517,6 +4626,11 @@ final class DictationViewModel: ObservableObject {
     func pasteLastTranscription() {
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
+        // The undelivered-transcript feedback keeps the state busy, so insert its transcript here.
+        if case .insertUndeliveredTranscript(let transcript)? = actionFeedbackAction {
+            insertUndeliveredTranscript(transcript)
+            return
+        }
         recentTranscriptionPaletteHandler.insertLatest(currentState: state)
     }
 
@@ -4792,6 +4906,8 @@ final class DictationViewModel: ObservableObject {
             if openRecoverySettingsWindow {
                 ManagedAppWindowOpener.shared.open(id: "settings")
             }
+        case .insertUndeliveredTranscript(let transcript):
+            insertUndeliveredTranscript(transcript)
         }
     }
 

@@ -297,6 +297,12 @@ final class TextInsertionService {
         var leftFocusedTextUnchanged: Bool {
             self == .pasted(verification: .unverified(.focusedTextUnchanged))
         }
+
+        /// The paste reached no text field: none was focused, or the focused field was readable
+        /// and stayed unchanged.
+        var missedTextField: Bool {
+            leftFocusedTextUnchanged || self == .pasted(verification: .unverified(.noFocusedTextElement))
+        }
     }
 
     /// When the latest `insertText` call inserted its text and when it verified it, as
@@ -318,8 +324,11 @@ final class TextInsertionService {
     }
 
     enum PasteVerificationFailure: String, Equatable {
+        /// A text element was focused, but its text could not be read.
         case focusedTextStateUnavailable = "focused-text-state-unavailable"
         case focusedTextUnchanged = "focused-text-unchanged"
+        /// Accessibility could inspect the focused app, and no text element was focused.
+        case noFocusedTextElement = "no-focused-text-element"
     }
 
     enum TextInsertionError: LocalizedError {
@@ -456,6 +465,14 @@ final class TextInsertionService {
 
     struct PasteVerificationState {
         fileprivate let focusedTextState: FocusedTextState?
+        /// False when accessibility could not inspect other apps, so a missing text element
+        /// does not mean that none was focused.
+        fileprivate let canInspectFocus: Bool
+
+        /// Whether verification can show that the paste missed. Unreadable fields never can.
+        var canDetectMissedTextField: Bool {
+            focusedTextState.map(\.hasReadableText) ?? canInspectFocus
+        }
     }
 
     fileprivate struct FocusedTextState: Equatable {
@@ -854,7 +871,10 @@ final class TextInsertionService {
     }
 
     func capturePasteVerificationState() -> PasteVerificationState {
-        PasteVerificationState(focusedTextState: captureFocusedTextState())
+        PasteVerificationState(
+            focusedTextState: captureFocusedTextState(),
+            canInspectFocus: focusedTextElementOverride != nil || canInspectOtherApplications
+        )
     }
 
     func captureInsertionContext() -> InsertionContext? {
@@ -1189,16 +1209,18 @@ final class TextInsertionService {
     /// Inserts text into the focused application.
     ///
     /// A synthetic paste only waits for paste verification when the caller needs the paste to
-    /// land before this returns (`autoEnter`, `awaitPasteVerification`). With `preserveClipboard`,
-    /// the clipboard restore runs afterwards and only while the clipboard still holds the
-    /// generated payload.
+    /// land before this returns (`autoEnter`, `awaitPasteVerification`), or when
+    /// `detectMissedTextField` asks for it and verification can show a miss (see
+    /// `InsertionResult.missedTextField`). With `preserveClipboard`, the clipboard restore runs
+    /// afterwards and only while the clipboard still holds the generated payload.
     func insertText(
         _ text: String,
         preserveClipboard: Bool = false,
         autoEnter: Bool = false,
         outputFormat: String? = nil,
         deferredClipboardRestore: DeferredClipboardRestore? = nil,
-        awaitPasteVerification: Bool = false
+        awaitPasteVerification: Bool = false,
+        detectMissedTextField: Bool = false
     ) async throws -> InsertionResult {
 #if !APPSTORE
         guard isAccessibilityGranted else {
@@ -1263,10 +1285,12 @@ final class TextInsertionService {
                 ?? pendingOriginalItems
                 ?? saveClipboard(from: pasteboard))
             : []
-        let verifiesBeforeReturning = autoEnter || awaitPasteVerification
-        let pasteVerificationState = verifiesBeforeReturning || preserveClipboard
+        let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
+            || detectMissedTextField
             ? capturePasteVerificationState()
             : nil
+        let verifiesBeforeReturning = autoEnter || awaitPasteVerification
+            || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
         let initialChangeCount = pasteboard.changeCount
 
         // Set transcribed text on clipboard and simulate Cmd+V.
@@ -1370,7 +1394,7 @@ final class TextInsertionService {
 
     private func waitForPasteVerification(using state: PasteVerificationState) async -> PasteVerification {
         guard state.focusedTextState != nil else {
-            return .unverified(.focusedTextStateUnavailable)
+            return .unverified(state.canInspectFocus ? .noFocusedTextElement : .focusedTextStateUnavailable)
         }
 
         let attempts = max(0, pasteVerificationAttempts)

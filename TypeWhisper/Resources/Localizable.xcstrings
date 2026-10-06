@@ -1,6 +1,98 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Insert" : {
+      "comment" : "Button in the dictation indicator that inserts a transcript that did not reach a text field.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einfügen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "挿入"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "插入"
+          }
+        }
+      }
+    },
+    "No text field detected" : {
+      "comment" : "Shown in the dictation indicator when a dictation finished without a focused text field.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Textfeld erkannt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストフィールドが見つかりません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未检测到文本字段"
+          }
+        }
+      }
+    },
+    "Or press %@" : {
+      "comment" : "Second line of the undelivered-transcript message. %@ is the Paste Last Transcription hotkey.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Oder drücke %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "または %@ を押します"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "或按 %@"
+          }
+        }
+      }
+    },
+    "The text field changed" : {
+      "comment" : "Shown in the dictation indicator when the target text field changed before the transcript could be inserted.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Textfeld wurde geändert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストフィールドが変更されました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本字段已更改"
+          }
+        }
+      }
+    },
     "Improve Dictionary Terms" : {
       "comment" : "Shown above the dictionary when the selected engine needs a plugin setting for Terms.",
       "localizations" : {
