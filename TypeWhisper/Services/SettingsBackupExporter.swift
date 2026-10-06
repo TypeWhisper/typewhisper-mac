@@ -945,7 +945,7 @@ enum SettingsBackupExporter {
                 result.historySkippedByRetention += 1
                 continue
             }
-            if existingHistory.contains(entry) {
+            if existingHistory.consumeMatch(for: entry) {
                 result.historySkippedAsDuplicate += 1
                 continue
             }
@@ -972,7 +972,6 @@ enum SettingsBackupExporter {
             // visible in History.
             if inserted {
                 result.historyImported += 1
-                existingHistory.insert(entry)
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
                     wordsCount: entry.finalText.split(separator: " ").count,
@@ -1118,14 +1117,16 @@ enum SettingsBackupExporter {
             }
         }
 
-        func contains(_ entry: HistoryEntryDTO) -> Bool {
-            let timestamps = timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText)] ?? []
-            return timestamps.contains { abs($0.timeIntervalSince(entry.timestamp)) < 1 }
-        }
-
-        mutating func insert(_ entry: HistoryEntryDTO) {
-            timestampsByTexts[Texts(rawText: entry.rawText, finalText: entry.finalText), default: []]
-                .append(entry.timestamp)
+        /// Each existing record covers at most one backup entry, so two
+        /// distinct records with the same text in the same second are both
+        /// kept, while re-importing them onto their source Mac adds nothing.
+        mutating func consumeMatch(for entry: HistoryEntryDTO) -> Bool {
+            let texts = Texts(rawText: entry.rawText, finalText: entry.finalText)
+            guard let index = timestampsByTexts[texts]?.firstIndex(where: {
+                abs($0.timeIntervalSince(entry.timestamp)) < 1
+            }) else { return false }
+            timestampsByTexts[texts]?.remove(at: index)
+            return true
         }
     }
 
@@ -1182,7 +1183,17 @@ extension SettingsBackupExporter.WorkflowDTO {
             && template == other.template
             && Self.hasSameSelectors(trigger, other.trigger)
             && behavior == other.behavior
-            && output == other.output
+            && Self.hasSameEffect(output, other.output)
+    }
+
+    /// Older workflows store the auto-enter mode only as a flag. Saving them
+    /// in the current editor writes the equivalent explicit mode, which must
+    /// not make an unchanged workflow look different.
+    private static func hasSameEffect(_ lhs: WorkflowOutput, _ rhs: WorkflowOutput) -> Bool {
+        lhs.format == rhs.format
+            && lhs.autoEnterMode == rhs.autoEnterMode
+            && lhs.targetActionPluginId == rhs.targetActionPluginId
+            && lhs.numberNormalizationMode == rhs.numberNormalizationMode
     }
 
     /// Workflow matching checks apps, websites, and hotkeys with `contains`,
