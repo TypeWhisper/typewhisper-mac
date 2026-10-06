@@ -527,8 +527,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             runLoop = box.runLoop!
         }
 
-        /// Runs `work` between two tap callbacks. Never call it from the tap thread.
+        /// Runs `work` between two tap callbacks, or right away when already on the tap thread
+        /// (the last reference to a service can be released there).
         func performAndWait(_ work: @escaping @Sendable () -> Void) {
+            if CFRunLoopGetCurrent() === runLoop {
+                work()
+                return
+            }
             let done = DispatchSemaphore(value: 0)
             CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) {
                 work()
@@ -536,6 +541,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
             CFRunLoopWakeUp(runLoop)
             done.wait()
+        }
+    }
+
+    /// The tap's `userInfo`. It is retained separately and released only after the tap source
+    /// is gone, so a callback already running on the tap thread never touches a freed service.
+    private nonisolated final class EventTapCallbackContext: @unchecked Sendable {
+        weak var service: HotkeyService?
+
+        init(service: HotkeyService) {
+            self.service = service
         }
     }
 
@@ -735,6 +750,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var failEventTapCreationForTesting = false
 #endif
     private var runLoopSource: CFRunLoopSource?
+    private var eventTapCallbackContext: Unmanaged<EventTapCallbackContext>?
     /// Re-arm disabled taps independently of the main run loop. Events already
     /// missed during an outage cannot be reconstructed; recovery also reconciles
     /// physical key state once the main thread can process hotkeys again.
@@ -1194,6 +1210,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             runLoopSource = nil
         }
         eventTapHandle.invalidateAndClear()
+        eventTapCallbackContext?.release()
+        eventTapCallbackContext = nil
     }
 
     func suspendMonitoring() {
@@ -1533,25 +1551,23 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         eventTapSetupAttemptCountForTesting += 1
         if failEventTapCreationForTesting { return false }
 #endif
-        let selfPtr = Unmanaged.passUnretained(self).toOpaque()
+        let context = Unmanaged.passRetained(EventTapCallbackContext(service: self))
 
         // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
         // The tap source is attached to the dedicated tap thread's run loop. Hotkey state lives on
         // the main thread, so the callback only touches lock-guarded state and hops to main.
         let callback: CGEventTapCallBack = { _, type, event, userInfo in
+            guard let userInfo,
+                  let service = Unmanaged<EventTapCallbackContext>.fromOpaque(userInfo)
+                    .takeUnretainedValue().service else {
+                return Unmanaged.passUnretained(event)
+            }
+
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-                if let userInfo {
-                    let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
-                    service.reenableEventTapAfterSystemDisable(byTimeout: type == .tapDisabledByTimeout)
-                }
+                service.reenableEventTapAfterSystemDisable(byTimeout: type == .tapDisabledByTimeout)
                 return Unmanaged.passUnretained(event)
             }
 
-            guard let userInfo else {
-                return Unmanaged.passUnretained(event)
-            }
-
-            let service = Unmanaged<HotkeyService>.fromOpaque(userInfo).takeUnretainedValue()
             let shouldSuppress = service.decideEventTapEvent(event)
             return shouldSuppress ? nil : Unmanaged.passUnretained(event)
         }
@@ -1562,12 +1578,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             options: .defaultTap,
             eventsOfInterest: Self.suppressingEventTapMask(includeMouse: includeMouse),
             callback: callback,
-            userInfo: selfPtr
+            userInfo: context.toOpaque()
         ) else {
+            context.release()
             return false
         }
 
         eventTapHandle.store(tap)
+        eventTapCallbackContext = context
         let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
         runLoopSource = source
         let tapRunLoop = EventTapThread.shared.runLoop
@@ -1651,13 +1669,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .reenable:
             logger.warning("CGEventTap was disabled by system (\(reason, privacy: .public)), re-enabling")
         case .backingOff(let seconds):
-            if let seconds {
-                logger.error(
-                    "CGEventTap timed out \(EventTapReenableBackoff.timeoutLimit) times within \(Int(EventTapReenableBackoff.timeoutWindow / 1_000_000_000))s; leaving it disabled for \(Int(seconds))s, hotkeys keep working without suppression"
-                )
-            }
-            return
+            // Later timeouts within the backoff follow no new outage.
+            guard let seconds else { return }
+            logger.error(
+                "CGEventTap timed out \(EventTapReenableBackoff.timeoutLimit) times within \(Int(EventTapReenableBackoff.timeoutWindow / 1_000_000_000))s; leaving it disabled for \(Int(seconds))s, hotkeys keep working without suppression"
+            )
         }
+        // Releases missed during the outage would otherwise leave a hotkey latched, also while
+        // the NSEvent monitors take over during a backoff.
         guard let generation = eventTapHandle.currentWatchdogGeneration else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.eventTapHandle.isCurrentWatchdog(generation) else { return }
