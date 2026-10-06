@@ -1248,4 +1248,489 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(filteredNoProfiles.promptActions.count, 0)
         XCTAssertEqual(filteredNoProfiles.plugins.count, 0)
     }
+
+    // MARK: - Re-import and replace (#1491)
+
+    private func exportBackup(from fixture: Fixture) throws -> SettingsBackupExporter.SettingsBackup {
+        let backup = try SettingsBackupExporter.buildBackup(
+            workflowService: fixture.workflowService,
+            dictionaryService: fixture.dictionaryService,
+            snippetService: fixture.snippetService,
+            profileService: fixture.profileService,
+            promptActionService: fixture.promptActionService,
+            pluginManager: fixture.pluginManager,
+            historyService: fixture.historyService,
+            userDefaults: fixture.userDefaults
+        )
+        // Round-trip through the file format, which drops fractional seconds.
+        return try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(backup))
+    }
+
+    private func importBackup(
+        _ backup: SettingsBackupExporter.SettingsBackup,
+        into fixture: Fixture,
+        mode: SettingsBackupExporter.ImportMode = .merge,
+        hotkeysDidChange: (() -> Void)? = nil
+    ) async -> SettingsBackupExporter.ImportResult {
+        await SettingsBackupExporter.importBackup(
+            backup,
+            mode: mode,
+            workflowService: fixture.workflowService,
+            dictionaryService: fixture.dictionaryService,
+            snippetService: fixture.snippetService,
+            profileService: fixture.profileService,
+            promptActionService: fixture.promptActionService,
+            pluginManager: fixture.pluginManager,
+            pluginRegistryService: fixture.pluginRegistryService,
+            historyService: fixture.historyService,
+            usageStatisticsService: fixture.usageStatisticsService,
+            userDefaults: fixture.userDefaults,
+            hotkeysDidChange: hotkeysDidChange
+        )
+    }
+
+    private func editedBackup(
+        _ backup: SettingsBackupExporter.SettingsBackup,
+        workflows: [SettingsBackupExporter.WorkflowDTO]? = nil,
+        promptActions: [SettingsBackupExporter.PromptActionDTO]? = nil,
+        profiles: [SettingsBackupExporter.ProfileDTO]? = nil,
+        hotkeys: [String: [UnifiedHotkey]]? = nil
+    ) -> SettingsBackupExporter.SettingsBackup {
+        SettingsBackupExporter.SettingsBackup(
+            schemaVersion: backup.schemaVersion,
+            exportedAt: backup.exportedAt,
+            appVersion: backup.appVersion,
+            workflows: workflows ?? backup.workflows,
+            dictionaryEntries: backup.dictionaryEntries,
+            snippets: backup.snippets,
+            promptActions: promptActions ?? backup.promptActions,
+            profiles: profiles ?? backup.profiles,
+            hotkeys: hotkeys ?? backup.hotkeys,
+            plugins: backup.plugins,
+            history: backup.history,
+            updateChannel: backup.updateChannel,
+            preferences: backup.preferences
+        )
+    }
+
+    private func seedReimportFixture(_ fixture: Fixture) throws -> PromptAction {
+        fixture.workflowService.addWorkflow(name: "Email", template: .cleanedText, trigger: .app("com.apple.mail"))
+        let action = try XCTUnwrap(fixture.promptActionService.addAction(name: "Summarize", prompt: "Summarize the text"))
+        fixture.profileService.addProfile(
+            name: "Slack",
+            bundleIdentifiers: ["com.tinyspeck.slackmacgap"],
+            promptActionId: action.id.uuidString
+        )
+        fixture.historyService.addRecord(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000.75),
+            rawText: "helo world",
+            finalText: "Hello, world.",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 2,
+            language: "en",
+            engineUsed: "whisperkit"
+        )
+        fixture.userDefaults.set(
+            try JSONEncoder().encode([UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)]),
+            forKey: UserDefaultsKeys.toggleHotkeys
+        )
+        return action
+    }
+
+    func testReimportingBackupOnSameMacChangesNothing() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let action = try seedReimportFixture(fixture)
+        let backup = try exportBackup(from: fixture)
+
+        for mode in [SettingsBackupExporter.ImportMode.merge, .replace] {
+            var hotkeysChanged = false
+            let result = await importBackup(backup, into: fixture, mode: mode) { hotkeysChanged = true }
+
+            XCTAssertEqual(result.workflowsImported, 0, "\(mode)")
+            XCTAssertEqual(result.workflowsUpdated, 0, "\(mode)")
+            XCTAssertEqual(result.workflowsSkipped, 1, "\(mode)")
+            XCTAssertEqual(result.promptActionsImported, 0, "\(mode)")
+            XCTAssertEqual(result.promptActionsSkipped, 1, "\(mode)")
+            XCTAssertEqual(result.profilesImported, 0, "\(mode)")
+            XCTAssertEqual(result.profilesSkipped, 1, "\(mode)")
+            XCTAssertEqual(result.historyImported, 0, "\(mode)")
+            XCTAssertEqual(result.historySkippedAsDuplicate, 1, "\(mode)")
+            XCTAssertEqual(result.hotkeysApplied, 0, "\(mode)")
+            XCTAssertFalse(hotkeysChanged, "\(mode)")
+        }
+
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+        XCTAssertEqual(fixture.promptActionService.promptActions.filter { !$0.isPreset }.count, 1)
+        XCTAssertEqual(fixture.profileService.profiles.count, 1)
+        XCTAssertEqual(fixture.profileService.profiles.first?.promptActionId, action.id.uuidString)
+        XCTAssertEqual(try fixture.historyService.allRecordsThrowing().count, 1)
+    }
+
+    func testHistoryWithSameTextAtDifferentTimeIsStillImported() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        _ = try seedReimportFixture(fixture)
+        let backup = try exportBackup(from: fixture)
+        let entry = try XCTUnwrap(backup.history.first)
+        let laterEntry = SettingsBackupExporter.HistoryEntryDTO(
+            timestamp: entry.timestamp.addingTimeInterval(60),
+            rawText: entry.rawText,
+            finalText: entry.finalText,
+            appName: entry.appName,
+            appBundleIdentifier: entry.appBundleIdentifier,
+            appURL: entry.appURL,
+            durationSeconds: entry.durationSeconds,
+            language: entry.language,
+            engineUsed: entry.engineUsed,
+            modelUsed: entry.modelUsed,
+            pipelineSteps: entry.pipelineSteps
+        )
+        let backupWithLaterEntry = SettingsBackupExporter.SettingsBackup(
+            schemaVersion: backup.schemaVersion,
+            exportedAt: backup.exportedAt,
+            appVersion: backup.appVersion,
+            workflows: [],
+            dictionaryEntries: [],
+            snippets: [],
+            promptActions: [],
+            profiles: [],
+            hotkeys: [:],
+            plugins: [],
+            history: [entry, laterEntry, laterEntry],
+            updateChannel: nil,
+            preferences: .empty
+        )
+
+        let result = await importBackup(backupWithLaterEntry, into: fixture)
+
+        XCTAssertEqual(result.historyImported, 1)
+        XCTAssertEqual(result.historySkippedAsDuplicate, 2)
+        XCTAssertEqual(try fixture.historyService.allRecordsThrowing().count, 2)
+    }
+
+    func testMergeAddsEditedItemsAndKeepsHotkeysAndEnabledState() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        _ = try seedReimportFixture(fixture)
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        let edited = editedBackup(
+            backup,
+            workflows: [SettingsBackupExporter.WorkflowDTO(
+                name: workflow.name,
+                isEnabled: workflow.isEnabled,
+                sortOrder: workflow.sortOrder,
+                template: .summary,
+                trigger: workflow.trigger,
+                behavior: workflow.behavior,
+                output: workflow.output
+            )],
+            hotkeys: [UserDefaultsKeys.toggleHotkeys: [UnifiedHotkey(keyCode: 9, modifierFlags: 0x200, isFn: false)]]
+        )
+        // Disabling an item on this Mac after the export doesn't make it a different item.
+        let existingWorkflow = try XCTUnwrap(fixture.workflowService.workflows.first)
+        fixture.workflowService.toggleWorkflow(existingWorkflow)
+        let existingProfile = try XCTUnwrap(fixture.profileService.profiles.first)
+        fixture.profileService.toggleProfile(existingProfile)
+
+        let result = await importBackup(edited, into: fixture)
+
+        XCTAssertEqual(result.workflowsImported, 1)
+        XCTAssertEqual(result.workflowsSkipped, 0)
+        XCTAssertEqual(result.profilesSkipped, 1)
+        XCTAssertEqual(result.hotkeysApplied, 0)
+        XCTAssertEqual(fixture.workflowService.workflows.map(\.template).sorted { $0.rawValue < $1.rawValue }, [.cleanedText, .summary])
+        XCTAssertEqual(fixture.profileService.profiles.map(\.isEnabled), [false])
+        let hotkeyData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(
+            try JSONDecoder().decode([UnifiedHotkey].self, from: hotkeyData),
+            [UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)]
+        )
+    }
+
+    func testReplaceUpdatesSameNameItemsAndHotkeysWithoutDuplicating() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let action = try seedReimportFixture(fixture)
+        fixture.profileService.addProfile(name: "Other", priority: 5)
+        let backup = try exportBackup(from: fixture)
+        let slackPriority = try XCTUnwrap(fixture.profileService.profiles.first { $0.name == "Slack" }?.priority)
+
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        let promptAction = try XCTUnwrap(backup.promptActions.first)
+        let profile = try XCTUnwrap(backup.profiles.first { $0.name == "Slack" })
+        let newHotkey = UnifiedHotkey(keyCode: 9, modifierFlags: 0x200, isFn: false)
+        let edited = editedBackup(
+            backup,
+            workflows: [SettingsBackupExporter.WorkflowDTO(
+                name: workflow.name,
+                isEnabled: false,
+                sortOrder: 99,
+                template: .summary,
+                trigger: .app("com.microsoft.Outlook"),
+                behavior: workflow.behavior,
+                output: workflow.output
+            )],
+            promptActions: [SettingsBackupExporter.PromptActionDTO(
+                localId: promptAction.localId,
+                name: "Summarize briefly",
+                prompt: "Summarize in one sentence",
+                icon: promptAction.icon,
+                isEnabled: promptAction.isEnabled,
+                providerType: promptAction.providerType,
+                cloudModel: promptAction.cloudModel,
+                temperatureModeRaw: promptAction.temperatureModeRaw,
+                temperatureValue: promptAction.temperatureValue,
+                targetActionPluginId: promptAction.targetActionPluginId
+            )],
+            profiles: [SettingsBackupExporter.ProfileDTO(
+                name: profile.name,
+                isEnabled: profile.isEnabled,
+                priority: 42,
+                bundleIdentifiers: ["com.hnc.Discord"],
+                urlPatterns: profile.urlPatterns,
+                inputLanguage: "de",
+                translationEnabled: profile.translationEnabled,
+                translationTargetLanguage: profile.translationTargetLanguage,
+                selectedTask: profile.selectedTask,
+                engineOverride: profile.engineOverride,
+                cloudModelOverride: profile.cloudModelOverride,
+                promptActionId: profile.promptActionId,
+                memoryEnabled: profile.memoryEnabled,
+                outputFormat: profile.outputFormat,
+                hotkey: profile.hotkey,
+                inlineCommandsEnabled: profile.inlineCommandsEnabled,
+                autoEnterEnabled: profile.autoEnterEnabled
+            )],
+            hotkeys: [
+                UserDefaultsKeys.toggleHotkeys: [newHotkey],
+                "AppleLanguages": [newHotkey],
+            ]
+        )
+
+        var hotkeysChanged = false
+        let result = await importBackup(edited, into: fixture, mode: .replace) { hotkeysChanged = true }
+
+        XCTAssertEqual(result.workflowsUpdated, 1)
+        XCTAssertEqual(result.workflowsImported, 0)
+        XCTAssertEqual(result.promptActionsUpdated, 1)
+        XCTAssertEqual(result.promptActionsImported, 0)
+        XCTAssertEqual(result.profilesUpdated, 1)
+        XCTAssertEqual(result.profilesImported, 0)
+        XCTAssertEqual(result.hotkeysApplied, 1)
+        XCTAssertEqual(result.hotkeysSkipped, 1)
+        XCTAssertTrue(hotkeysChanged)
+
+        let updatedWorkflow = try XCTUnwrap(fixture.workflowService.workflows.first)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+        XCTAssertEqual(updatedWorkflow.template, .summary)
+        XCTAssertEqual(updatedWorkflow.trigger, .app("com.microsoft.Outlook"))
+        XCTAssertFalse(updatedWorkflow.isEnabled)
+        XCTAssertNotEqual(updatedWorkflow.sortOrder, 99)
+
+        // Matched by its exported id although the name changed.
+        let customActions = fixture.promptActionService.promptActions.filter { !$0.isPreset }
+        XCTAssertEqual(customActions.map(\.id), [action.id])
+        XCTAssertEqual(customActions.first?.name, "Summarize briefly")
+        XCTAssertEqual(customActions.first?.prompt, "Summarize in one sentence")
+
+        let updatedProfile = try XCTUnwrap(fixture.profileService.profiles.first { $0.name == "Slack" })
+        XCTAssertEqual(fixture.profileService.profiles.count, 2)
+        XCTAssertEqual(updatedProfile.bundleIdentifiers, ["com.hnc.Discord"])
+        XCTAssertEqual(updatedProfile.inputLanguage, "de")
+        XCTAssertEqual(updatedProfile.priority, slackPriority)
+        XCTAssertEqual(updatedProfile.promptActionId, action.id.uuidString)
+
+        let hotkeyData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: hotkeyData), [newHotkey])
+        XCTAssertNil(fixture.userDefaults.data(forKey: "AppleLanguages"))
+    }
+
+    func testReplaceUpdatesOnlyOneOfSeveralSameNameWorkflows() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(name: "Email", template: .cleanedText, trigger: .manual())
+        fixture.workflowService.addWorkflow(name: "Email", template: .emailReply, trigger: .manual())
+        let backup = try exportBackup(from: fixture)
+        let edited = editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+            name: "Email",
+            isEnabled: true,
+            sortOrder: 0,
+            template: .summary,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(),
+            output: WorkflowOutput()
+        )])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.workflowsUpdated, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 2)
+        XCTAssertEqual(fixture.workflowService.workflows.filter { $0.template == .summary }.count, 1)
+    }
+
+    func testReimportKeepsProfileReferenceToBuiltInPreset() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.promptActionService.addPreset(PromptAction.presets[0])
+        let preset = try XCTUnwrap(fixture.promptActionService.promptActions.first { $0.isPreset })
+        fixture.profileService.addProfile(
+            name: "Mail",
+            bundleIdentifiers: ["com.apple.mail", "com.microsoft.Outlook"],
+            promptActionId: preset.id.uuidString
+        )
+        let backup = try exportBackup(from: fixture)
+        XCTAssertTrue(backup.promptActions.isEmpty)
+        let profile = try XCTUnwrap(backup.profiles.first)
+        // The same apps in another order are still the same profile.
+        let reordered = editedBackup(backup, profiles: [SettingsBackupExporter.ProfileDTO(
+            name: profile.name,
+            isEnabled: profile.isEnabled,
+            priority: profile.priority,
+            bundleIdentifiers: profile.bundleIdentifiers.reversed(),
+            urlPatterns: profile.urlPatterns,
+            inputLanguage: profile.inputLanguage,
+            translationEnabled: profile.translationEnabled,
+            translationTargetLanguage: profile.translationTargetLanguage,
+            selectedTask: profile.selectedTask,
+            engineOverride: profile.engineOverride,
+            cloudModelOverride: profile.cloudModelOverride,
+            promptActionId: profile.promptActionId,
+            memoryEnabled: profile.memoryEnabled,
+            outputFormat: profile.outputFormat,
+            hotkey: profile.hotkey,
+            inlineCommandsEnabled: profile.inlineCommandsEnabled,
+            autoEnterEnabled: profile.autoEnterEnabled
+        )])
+
+        for mode in [SettingsBackupExporter.ImportMode.merge, .replace] {
+            let result = await importBackup(reordered, into: fixture, mode: mode)
+
+            XCTAssertEqual(result.profilesSkipped, 1, "\(mode)")
+            XCTAssertEqual(fixture.profileService.profiles.count, 1, "\(mode)")
+            XCTAssertEqual(fixture.profileService.profiles.first?.promptActionId, preset.id.uuidString, "\(mode)")
+        }
+    }
+
+    func testReplacePrefersExportedPromptActionIdOverMatchingContent() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let first = try XCTUnwrap(fixture.promptActionService.addAction(name: "Shorten", prompt: "Shorten the text"))
+        let second = try XCTUnwrap(fixture.promptActionService.addAction(name: "Translate", prompt: "Translate to English"))
+        let backup = try exportBackup(from: fixture)
+        let exportedFirst = try XCTUnwrap(backup.promptActions.first { $0.localId == first.id.uuidString })
+        // The first action is edited to look exactly like the second one.
+        let edited = editedBackup(backup, promptActions: [SettingsBackupExporter.PromptActionDTO(
+            localId: exportedFirst.localId,
+            name: second.name,
+            prompt: second.prompt,
+            icon: second.icon,
+            isEnabled: exportedFirst.isEnabled,
+            providerType: exportedFirst.providerType,
+            cloudModel: exportedFirst.cloudModel,
+            temperatureModeRaw: exportedFirst.temperatureModeRaw,
+            temperatureValue: exportedFirst.temperatureValue,
+            targetActionPluginId: exportedFirst.targetActionPluginId
+        )])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.promptActionsUpdated, 1)
+        let actions = fixture.promptActionService.promptActions.filter { !$0.isPreset }
+        XCTAssertEqual(actions.first { $0.id == first.id }?.prompt, "Translate to English")
+        XCTAssertEqual(actions.first { $0.id == second.id }?.prompt, "Translate to English")
+        XCTAssertEqual(actions.count, 2)
+    }
+
+    func testImportedHotkeyThatConflictsWithAnotherSlotIsSkipped() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let pttHotkey = UnifiedHotkey(keyCode: 9, modifierFlags: 0x200, isFn: false)
+        let toggleHotkey = UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([pttHotkey]), forKey: UserDefaultsKeys.pttHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([toggleHotkey]), forKey: UserDefaultsKeys.toggleHotkeys)
+        let backup = try exportBackup(from: fixture)
+        // A slot with one conflicting binding keeps all of its current bindings.
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [UnifiedHotkey(keyCode: 11, modifierFlags: 0x100, isFn: false), pttHotkey],
+            UserDefaultsKeys.hybridHotkeys: [UnifiedHotkey(keyCode: 5, modifierFlags: 0x100, isFn: false)],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 1)
+        XCTAssertEqual(result.hotkeysSkipped, 1)
+        let toggleData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: toggleData), [toggleHotkey])
+        XCTAssertNotNil(fixture.userDefaults.data(forKey: UserDefaultsKeys.hybridHotkeys))
+    }
+
+    func testDroppedHotkeyDoesNotLeaveAConflictWithItsOldBinding() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let y = UnifiedHotkey(keyCode: 16, modifierFlags: 0x100, isFn: false)
+        let z = UnifiedHotkey(keyCode: 6, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([y]), forKey: UserDefaultsKeys.toggleHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([z]), forKey: UserDefaultsKeys.recorderToggleHotkeys)
+        let backup = try exportBackup(from: fixture)
+        // Toggle=Z collides with the Recorder, so Toggle keeps Y and Hybrid=Y must not be written either.
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [z],
+            UserDefaultsKeys.hybridHotkeys: [y],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 0)
+        XCTAssertEqual(result.hotkeysSkipped, 2)
+        XCTAssertNil(fixture.userDefaults.data(forKey: UserDefaultsKeys.hybridHotkeys))
+    }
+
+    func testReplaceSwapsHotkeysBetweenSlots() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        let y = UnifiedHotkey(keyCode: 16, modifierFlags: 0x100, isFn: false)
+        let z = UnifiedHotkey(keyCode: 6, modifierFlags: 0x100, isFn: false)
+        fixture.userDefaults.set(try JSONEncoder().encode([y]), forKey: UserDefaultsKeys.toggleHotkeys)
+        fixture.userDefaults.set(try JSONEncoder().encode([z]), forKey: UserDefaultsKeys.pttHotkeys)
+        let backup = try exportBackup(from: fixture)
+        let edited = editedBackup(backup, hotkeys: [
+            UserDefaultsKeys.toggleHotkeys: [z],
+            UserDefaultsKeys.pttHotkeys: [y],
+        ])
+
+        let result = await importBackup(edited, into: fixture, mode: .replace)
+
+        XCTAssertEqual(result.hotkeysApplied, 2)
+        let toggleData = try XCTUnwrap(fixture.userDefaults.data(forKey: UserDefaultsKeys.toggleHotkeys))
+        XCTAssertEqual(try JSONDecoder().decode([UnifiedHotkey].self, from: toggleData), [z])
+    }
+
+    func testWorkflowWithReorderedAppsIsTheSameWorkflow() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(
+            name: "Chat",
+            template: .cleanedText,
+            trigger: WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.tinyspeck.slackmacgap", "com.hnc.Discord"])
+        )
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        let edited = editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+            name: workflow.name,
+            isEnabled: workflow.isEnabled,
+            sortOrder: workflow.sortOrder,
+            template: workflow.template,
+            trigger: WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.hnc.Discord", "com.tinyspeck.slackmacgap"]),
+            behavior: workflow.behavior,
+            output: workflow.output
+        )])
+
+        let result = await importBackup(edited, into: fixture)
+
+        XCTAssertEqual(result.workflowsSkipped, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+    }
 }

@@ -89,8 +89,9 @@ struct CLIClient {
         try await get("/v1/settings/export", timeout: 300)
     }
 
-    func importSettings(_ data: Data) async throws -> Data {
-        let url = URL(string: "\(baseURL)/v1/settings/import")!
+    func importSettings(_ data: Data, replaceExisting: Bool = false) async throws -> Data {
+        let mode = replaceExisting ? "replace" : "merge"
+        let url = URL(string: "\(baseURL)/v1/settings/import?mode=\(mode)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

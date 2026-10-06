@@ -82,6 +82,11 @@ final class DictationSettingsHandler {
         hotkeyService.hotkeys(for: slot)
     }
 
+    func reloadHotkeysFromDefaults() {
+        hotkeyService.reloadHotkeysFromDefaults()
+        onHotkeyLabelsChanged?()
+    }
+
     func isHotkeyAssigned(_ hotkey: UnifiedHotkey, excluding: HotkeySlotType) -> HotkeySlotType? {
         hotkeyService.isHotkeyAssigned(hotkey, excluding: excluding)
     }

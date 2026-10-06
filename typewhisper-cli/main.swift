@@ -17,6 +17,7 @@ var engineOverride: String?
 var modelOverride: String?
 var awaitDownload = false
 var applyCorrections = true
+var replaceExisting = false
 
 var argIterator = args.makeIterator()
 while let arg = argIterator.next() {
@@ -83,6 +84,8 @@ while let arg = argIterator.next() {
         awaitDownload = true
     case "--no-corrections":
         applyCorrections = false
+    case "--replace":
+        replaceExisting = true
     default:
         // Ignore Apple/Xcode internal flags (e.g. -NSDocumentRevisionsDebugMode)
         if arg.hasPrefix("-NS") || arg.hasPrefix("-Apple") {
@@ -147,7 +150,7 @@ do {
             throw CLIError.fileNotFound(fileURL.path)
         }
         let backupData = try Data(contentsOf: fileURL)
-        let result = try await client.importSettings(backupData)
+        let result = try await client.importSettings(backupData, replaceExisting: replaceExisting)
         print(OutputFormatter.formatSettingsImport(result, json: jsonOutput))
 
     case "transcribe":
@@ -226,10 +229,15 @@ func printUsage() {
           --await-download     Wait for an engine to restore/download its model instead of failing with 409
           --no-corrections     Return raw transcription text without Dictionary Corrections
 
+        Import options:
+          --replace            Overwrite workflows, profiles, and prompt actions with the
+                               same name and replace hotkeys (default: only add new items)
+
         Examples:
           typewhisper status
           typewhisper export typewhisper-settings.json
           typewhisper import typewhisper-settings.json
+          typewhisper import typewhisper-settings.json --replace
           typewhisper transcribe recording.wav
           typewhisper transcribe recording.wav --language de --json
           typewhisper transcribe recording.wav --language-hint de --language-hint en

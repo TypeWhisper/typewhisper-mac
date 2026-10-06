@@ -476,7 +476,15 @@ curl --fail --silent --show-error -X POST http://localhost:8978/v1/settings/impo
   -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @typewhisper-settings.json
+
+# Import and overwrite workflows, profiles, prompt actions with the same name and hotkeys
+curl --fail --silent --show-error -X POST "http://localhost:8978/v1/settings/import?mode=replace" \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @typewhisper-settings.json
 ```
+
+An import skips history entries, workflows, profiles, and prompt actions that already exist unchanged, so importing a backup onto the Mac it came from does not duplicate them. The default `mode=merge` adds everything else and only fills empty hotkey slots. `mode=replace` also overwrites existing workflows, profiles, and prompt actions with the same name and the hotkeys contained in the backup. Neither mode deletes anything.
 
 ### Workflows
 
@@ -654,6 +662,7 @@ typewhisper import settings.json # Import all categories in a backup
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 | `--no-corrections` | Return raw transcription text without Dictionary Corrections |
+| `--replace` | `import` only: overwrite workflows, profiles, and prompt actions with the same name and replace hotkeys |
 
 ### Examples
 
@@ -675,6 +684,9 @@ typewhisper export ~/.config/typewhisper/settings.json
 
 # Restore it and receive a machine-readable import summary
 typewhisper import ~/.config/typewhisper/settings.json --json
+
+# Apply edits made to that file, including changed hotkeys
+typewhisper import ~/.config/typewhisper/settings.json --replace
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.

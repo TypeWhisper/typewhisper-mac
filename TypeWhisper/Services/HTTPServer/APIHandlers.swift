@@ -88,9 +88,12 @@ final class APIHandlers: @unchecked Sendable {
         guard !request.body.isEmpty else {
             return .error(status: 400, message: "Request body must contain a TypeWhisper settings backup")
         }
+        guard let mode = SettingsBackupExporter.ImportMode(rawValue: request.queryParams["mode"] ?? "merge") else {
+            return .error(status: 400, message: "mode must be merge or replace")
+        }
 
         do {
-            let result = try await settingsBackupService.importData(request.body)
+            let result = try await settingsBackupService.importData(request.body, mode: mode)
             return .json(result)
         } catch SettingsBackupExporter.ImportError.invalidFile {
             return .error(status: 400, message: "Request body is not a valid TypeWhisper settings backup")

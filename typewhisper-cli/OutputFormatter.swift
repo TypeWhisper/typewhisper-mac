@@ -107,16 +107,19 @@ enum OutputFormatter {
         }
 
         var lines = [
-            "Workflows: \(integer("workflowsImported")) imported",
+            "Workflows: \(integer("workflowsImported")) imported, \(integer("workflowsUpdated")) updated, \(integer("workflowsSkipped")) skipped",
             "Dictionary: \(integer("dictionaryImported")) imported, \(integer("dictionarySkipped")) skipped",
             "Snippets: \(integer("snippetsImported")) imported, \(integer("snippetsSkipped")) skipped",
-            "Prompt Actions: \(integer("promptActionsImported")) imported",
-            "Profiles: \(integer("profilesImported")) imported",
+            "Prompt Actions: \(integer("promptActionsImported")) imported, \(integer("promptActionsUpdated")) updated, \(integer("promptActionsSkipped")) skipped",
+            "Profiles: \(integer("profilesImported")) imported, \(integer("profilesUpdated")) updated, \(integer("profilesSkipped")) skipped",
             "Hotkeys: \(integer("hotkeysApplied")) applied, \(integer("hotkeysSkipped")) skipped",
             "Plugins: \(integer("pluginsInstalled")) installed, \(integer("pluginsSkipped")) skipped",
-            "History: \(integer("historyImported")) imported, \(integer("historySkippedByRetention")) skipped by retention",
+            "History: \(integer("historyImported")) imported, \(integer("historySkippedAsDuplicate")) skipped as duplicates, \(integer("historySkippedByRetention")) skipped by retention",
             "Preferences: \(integer("preferencesApplied")) applied",
         ]
+        if integer("historySkippedUnreadableDestination") > 0 {
+            lines.append("Warning: \(integer("historySkippedUnreadableDestination")) history entries were skipped because the existing history could not be read.")
+        }
         if result["updateChannelApplied"] as? Bool == true {
             lines.append("Update channel applied")
         }

@@ -15034,28 +15034,6 @@
         }
       }
     },
-    "Global keyboard shortcuts. Only fills empty slots on import — never overwrites existing bindings." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Globale Tastenkombinationen. Beim Import werden nur leere Plätze befüllt — bestehende Zuordnungen werden nie überschrieben."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全局键盘快捷键。导入时仅填充空白位置 - 绝不覆盖现有绑定。"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリ共通のキーボードショートカット。取込み時は未設定の項目にのみ適用し、既存の割り当ては上書きしません。"
-          }
-        }
-      }
-    },
     "Glass follows your system appearance and uses Liquid Glass on macOS 26. Earlier versions show a translucent material." : {
       "localizations" : {
         "de" : {
