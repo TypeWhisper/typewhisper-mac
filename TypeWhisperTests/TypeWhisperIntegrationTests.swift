@@ -5696,43 +5696,55 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
     @MainActor
     func testTerminalBundleForcesSyntheticPasteInsteadOfDirectAccessibilityInsertion() async throws {
-        let service = TextInsertionService()
-        let pasteboard = NSPasteboard.withUniqueName()
-        let element = AXUIElementCreateSystemWide()
-        service.accessibilityGrantedOverride = true
-        service.pasteboardProvider = { pasteboard }
-        service.focusedTextElementOverride = { element }
-        service.captureActiveAppOverride = { ("iTerm2", "com.googlecode.iterm2", nil) }
-        service.terminalPasteFallbackRestoreDelay = .milliseconds(1)
+        // cmux accepts AX writes but updates AXValue only after the terminal redraws, so a
+        // direct insertion looks unverified and the fallback paste would insert it again.
+        let applications = [
+            (name: "iTerm2", bundleIdentifier: "com.googlecode.iterm2"),
+            (name: "cmux", bundleIdentifier: "com.cmuxterm.app")
+        ]
 
-        var pasteCount = 0
-        service.pasteSimulatorOverride = {
-            pasteCount += 1
-        }
-        service.focusedTextStateOverride = { _ in
-            if pasteCount == 0 {
-                return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        for application in applications {
+            let service = TextInsertionService()
+            let pasteboard = NSPasteboard.withUniqueName()
+            let element = AXUIElementCreateSystemWide()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.focusedTextElementOverride = { element }
+            service.captureActiveAppOverride = { (application.name, application.bundleIdentifier, nil) }
+            service.terminalPasteFallbackRestoreDelay = .milliseconds(1)
+
+            var pasteCount = 0
+            service.pasteSimulatorOverride = {
+                pasteCount += 1
             }
-            return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+            service.focusedTextStateOverride = { _ in
+                if pasteCount == 0 {
+                    return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                }
+                return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+            }
+
+            var didAttemptDirectAXInsertion = false
+            service.insertTextAtOverride = { _, _ in
+                didAttemptDirectAXInsertion = true
+                return true
+            }
+
+            pasteboard.clearContents()
+            pasteboard.setString("Existing", forType: .string)
+
+            let result = try await service.insertText("Hello", preserveClipboard: true)
+            let restoreVerification = await service.waitForPendingClipboardRestore()
+
+            XCTAssertFalse(
+                didAttemptDirectAXInsertion,
+                "\(application.name) should bypass direct AX insertion"
+            )
+            XCTAssertEqual(pasteCount, 1, "\(application.name) should paste exactly once")
+            XCTAssertEqual(result, .pasted(verification: .notAwaited))
+            XCTAssertEqual(restoreVerification, .verified)
+            XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
         }
-
-        var didAttemptDirectAXInsertion = false
-        service.insertTextAtOverride = { _, _ in
-            didAttemptDirectAXInsertion = true
-            return true
-        }
-
-        pasteboard.clearContents()
-        pasteboard.setString("Existing", forType: .string)
-
-        let result = try await service.insertText("Hello", preserveClipboard: true)
-        let restoreVerification = await service.waitForPendingClipboardRestore()
-
-        XCTAssertFalse(didAttemptDirectAXInsertion)
-        XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(result, .pasted(verification: .notAwaited))
-        XCTAssertEqual(restoreVerification, .verified)
-        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
     @MainActor

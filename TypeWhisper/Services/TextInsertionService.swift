@@ -181,7 +181,8 @@ final class TextInsertionService {
         "dev.warp.Warp-Stable",
         "dev.warp.Warp-Preview",
         "dev.warp.WarpPreview",
-        "com.mitchellh.ghostty"
+        "com.mitchellh.ghostty",
+        "com.cmuxterm.app"
     ]
     // Gecko editors can report successful AX writes while applying text at
     // the wrong position or more than once. Prefer one synthetic paste.
