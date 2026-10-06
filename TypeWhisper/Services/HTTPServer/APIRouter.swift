@@ -3,14 +3,20 @@ import os
 
 typealias APIHandler = @Sendable (HTTPRequest) async -> HTTPResponse
 
+enum APIAuthenticationRequirement: Sendable, Equatable {
+    case disabled
+    /// A missing or empty token rejects every protected request.
+    case required(token: String?)
+}
+
 final class APIRouter: Sendable {
     private typealias RouteEntry = (method: String, path: String, handler: APIHandler)
 
     private let routes = OSAllocatedUnfairLock<[RouteEntry]>(initialState: [])
-    private let apiTokenProvider: @Sendable () -> String?
+    private let authenticationProvider: @Sendable () -> APIAuthenticationRequirement
 
-    init(apiTokenProvider: @escaping @Sendable () -> String? = { nil }) {
-        self.apiTokenProvider = apiTokenProvider
+    init(authenticationProvider: @escaping @Sendable () -> APIAuthenticationRequirement = { .disabled }) {
+        self.authenticationProvider = authenticationProvider
     }
 
     func register(_ method: String, _ path: String, handler: @escaping APIHandler) {
@@ -20,6 +26,10 @@ final class APIRouter: Sendable {
     }
 
     func route(_ request: HTTPRequest) async -> HTTPResponse {
+        if let rejection = Self.browserRequestRejection(request) {
+            return .error(status: 403, message: rejection)
+        }
+
         if request.method == "OPTIONS" {
             return HTTPResponse(status: 204, contentType: "text/plain", body: Data())
         }
@@ -44,16 +54,63 @@ final class APIRouter: Sendable {
 
     private func isAuthorized(_ request: HTTPRequest) -> Bool {
         guard !isPublicRoute(request),
-              let expectedToken = apiTokenProvider(),
-              !expectedToken.isEmpty else {
+              case .required(let expectedToken) = authenticationProvider() else {
             return true
         }
 
-        guard let providedToken = request.bearerToken ?? request.apiTokenHeader else {
+        guard let expectedToken, !expectedToken.isEmpty,
+              let providedToken = request.bearerToken ?? request.apiTokenHeader else {
             return false
         }
 
         return Self.constantTimeEquals(providedToken, expectedToken)
+    }
+
+    /// The API serves local tools, which either send no browser headers or
+    /// talk to 127.0.0.1 directly. Web pages from other sites, including
+    /// DNS-rebinding attempts that point a foreign host name at 127.0.0.1,
+    /// are refused even when no API token is required.
+    static func browserRequestRejection(_ request: HTTPRequest) -> String? {
+        if let host = request.headers["host"], !isLoopbackHost(host) {
+            return "Requests must be addressed to 127.0.0.1 or localhost"
+        }
+
+        if let origin = request.headers["origin"], !isAllowedOrigin(origin) {
+            return "Requests from web pages on other sites are not allowed"
+        }
+
+        if request.headers["sec-fetch-site"]?.lowercased() == "cross-site" {
+            return "Requests from web pages on other sites are not allowed"
+        }
+
+        return nil
+    }
+
+    private static func isLoopbackHost(_ hostHeader: String) -> Bool {
+        let value = hostHeader.trimmingCharacters(in: .whitespaces)
+        if value.hasPrefix("["), let closingBracket = value.firstIndex(of: "]") {
+            return isLoopbackHostName(String(value[value.index(after: value.startIndex)..<closingBracket]))
+        }
+        let hostName = value.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false).first ?? ""
+        return isLoopbackHostName(String(hostName))
+    }
+
+    private static func isLoopbackHostName(_ name: String) -> Bool {
+        ["127.0.0.1", "localhost", "::1"].contains(name.lowercased())
+    }
+
+    /// Pages served from this Mac and non-web origins such as browser
+    /// extensions are allowed. Opaque "null" origins come from sandboxed
+    /// frames and local files, which any site can create.
+    private static func isAllowedOrigin(_ origin: String) -> Bool {
+        guard let components = URLComponents(string: origin.trimmingCharacters(in: .whitespaces)),
+              let scheme = components.scheme?.lowercased() else {
+            return false
+        }
+
+        guard scheme == "http" || scheme == "https" else { return true }
+        guard let host = components.host else { return false }
+        return isLoopbackHostName(host.trimmingCharacters(in: CharacterSet(charactersIn: "[]")))
     }
 
     private func isPublicRoute(_ request: HTTPRequest) -> Bool {

@@ -1990,7 +1990,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     func testRouterRequiresAPITokenForRegisteredRoutes() async throws {
-        let router = APIRouter(apiTokenProvider: { "test-token" })
+        let router = APIRouter(authenticationProvider: { .required(token: "test-token") })
         router.register("GET", "/v1/status") { _ in
             .json(["status": "ready"])
         }
@@ -2042,13 +2042,107 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testLocalAPIAuthenticatorEnforcesTokenOnlyWhenEnabled() {
         let authenticator = LocalAPIAuthenticator(initialToken: "test-token", requiresAuthentication: false)
 
-        XCTAssertNil(authenticator.tokenForEnforcedRequests())
+        XCTAssertEqual(authenticator.authenticationRequirement(), .disabled)
 
         authenticator.setRequiresAuthentication(true)
-        XCTAssertEqual(authenticator.tokenForEnforcedRequests(), "test-token")
+        XCTAssertEqual(authenticator.authenticationRequirement(), .required(token: "test-token"))
 
         authenticator.setRequiresAuthentication(false)
-        XCTAssertNil(authenticator.tokenForEnforcedRequests())
+        XCTAssertEqual(authenticator.authenticationRequirement(), .disabled)
+    }
+
+    func testRouterRejectsProtectedRoutesWhileTheRequiredTokenIsMissing() async {
+        for missingToken in [nil, ""] as [String?] {
+            let router = APIRouter(authenticationProvider: { .required(token: missingToken) })
+            router.register("GET", "/v1/status") { _ in .json(["status": "ready"]) }
+            router.register("GET", "/v1/models") { _ in .json(["ok": true]) }
+
+            let status = await router.route(Self.apiRequest("/v1/status"))
+            let withoutToken = await router.route(Self.apiRequest("/v1/models"))
+            let withEmptyToken = await router.route(
+                Self.apiRequest("/v1/models", headers: ["authorization": "Bearer "])
+            )
+            let withSomeToken = await router.route(
+                Self.apiRequest("/v1/models", headers: ["x-typewhisper-api-token": "guess"])
+            )
+
+            XCTAssertEqual(status.status, 200)
+            XCTAssertEqual(withoutToken.status, 401)
+            XCTAssertEqual(withEmptyToken.status, 401)
+            XCTAssertEqual(withSomeToken.status, 401)
+        }
+    }
+
+    func testRouterAcceptsLocalToolsAndRejectsForeignWebPages() async {
+        let router = APIRouter()
+        router.register("GET", "/v1/status") { _ in .json(["status": "ready"]) }
+        router.register("POST", "/v1/dictation/start") { _ in .json(["ok": true]) }
+
+        let accepted: [[String: String]] = [
+            [:],
+            ["host": "127.0.0.1:8978"],
+            ["host": "localhost:8978"],
+            ["host": "LOCALHOST"],
+            ["host": "[::1]:8978"],
+            ["host": "127.0.0.1:8978", "origin": "http://localhost:3000", "sec-fetch-site": "same-site"],
+            ["host": "127.0.0.1:8978", "origin": "http://[::1]:5173"],
+            ["host": "127.0.0.1:8978", "origin": "chrome-extension://abcdefghijklmnop"],
+            ["host": "127.0.0.1:8978", "sec-fetch-site": "none"],
+        ]
+        let rejected: [[String: String]] = [
+            ["host": "attacker.example:8978"],
+            ["host": "127.0.0.1.attacker.example"],
+            ["host": ""],
+            ["host": "127.0.0.1:8978", "origin": "https://attacker.example"],
+            ["host": "127.0.0.1:8978", "origin": "http://localhost.attacker.example"],
+            ["host": "127.0.0.1:8978", "origin": "null"],
+            ["host": "127.0.0.1:8978", "sec-fetch-site": "cross-site"],
+        ]
+
+        for headers in accepted {
+            let status = await router.route(Self.apiRequest("/v1/status", headers: headers)).status
+            let start = await router.route(Self.apiRequest("/v1/dictation/start", method: "POST", headers: headers)).status
+            XCTAssertEqual(status, 200, "\(headers)")
+            XCTAssertEqual(start, 200, "\(headers)")
+        }
+
+        for headers in rejected {
+            let status = await router.route(Self.apiRequest("/v1/status", headers: headers)).status
+            let start = await router.route(Self.apiRequest("/v1/dictation/start", method: "POST", headers: headers)).status
+            let preflight = await router.route(Self.apiRequest("/v1/dictation/start", method: "OPTIONS", headers: headers)).status
+            XCTAssertEqual(status, 403, "\(headers)")
+            XCTAssertEqual(start, 403, "\(headers)")
+            XCTAssertEqual(preflight, 403, "\(headers)")
+        }
+    }
+
+    func testAPITokenIsRequiredByDefaultButExistingTokenlessServersKeepRunning() throws {
+        let freshDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        XCTAssertTrue(LocalAPIAuthenticator.storedRequiresAuthentication(freshDefaults))
+        freshDefaults.set(true, forKey: UserDefaultsKeys.apiServerEnabled)
+        XCTAssertTrue(
+            LocalAPIAuthenticator.storedRequiresAuthentication(freshDefaults),
+            "Enabling the server later must not drop the token requirement"
+        )
+
+        let existingServerDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        existingServerDefaults.set(true, forKey: UserDefaultsKeys.apiServerEnabled)
+        XCTAssertFalse(LocalAPIAuthenticator.storedRequiresAuthentication(existingServerDefaults))
+        existingServerDefaults.set(false, forKey: UserDefaultsKeys.apiServerEnabled)
+        XCTAssertFalse(LocalAPIAuthenticator.storedRequiresAuthentication(existingServerDefaults))
+
+        let optedInDefaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
+        optedInDefaults.set(true, forKey: UserDefaultsKeys.apiServerEnabled)
+        optedInDefaults.set(true, forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        XCTAssertTrue(LocalAPIAuthenticator.storedRequiresAuthentication(optedInDefaults))
+    }
+
+    private static func apiRequest(
+        _ path: String,
+        method: String = "GET",
+        headers: [String: String] = [:]
+    ) -> HTTPRequest {
+        HTTPRequest(method: method, path: path, queryParams: [:], headers: headers, body: Data())
     }
 
     func testLocalAPIAuthenticatorDefersKeychainReadOffMainThread() async throws {

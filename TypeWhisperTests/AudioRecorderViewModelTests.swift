@@ -444,7 +444,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         _ = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
         let completions = try await viewModel.apiRecorderRecordings()
         let saved = try XCTUnwrap(completions.first)
-        let router = APIRouter(apiTokenProvider: { "test-token" })
+        let router = APIRouter(authenticationProvider: { .required(token: "test-token") })
         router.register("GET", "/v1/recorder/recordings") { request in
             await APIHandlers.recorderRecordingsResponse(for: request, recorder: viewModel)
         }

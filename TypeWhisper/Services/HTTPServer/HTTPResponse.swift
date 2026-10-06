@@ -36,6 +36,7 @@ struct HTTPResponse {
         switch status {
         case 400: code = "bad_request"
         case 401: code = "unauthorized"
+        case 403: code = "forbidden"
         case 404: code = "not_found"
         case 405: code = "method_not_allowed"
         case 413: code = "payload_too_large"
@@ -52,6 +53,7 @@ struct HTTPResponse {
         case 204: statusText = "No Content"
         case 400: statusText = "Bad Request"
         case 401: statusText = "Unauthorized"
+        case 403: statusText = "Forbidden"
         case 404: statusText = "Not Found"
         case 405: statusText = "Method Not Allowed"
         case 413: statusText = "Payload Too Large"

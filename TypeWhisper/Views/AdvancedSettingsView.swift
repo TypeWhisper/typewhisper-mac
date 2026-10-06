@@ -429,8 +429,34 @@ struct AdvancedSettingsView: View {
                 Toggle(isOn: $viewModel.requiresAuthentication) {
                     SettingsInfoLabel(
                         title: String(localized: "Require API Token"),
-                        info: String(localized: "Off by default for compatibility with existing local integrations. New clients can use api-discovery.json or send the bearer token.")
+                        info: localizedAppText(
+                            "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in TypeWhisper's Application Support folder.",
+                            de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von TypeWhisper.",
+                            ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、TypeWhisper の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
+                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 TypeWhisper 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
+                        )
                     )
+                }
+
+                if viewModel.isEnabled && !viewModel.requiresAuthentication {
+                    Label(
+                        localizedAppText(
+                            "Without a token, any app on this Mac can start dictation and read your history and settings through the API.",
+                            de: "Ohne Token kann jede App auf diesem Mac über die API Diktate starten und deinen Verlauf und deine Einstellungen lesen.",
+                            ja: "トークンがない場合、この Mac 上のどのアプリでも API を通じて音声入力を開始し、履歴や設定を読み取れます。",
+                            zh: "没有令牌时，这台 Mac 上的任何应用都可以通过 API 开始听写并读取你的历史记录和设置。"
+                        ),
+                        systemImage: "exclamationmark.shield.fill"
+                    )
+                    .foregroundStyle(.orange)
+                    .font(.callout)
+                }
+
+                if viewModel.isRunning && viewModel.requiresAuthentication, let apiToken = viewModel.currentAPIToken {
+                    Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌")) {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(apiToken, forType: .string)
+                    }
                 }
 
                 if viewModel.isEnabled {
@@ -624,12 +650,27 @@ struct AdvancedSettingsView: View {
 
     private var curlExamples: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if viewModel.requiresAuthentication {
+                exampleRow(
+                    localizedAppText("Read the API token:", de: "API-Token auslesen:", ja: "API トークンを読み取る:", zh: "读取 API 令牌："),
+                    "export TYPEWHISPER_API_TOKEN=\"$(jq -r .token \"\(apiDiscoveryFilePath)\")\""
+                )
+                Divider()
+            }
             exampleRow(String(localized: "Check status:"), "curl http://127.0.0.1:\(viewModel.port)/v1/status")
             Divider()
-            exampleRow(String(localized: "Transcribe audio:"), "curl -X POST http://127.0.0.1:\(viewModel.port)/v1/transcribe \\\n  -F \"file=@audio.wav\"")
+            exampleRow(String(localized: "Transcribe audio:"), "curl -X POST http://127.0.0.1:\(viewModel.port)/v1/transcribe \(curlAuthorizationArgument)\\\n  -F \"file=@audio.wav\"")
             Divider()
-            exampleRow(String(localized: "List models:"), "curl http://127.0.0.1:\(viewModel.port)/v1/models")
+            exampleRow(String(localized: "List models:"), "curl \(curlAuthorizationArgument)http://127.0.0.1:\(viewModel.port)/v1/models")
         }
+    }
+
+    private var apiDiscoveryFilePath: String {
+        AppConstants.appSupportDirectory.appendingPathComponent("api-discovery.json").path
+    }
+
+    private var curlAuthorizationArgument: String {
+        viewModel.requiresAuthentication ? "-H \"Authorization: Bearer $TYPEWHISPER_API_TOKEN\" " : ""
     }
 
     private func exampleRow(_ label: String, _ command: String) -> some View {
