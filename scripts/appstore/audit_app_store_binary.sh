@@ -35,7 +35,8 @@ PROCESS_SYMBOL_PATTERN='^_(posix_spawn|posix_spawnp|execve|execv|execvp|fork|vfo
 # if its imports match its entry exactly; any new symbol fails the audit.
 #   _popen: MLX CPU JIT compiler (mlx-swift Cmlx, mlx/backend/cpu/jit_compiler.cpp).
 #   _execvp _fork _posix_spawnp: Rust std::process in FluidAudio's prebuilt
-#   NemoTextProcessing (libtext_processing_rs.a).
+#   NemoTextProcessing (libtext_processing_rs.a), linked into every plugin that
+#   uses FluidAudio, including speaker detection, which never calls it.
 KNOWN_PLUGIN_PROCESS_IMPORTS=(
     "CanaryPlugin.bundle:_popen"
     "GranitePlugin.bundle:_popen"
@@ -43,6 +44,7 @@ KNOWN_PLUGIN_PROCESS_IMPORTS=(
     "Qwen3Plugin.bundle:_popen"
     "VoxtralPlugin.bundle:_popen"
     "ParakeetPlugin.bundle:_execvp _fork _posix_spawnp"
+    "SpeakerDiarizationPlugin.bundle:_execvp _fork _posix_spawnp"
 )
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"
