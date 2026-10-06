@@ -690,6 +690,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         private var recentTimeouts: [UInt64] = []
         private var backoffUntil: UInt64?
+        private var lastBackoffEnd: UInt64?
         private var nextBackoff = Self.initialBackoff
 
         func allowsReenable(at now: UInt64) -> Bool {
@@ -701,8 +702,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             if let backoffUntil {
                 guard now >= backoffUntil else { return .backingOff(seconds: nil) }
                 self.backoffUntil = nil
-                // A quiet period after the last backoff starts the next one from the beginning.
-                if now - backoffUntil > Self.maximumBackoff { nextBackoff = Self.initialBackoff }
+                lastBackoffEnd = backoffUntil
+            }
+            // A quiet period after the last backoff starts the next one from the beginning.
+            if let lastBackoffEnd, now - lastBackoffEnd > Self.maximumBackoff {
+                nextBackoff = Self.initialBackoff
+                self.lastBackoffEnd = nil
             }
             recentTimeouts = recentTimeouts.filter { now - $0 < Self.timeoutWindow } + [now]
             guard recentTimeouts.count >= Self.timeoutLimit else { return .reenable }
