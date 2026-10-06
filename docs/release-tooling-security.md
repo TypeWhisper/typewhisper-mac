@@ -26,8 +26,9 @@ inputs. This change does not sandbox reviewed build scripts or dependencies.
   tap's `main` branch requires status checks, and the release job merges the pull
   request only after those checks and the cask validation have passed.
   `HOMEBREW_TAP_TOKEN` therefore needs write access to contents and pull requests
-  on `TypeWhisper/homebrew-tap`. A rerun reuses the open pull request of an
-  earlier attempt for the same version, but only if it carries the same cask.
+  on `TypeWhisper/homebrew-tap`. A rerun closes open pull requests that earlier
+  attempts opened from tap branches for the same version and opens a fresh one,
+  so all checks run again.
 
 When updating a tool, review its upstream release and dependencies first. Obtain
 wheel SHA-256 values from the version-specific PyPI JSON endpoints recorded in
