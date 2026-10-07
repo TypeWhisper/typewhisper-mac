@@ -2661,11 +2661,18 @@ final class DictationViewModel: ObservableObject {
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
+        // A live session that lost audio or failed to finalize leaves a preview that may
+        // miss part of the recording, so the full recording is transcribed instead.
+        var liveSessionFailed = false
         if hiddenLiveSessionWasDeferred,
            let replayedResult = await transcribeRecordingThroughDeferredLiveSession(samples) {
             liveSessionResultBeforePreviewFallback = replayedResult
         } else if previewFollowedDictationEngine {
-            liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
+            let liveSessionFinish = await streamingHandler.finish(finalSamples: samples)
+            liveSessionResultBeforePreviewFallback = liveSessionFinish.result
+            if case .failed = liveSessionFinish {
+                liveSessionFailed = true
+            }
         } else {
             // The live session ran on a preview-only engine; its text is display-only
             // and the final transcription comes from the dictation engine below. Don't
@@ -2674,13 +2681,15 @@ final class DictationViewModel: ObservableObject {
             liveSessionResultBeforePreviewFallback = nil
         }
         guard !Task.isCancelled else { return }
-        logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public)")
+        logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public), liveSessionFailed=\(liveSessionFailed, privacy: .public)")
         var liveSessionResult = liveSessionResultBeforePreviewFallback.map {
             StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
         }
         let hasPreviewText = !previewText.isEmpty
 
-        if !partialText.isEmpty {
+        // A failed live session's preview stopped early; the completion event carries
+        // the final text instead.
+        if !liveSessionFailed, !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: partialText,
@@ -2694,6 +2703,7 @@ final class DictationViewModel: ObservableObject {
         updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = rawDuration }
         if previewFollowedDictationEngine,
            !streamingPreviewWasHidden,
+           !liveSessionFailed,
            !hasConfirmedTranscriptionResultText(liveSessionResult),
            let previewResult = stableLivePreviewFallbackResult(
             previewText: previewText,
@@ -2702,11 +2712,11 @@ final class DictationViewModel: ObservableObject {
            ) {
             liveSessionResult = previewResult
         }
-        // Text from a distinct preview engine or a hidden live session never becomes
-        // the final result on its own, but its having recognized speech still counts
-        // for the discard-quiet-clip gating — otherwise valid quiet speech would be
-        // discarded before the dictation engine gets to transcribe it.
-        let previewEngineConfirmedSpeech = (!previewFollowedDictationEngine || streamingPreviewWasHidden)
+        // Text from a distinct preview engine, a hidden live session or a failed live
+        // session never becomes the final result on its own, but its having recognized
+        // speech still counts for the discard-quiet-clip gating — otherwise valid quiet
+        // speech would be discarded before the dictation engine gets to transcribe it.
+        let previewEngineConfirmedSpeech = (!previewFollowedDictationEngine || streamingPreviewWasHidden || liveSessionFailed)
             && StreamingHandler.isSubstantiveStablePreview(
                 previewText.trimmingCharacters(in: .whitespacesAndNewlines)
             )

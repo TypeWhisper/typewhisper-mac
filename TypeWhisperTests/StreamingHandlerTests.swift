@@ -311,6 +311,8 @@ final class StreamingHandlerTests: XCTestCase {
         let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
         private(set) var lastPrompt: String?
         private(set) var liveSessionCreateCount = 0
+        /// Holds the next session creation until released, then fails it.
+        var failingCreationGate: SessionCreationGate?
 
         override init() {
             liveTranscriptionProgressMode = .rollingWindow
@@ -349,9 +351,29 @@ final class StreamingHandlerTests: XCTestCase {
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
             liveSessionCreateCount += 1
+            if let gate = failingCreationGate {
+                failingCreationGate = nil
+                await gate.wait()
+                throw PluginTranscriptionError.networkError("session setup failed")
+            }
             lastPrompt = prompt
             await session.setOnProgress(onProgress)
             return session
+        }
+    }
+
+    private actor SessionCreationGate {
+        private var continuation: CheckedContinuation<Void, Never>?
+        private(set) var isWaiting = false
+
+        func wait() async {
+            isWaiting = true
+            await withCheckedContinuation { continuation = $0 }
+        }
+
+        func release() {
+            continuation?.resume()
+            continuation = nil
         }
     }
 
@@ -441,9 +463,11 @@ final class StreamingHandlerTests: XCTestCase {
             finishError = error
         }
 
-        /// Fails only the next append, so later appends (e.g. the finish tail) succeed.
-        func setAppendError(_ error: PluginTranscriptionError?) {
+        /// Fails only one append, after `successfulAppends` appends went through, so
+        /// later appends (e.g. the finish tail) succeed.
+        func setAppendError(_ error: PluginTranscriptionError?, afterSuccessfulAppends successfulAppends: Int = 0) {
             appendError = error
+            appendsBeforeError = successfulAppends
         }
 
         func prepareToBlockNextAppend() {
@@ -451,7 +475,9 @@ final class StreamingHandlerTests: XCTestCase {
             appendWasReleased = false
         }
 
-        func releaseBlockedAppend() {
+        /// Lets the blocked append return, or throw `error` once it resumes.
+        func releaseBlockedAppend(throwing error: PluginTranscriptionError? = nil) {
+            blockedAppendError = error
             appendWasReleased = true
             appendReleaseContinuation?.resume()
             appendReleaseContinuation = nil
@@ -467,8 +493,11 @@ final class StreamingHandlerTests: XCTestCase {
 
         func appendAudio(samples: [Float]) async throws {
             if let appendError {
-                self.appendError = nil
-                throw appendError
+                if appendsBeforeError == 0 {
+                    self.appendError = nil
+                    throw appendError
+                }
+                appendsBeforeError -= 1
             }
             appendedChunkSizes.append(samples.count)
 
@@ -482,6 +511,10 @@ final class StreamingHandlerTests: XCTestCase {
                     }
                 }
                 appendIsBlocked = false
+                if let blockedAppendError {
+                    self.blockedAppendError = nil
+                    throw blockedAppendError
+                }
             }
 
             let progressText: String
@@ -514,6 +547,8 @@ final class StreamingHandlerTests: XCTestCase {
         private var finalResult = PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
         private var finishError: PluginTranscriptionError?
         private var appendError: PluginTranscriptionError?
+        private var appendsBeforeError = 0
+        private var blockedAppendError: PluginTranscriptionError?
     }
 
     override func tearDown() {
@@ -1022,7 +1057,12 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(result.detectedLanguage, "zh")
     }
 
-    func testFinishUsesStablePreviewWhenLiveSessionFinalizationFails() async throws {
+    /// Streams two audio deltas through a live session set up to fail along the way,
+    /// then finishes it.
+    private func finishLiveSessionWithFailure(
+        previewHidden: Bool,
+        configureFailure: (MockLiveSession) async -> Void
+    ) async throws -> (outcome: StreamingHandler.FinishOutcome, previews: [String], cancelCallCount: Int) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -1031,7 +1071,7 @@ final class StreamingHandlerTests: XCTestCase {
             "Early words stay in the transcript",
             "the transcript while later words arrive",
         ])
-        await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
+        await configureFailure(plugin.session)
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
             LoadedPlugin(
@@ -1067,6 +1107,10 @@ final class StreamingHandlerTests: XCTestCase {
             },
             bufferedDurationProvider: { 0.25 }
         )
+        let updatesLock = OSAllocatedUnfairLock(initialState: [String]())
+        handler.onPartialTextUpdate = { text in
+            updatesLock.withLock { $0.append(text) }
+        }
 
         handler.start(
             streamPrompt: "Live Terms",
@@ -1076,144 +1120,63 @@ final class StreamingHandlerTests: XCTestCase {
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
+            previewHidden: previewHidden,
             stateCheck: { true }
         )
 
         try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish()
-
-        XCTAssertEqual(result?.text, "Early words stay in the transcript while later words arrive")
-        XCTAssertEqual(result?.engineUsed, plugin.providerId)
-    }
-
-    func testFinishReturnsNilWhenHiddenLiveSessionFinalizationFails() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let plugin = MockLivePlugin(progressMode: .rollingWindow)
-        await plugin.session.setProgressUpdates([
-            "Early words stay in the transcript",
-            "the transcript while later words arrive",
-        ])
-        await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: "com.typewhisper.mock.live",
-                    name: "Mock Live",
-                    version: "1.0.0",
-                    principalClass: "MockLivePlugin",
-                    requiresAPIKey: false
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let modelManager = ModelManagerService()
-        modelManager.selectProvider(plugin.providerId)
-
-        let deltaLock = NSLock()
-        var sentDeltaCount = 0
-        let handler = StreamingHandler(
-            modelManager: modelManager,
-            bufferProvider: { [] },
-            recentBufferProvider: { _ in [] },
-            bufferDeltaProvider: { offset in
-                deltaLock.lock()
-                defer { deltaLock.unlock() }
-                guard sentDeltaCount < 2 else { return ([], offset) }
-                sentDeltaCount += 1
-                return (Array(repeating: 0.2, count: 4000), sentDeltaCount * 4000)
-            },
-            bufferedDurationProvider: { 0.25 }
-        )
-
-        handler.start(
-            streamPrompt: "Live Terms",
-            engineOverrideId: plugin.providerId,
-            selectedProviderId: plugin.providerId,
-            languageSelection: .auto,
-            task: .transcribe,
-            cloudModelOverride: nil,
-            allowLiveTranscription: true,
-            previewHidden: true,
-            stateCheck: { true }
-        )
-
-        try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish()
-
-        XCTAssertNil(result)
-    }
-
-    func testFinishReturnsNilWhenHiddenLiveSessionAppendFails() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let plugin = MockLivePlugin(progressMode: .rollingWindow)
-        await plugin.session.setProgressUpdates([
-            "Early words stay in the transcript",
-            "the transcript while later words arrive",
-        ])
-        await plugin.session.setAppendError(PluginTranscriptionError.networkError("socket closed"))
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: "com.typewhisper.mock.live",
-                    name: "Mock Live",
-                    version: "1.0.0",
-                    principalClass: "MockLivePlugin",
-                    requiresAPIKey: false
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let modelManager = ModelManagerService()
-        modelManager.selectProvider(plugin.providerId)
-
-        let deltaLock = NSLock()
-        var sentDeltaCount = 0
-        let handler = StreamingHandler(
-            modelManager: modelManager,
-            bufferProvider: { [] },
-            recentBufferProvider: { _ in [] },
-            bufferDeltaProvider: { offset in
-                deltaLock.lock()
-                defer { deltaLock.unlock() }
-                guard sentDeltaCount < 2 else { return ([], offset) }
-                sentDeltaCount += 1
-                return (Array(repeating: 0.2, count: 4000), sentDeltaCount * 4000)
-            },
-            bufferedDurationProvider: { 0.25 }
-        )
-
-        handler.start(
-            streamPrompt: "Live Terms",
-            engineOverrideId: plugin.providerId,
-            selectedProviderId: plugin.providerId,
-            languageSelection: .auto,
-            task: .transcribe,
-            cloudModelOverride: nil,
-            allowLiveTranscription: true,
-            previewHidden: true,
-            stateCheck: { true }
-        )
-
-        try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish()
-
+        let outcome = await handler.finish()
         let cancellation = await plugin.session.cancellationSnapshot()
-        XCTAssertNil(result)
-        XCTAssertEqual(cancellation.callCount, 1)
+        return (outcome, updatesLock.withLock { $0 }, cancellation.callCount)
+    }
+
+    func testFinishFailsWhenLiveSessionFinalizationFails() async throws {
+        let run = try await finishLiveSessionWithFailure(previewHidden: false) { session in
+            await session.setFinishError(PluginTranscriptionError.networkError("timeout"))
+        }
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+        XCTAssertEqual(run.cancelCallCount, 1)
+    }
+
+    func testFinishFailsWhenHiddenLiveSessionFinalizationFails() async throws {
+        let run = try await finishLiveSessionWithFailure(previewHidden: true) { session in
+            await session.setFinishError(PluginTranscriptionError.networkError("timeout"))
+        }
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+        XCTAssertEqual(run.cancelCallCount, 1)
+    }
+
+    func testFinishFailsWhenConnectionDropsAfterPreviewStarted() async throws {
+        let run = try await finishLiveSessionWithFailure(previewHidden: false) { session in
+            await session.setAppendError(
+                PluginTranscriptionError.networkError("Socket is not connected"),
+                afterSuccessfulAppends: 1
+            )
+        }
+
+        // The preview showed the words from before the drop, but must not become the result.
+        XCTAssertEqual(run.previews.last, "Early words stay in the transcript")
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+        XCTAssertEqual(run.cancelCallCount, 1)
+    }
+
+    func testFinishFailsWhenHiddenLiveSessionAppendFails() async throws {
+        let run = try await finishLiveSessionWithFailure(previewHidden: true) { session in
+            await session.setAppendError(PluginTranscriptionError.networkError("socket closed"))
+        }
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+        XCTAssertEqual(run.cancelCallCount, 1)
     }
 
     func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
@@ -1280,7 +1243,7 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         try await Task.sleep(for: .milliseconds(3400))
-        let liveResult = await handler.finish()
+        let liveResult = await handler.finish().result
         let finalResult = try await modelManager.transcribe(
             audioSamples: Array(repeating: 0.5, count: 16_000),
             languageSelection: .exact("en"),
@@ -1496,6 +1459,170 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertFalse(finalCancellation.observedDuringAppend)
     }
 
+    func testReplacedSessionAppendFailureDoesNotFailNextSession() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let nextOffset = OSAllocatedUnfairLock(initialState: 0)
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                nextOffset.withLock { offset in
+                    offset += 1600
+                    return (Array(repeating: 0.25, count: 1600), offset)
+                }
+            },
+            bufferedDurationProvider: { 0.1 }
+        )
+
+        await plugin.session.prepareToBlockNextAppend()
+        handler.start(
+            streamPrompt: "First session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+        for _ in 0..<50 {
+            if await plugin.session.isAppendBlocked() { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let appendIsBlocked = await plugin.session.isAppendBlocked()
+        XCTAssertTrue(appendIsBlocked)
+
+        // A website workflow restarts streaming while the first session's append is
+        // in flight; that append then fails after the restart reset the state.
+        handler.start(
+            streamPrompt: "Second session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+        await plugin.session.releaseBlockedAppend(
+            throwing: PluginTranscriptionError.networkError("cancelled")
+        )
+        for _ in 0..<50 where plugin.liveSessionCreateCount < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(plugin.liveSessionCreateCount, 2)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let outcome = await handler.finish()
+
+        XCTAssertEqual(outcome.result?.text, "finished")
+    }
+
+    func testCancelledPredecessorCleanupKeepsReplacementAppendFailure() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        let creationGate = SessionCreationGate()
+        plugin.failingCreationGate = creationGate
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let nextOffset = OSAllocatedUnfairLock(initialState: 0)
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                nextOffset.withLock { offset in
+                    offset += 1600
+                    return (Array(repeating: 0.25, count: 1600), offset)
+                }
+            },
+            bufferedDurationProvider: { 0.1 }
+        )
+        func startHiddenSession() {
+            handler.start(
+                streamPrompt: "Live Terms",
+                engineOverrideId: plugin.providerId,
+                selectedProviderId: plugin.providerId,
+                languageSelection: .exact("en"),
+                task: .transcribe,
+                cloudModelOverride: nil,
+                allowLiveTranscription: true,
+                previewHidden: true,
+                stateCheck: { true }
+            )
+        }
+
+        startHiddenSession()
+        for _ in 0..<50 {
+            if await creationGate.isWaiting { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let creationIsWaiting = await creationGate.isWaiting
+        XCTAssertTrue(creationIsWaiting)
+
+        // The replacement starts while the first session is still being created; that
+        // creation then fails, and the replacement later loses audio.
+        await plugin.session.setAppendError(
+            PluginTranscriptionError.networkError("Socket is not connected"),
+            afterSuccessfulAppends: 1
+        )
+        startHiddenSession()
+        await creationGate.release()
+        for _ in 0..<50 where plugin.liveSessionCreateCount < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(plugin.liveSessionCreateCount, 2)
+        try await Task.sleep(for: .milliseconds(1_000))
+
+        let outcome = await handler.finish()
+
+        guard case .failed = outcome else {
+            return XCTFail("Expected a failed live session, got \(outcome)")
+        }
+    }
+
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1564,7 +1691,7 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         try await Task.sleep(for: .milliseconds(1200))
-        let result = await handler.finish()
+        let result = await handler.finish().result
 
         XCTAssertEqual(result?.text, "finished")
         let recorded = await plugin.session.recordedChunks()
@@ -1635,7 +1762,7 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         try await Task.sleep(for: .milliseconds(500))
-        let result = await handler.finish(finalSamples: finalSamples)
+        let result = await handler.finish(finalSamples: finalSamples).result
 
         XCTAssertEqual(result?.text, "finished")
         let recorded = await plugin.session.recordedChunks()
@@ -2088,7 +2215,7 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         try await Task.sleep(for: .milliseconds(3400))
-        let result = await handler.finish()
+        let result = await handler.finish().result
 
         XCTAssertNil(result)
         XCTAssertEqual(plugin.transcribeCallCount, 0)
@@ -2141,7 +2268,7 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         try await Task.sleep(for: .milliseconds(150))
-        let result = await handler.finish()
+        let result = await handler.finish().result
 
         XCTAssertEqual(result?.text, "finished")
         XCTAssertEqual(plugin.liveSessionCreateCount, 1)

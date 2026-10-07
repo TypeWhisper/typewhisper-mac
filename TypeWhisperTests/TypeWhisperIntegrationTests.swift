@@ -1021,7 +1021,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private var createCount = 0
         private var appendCount = 0
         private var cancelCount = 0
+        private var batchSamples: [Float] = []
         var failsFinalization = false
+        /// Every audio append throws, like a live connection that dropped.
+        var failsAudioAppend = false
         /// Session creation takes this long and ignores cancellation, like a stalled provider.
         var sessionCreationStall: TimeInterval = 0
 
@@ -1037,6 +1040,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             lock.withLock { cancelCount }
         }
 
+        var lastBatchTranscriptionSamples: [Float] {
+            lock.withLock { batchSamples }
+        }
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -1044,7 +1051,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         func selectModel(_ modelId: String) {}
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            PluginTranscriptionResult(text: "batch", detectedLanguage: language)
+            lock.withLock { batchSamples = audio.samples }
+            return PluginTranscriptionResult(text: "batch", detectedLanguage: language)
         }
 
         func createLiveTranscriptionSession(
@@ -1058,7 +1066,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             while Date() < stallEnd {
                 try? await Task.sleep(for: .milliseconds(20))
             }
-            return MockLiveSession(failsFinalization: failsFinalization, plugin: self)
+            return MockLiveSession(
+                failsFinalization: failsFinalization,
+                failsAudioAppend: failsAudioAppend,
+                plugin: self
+            )
         }
 
         fileprivate func recordAppend() {
@@ -1071,15 +1083,20 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         private actor MockLiveSession: LiveTranscriptionSession {
             private let failsFinalization: Bool
+            private let failsAudioAppend: Bool
             private let plugin: MockLiveDictationPlugin
 
-            init(failsFinalization: Bool, plugin: MockLiveDictationPlugin) {
+            init(failsFinalization: Bool, failsAudioAppend: Bool, plugin: MockLiveDictationPlugin) {
                 self.failsFinalization = failsFinalization
+                self.failsAudioAppend = failsAudioAppend
                 self.plugin = plugin
             }
 
             func appendAudio(samples: [Float]) async throws {
                 plugin.recordAppend()
+                if failsAudioAppend {
+                    throw PluginTranscriptionError.networkError("Socket is not connected")
+                }
             }
 
             func finish() async throws -> PluginTranscriptionResult {
@@ -7756,6 +7773,80 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.rawText, "batch")
+    }
+
+    @MainActor
+    func testDroppedLiveConnectionTranscribesFullRecordingInsteadOfVisiblePreview() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        var finalPartialTexts: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .partialTranscriptionUpdate(let payload) = event, payload.isFinal {
+                finalPartialTexts.append(payload.text)
+            }
+        }
+        let livePlugin = MockLiveDictationPlugin()
+        livePlugin.failsAudioAppend = true
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.live-dictation",
+                name: "Mock Live Dictation",
+                version: "1.0.0",
+                principalClass: "APIRouterMockLiveDictationPlugin",
+                capabilities: [PluginCapability.liveDictation.rawValue]
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        context.modelManager.selectProvider(livePlugin.providerId)
+        let originalPreviewEnabled = context.dictationViewModel.indicatorTranscriptPreviewEnabled
+        defer { context.dictationViewModel.indicatorTranscriptPreviewEnabled = originalPreviewEnabled }
+        context.dictationViewModel.indicatorTranscriptPreviewEnabled = true
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        let recording = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.stopRecordingOverride = { _ in recording }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        for _ in 0..<20 where livePlugin.liveSessionCreateCount == 0 {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+        // The preview froze at the words recognized before the connection dropped.
+        context.dictationViewModel.partialText = "words before the drop"
+
+        _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.rawText, "batch")
+        XCTAssertEqual(livePlugin.liveSessionCancelCount, 1)
+        // Every recorded sample reached batch transcription; the rest is silent padding.
+        let batchSamples = livePlugin.lastBatchTranscriptionSamples
+        XCTAssertEqual(Array(batchSamples.prefix(recording.count)), recording)
+        XCTAssertTrue(batchSamples.dropFirst(recording.count).allSatisfy { $0 == 0 })
+        XCTAssertEqual(finalPartialTexts, [])
     }
 
     /// Returns the live-dictation session count before and after the browser URL
