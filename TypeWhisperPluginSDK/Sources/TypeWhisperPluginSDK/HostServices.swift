@@ -440,6 +440,13 @@ public enum PluginHTTPClient {
                     logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
                     throw error
                 }
+                // A dedicated request that used up its long timeout is not sent
+                // again: the provider may still be working on it, and a second
+                // attempt would double a wait of up to hours.
+                if dedicatedConfiguration != nil, (error as? URLError)?.code == .timedOut {
+                    logger.error("\(method) \(url) timed out after \(elapsed) on a dedicated session, not retrying")
+                    throw error
+                }
 
                 if dedicatedConfiguration == nil {
                     resetSharedSession(matching: session, reason: "transient network error")

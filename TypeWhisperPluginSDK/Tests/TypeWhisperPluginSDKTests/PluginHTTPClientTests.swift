@@ -493,6 +493,23 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.configurations.map(\.timeoutIntervalForResource), [1_650, 1_650])
     }
 
+    func testDedicatedSessionDoesNotRepeatARequestThatTimedOut() async throws {
+        // After a timeout of up to hours the provider may still be transcribing;
+        // sending the POST again would duplicate the work and double the wait.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(outcomes: [.failure(URLError(.timedOut))], configuration: configuration)
+        }
+
+        do {
+            _ = try await PluginHTTPClient.data(for: Self.request(path: "/long-transcription"), resourceTimeout: 1_650)
+            XCTFail("expected the timeout")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
+        XCTAssertEqual(store.sessions.count, 1)
+    }
+
     func testDedicatedSessionRetriesAStatusTheOriginNeverSaw() async throws {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { configuration in
