@@ -440,12 +440,17 @@ public enum PluginHTTPClient {
                     logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
                     throw error
                 }
-                // A dedicated request that used up its long timeout is not sent
-                // again: the provider may still be working on it, and a second
-                // attempt would double a wait of up to hours.
-                if dedicatedConfiguration != nil, (error as? URLError)?.code == .timedOut {
-                    logger.error("\(method) \(url) timed out after \(elapsed) on a dedicated session, not retrying")
-                    throw error
+                // A dedicated request is a long upload or transcription. After it
+                // timed out, the provider may still be working on it, and a second
+                // attempt would double a wait of up to hours. After a connection
+                // lost mid-request, the provider may already have accepted it, and
+                // a POST sent again can create and bill a second job. Failures
+                // before a connection existed are still retried.
+                if dedicatedConfiguration != nil,
+                   let code = (error as? URLError)?.code,
+                   code == .timedOut || (code == .networkConnectionLost && !isIdempotentMethod(method)) {
+                    logger.error("\(method) \(url) failed after \(elapsed) on a dedicated session, not retrying: \(error.localizedDescription)")
+                    throw describingRejectedLargeUpload(error, request: request)
                 }
 
                 if dedicatedConfiguration == nil {

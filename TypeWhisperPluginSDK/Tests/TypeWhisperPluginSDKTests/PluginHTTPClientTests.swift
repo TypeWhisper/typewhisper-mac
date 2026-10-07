@@ -471,13 +471,13 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 230_400_000), 7_500)
     }
 
-    func testDedicatedSessionKeepsTheTransportRetry() async throws {
-        // A long upload on its own session must survive a stale connection like
-        // any other request, on a fresh session with the same long timeout.
+    func testDedicatedSessionRetriesAFailedConnection() async throws {
+        // Nothing reached the provider, so a long upload tries again on a fresh
+        // session with the same long timeout.
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { configuration in
             if store.sessionCount == 0 {
-                return store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))], configuration: configuration)
+                return store.makeSession(outcomes: [.failure(URLError(.cannotConnectToHost))], configuration: configuration)
             }
             return store.makeSession(outcomes: [.success(Self.okResponse())], configuration: configuration)
         }
@@ -491,6 +491,26 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.sessions.count, 2)
         XCTAssertTrue(store.sessions.allSatisfy(\.didInvalidate))
         XCTAssertEqual(store.configurations.map(\.timeoutIntervalForResource), [1_650, 1_650])
+    }
+
+    func testDedicatedSessionDoesNotRepeatAPostThatLostItsConnection() async throws {
+        // The provider may already have created the job; a second POST could
+        // create and bill another one.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))], configuration: configuration)
+        }
+        var request = Self.request(path: "/jobs")
+        request.httpBody = Data(count: 30_000_000)
+
+        do {
+            _ = try await PluginHTTPClient.data(for: request, resourceTimeout: 1_650)
+            XCTFail("expected the lost connection")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+            XCTAssertTrue(error.localizedDescription.contains("30.0 MB"))
+        }
+        XCTAssertEqual(store.sessions.count, 1)
     }
 
     func testDedicatedSessionDoesNotRepeatARequestThatTimedOut() async throws {
