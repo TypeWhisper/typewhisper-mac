@@ -209,6 +209,54 @@ final class MetaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains(#""mode":"DIARIZATION""#))
     }
 
+    func testLongRecordingIsSplitWithoutMetaSpeakerLabels() async throws {
+        // Meta restarts its speaker numbering in every request, so labels from
+        // different chunks could put two people under one name.
+        let host = try PluginTestHostServices(secrets: ["api-key": "meta-key"])
+        let plugin = MetaPlugin()
+        plugin.activate(host: host)
+        plugin.setSpeakerDiarizationEnabled(true)
+
+        let url = "https://api.meta.ai/v1/asr/transcribe"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"sessionId":"a","transcript":"Hallo.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Hallo."}]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"sessionId":"b","transcript":"Welt.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Welt."}]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        // Eleven minutes, more than one nine-minute request.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let result = try await plugin.transcribeStructured(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
+            language: "de",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hallo. Welt.")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), [nil, nil])
+        XCTAssertEqual(result.segments.first?.start, 1)
+        XCTAssertGreaterThan(result.segments.last?.start ?? 0, 300)
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            let body = try XCTUnwrap(request.httpBody)
+            XCTAssertLessThan(body.count, 32_000_000)
+            // The request JSON precedes the audio part.
+            // swiftlint:disable:next optional_data_string_conversion
+            let header = String(decoding: body.prefix(2_000), as: UTF8.self)
+            XCTAssertTrue(header.contains(#""mode":"PUSH_TO_TALK""#))
+        }
+    }
+
     func testRealtimeHandshakeUsesPCM16HintsKeywordsAndHandshakeAuthentication() throws {
         let message = try MetaLiveTranscriptionSession.handshakeMessage(
             apiKey: "meta-key",

@@ -959,14 +959,52 @@ final class MetaPlugin: NSObject,
         let keywords = PluginDictionaryTerms.normalizedTermHints(from: dictionaryTermHints + promptHints)
             .map(\.text)
 
-        return try await MetaTranscriptionClient(apiKey: apiKey).transcribe(
-            audio: audio,
-            model: model,
-            mode: transcriptionMode,
-            languageHints: languageHints,
-            keywords: keywords
+        let client = MetaTranscriptionClient(apiKey: apiKey)
+        let maximumSampleCount = Int(Self.maximumRequestDuration) * PluginAudioUploadEncoder.sampleRate
+        guard audio.samples.count > maximumSampleCount else {
+            return try await client.transcribe(
+                audio: audio,
+                model: model,
+                mode: transcriptionMode,
+                languageHints: languageHints,
+                keywords: keywords
+            )
+        }
+
+        // Meta numbers the speakers anew in every request, so the chunks of a
+        // longer recording go without speaker labels. The app's own speaker
+        // detection then numbers the speakers across the whole recording.
+        let result = try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumRequestDuration
+        ) { chunk in
+            let chunkResult = try await client.transcribe(
+                audio: chunk,
+                model: model,
+                mode: .pushToTalk,
+                languageHints: languageHints,
+                keywords: keywords
+            )
+            return PluginTranscriptionResult(
+                text: chunkResult.text,
+                detectedLanguage: chunkResult.detectedLanguage,
+                segments: chunkResult.segments.map {
+                    PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+                }
+            )
+        }
+        return PluginStructuredTranscriptionResult(
+            text: result.text,
+            detectedLanguage: result.detectedLanguage,
+            segments: result.segments.map {
+                PluginStructuredTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
         )
     }
+
+    /// Meta takes at most 10 minutes or 32 MB per request; nine minutes are
+    /// 17.3 MB as WAV.
+    static let maximumRequestDuration: TimeInterval = 540
 
     private static func legacyResult(
         from result: PluginStructuredTranscriptionResult
