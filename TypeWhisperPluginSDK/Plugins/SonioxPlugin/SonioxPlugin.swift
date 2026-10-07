@@ -129,6 +129,7 @@ private struct SonioxAsyncTranscriptionRequest: Sendable {
     let apiKey: String
     let prompt: String?
     let contextText: String?
+    let pollAttempts: Int
 }
 
 private struct SonioxUploadedAudio: Sendable {
@@ -1396,10 +1397,48 @@ final class SonioxPlugin: NSObject,
 
     // MARK: - REST Implementation (4-Step Async)
 
+    /// Soniox rejects files over 300 minutes and cannot raise that limit, so
+    /// longer recordings go out in parts of at most four and a half hours.
+    static let maximumChunkDuration: TimeInterval = 270 * 60
+
+    /// The shared HTTP session gives up on a request after 600 s. Uploading a
+    /// recording of several hours on a slow uplink takes longer, so the upload
+    /// gets as long as 256 kbit/s would need.
+    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
+        max(600, Double(byteCount) / 32_000)
+    }
+
+    /// Soniox returns an hour of audio within a few minutes, depending on load.
+    /// One poll per second for a quarter of the audio duration, at least five
+    /// minutes and at most an hour.
+    static func pollAttempts(forAudioDuration duration: TimeInterval) -> Int {
+        Int(min(max(duration / 4, 300), 3_600))
+    }
+
     private func transcribeREST(
         audio: AudioData,
         language: String?,
         languageHints: [String] = [],
+        translate: Bool,
+        apiKey: String,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: Self.maximumChunkDuration) { chunk in
+            try await transcribeRESTChunk(
+                audio: chunk,
+                language: language,
+                languageHints: languageHints,
+                translate: translate,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+        }
+    }
+
+    private func transcribeRESTChunk(
+        audio: AudioData,
+        language: String?,
+        languageHints: [String],
         translate: Bool,
         apiKey: String,
         prompt: String?
@@ -1412,7 +1451,8 @@ final class SonioxPlugin: NSObject,
             translate: translate,
             apiKey: apiKey,
             prompt: prompt,
-            contextText: normalizedTranscriptionContext
+            contextText: normalizedTranscriptionContext,
+            pollAttempts: Self.pollAttempts(forAudioDuration: audio.duration)
         )
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
 
@@ -1704,7 +1744,10 @@ final class SonioxPlugin: NSObject,
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -2216,7 +2259,7 @@ final class SonioxPlugin: NSObject,
         request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
 
-        for _ in 0..<300 {
+        for _ in 0..<configuration.pollAttempts {
             try await Task.sleep(for: .seconds(1))
 
             let (data, response) = try await PluginHTTPClient.data(for: request)
@@ -2268,7 +2311,7 @@ final class SonioxPlugin: NSObject,
             }
         }
 
-        throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
+        throw PluginTranscriptionError.apiError("Transcription timed out after \(configuration.pollAttempts / 60) minutes")
     }
 
     private func fetchTranscript(
