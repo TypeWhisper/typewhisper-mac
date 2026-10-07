@@ -748,9 +748,7 @@ final class DeepgramPlugin: NSObject,
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
         ])
-        if let language, !language.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: language))
-        }
+        queryItems.append(URLQueryItem(name: "language", value: requestLanguage(language)))
         queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
@@ -790,7 +788,7 @@ final class DeepgramPlugin: NSObject,
             URLQueryItem(name: "interim_results", value: "true"),
             URLQueryItem(name: "endpointing", value: "300"),
         ])
-        queryItems.append(URLQueryItem(name: "language", value: streamingLanguage(language)))
+        queryItems.append(URLQueryItem(name: "language", value: requestLanguage(language)))
         queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
@@ -800,7 +798,10 @@ final class DeepgramPlugin: NSObject,
         return requestURL
     }
 
-    static func streamingLanguage(_ language: String?) -> String {
+    /// Without a language, Deepgram assumes English. `multi` recognizes and
+    /// switches between languages on Nova-2 and Nova-3, for streams and files.
+    /// https://developers.deepgram.com/docs/multilingual-code-switching
+    static func requestLanguage(_ language: String?) -> String {
         language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
     }
 
@@ -861,15 +862,13 @@ final class DeepgramPlugin: NSObject,
         }
 
         if audio.duration > Self.maximumStreamedAudioDuration {
-            // Without a language, REST would assume English where the stream recognizes any.
-            let result = try await transcribeREST(
+            return try await transcribeREST(
                 audio: audio,
-                language: Self.streamingLanguage(language),
+                language: language,
                 modelId: modelId,
                 apiKey: apiKey,
                 prompt: prompt
             )
-            return PluginTranscriptionResult(text: result.text, detectedLanguage: language)
         }
 
         do {

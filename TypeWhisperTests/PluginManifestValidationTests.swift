@@ -1730,6 +1730,24 @@ final class PluginDictionaryGuardTests: XCTestCase {
         }
         XCTAssertEqual(languageValues(in: restURL), ["ar"])
         XCTAssertEqual(languageValues(in: streamingURL), ["kk"])
+
+        // Without a language Deepgram assumes English; both paths detect it instead.
+        for language in [nil, ""] as [String?] {
+            let restURL = try DeepgramPlugin.restRequestURL(
+                baseURL: "https://api.deepgram.com",
+                modelId: "nova-3",
+                language: language,
+                prompt: nil
+            )
+            let streamingURL = try DeepgramPlugin.streamingRequestURL(
+                baseURL: "https://api.deepgram.com",
+                modelId: "nova-3",
+                language: language,
+                prompt: nil
+            )
+            XCTAssertEqual(languageValues(in: restURL), ["multi"])
+            XCTAssertEqual(languageValues(in: streamingURL), ["multi"])
+        }
     }
 
     func testDeepgramAdvertisesLiveDictationTranscription() {
