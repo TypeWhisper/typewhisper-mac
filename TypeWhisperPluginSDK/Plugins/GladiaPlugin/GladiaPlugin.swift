@@ -255,18 +255,43 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let audioURL = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await uploadAudio(uploadFile, apiKey: apiKey)
+        try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: Self.maximumChunkDuration) { chunk in
+            let audioURL = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
+                try await uploadAudio(uploadFile, apiKey: apiKey)
+            }
+            let resultURL = try await submitPreRecorded(
+                audioURL: audioURL,
+                language: language,
+                languageHints: languageHints,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+            return try await pollResult(
+                url: resultURL,
+                apiKey: apiKey,
+                fallbackLanguage: language,
+                attempts: Self.pollAttempts(forAudioDuration: chunk.duration)
+            )
         }
-        let resultURL = try await submitPreRecorded(
-            audioURL: audioURL,
-            language: language,
-            languageHints: languageHints,
-            modelId: modelId,
-            apiKey: apiKey,
-            prompt: prompt
-        )
-        return try await pollResult(url: resultURL, apiKey: apiKey, fallbackLanguage: language)
+    }
+
+    /// Gladia rejects pre-recorded audio over 135 minutes (4 h 15 min only on
+    /// enterprise plans), so longer recordings go out in parts of two hours.
+    private static let maximumChunkDuration: TimeInterval = 120 * 60
+
+    /// The shared HTTP session gives up on a request after 600 s. Uploading a
+    /// recording of several hours on a slow uplink takes longer, so the upload
+    /// gets as long as 256 kbit/s would need.
+    private static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
+        max(600, Double(byteCount) / 32_000)
+    }
+
+    /// Gladia needs about a minute per hour of audio, but a backlog has taken
+    /// several minutes per file. One poll per second for a quarter of the audio
+    /// duration, at least five minutes and at most an hour.
+    private static func pollAttempts(forAudioDuration duration: TimeInterval) -> Int {
+        Int(min(max(duration / 4, 300), 3_600))
     }
 
     private func uploadAudio(_ uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
@@ -292,7 +317,10 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         body.append("--\(boundary)--\r\n".data(using: .utf8)!)
         request.httpBody = body
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -409,16 +437,17 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
     private func pollResult(
         url: URL,
         apiKey: String,
-        fallbackLanguage: String?
+        fallbackLanguage: String?,
+        attempts: Int
     ) async throws -> PluginTranscriptionResult {
         var request = URLRequest(url: url)
         request.setValue(apiKey, forHTTPHeaderField: "x-gladia-key")
         request.timeoutInterval = 15
 
-        for _ in 0..<300 {
+        for _ in 0..<attempts {
             try await Task.sleep(for: .seconds(1))
 
-            // The 300-iteration loop is already the retry.
+            // The polling loop is already the retry.
             let (data, response) = try await PluginHTTPClient.data(for: request, retry: .disabled)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 continue
