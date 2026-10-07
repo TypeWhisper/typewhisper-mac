@@ -310,6 +310,10 @@ public enum PluginHTTPClient {
         let url = request.url?.absoluteString ?? "unknown"
         var attempt = 0
         var usedRetryAfterGrace = false
+        // Restarts after losing the session-invalidation race sent nothing, so
+        // they are bounded separately and leave `attempt` (and with it the
+        // first transport retry) untouched.
+        var unsentRestarts = 0
 
         while true {
             let session = sharedOrCreateSession()
@@ -317,7 +321,7 @@ public enum PluginHTTPClient {
             let start = ContinuousClock.now
 
             do {
-                let (data, response) = try await session.data(for: request)
+                let (data, response) = try await dataStartingFreshAfterCancellation(for: request, on: session)
                 let elapsed = ContinuousClock.now - start
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 logger.info("\(method) \(url) -> \(status) (\(elapsed))")
@@ -377,6 +381,21 @@ public enum PluginHTTPClient {
                 try await sleeper(delay)
             } catch {
                 let elapsed = ContinuousClock.now - start
+                // Another request's cancellation can invalidate the shared session
+                // after this request borrowed it but before its task started. That
+                // surfaces as `.cancelled` although this task was not cancelled.
+                // `finishTasksAndInvalidate()` lets running tasks finish, so on a
+                // session that is no longer the shared one, `.cancelled` means the
+                // task was created after the invalidation and sent nothing; only
+                // then is it safe to start over, even for a POST.
+                if (error as? URLError)?.code == .cancelled,
+                   !Task.isCancelled,
+                   !isCurrentSharedSession(session),
+                   unsentRestarts < retryMaxAttempts {
+                    unsentRestarts += 1
+                    logger.warning("\(method) \(url) cancelled by an invalidated session, retrying on a fresh one")
+                    continue
+                }
                 guard isTransientNetworkError(error) else {
                     logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
                     throw error
@@ -411,6 +430,24 @@ public enum PluginHTTPClient {
                 logger.warning("\(method) \(url) transient failure after \(elapsed), retrying in \(delay) (attempt \(attempt + 1)): \(error.localizedDescription)")
                 try await sleeper(delay)
             }
+        }
+    }
+
+    /// Cancelling a request mid-upload can leave its pooled connection broken while
+    /// the session still hands it out. When a live preview was cancelled at the end
+    /// of a dictation, the final transcription started on that connection 28 ms later
+    /// and hung until its request timeout (#1532). The reset runs in the cancellation
+    /// handler, synchronously with `Task.cancel()`, so it lands before any request the
+    /// caller starts next.
+    private static func dataStartingFreshAfterCancellation(
+        for request: URLRequest,
+        on session: any PluginHTTPClientSession
+    ) async throws -> (Data, URLResponse) {
+        nonisolated(unsafe) let cancelledSession = session
+        return try await withTaskCancellationHandler {
+            try await session.data(for: request)
+        } onCancel: {
+            resetSharedSession(matching: cancelledSession, reason: "request cancelled")
         }
     }
 
@@ -585,6 +622,10 @@ public enum PluginHTTPClient {
             return false
         }
     }
+    private static func isCurrentSharedSession(_ session: any PluginHTTPClientSession) -> Bool {
+        lock.withLock { sharedSession === session }
+    }
+
     private static func resetSharedSession(matching session: any PluginHTTPClientSession, reason: String) {
         let didRemoveSharedSession = lock.withLock {
             guard let current = sharedSession, current === session else {
