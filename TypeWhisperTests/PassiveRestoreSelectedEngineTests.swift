@@ -471,6 +471,48 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
         }
     }
 
+    func testUninstallingAnUpdatePlaceholderReplacesItsSavedEngine() async throws {
+        let container = ServiceContainer.shared
+        let manager = container.pluginManager
+        let modelManager = container.modelManagerService
+        let savedManager = PluginManager.shared
+        let savedPlugins = manager.loadedPlugins
+        let savedSelection = modelManager.selectedProviderId
+        let defaults = UserDefaults.standard
+        let savedPersistedSelection = defaults.object(forKey: UserDefaultsKeys.selectedEngine)
+        let savedEnabled = defaults.object(forKey: "plugin.removed.enabled")
+        defer {
+            defaults.set(savedPersistedSelection, forKey: UserDefaultsKeys.selectedEngine)
+            defaults.set(savedEnabled, forKey: "plugin.removed.enabled")
+            PluginManager.shared = savedManager
+        }
+        PluginManager.shared = manager
+        manager.loadedPlugins = []
+        install(ReconciledRestorePlugin(id: "removed", configured: true), in: manager)
+        install(ReconciledRestorePlugin(id: "local", configured: true), in: manager)
+        modelManager.selectProvider("removed")
+
+        // An update unloads the runtime and leaves a restart-required placeholder.
+        manager.unloadPlugin("removed", keepsSavedEngine: true)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.selectedEngine), "removed")
+        try manager.registerUnloadedPlugin(
+            manifest: PluginManifest(id: "removed", name: "removed", version: "2.0.0",
+                                     principalClass: "ReconciledRestorePlugin"),
+            sourceURL: Bundle.main.bundleURL,
+            isEnabled: true
+        )
+
+        // Uninstalling that placeholder is an explicit choice, so the engine is replaced.
+        manager.unloadPlugin("removed")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.selectedEngine), "local")
+
+        manager.loadedPlugins = savedPlugins
+        await drainMainQueue()
+        if let savedSelection { modelManager.selectProvider(savedSelection) }
+        else { modelManager.clearProviderSelection() }
+        await drainMainQueue()
+    }
+
     func testDisablingSelectedPluginThroughManagerRestoresLocalFallback() async throws {
         let container = ServiceContainer.shared
         let manager = container.pluginManager

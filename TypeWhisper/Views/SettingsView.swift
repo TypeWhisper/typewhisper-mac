@@ -893,7 +893,6 @@ struct RecordingSettingsView: View {
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
-    @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var bluetoothInstantStartEnabled = false
@@ -1137,21 +1136,20 @@ struct RecordingSettingsView: View {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker(String(localized: "Default Engine"), selection: $selectedProvider) {
+                    // Shows the engine dictation uses right now, which can be a
+                    // temporary fallback; only a choice made here is saved (#1533).
+                    Picker(String(localized: "Default Engine"), selection: Binding(
+                        get: { modelManager.selectedProviderId },
+                        set: { newValue in
+                            if let newValue { modelManager.selectProvider(newValue) }
+                        }
+                    )) {
                         Text(String(localized: "None")).tag(nil as String?)
                         Divider()
                         ForEach(engines, id: \.providerId) { engine in
                             enginePickerLabel(for: engine)
                                 .tag(engine.providerId as String?)
                                 .disabled(!modelManager.canUseForTranscription(engine))
-                        }
-                    }
-                    .onChange(of: selectedProvider) { _, newValue in
-                        // `onAppear` mirrors the current selection into the picker,
-                        // which may be a temporary fallback; only a change the user
-                        // makes is saved (#1533).
-                        if let newValue, newValue != modelManager.selectedProviderId {
-                            modelManager.selectProvider(newValue)
                         }
                     }
 
@@ -1161,14 +1159,15 @@ struct RecordingSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if let providerId = selectedProvider,
+                    if let providerId = modelManager.selectedProviderId,
                        let engine = pluginManager.transcriptionEngine(for: providerId),
                        modelManager.canUseForTranscription(engine) {
                         let models = engine.transcriptionModels
                         if models.count > 1 {
                             Picker(String(localized: "Model"), selection: Binding(
                                 get: { engine.selectedModelId },
-                                set: { if let id = $0 { modelManager.selectModel(providerId, modelId: id) } }
+                                // Changing the model keeps the saved engine as it is.
+                                set: { if let id = $0 { modelManager.selectModel(id, of: providerId) } }
                             )) {
                                 ForEach(models, id: \.id) { model in
                                     Text(model.displayName).tag(model.id as String?)
@@ -1427,7 +1426,6 @@ struct RecordingSettingsView: View {
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
             modelManager.restoreProviderSelection()
-            selectedProvider = modelManager.selectedProviderId
             customSounds = SoundChoice.installedCustomSounds()
         }
     }

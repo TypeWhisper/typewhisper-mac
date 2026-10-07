@@ -372,6 +372,13 @@ final class ModelManagerService: ObservableObject {
         PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
     }
 
+    /// Picks a model for an engine without making that engine the saved
+    /// choice, for the engine that is in use, which may be a temporary fallback.
+    func selectModel(_ modelId: String, of providerId: String) {
+        PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
+        objectWillChange.send()
+    }
+
     func loadModel(_ providerId: String, modelId: String) async throws {
         guard let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             throw ModelLifecycleError.engineNotFound(providerId)

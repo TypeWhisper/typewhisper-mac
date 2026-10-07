@@ -1096,6 +1096,10 @@ final class PluginManager: ObservableObject {
     /// Removes a plugin from the active runtime registry without unmapping its executable code.
     /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
     /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
+    /// Engine ids of plugins unloaded for an update, kept until the update is
+    /// gone or replaced, because the placeholder that stands in exposes none.
+    private var providerIdsAwaitingRelaunch: [String: Set<String>] = [:]
+
     /// - Parameter keepsSavedEngine: Pass `true` when the plugin comes straight
     ///   back, as during an update. The saved dictation engine then stays, and
     ///   `restoreProviderSelection()` bridges the gap with a temporary fallback
@@ -1103,10 +1107,20 @@ final class PluginManager: ObservableObject {
     func unloadPlugin(_ pluginId: String, keepsSavedEngine: Bool = false) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
-        let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+        var disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+        // An update can leave a restart-required placeholder that exposes no
+        // engines; uninstalling it must still replace the engines it stands for.
+        if disabledProviderIds.isEmpty {
+            disabledProviderIds = providerIdsAwaitingRelaunch[pluginId] ?? []
+        }
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
-        if !keepsSavedEngine {
+        if keepsSavedEngine {
+            if !disabledProviderIds.isEmpty {
+                providerIdsAwaitingRelaunch[pluginId] = disabledProviderIds
+            }
+        } else {
+            providerIdsAwaitingRelaunch[pluginId] = nil
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
         }
 
