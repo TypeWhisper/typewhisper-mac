@@ -35,6 +35,12 @@ final class Reson8PluginTests: XCTestCase {
         XCTAssertNil(Reson8Plugin.resolveLanguage(selection: PluginLanguageSelection(languageHints: [""])))
     }
 
+    func testOnlyRecordingsThatFitOneRequestAreStreamed() {
+        XCTAssertTrue(Reson8Plugin.streamsAudio(ofDuration: 60))
+        XCTAssertTrue(Reson8Plugin.streamsAudio(ofDuration: Reson8Plugin.maximumRequestDuration))
+        XCTAssertFalse(Reson8Plugin.streamsAudio(ofDuration: Reson8Plugin.maximumRequestDuration + 1))
+    }
+
     func testTranscriptionSplitsLongRecordingsIntoFiveMinuteRequests() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "reson8-key"])
         let plugin = Reson8Plugin()

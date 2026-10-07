@@ -466,6 +466,9 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             throw PluginTranscriptionError.notConfigured
         }
         let resolved = Self.resolveLanguage(selection: languageSelection)
+        guard Self.streamsAudio(ofDuration: audio.duration) else {
+            return try await transcribeREST(audio: audio, language: resolved, apiKey: apiKey)
+        }
 
         do {
             return try await transcribeWebSocket(
@@ -482,6 +485,13 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 apiKey: apiKey
             )
         }
+    }
+
+    /// The realtime endpoint takes a recording as one stream and documents no
+    /// session length. Longer files go to the prerecorded endpoint, which takes
+    /// them in five-minute requests.
+    static func streamsAudio(ofDuration duration: TimeInterval) -> Bool {
+        duration <= maximumRequestDuration
     }
 
     /// Reson8 accepts one language query parameter, not an ordered hint list.
