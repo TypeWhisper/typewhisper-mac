@@ -436,9 +436,11 @@ final class MicrosoftAIPluginTests: XCTestCase {
         }
     }
 
-    func testLongDiarizedRecordingGivesEveryChunkItsOwnSpeakerNumbers() async throws {
-        // MAI numbers the speakers anew in every request, so speaker 1 in the
-        // second chunk need not be speaker 1 from the first.
+    func testRecordingsUpToAnHourKeepOneSpeakerNumbering() async throws {
+        // MAI numbers the speakers anew in every request, so splitting would
+        // number them anew every chunk; an hour still goes out at once.
+        XCTAssertEqual(MicrosoftAITranscriptionClient.maximumChunkDuration, 3_600)
+
         let plugin = MicrosoftAIPlugin()
         plugin.activate(host: try configuredHost(defaults: ["speakerDiarizationEnabled": true]))
 
@@ -446,37 +448,21 @@ final class MicrosoftAIPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(Self.successResponseData, Self.httpResponse(statusCode: 200)),
-                .success(
-                    Data(#"{"durationMilliseconds":1000,"combinedPhrases":[{"text":"Tschüss"}],"phrases":[{"offsetMilliseconds":500,"durationMilliseconds":500,"text":"Tschüss","locale":"de-DE","speaker":1}]}"#.utf8),
-                    Self.httpResponse(statusCode: 200)
-                ),
             ])
         }
 
-        // Just over ten minutes, more than one chunk.
-        let samples = [Float](repeating: 0.3, count: 16_000 * 601)
+        // Eleven minutes, which ten-minute chunks would have split.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
         let result = try await plugin.transcribeStructured(
-            audio: AudioData(samples: samples, wavData: Data(), duration: 601),
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
             language: "de",
             translate: false,
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "Speaker 1: Hallo Welt\nSpeaker 2: Willkommen\nSpeaker 3: Tschüss")
-        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2", "Speaker 3"])
-        XCTAssertEqual(result.segments.first?.start, 0.25)
-        let secondChunkStart = try XCTUnwrap(result.segments.last?.start)
-        XCTAssertGreaterThan(secondChunkStart, 271, "shifted by the first chunk's length")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
         let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
-        XCTAssertEqual(requests.count, 2)
-        for request in requests {
-            let body = try XCTUnwrap(request.httpBody)
-            // Ten minutes of 16 kHz 16-bit WAV plus the request definition,
-            // far below the 250 MB limit.
-            XCTAssertLessThan(body.count, 600 * 32_000 + 10_000)
-            let definition = String(decoding: body.prefix(2_000), as: UTF8.self)
-            XCTAssertTrue(definition.contains("\"diarization\":{\"enabled\":true}"))
-        }
+        XCTAssertEqual(requests.count, 1)
     }
 
     func testManifestAndLocalizationAreValid() throws {
@@ -487,7 +473,7 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(manifest["principalClass"] as? String, "MicrosoftAIPlugin")
         XCTAssertEqual(manifest["hosting"] as? String, "cloud")
         XCTAssertEqual(manifest["iconResourceName"] as? String, "azure.svg")
-        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.7.0")
+        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.8.0")
 
         XCTAssertTrue(
             FileManager.default.fileExists(
