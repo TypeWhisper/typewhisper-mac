@@ -295,7 +295,8 @@ extension ServiceContainer {
             transcript: transcript
         ) else { return }
         historyService.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
-        historyService.setSpeakerName("Marco", for: "S2", inRecordID: recordID)
+        // The microphone's speaker, as detection names it in a Recorder recording.
+        historyService.setSpeakerName(String(localized: "speakers.me"), for: "S2", inRecordID: recordID)
         // Anna has a voice profile; the third speaker is recognized as Lena and waits for confirmation.
         let voices = speakerVoiceProfileService
         if voices.store.profiles.isEmpty {
