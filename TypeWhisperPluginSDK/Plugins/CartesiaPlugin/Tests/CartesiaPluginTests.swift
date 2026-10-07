@@ -170,7 +170,8 @@ final class CartesiaPluginTests: XCTestCase {
             ),
             apiKey: "sk_car_test",
             modelId: CartesiaPlugin.sttModelId,
-            language: "de"
+            language: "de",
+            audioDuration: 1
         )
 
         XCTAssertEqual(request.httpMethod, "POST")
@@ -307,6 +308,38 @@ final class CartesiaPluginTests: XCTestCase {
 
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde"))
+    }
+
+    func testTranscriptionTimeoutsGrowWithAudioDuration() {
+        let short = CartesiaPlugin.transcriptionTimeouts(forAudioDuration: 60)
+        XCTAssertEqual(short.request, 600)
+        XCTAssertEqual(short.resource, 600)
+
+        let twoHours = CartesiaPlugin.transcriptionTimeouts(forAudioDuration: 2 * 3_600)
+        XCTAssertEqual(twoHours.request, 720)
+        XCTAssertEqual(twoHours.resource, 1_200)
+
+        let fourHours = CartesiaPlugin.transcriptionTimeouts(forAudioDuration: 4 * 3_600)
+        XCTAssertEqual(fourHours.request, 1_440)
+        XCTAssertEqual(fourHours.resource, 2_400)
+
+        let twentyHours = CartesiaPlugin.transcriptionTimeouts(forAudioDuration: 20 * 3_600)
+        XCTAssertEqual(twentyHours.request, 3_600)
+        XCTAssertEqual(twentyHours.resource, 7_200)
+    }
+
+    func testShortTranscriptionKeepsSharedSessionTimeouts() async throws {
+        let captured = try await transcribeCapturingTimeouts(duration: 60)
+
+        XCTAssertEqual(captured.request.timeoutInterval, 600)
+        XCTAssertEqual(captured.resource, [600])
+    }
+
+    func testLongTranscriptionWaitsLongerForTheAnswer() async throws {
+        let captured = try await transcribeCapturingTimeouts(duration: 2 * 3_600)
+
+        XCTAssertEqual(captured.request.timeoutInterval, 720)
+        XCTAssertEqual(captured.resource, [1_200])
     }
 
     func testTranscribeDefaultsToEnglishWhenNoLanguageConfigured() async throws {
@@ -583,6 +616,39 @@ final class CartesiaPluginTests: XCTestCase {
         )
     }
 
+    /// The duration drives the timeouts; one second of samples keeps encoding fast.
+    private func transcribeCapturingTimeouts(
+        duration: TimeInterval
+    ) async throws -> (request: URLRequest, resource: [TimeInterval]) {
+        let host = try PluginTestHostServices(secrets: ["api-key": "sk_car_live"])
+        let plugin = CartesiaPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        let resourceTimeouts = TimeoutRecorder()
+        PluginHTTPClientTestHarness.configure { configuration in
+            resourceTimeouts.append(configuration.timeoutIntervalForResource)
+            return store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"type":"transcript","text":"Hello","language":"en","words":[]}"#.utf8),
+                    Self.httpResponse(url: "https://api.cartesia.ai/stt", statusCode: 200)
+                )
+            ])
+        }
+
+        let samples = [Float](repeating: 0.3, count: 16_000)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: duration),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hello")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        return (request, resourceTimeouts.values)
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
@@ -590,5 +656,18 @@ final class CartesiaPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+}
+
+private final class TimeoutRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [TimeInterval] = []
+
+    var values: [TimeInterval] {
+        lock.withLock { storage }
+    }
+
+    func append(_ value: TimeInterval) {
+        lock.withLock { storage.append(value) }
     }
 }
