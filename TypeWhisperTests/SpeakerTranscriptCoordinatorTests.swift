@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -602,6 +603,19 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
             XCTAssertEqual(error, .premiumRequired)
         }
         XCTAssertTrue(provider.requests.isEmpty)
+    }
+
+    func testPremiumChangesRedrawTheSpeakerViews() async {
+        let coordinator = makeCoordinator()
+        let premium = PassthroughSubject<Void, Never>()
+        coordinator.observePremiumChanges([premium.eraseToAnyPublisher()])
+        let redrawn = expectation(description: "objectWillChange")
+        let observation = coordinator.objectWillChange.sink { redrawn.fulfill() }
+
+        premium.send()
+
+        await fulfillment(of: [redrawn], timeout: 1)
+        observation.cancel()
     }
 
     func testSupporterStatusDoesNotUnlockSpeakerDetection() {

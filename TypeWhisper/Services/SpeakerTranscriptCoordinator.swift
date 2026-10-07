@@ -1,4 +1,5 @@
 import AVFoundation
+import Combine
 import Foundation
 import TypeWhisperPluginSDK
 import os
@@ -221,6 +222,16 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     }
 
     var hasPremiumAccess: Bool { premiumAccess() }
+
+    private var premiumObservation: AnyCancellable?
+
+    /// Redraws the views that show what Premium unlocks when one of the
+    /// services behind `premiumAccess` changes.
+    func observePremiumChanges(_ changes: [AnyPublisher<Void, Never>]) {
+        premiumObservation = Publishers.MergeMany(changes)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.objectWillChange.send() }
+    }
     var provider: (any SpeakerDiarizationProviderPlugin)? { providerSource() }
 
     /// Fixed speaker counts offered besides automatic detection.

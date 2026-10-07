@@ -979,11 +979,13 @@ final class APIHandlers: @unchecked Sendable {
                     model: record.modelUsed,
                     words_count: record.wordsCount,
                     speaker_state: record.speakerTranscriptState?.rawValue,
-                    speakers: transcript?.speakerIDs.map {
+                    speakers: transcript?.speakerIDs.map { speakerID in
                         // Unnamed speakers get the fixed `Speaker N`, not the localized default name.
+                        // A name only suggested by a voice profile is a guess and is not returned.
                         SpeakerEntry(
-                            id: $0,
-                            name: names?.displayName(for: $0) ?? SpeakerTranscriptBuilder.outputLabel(for: $0)
+                            id: speakerID,
+                            name: names?.confirmedEntries.first { $0.speakerID == speakerID }?.displayName
+                                ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID)
                         )
                     },
                     speaker_segments: includesSpeakerSegments

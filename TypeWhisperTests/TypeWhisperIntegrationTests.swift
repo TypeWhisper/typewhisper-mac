@@ -2108,6 +2108,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 ])
             ))
             context.historyService.setSpeakerName("Anna", for: "S1", inRecordID: id)
+            // A name a voice profile only suggested is not returned as the speaker's name.
+            context.historyService.setSpeakerName("Guess", for: "S2", profileID: UUID(), isSuggestion: true, inRecordID: id)
             context.historyService.addRecord(
                 rawText: "A dictation",
                 finalText: "A dictation",
@@ -2140,7 +2142,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(meeting["speaker_state"] as? String, "ready")
         XCTAssertEqual(
             meeting["speakers"] as? [[String: String]],
-            [["id": "S1", "name": "Anna"], ["id": "S2", "name": SpeakerTranscriptPresentation.defaultName(for: "S2")]]
+            [["id": "S1", "name": "Anna"], ["id": "S2", "name": SpeakerTranscriptBuilder.outputLabel(for: "S2")]]
         )
         XCTAssertNil(meeting["speaker_segments"])
         XCTAssertNil(dictation["speaker_state"])

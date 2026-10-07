@@ -373,11 +373,17 @@ struct HistoryRecordDetailView: View {
 
             switch viewModel.detailViewMode {
             case .final:
-                TextEditor(text: $viewModel.editedText)
-                    .font(.body)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .disabled(!viewModel.canEditSelectedRecord)
+                if hasSpeakerTranscript {
+                    // Text with speakers is edited by paragraph in the
+                    // conversation, so the transcript and the text stay in step.
+                    readOnlyText(AttributedString(record.finalText))
+                } else {
+                    TextEditor(text: $viewModel.editedText)
+                        .font(.body)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .disabled(!viewModel.canEditSelectedRecord)
+                }
             case .original:
                 readOnlyText(AttributedString(record.rawText))
             case .changes:

@@ -299,6 +299,10 @@ final class ServiceContainer: ObservableObject {
                 )
             }
         )
+        speakerCoordinator.observePremiumChanges([
+            licenseService.objectWillChange.eraseToAnyPublisher(),
+            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
+        ])
         speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
             let samples = try await audioFileService.loadAudioSamples(from: url)
             return try await modelManagerService.transcribe(
