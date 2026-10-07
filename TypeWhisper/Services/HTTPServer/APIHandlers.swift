@@ -303,6 +303,20 @@ final class APIHandlers: @unchecked Sendable {
                 }
                 options.applyCorrections = parsed
             }
+            if let detectSpeakers = request.headers["x-detect-speakers"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !detectSpeakers.isEmpty {
+                guard let parsed = Self.parseBoolean(detectSpeakers) else {
+                    return .error(status: 400, message: "Invalid 'x-detect-speakers' value")
+                }
+                options.detectSpeakers = parsed
+            }
+            if let speakerCount = request.headers["x-speaker-count"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !speakerCount.isEmpty {
+                guard let parsed = Int(speakerCount), parsed > 0 else {
+                    return .error(status: 400, message: "Invalid 'x-speaker-count' value")
+                }
+                options.speakerCount = parsed
+            }
         } else {
             return .error(status: 400, message: "No audio data provided")
         }

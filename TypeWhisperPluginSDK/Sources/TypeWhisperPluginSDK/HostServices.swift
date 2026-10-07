@@ -1417,10 +1417,10 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         }
 
         // A server that does not know the word timestamp parameter gets the
-        // request again without it, and is not asked for words again.
+        // request again without it. Only when that request succeeds was the
+        // parameter the problem, and the server is not asked for words again.
         if requestsWordTimings, [400, 422].contains(httpResponse.statusCode) {
-            Self.serversWithoutWordTimings.withLock { _ = $0.insert(baseURL) }
-            return try await performTranscribe(
+            let result = try await performTranscribe(
                 audio: audio,
                 apiKey: apiKey,
                 modelName: modelName,
@@ -1434,6 +1434,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 allowsWavFallback: allowsWavFallback,
                 requestsWordTimings: false
             )
+            Self.serversWithoutWordTimings.withLock { _ = $0.insert(baseURL) }
+            return result
         }
 
         switch httpResponse.statusCode {

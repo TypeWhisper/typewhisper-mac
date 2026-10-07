@@ -276,6 +276,26 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertTrue(history.searchRecords(query: "anna").isEmpty)
     }
 
+    func testCancellingARecordingThatWaitsTakesItOffTheQueueRightAway() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        provider.delay = .milliseconds(500)
+        let coordinator = makeCoordinator()
+        let firstID = await coordinator.addRecording(input())
+        let secondID = await coordinator.addRecording(input())
+        let first = try XCTUnwrap(firstID)
+        let second = try XCTUnwrap(secondID)
+        XCTAssertEqual(coordinator.stages[second], .waiting)
+
+        coordinator.cancel(recordID: second)
+
+        XCTAssertNil(coordinator.stages[second])
+        XCTAssertEqual(history.record(withID: second)?.speakerTranscriptState, .failed)
+        XCTAssertNotNil(coordinator.stages[first])
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(history.record(withID: first)?.speakerTranscriptState, .ready)
+        XCTAssertEqual(provider.requests.count, 1)
+    }
+
     func testDetectionInterruptedByAQuitBecomesFailed() async throws {
         let id = UUID()
         try SpeakerAudioWriter.writeAAC(
@@ -339,6 +359,46 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.speakerTranscriptState, .ready)
         XCTAssertEqual(record.speakerTranscript?.segments.map(\.speakerID), ["S1"])
         XCTAssertEqual(record.finalText, "Hello there")
+    }
+
+    func testRecordingWithoutTimestampsIsKeptAndTranscribedAgainForDetection() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        let timed = input()
+        let untimed = SpeakerRecordingInput(
+            result: TranscriptionResult(
+                text: timed.result.text,
+                detectedLanguage: "en",
+                duration: 3,
+                processingTime: 0.1,
+                engineUsed: "test",
+                segments: []
+            ),
+            samples: timed.samples,
+            title: timed.title,
+            source: timed.source,
+            modelUsed: nil
+        )
+        let withoutTimingSource = await coordinator.addRecording(untimed)
+        XCTAssertNil(withoutTimingSource)
+
+        coordinator.timingSource = { _, language in
+            TranscriptionResult(
+                text: "Good morning. Morning. Let's start.",
+                detectedLanguage: language,
+                duration: 3,
+                processingTime: 0.1,
+                engineUsed: "test",
+                segments: [TranscriptionSegment(text: "Good morning. Morning. Let's start.", start: 0, end: 3)]
+            )
+        }
+        let addedID = await coordinator.addRecording(untimed)
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        XCTAssertEqual(record.timedTextGranularity, .segment)
+        XCTAssertEqual(record.speakerTranscriptState, .ready)
     }
 
     func testRecordingWithoutWordTimingGetsItFromTheSecondPass() async throws {
@@ -490,6 +550,8 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
     var embeddings: [String: [Float]] = [:]
     var error: Error?
     var modelsInstalled = true
+    /// How long each detection takes.
+    var delay: Duration?
     private(set) var requests: [PluginDiarizationRequest] = []
     private(set) var prepareCalls = 0
 
@@ -518,6 +580,7 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
         requests.append(request)
+        if let delay { try await Task.sleep(for: delay) }
         if let error { throw error }
         return PluginDiarizationResult(turns: turns, speakerEmbeddings: embeddings, engine: "fake-diarizer")
     }

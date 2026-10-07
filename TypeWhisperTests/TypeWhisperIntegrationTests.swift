@@ -2140,7 +2140,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(meeting["speaker_state"] as? String, "ready")
         XCTAssertEqual(
             meeting["speakers"] as? [[String: String]],
-            [["id": "S1", "name": "Anna"], ["id": "S2", "name": "Speaker 2"]]
+            [["id": "S1", "name": "Anna"], ["id": "S2", "name": SpeakerTranscriptPresentation.defaultName(for: "S2")]]
         )
         XCTAssertNil(meeting["speaker_segments"])
         XCTAssertNil(dictation["speaker_state"])
@@ -2920,6 +2920,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(rawResponse.status, 400)
         XCTAssertEqual((rawJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'x-apply-corrections' value")
+
+        for (header, value) in [("x-detect-speakers", "maybe"), ("x-speaker-count", "0")] {
+            let response = await router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/transcribe",
+                    queryParams: [:],
+                    headers: ["content-type": "audio/wav", header: value],
+                    body: wavData
+                )
+            )
+            XCTAssertEqual(response.status, 400)
+            XCTAssertEqual(
+                (try Self.jsonObject(response)["error"] as? [String: Any])?["message"] as? String,
+                "Invalid '\(header)' value"
+            )
+        }
 
         let boundary = "Boundary-\(UUID().uuidString)"
         let multipartResponse = await router.route(

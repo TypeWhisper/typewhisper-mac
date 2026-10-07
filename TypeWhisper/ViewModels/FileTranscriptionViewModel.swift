@@ -328,6 +328,15 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     func transcribeAll() {
+        transcribe(retryingFailed: true)
+    }
+
+    /// Starts the files that wait, leaving failed and cancelled ones as they are.
+    func transcribePending() {
+        transcribe(retryingFailed: false)
+    }
+
+    private func transcribe(retryingFailed: Bool) {
         guard canTranscribe else { return }
 
         activeBatchTask?.cancel()
@@ -340,7 +349,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         startElapsedTimer()
 
         // Reset pending/error items
-        for i in files.indices {
+        for i in files.indices where retryingFailed {
             if files[i].state != .done {
                 files[i].state = .pending
                 files[i].result = nil
@@ -358,7 +367,7 @@ final class FileTranscriptionViewModel: ObservableObject {
             guard let self else { return }
             for i in files.indices {
                 guard batchState == .processing, !cancellationFlag.isCancelled else { break }
-                guard files[i].state != .done else { continue }
+                guard files[i].state == .pending else { continue }
 
                 currentIndex = i
                 await transcribeFile(at: i, cancellationFlag: cancellationFlag)
@@ -494,6 +503,8 @@ final class FileTranscriptionViewModel: ObservableObject {
                 ))
                 guard files.indices.contains(index), files[index].id == itemID else { return }
                 files[index].historyRecordID = recordID
+                // Cancelling while the record was added must not end as done.
+                guard !cancellationFlag.isCancelled else { throw CancellationError() }
             }
             files[index].state = .done
             files[index].phaseDescription = String(localized: "Done")

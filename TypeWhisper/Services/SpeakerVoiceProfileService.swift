@@ -33,6 +33,9 @@ final class SpeakerVoiceProfileService: ObservableObject {
         self.store = store
         self.historyService = historyService
         self.premiumAccess = premiumAccess
+        historyService.onRecordsDeleted = { [weak store] ids in
+            store?.removeEmbeddings(forRecordIDs: Set(ids))
+        }
     }
 
     // MARK: - After detection and corrections

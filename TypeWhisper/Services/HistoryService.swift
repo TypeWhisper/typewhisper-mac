@@ -95,9 +95,12 @@ struct HistoryPostFilter {
             || matchesSpeakerName(record)
     }
 
-    /// Recordings are also found by the names of their speakers.
+    /// Recordings are also found by the names of their speakers. Only the
+    /// names are decoded, not the transcript they belong to: a name from an
+    /// earlier detection run still finds the recording.
     private func matchesSpeakerName(_ record: TranscriptionRecord) -> Bool {
-        guard record.speakerNamesData != nil, let names = record.speakerNames else { return false }
+        guard let data = record.speakerNamesData,
+              let names = try? JSONDecoder().decode(SpeakerNameTable.self, from: data) else { return false }
         return names.entries.contains { Self.text($0.displayName, contains: searchText) }
     }
 
@@ -175,6 +178,10 @@ final class HistoryService: ObservableObject {
     private let historySyncPreferences: HistorySyncPreferences?
 
     private(set) var totalRecords: Int = 0
+
+    /// Called with the IDs of records right after they were deleted, so data
+    /// kept elsewhere for them, such as voice embeddings, goes too.
+    var onRecordsDeleted: (([UUID]) -> Void)?
 
     /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
     /// as dictations persisted after insertion, pass the generation they were captured in.
@@ -710,34 +717,40 @@ final class HistoryService: ObservableObject {
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {
-        historySyncPreferences?.recordExplicitDeletion(record.id)
+        let id = record.id
+        historySyncPreferences?.recordExplicitDeletion(id)
         deleteAudioFile(for: record)
         modelContext.delete(record)
         save()
         refreshRecentRecords()
+        onRecordsDeleted?([id])
     }
 
     func deleteRecords(_ records: [TranscriptionRecord]) {
-        historySyncPreferences?.recordExplicitDeletions(records.map(\.id))
+        let ids = records.map(\.id)
+        historySyncPreferences?.recordExplicitDeletions(ids)
         for record in records {
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
         save()
         refreshRecentRecords()
+        onRecordsDeleted?(ids)
     }
 
     func clearAll() {
         clearGeneration += 1
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
-            historySyncPreferences?.recordExplicitDeletions(allRecords.map(\.id))
+            let ids = allRecords.map(\.id)
+            historySyncPreferences?.recordExplicitDeletions(ids)
             for record in allRecords {
                 deleteAudioFile(for: record)
                 modelContext.delete(record)
             }
             save()
             refreshRecentRecords()
+            onRecordsDeleted?(ids)
         } catch {
             logger.error("Failed to clear records: \(error.localizedDescription)")
         }
@@ -961,6 +974,7 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.processingStateRaw,
             \TranscriptionRecord.audioFileName,
             \TranscriptionRecord.remoteAudioRelativePath,
+            \TranscriptionRecord.speakerTranscriptStateRaw,
         ]
 
         try context.enumerate(descriptor, batchSize: 500) { record in
@@ -1117,13 +1131,15 @@ final class HistoryService: ObservableObject {
             return
         }
         guard !old.isEmpty else { return }
-        historySyncPreferences?.recordRetentionPrunes(old.map(\.id))
+        let ids = old.map(\.id)
+        historySyncPreferences?.recordRetentionPrunes(ids)
         for record in old {
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
         save()
         refreshRecentRecords()
+        onRecordsDeleted?(ids)
     }
 
     func completeInbox(_ record: TranscriptionRecord) {
@@ -1267,6 +1283,7 @@ final class HistoryService: ObservableObject {
     }
 
     func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        var deletedIDs: [UUID] = []
         for mutation in mutations {
             switch mutation {
             case .upsertHistoryContent(let content):
@@ -1368,6 +1385,7 @@ final class HistoryService: ObservableObject {
                 if let record = record(withID: recordID) {
                     deleteAudioFile(for: record)
                     modelContext.delete(record)
+                    deletedIDs.append(recordID)
                 }
             case .upsertDictionary,
                  .deleteDictionary,
@@ -1378,6 +1396,7 @@ final class HistoryService: ObservableObject {
         }
         try modelContext.save()
         refreshRecentRecords()
+        if !deletedIDs.isEmpty { onRecordsDeleted?(deletedIDs) }
     }
 
     func installSynchronizedAudio(recordID: UUID, sourceURL: URL) throws {
@@ -1595,6 +1614,7 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.sourceRaw,
             \TranscriptionRecord.originDeviceID,
             \TranscriptionRecord.originPlatformRaw,
+            \TranscriptionRecord.speakerNamesData,
         ]
         var ids: [UUID] = []
         let totalCount = try enumerateMatches(

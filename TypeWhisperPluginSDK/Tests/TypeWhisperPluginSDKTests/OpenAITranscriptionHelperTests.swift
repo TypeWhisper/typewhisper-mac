@@ -517,6 +517,39 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertEqual(bodies.map { $0.contains("timestamp_granularities") }, [true, false, false])
     }
 
+    func testAnErrorThatIsNotAboutWordTimestampsKeepsThemForLaterRequests() async throws {
+        PluginOpenAITranscriptionHelper.resetWordTimingSupportForTesting()
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"error":"invalid language"}"#.utf8), 400),
+                .success(Data(#"{"error":"invalid language"}"#.utf8), 400),
+                .success(Data(#"{"text":"later"}"#.utf8), 200),
+            ])
+        }
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://validation.example.test")
+        let collector = PluginWordTimingCollector()
+
+        let text = try await PluginWordTimings.$collector.withValue(collector) {
+            do {
+                _ = try await helper.transcribe(
+                    audio: oneSecondAudio(), apiKey: "k", modelName: "whisper-1",
+                    language: "xx", translate: false, prompt: nil
+                )
+                XCTFail("Expected the validation error")
+            } catch {}
+            return try await helper.transcribe(
+                audio: oneSecondAudio(), apiKey: "k", modelName: "whisper-1",
+                language: nil, translate: false, prompt: nil
+            ).text
+        }
+
+        XCTAssertEqual(text, "later")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        let bodies = requests.map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+        XCTAssertEqual(bodies.map { $0.contains("timestamp_granularities") }, [true, false, true])
+    }
+
     func testCompressedAudioWithWavFallbackRetriesUnsupportedMediaAndPreservesFields() async throws {
         let store = OpenAITranscriptionMockSessionStore()
         PluginHTTPClient.configureForTesting { _ in

@@ -71,6 +71,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "models"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "api-discovery.json"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "api-port"))
+        XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "VoiceProfiles/voice-profiles.json"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "PluginData/com.test/models"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "PluginData/com.test/Models/a.gguf"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "PluginData/com.test/custom-models"))

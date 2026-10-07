@@ -536,7 +536,7 @@ struct SpeakersView: View {
     /// Files added while a batch runs are picked up when it ends.
     private func startPending() {
         guard viewModel.files.contains(where: { $0.state == .pending }) else { return }
-        viewModel.transcribeAll()
+        viewModel.transcribePending()
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {

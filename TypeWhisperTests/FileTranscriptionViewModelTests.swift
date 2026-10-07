@@ -374,6 +374,49 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.files.first?.result?.text, "Recovered text")
     }
 
+    func testTranscribePendingLeavesFailedFilesAlone() async throws {
+        let defaults = try makeDefaults()
+        let failingURL = makeTemporaryFile(named: "failing.wav")
+        let laterURL = makeTemporaryFile(named: "later.wav")
+        var transcribedURLs: [URL] = []
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            audioSamplesLoader: { url, _, _ in
+                transcribedURLs.append(url)
+                if url == failingURL { throw CocoaError(.fileReadCorruptFile) }
+                return [0.1, -0.1]
+            },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
+                TranscriptionResult(
+                    text: "Later text",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+        viewModel.selectedEngine = "parakeet"
+
+        viewModel.addFiles([failingURL])
+        viewModel.transcribePending()
+        try await waitForBatchToFinish(viewModel)
+        XCTAssertEqual(viewModel.files.first?.state, .error)
+
+        viewModel.addFiles([laterURL])
+        viewModel.transcribePending()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(transcribedURLs, [failingURL, laterURL])
+        XCTAssertEqual(viewModel.files.map(\.state), [.error, .done])
+    }
+
     func testTranscribeAllAppliesDictionaryCorrectionsToTextAndSegmentsPreservingMetadata() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "corrected-transcript.wav")

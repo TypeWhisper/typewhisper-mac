@@ -206,6 +206,8 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     /// Voice profiles; nil leaves every speaker anonymous.
     var voices: SpeakerVoiceProfileService?
     private var tasks: [UUID: Task<Void, Never>] = [:]
+    /// Records whose detection has started, past the wait for earlier ones.
+    private var runningRecordIDs: Set<UUID> = []
     private var lastTask: Task<Void, Never>?
 
     init(
@@ -291,7 +293,11 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         let previous = lastTask
         let task = Task { [weak self] in
             await previous?.value
-            await self?.run(recordID: recordID, speakerCount: speakerCount)
+            // A recording cancelled while it waited was already taken off the queue.
+            guard !Task.isCancelled, let self else { return }
+            self.runningRecordIDs.insert(recordID)
+            defer { self.runningRecordIDs.remove(recordID) }
+            await self.run(recordID: recordID, speakerCount: speakerCount)
         }
         tasks[recordID] = task
         lastTask = task
@@ -308,7 +314,10 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             from: segments,
             engine: input.result.engineUsed
         )
-        guard providerTranscript != nil || (!timedText.isEmpty && providerSource() != nil) else { return nil }
+        // Without timestamps the recording is still kept when a second
+        // transcription pass can provide them before detection.
+        guard providerTranscript != nil
+            || (providerSource() != nil && (!timedText.isEmpty || timingSource != nil)) else { return nil }
 
         let id = UUID()
         let audioURL = historyService.speakerAudioFileURL(forRecordID: id)
@@ -396,7 +405,14 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     }
 
     func cancel(recordID: UUID) {
-        tasks[recordID]?.cancel()
+        guard let task = tasks[recordID] else { return }
+        task.cancel()
+        // Waiting behind another recording would keep the cancelled one
+        // queued until that recording is done, so it leaves the queue now.
+        guard !runningRecordIDs.contains(recordID) else { return }
+        stages[recordID] = nil
+        tasks[recordID] = nil
+        finishWithoutResult(recordID: recordID)
     }
 
     private func run(recordID: UUID, speakerCount: Int?) async {

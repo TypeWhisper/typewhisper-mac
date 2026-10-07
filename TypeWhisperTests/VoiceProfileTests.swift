@@ -417,6 +417,18 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         XCTAssertEqual(Set(store.recordingEmbeddings.keys), [kept])
     }
 
+    func testDeletingRecordingsRemovesTheirEmbeddingsRightAway() throws {
+        let kept = try addRecording()
+        let deleted = try addRecording()
+        let cleared = try addRecording()
+
+        XCTAssertTrue(history.deleteRecord(withID: deleted))
+        XCTAssertEqual(Set(store.recordingEmbeddings.keys), [kept, cleared])
+
+        history.clearAll()
+        XCTAssertTrue(store.recordingEmbeddings.isEmpty)
+    }
+
     func testWorkspaceCorrectionsKeepVoicesAndRenamingUnlinksOrConfirms() throws {
         let first = try addRecording()
         history.setSpeakerName("Anna", for: "S2", inRecordID: first)

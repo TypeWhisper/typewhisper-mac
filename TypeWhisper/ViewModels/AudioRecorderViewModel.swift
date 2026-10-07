@@ -1101,7 +1101,9 @@ final class AudioRecorderViewModel: ObservableObject {
                 calendarEvent: item.calendarEvent
             )
 
-            _ = await self.runRetranscription(request)
+            // A recording transcribed before may already have its speaker record.
+            let hadTranscript = FileManager.default.fileExists(atPath: self.transcriptURL(for: url).path)
+            _ = await self.runRetranscription(request, addsSpeakerRecord: !hadTranscript)
         }
     }
 
@@ -1296,8 +1298,10 @@ final class AudioRecorderViewModel: ObservableObject {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 partialText = text
+                // The transcript is saved first; adding the speaker record can take seconds.
+                let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
                 await addSpeakerRecordIfWanted(result, request: request)
-                return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+                return outcome
             } else if !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             } else {
@@ -1329,7 +1333,10 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    private func runRetranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
+    private func runRetranscription(
+        _ request: FinalTranscriptionRequest,
+        addsSpeakerRecord: Bool
+    ) async -> FinalTranscriptionOutcome {
         let effectiveTask = resolvedTask(for: request)
 
         do {
@@ -1346,8 +1353,11 @@ final class AudioRecorderViewModel: ObservableObject {
                 return .failed(recordedFailure)
             }
 
-            await addSpeakerRecordIfWanted(result, request: request)
-            return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+            let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
+            if addsSpeakerRecord {
+                await addSpeakerRecordIfWanted(result, request: request)
+            }
+            return outcome
         } catch is CancellationError {
             return .skipped
         } catch {

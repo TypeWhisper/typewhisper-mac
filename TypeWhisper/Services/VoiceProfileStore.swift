@@ -92,6 +92,13 @@ final class VoiceProfileStore: ObservableObject {
         save()
     }
 
+    /// Drops the embeddings of deleted recordings.
+    func removeEmbeddings(forRecordIDs removed: Set<UUID>) {
+        guard recordings.keys.contains(where: removed.contains) else { return }
+        recordings = recordings.filter { !removed.contains($0.key) }
+        save()
+    }
+
     /// Drops embeddings of recordings that no longer exist.
     func removeEmbeddings(exceptForRecordIDs kept: Set<UUID>) {
         let before = recordings.count

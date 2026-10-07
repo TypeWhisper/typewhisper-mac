@@ -149,10 +149,36 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
 }
 
 /// Serializes model loading and inference; one recording is diarized at a time.
+/// The actor alone does not ensure that: it takes the next call at every
+/// `await`, so each operation holds a turn until it is done.
 private actor DiarizationRunner {
     private var models: OfflineDiarizerModels?
+    private var isBusy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    private func takeTurn() async {
+        guard isBusy else {
+            isBusy = true
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    private func endTurn() {
+        if waiting.isEmpty {
+            isBusy = false
+        } else {
+            waiting.removeFirst().resume()
+        }
+    }
 
     func load(from directory: URL, progress: ProgressHandler? = nil) async throws {
+        await takeTurn()
+        defer { endTurn() }
+        try await loadModels(from: directory, progress: progress)
+    }
+
+    private func loadModels(from directory: URL, progress: ProgressHandler? = nil) async throws {
         guard models == nil else { return }
         models = try await OfflineDiarizerModels.load(from: directory, progressHandler: progress)
     }
@@ -167,7 +193,9 @@ private actor DiarizationRunner {
         modelsDirectory: URL,
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
-        try await load(from: modelsDirectory)
+        await takeTurn()
+        defer { endTurn() }
+        try await loadModels(from: modelsDirectory)
         guard let models else { throw PluginDiarizationError.modelsNotInstalled }
         try Task.checkCancellation()
 
