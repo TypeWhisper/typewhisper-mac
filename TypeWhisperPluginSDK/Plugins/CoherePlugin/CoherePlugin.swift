@@ -74,71 +74,74 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             throw PluginTranscriptionError.apiError("Invalid Cohere API URL")
         }
 
-        let boundary = UUID().uuidString
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
+        // The API takes at most 25 MB per request, about 13 minutes of WAV.
+        return try await PluginAudioChunking.transcribe(audio) { chunk in
+            let boundary = UUID().uuidString
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+            request.timeoutInterval = 120
 
-        // Build multipart form body
-        var body = Data()
+            // Build multipart form body
+            var body = Data()
 
-        // model field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(model)\r\n".data(using: .utf8)!)
+            // model field
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(model)\r\n".data(using: .utf8)!)
 
-        // language field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(lang)\r\n".data(using: .utf8)!)
+            // language field
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"language\"\r\n\r\n".data(using: .utf8)!)
+            body.append("\(lang)\r\n".data(using: .utf8)!)
 
-        // file field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(audio.wavData)
-        body.append("\r\n".data(using: .utf8)!)
+            // file field
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n".data(using: .utf8)!)
+            body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+            body.append(chunk.wavData)
+            body.append("\r\n".data(using: .utf8)!)
 
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
+            body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+            request.httpBody = body
 
-        let (responseData, response) = try await PluginHTTPClient.data(for: request)
+            let (responseData, response) = try await PluginHTTPClient.data(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw PluginTranscriptionError.networkError("Invalid response")
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw PluginTranscriptionError.networkError("Invalid response")
+            }
+
+            switch httpResponse.statusCode {
+            case 200:
+                break
+            case 401:
+                throw PluginTranscriptionError.invalidApiKey
+            case 413:
+                throw PluginTranscriptionError.fileTooLarge
+            case 429:
+                throw PluginTranscriptionError.rateLimitOrQuota(from: responseData)
+            default:
+                let errorBody = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
+                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorBody)")
+            }
+
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: responseData,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse Cohere response: \(htmlPageSummary)"
+                )
+            }
+
+            guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+                  let text = json["text"] as? String else {
+                throw PluginTranscriptionError.apiError("Failed to parse Cohere response")
+            }
+
+            return PluginTranscriptionResult(text: text, detectedLanguage: lang)
         }
-
-        switch httpResponse.statusCode {
-        case 200:
-            break
-        case 401:
-            throw PluginTranscriptionError.invalidApiKey
-        case 413:
-            throw PluginTranscriptionError.fileTooLarge
-        case 429:
-            throw PluginTranscriptionError.rateLimitOrQuota(from: responseData)
-        default:
-            let errorBody = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorBody)")
-        }
-
-        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
-            from: responseData,
-            response: httpResponse
-        ) {
-            throw PluginTranscriptionError.apiError(
-                "Failed to parse Cohere response: \(htmlPageSummary)"
-            )
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-              let text = json["text"] as? String else {
-            throw PluginTranscriptionError.apiError("Failed to parse Cohere response")
-        }
-
-        return PluginTranscriptionResult(text: text, detectedLanguage: lang)
     }
 
     // MARK: - API Key Validation

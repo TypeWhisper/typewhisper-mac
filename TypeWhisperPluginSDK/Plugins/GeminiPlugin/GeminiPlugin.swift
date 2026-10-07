@@ -33,6 +33,7 @@ final class GeminiPlugin: NSObject,
     private static let modelsEndpoint = "https://generativelanguage.googleapis.com/v1beta/models"
     private static let transcriptionRequestTimeout: TimeInterval = 60
     private static let dedicatedTranscriptionRequestTimeout: TimeInterval = 900
+    static let dedicatedTranscriptionChunkDuration: TimeInterval = 1_800
     private static let modelCatalogRefreshInterval: TimeInterval = 24 * 60 * 60
     private static let maxModelCatalogPages = 100
     fileprivate static let dictionaryTermsMaxCount = 1_000
@@ -542,6 +543,27 @@ final class GeminiPlugin: NSObject,
     }
 
     private func transcribeDedicated(
+        audio: AudioData,
+        apiKey: String,
+        modelId: String,
+        mode: GeminiTranscriptionMode,
+        language: String?,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        // Dedicated transcription takes recordings of up to one hour.
+        try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: Self.dedicatedTranscriptionChunkDuration) { chunk in
+            try await transcribeDedicatedChunk(
+                audio: chunk,
+                apiKey: apiKey,
+                modelId: modelId,
+                mode: mode,
+                language: language,
+                prompt: prompt
+            )
+        }
+    }
+
+    private func transcribeDedicatedChunk(
         audio: AudioData,
         apiKey: String,
         modelId: String,

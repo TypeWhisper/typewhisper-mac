@@ -212,6 +212,53 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertNil(json["temperature"])
     }
 
+    func testTranscriptionSplitsLongRecordingsIntoTenMinuteRequests() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.mistral.ai/v1/audio/transcriptions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"text":"first","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"second","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Eleven minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let audio = AudioData(samples: samples, wavData: Data(), duration: 660)
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "first second")
+        XCTAssertEqual(store.sessions[0].requestedRequests.count, 2)
+    }
+
+    func testVoxtralSmallSplitsLongRecordingsIntoFiveMinuteRequests() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("voxtral-small-latest")
+
+        let url = "https://api.mistral.ai/v1/chat/completions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"choices":[{"message":{"content":"first"}}]}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"choices":[{"message":{"content":"second"}}]}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Six minutes: one request before, two now.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 360)
+        let audio = AudioData(samples: samples, wavData: Data(), duration: 360)
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "first second")
+        XCTAssertEqual(store.sessions[0].requestedRequests.count, 2)
+    }
+
     func testVoxtralSmallTranscribesViaChatCompletions() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()

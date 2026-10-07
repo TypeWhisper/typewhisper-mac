@@ -591,6 +591,62 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(try GeminiPlugin.parseDedicatedTranscriptionResponse(data), "hello from transcribe")
     }
 
+    func testDedicatedTranscribeSplitsRecordingsLongerThanHalfAnHour() async throws {
+        let host = try PluginTestHostServices(
+            defaults: try Self.configuredDefaults(selectedModel: "gemini-3.5-transcribe"),
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        // Each chunk starts an upload, uploads, transcribes and deletes its file.
+        var outcomes: [PluginHTTPClientTestOutcome] = []
+        for (index, transcript) in ["first half", "second half"].enumerated() {
+            outcomes += [
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://generativelanguage.googleapis.com/upload/v1beta/files",
+                        statusCode: 200,
+                        headers: ["x-goog-upload-url": "https://upload.example.test/session-\(index)"]
+                    )
+                ),
+                .success(
+                    Data(#"{"file":{"name":"files/audio-\#(index)","uri":"https://generativelanguage.googleapis.com/v1beta/files/audio-\#(index)","mimeType":"audio/mp4"}}"#.utf8),
+                    Self.httpResponse(url: "https://upload.example.test/session-\(index)", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"output_text":"\#(transcript)"}"#.utf8),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/interactions", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{}"#.utf8),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/files/audio-\(index)", statusCode: 200)
+                ),
+            ]
+        }
+        let session = PluginHTTPClientMockSession(outcomes: outcomes)
+        PluginHTTPClientTestHarness.configure { _ in session }
+
+        // 31 minutes, more than one chunk.
+        let duration: TimeInterval = 31 * 60
+        let samples = [Float](repeating: 0.3, count: Int(duration) * 16_000)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: duration),
+            language: "en-US",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(GeminiPlugin.dedicatedTranscriptionChunkDuration, 1_800)
+        XCTAssertEqual(result.text, "first half second half")
+        XCTAssertEqual(session.requestedPaths, [
+            "/upload/v1beta/files", "/session-0", "/v1beta/interactions", "/v1beta/files/audio-0",
+            "/upload/v1beta/files", "/session-1", "/v1beta/interactions", "/v1beta/files/audio-1",
+        ])
+    }
+
     func testDedicatedTranscribeKeepsSelectedModeAcrossUploadAndDeletesFile() async throws {
         for mode in [GeminiTranscriptionMode.verbatim, .smart] {
             try await assertDedicatedTranscription(mode: mode)
