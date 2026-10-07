@@ -120,6 +120,80 @@ final class SmallestAIPluginTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer smallest-key")
     }
 
+    func testTranscribeSplitsRecordingsLongerThanTenMinutes() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "smallest-key"])
+        let plugin = SmallestAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.smallest.ai/waves/v1/pulse/get_text"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"status":"success","transcription":"first","language":"en","utterances":[{"start":1,"end":2,"text":"first"}]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"success","transcription":"second","language":"en","utterances":[{"start":1,"end":2,"text":"second"}]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        // Just over ten minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 601)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 601),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "first second")
+        XCTAssertEqual(result.segments.map(\.text), ["first", "second"])
+        XCTAssertEqual(result.segments.first?.start, 1)
+        let secondChunkStart = try XCTUnwrap(result.segments.last?.start)
+        XCTAssertGreaterThan(secondChunkStart, 271, "shifted by the first chunk's length")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            // Ten minutes of 16 kHz 16-bit WAV.
+            XCTAssertLessThanOrEqual(try XCTUnwrap(request.httpBody).count, 44 + 600 * 32_000)
+        }
+    }
+
+    func testLongRecordingKeepsTheTranscriptWhenAChunkIsSilent() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "smallest-key"])
+        let plugin = SmallestAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.smallest.ai/waves/v1/pulse/get_text"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"status":"success","transcription":"first"}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"status":"success","transcription":""}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.3, count: 16_000 * 601)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 601),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "first")
+        XCTAssertEqual(store.sessions.first?.requestedRequests.count, 2)
+    }
+
     func testParseResponseRejectsFailedStatus() {
         XCTAssertThrowsError(try SmallestAIPlugin.parsePreRecordedResponse(
             Data(#"{"status":"error","message":"bad request"}"#.utf8)
