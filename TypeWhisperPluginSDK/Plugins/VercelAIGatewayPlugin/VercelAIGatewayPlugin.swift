@@ -253,7 +253,10 @@ final class VercelAIGatewayPlugin: NSObject,
             language: language,
             timeout: Self.transcriptionRequestTimeout
         )
-        var (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: Self.transcriptionRequestTimeout)
+        var (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
+        )
         if let httpResponse = response as? HTTPURLResponse,
            preferredUpload.format != "wav",
            PluginAudioUploadEncoder.shouldRetryWithWavUpload(
@@ -267,7 +270,10 @@ final class VercelAIGatewayPlugin: NSObject,
                 language: language,
                 timeout: Self.transcriptionRequestTimeout
             )
-            (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: Self.transcriptionRequestTimeout)
+            (data, response) = try await PluginHTTPClient.data(
+                for: request,
+                resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
+            )
         }
         return (data, response)
     }
