@@ -323,9 +323,10 @@ final class CartesiaPluginTests: XCTestCase {
         XCTAssertEqual(fourHours.request, 1_440)
         XCTAssertEqual(fourHours.resource, 2_400)
 
+        // No documented limit, so even a day of audio keeps 6 and 10 s a minute.
         let twentyHours = CartesiaPlugin.transcriptionTimeouts(forAudioDuration: 20 * 3_600)
-        XCTAssertEqual(twentyHours.request, 3_600)
-        XCTAssertEqual(twentyHours.resource, 7_200)
+        XCTAssertEqual(twentyHours.request, 7_200)
+        XCTAssertEqual(twentyHours.resource, 12_000)
     }
 
     func testShortTranscriptionKeepsSharedSessionTimeouts() async throws {

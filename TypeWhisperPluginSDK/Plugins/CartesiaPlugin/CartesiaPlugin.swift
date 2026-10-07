@@ -630,13 +630,14 @@ extension CartesiaPlugin {
     /// Cartesia answers once the whole file is transcribed and documents
     /// neither a length limit nor a speed; it splits long files on its side.
     /// The answer gets 6 s per audio minute, enough at ten times real time,
-    /// the whole request 4 s per audio minute more for the upload.
+    /// the whole request 4 s per audio minute more for the upload. Without a
+    /// documented limit, neither has a ceiling.
     /// https://docs.cartesia.ai/api-reference/stt/transcribe
     static func transcriptionTimeouts(forAudioDuration duration: TimeInterval) -> (request: TimeInterval, resource: TimeInterval) {
         let minutes = duration / 60
         return (
-            request: min(max(600, minutes * 6), 3_600),
-            resource: min(max(600, minutes * 10), 7_200)
+            request: max(600, minutes * 6),
+            resource: max(600, minutes * 10)
         )
     }
 
