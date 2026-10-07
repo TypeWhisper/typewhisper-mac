@@ -209,9 +209,9 @@ final class MetaPluginTests: XCTestCase {
         XCTAssertTrue(body.contains(#""mode":"DIARIZATION""#))
     }
 
-    func testLongRecordingIsSplitWithoutMetaSpeakerLabels() async throws {
-        // Meta restarts its speaker numbering in every request, so labels from
-        // different chunks could put two people under one name.
+    func testLongDiarizedRecordingGivesEveryChunkItsOwnSpeakerNumbers() async throws {
+        // Meta numbers the speakers anew in every request, so "A" in the
+        // second chunk need not be "A" from the first.
         let host = try PluginTestHostServices(secrets: ["api-key": "meta-key"])
         let plugin = MetaPlugin()
         plugin.activate(host: host)
@@ -222,11 +222,11 @@ final class MetaPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"sessionId":"a","transcript":"Hallo.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Hallo."}]}"#.utf8),
+                    Data(#"{"sessionId":"a","transcript":"Hallo. Hi.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Hallo.","speaker":"A"},{"turnId":2,"startMs":3000,"endMs":4000,"transcript":"Hi.","speaker":"B"}]}"#.utf8),
                     Self.httpResponse(url: url, statusCode: 200)
                 ),
                 .success(
-                    Data(#"{"sessionId":"b","transcript":"Welt.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Welt."}]}"#.utf8),
+                    Data(#"{"sessionId":"b","transcript":"Welt.","audioDurationMs":330000,"turns":[{"turnId":1,"startMs":1000,"endMs":2000,"transcript":"Welt.","speaker":"A"}]}"#.utf8),
                     Self.httpResponse(url: url, statusCode: 200)
                 ),
             ])
@@ -241,10 +241,11 @@ final class MetaPluginTests: XCTestCase {
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "Hallo. Welt.")
-        XCTAssertEqual(result.segments.map(\.speakerLabel), [nil, nil])
+        XCTAssertEqual(result.text, "Speaker 1: Hallo.\nSpeaker 2: Hi.\nSpeaker 3: Welt.")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2", "Speaker 3"])
         XCTAssertEqual(result.segments.first?.start, 1)
-        XCTAssertGreaterThan(result.segments.last?.start ?? 0, 300)
+        let secondChunkStart = try XCTUnwrap(result.segments.last?.start)
+        XCTAssertGreaterThan(secondChunkStart, 301, "shifted by the first chunk's length")
         let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
         XCTAssertEqual(requests.count, 2)
         for request in requests {
@@ -253,8 +254,41 @@ final class MetaPluginTests: XCTestCase {
             // The request JSON precedes the audio part.
             // swiftlint:disable:next optional_data_string_conversion
             let header = String(decoding: body.prefix(2_000), as: UTF8.self)
-            XCTAssertTrue(header.contains(#""mode":"PUSH_TO_TALK""#))
+            XCTAssertTrue(header.contains(#""mode":"DIARIZATION""#))
         }
+    }
+
+    func testLongRecordingWithoutDiarizationJoinsTheChunkTranscripts() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "meta-key"])
+        let plugin = MetaPlugin()
+        plugin.activate(host: host)
+
+        // PUSH_TO_TALK returns no turns.
+        let url = "https://api.meta.ai/v1/asr/transcribe"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"sessionId":"a","transcript":"Hallo.","audioDurationMs":330000,"turns":[]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"sessionId":"b","transcript":"Welt.","audioDurationMs":330000,"turns":[]}"#.utf8),
+                    Self.httpResponse(url: url, statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
+            language: "de",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "Hallo. Welt.")
+        XCTAssertEqual(store.sessions.first?.requestedRequests.count, 2)
     }
 
     func testRealtimeHandshakeUsesPCM16HintsKeywordsAndHandshakeAuthentication() throws {
