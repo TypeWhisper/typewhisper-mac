@@ -377,6 +377,18 @@ public enum PluginHTTPClient {
                 try await sleeper(delay)
             } catch {
                 let elapsed = ContinuousClock.now - start
+                // Another request's cancellation can invalidate the shared session
+                // after this request borrowed it but before its task started. That
+                // surfaces as `.cancelled` although this task was not cancelled, and
+                // nothing was sent, so start over on a fresh session.
+                if (error as? URLError)?.code == .cancelled,
+                   !Task.isCancelled,
+                   attempt + 1 < retryMaxAttempts {
+                    attempt += 1
+                    resetSharedSession(matching: session, reason: "request found its session invalidated")
+                    logger.warning("\(method) \(url) cancelled by an invalidated session, retrying on a fresh one")
+                    continue
+                }
                 guard isTransientNetworkError(error) else {
                     logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
                     throw error

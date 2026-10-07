@@ -65,11 +65,14 @@ final class PluginHTTPClientTests: XCTestCase {
             )
         }
 
-        let preview = Task { try await PluginHTTPClient.data(for: Self.request(path: "/preview")) }
+        let preview = Task { _ = try await PluginHTTPClient.data(for: Self.request(path: "/preview")) }
         let deadline = ContinuousClock.now + .seconds(5)
-        while store.sessions.first?.requestedPaths.isEmpty ?? true {
-            XCTAssertLessThan(ContinuousClock.now, deadline, "the preview request never started")
+        while !store.firstSessionHasRequests, ContinuousClock.now < deadline {
             await Task.yield()
+        }
+        guard store.firstSessionHasRequests else {
+            preview.cancel()
+            return XCTFail("the preview request never started")
         }
 
         preview.cancel()
@@ -77,7 +80,7 @@ final class PluginHTTPClientTests: XCTestCase {
 
         XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
         XCTAssertEqual(store.sessions.count, 2)
-        guard store.sessions.count == 2 else { return }
+        guard store.sessionCount == 2 else { return }
         XCTAssertTrue(store.sessions[0].didInvalidate)
         XCTAssertEqual(store.sessions[0].requestedPaths, ["/preview"])
         XCTAssertEqual(store.sessions[1].requestedPaths, ["/final"])
@@ -91,13 +94,31 @@ final class PluginHTTPClientTests: XCTestCase {
             store.makeSession(outcomes: [.success(Self.okResponse())])
         }
 
-        let first = Task { try await PluginHTTPClient.data(for: Self.request(path: "/first")) }
-        _ = try await first.value
+        let first = Task { _ = try await PluginHTTPClient.data(for: Self.request(path: "/first")) }
+        try await first.value
         first.cancel()
         _ = try await PluginHTTPClient.data(for: Self.request(path: "/second"))
 
         XCTAssertEqual(store.sessions.count, 1)
         XCTAssertFalse(store.sessions[0].didInvalidate)
+    }
+
+    func testRequestStartedOnAnInvalidatedSessionRetriesOnAFreshOne() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            if store.sessionCount == 0 {
+                return store.makeSession(outcomes: [.failure(URLError(.cancelled))])
+            }
+            return store.makeSession(outcomes: [.success(Self.okResponse())])
+        }
+
+        let (data, _) = try await PluginHTTPClient.data(
+            for: Self.request(path: "/borrowed"),
+            retry: .disabled
+        )
+
+        XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
+        XCTAssertEqual(store.sessionCount, 2)
     }
 
     func testHTTPClientResourceTimeoutAllowsLongRunningRequests() async throws {
@@ -630,6 +651,14 @@ private final class MockHTTPSessionStore: @unchecked Sendable {
     private(set) var sessions: [MockHTTPSession] = []
     private(set) var configurations: [URLSessionConfiguration] = []
 
+    var sessionCount: Int {
+        lock.withLock { sessions.count }
+    }
+
+    var firstSessionHasRequests: Bool {
+        lock.withLock { sessions.first }?.hasRequests ?? false
+    }
+
     func makeSession(
         outcomes: [Result<(Data, URLResponse), Error>],
         configuration: URLSessionConfiguration? = nil,
@@ -673,6 +702,10 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
             try await Task.sleep(for: .seconds(60))
         }
         return try outcome.get()
+    }
+
+    var hasRequests: Bool {
+        lock.withLock { !requestedPaths.isEmpty }
     }
 
     func finishTasksAndInvalidate() {
