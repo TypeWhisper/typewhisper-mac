@@ -870,10 +870,12 @@ final class OpenAICompatiblePlugin: NSObject,
 
         // TypeWhisper 1.6 RC1 does not export the SDK's apiVersion overload.
         // Keep this JSON request path in the plugin until that host is no longer supported.
-        // Azure OpenAI takes at most 25 MB per request.
+        // Azure OpenAI takes at most 25 MB per request. Its model field holds a
+        // deployment name, which does not tell whether gpt-4o-transcribe and its
+        // 2,000-token output limit are behind it, so this path uses short chunks.
         return try await PluginAudioChunking.transcribe(
             audio,
-            maximumChunkDuration: PluginOpenAITranscriptionHelper.maximumChunkDuration(forModel: modelId)
+            maximumChunkDuration: PluginOpenAITranscriptionHelper.maximumChunkDuration(forModel: "gpt-4o-transcribe")
         ) { chunk in
             try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
                 try await self.performBatchTranscriptionRequest(

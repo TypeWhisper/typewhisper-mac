@@ -534,12 +534,13 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"model\"\r\n\r\ngpt-transcribe\r\n"))
     }
 
-    func testAzureDeploymentBatchEndpointUsesShortChunksForGPT4oTranscribe() async throws {
-        // gpt-4o-transcribe returns at most 2,000 tokens.
+    func testAzureDeploymentBatchEndpointUsesShortChunksWhateverTheDeploymentIsCalled() async throws {
+        // The deployment "prod-stt" may serve gpt-4o-transcribe, which returns
+        // at most 2,000 tokens.
         let host = try PluginTestHostServices(
             defaults: [
                 "baseURL": "https://foundry-example.services.ai.azure.com/openai",
-                "selectedModel": "gpt-4o-transcribe",
+                "selectedModel": "prod-stt",
             ],
             secrets: ["api-key": "azure-key"]
         )
@@ -548,7 +549,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         plugin.setApiVersion("2025-03-01-preview", for: plugin.providerId)
         plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
 
-        let url = "https://foundry-example.services.ai.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=2025-03-01-preview"
+        let url = "https://foundry-example.services.ai.azure.com/openai/deployments/prod-stt/audio/transcriptions?api-version=2025-03-01-preview"
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
@@ -589,10 +590,11 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             store.makeSession(outcomes: [
                 .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
                 .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"third"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
             ])
         }
 
-        // Eleven minutes, more than one chunk.
+        // Eleven minutes in chunks of at most five.
         let samples = [Float](repeating: 0.3, count: 16_000 * 660)
         let result = try await plugin.transcribe(
             audio: AudioData(samples: samples, wavData: Data(), duration: 660),
@@ -601,9 +603,9 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             prompt: nil
         )
 
-        XCTAssertEqual(result.text, "first second")
+        XCTAssertEqual(result.text, "first second third")
         let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
-        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(requests.count, 3)
         XCTAssertTrue(requests.allSatisfy { ($0.httpBody?.count ?? .max) < 25 * 1_024 * 1_024 })
     }
 
