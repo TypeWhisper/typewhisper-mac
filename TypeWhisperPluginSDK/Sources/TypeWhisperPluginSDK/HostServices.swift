@@ -310,6 +310,10 @@ public enum PluginHTTPClient {
         let url = request.url?.absoluteString ?? "unknown"
         var attempt = 0
         var usedRetryAfterGrace = false
+        // Restarts after losing the session-invalidation race sent nothing, so
+        // they are bounded separately and leave `attempt` (and with it the
+        // first transport retry) untouched.
+        var unsentRestarts = 0
 
         while true {
             let session = sharedOrCreateSession()
@@ -387,8 +391,8 @@ public enum PluginHTTPClient {
                 if (error as? URLError)?.code == .cancelled,
                    !Task.isCancelled,
                    !isCurrentSharedSession(session),
-                   attempt + 1 < retryMaxAttempts {
-                    attempt += 1
+                   unsentRestarts < retryMaxAttempts {
+                    unsentRestarts += 1
                     logger.warning("\(method) \(url) cancelled by an invalidated session, retrying on a fresh one")
                     continue
                 }

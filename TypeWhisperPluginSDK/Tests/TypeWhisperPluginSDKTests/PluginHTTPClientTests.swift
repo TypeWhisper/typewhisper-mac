@@ -130,6 +130,28 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.sessionCount, 2)
     }
 
+    func testRestartAfterAnInvalidatedSessionKeepsTheFirstTransportRetry() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            switch store.sessionCount {
+            case 0:
+                return store.makeSession(
+                    outcomes: [.failure(URLError(.cancelled))],
+                    beforeResponding: { PluginHTTPClient.resetSharedSession(reason: "other request cancelled") }
+                )
+            case 1:
+                return store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))])
+            default:
+                return store.makeSession(outcomes: [.success(Self.okResponse())])
+            }
+        }
+
+        let (data, _) = try await PluginHTTPClient.data(for: Self.request(path: "/post"), retry: .disabled)
+
+        XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
+        XCTAssertEqual(store.sessionCount, 3)
+    }
+
     func testCancelledPostOnTheSharedSessionIsNotSentAgain() async throws {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
