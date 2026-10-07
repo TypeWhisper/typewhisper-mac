@@ -135,7 +135,11 @@ enum SpeakerTranscriptBuilder {
     static func textWithSpeakers(_ segments: [TranscriptionSegment]) -> String {
         var paragraphs: [(label: String?, text: String)] = []
         for segment in segments {
-            let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            var text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Cloud engines also write the label into the text.
+            if let label = segment.speakerLabel, text.hasPrefix("\(label):") {
+                text = String(text.dropFirst(label.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
             guard !text.isEmpty else { continue }
             if let last = paragraphs.last, last.label == segment.speakerLabel {
                 paragraphs[paragraphs.count - 1].text += " " + text
@@ -375,7 +379,10 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         speakerCount: Int? = nil
     ) async throws -> [TranscriptionSegment] {
         guard premiumAccess() else { throw StartError.premiumRequired }
-        guard !result.segments.contains(where: { $0.speakerLabel != nil }) else { return result.segments }
+        // Labels the engine returned are kept, unless a fixed number of speakers was asked for.
+        guard speakerCount != nil || !result.segments.contains(where: { $0.speakerLabel != nil }) else {
+            return result.segments
+        }
         guard let provider = providerSource() else { throw StartError.providerUnavailable }
         let timedText = SpeakerTranscriptBuilder.timedText(from: result.segments)
         guard !timedText.isEmpty else { throw StartError.timingMissing }

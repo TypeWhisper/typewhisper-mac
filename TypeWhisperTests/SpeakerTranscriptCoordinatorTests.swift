@@ -605,6 +605,28 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertTrue(provider.requests.isEmpty)
     }
 
+    func testAFixedSpeakerCountDetectsAgainOverEngineLabels() async throws {
+        provider.turns = [
+            PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 2),
+            PluginSpeakerTurn(speakerLabel: "y", start: 2, end: 3),
+        ]
+        let coordinator = makeCoordinator()
+        let labelled = input(labels: true)
+
+        let detected = try await coordinator.labelingSpeakers(in: labelled.result, samples: labelled.samples, speakerCount: 2)
+
+        XCTAssertEqual(provider.requests.map(\.speakerCount), [2])
+        XCTAssertEqual(Set(detected.compactMap(\.speakerLabel)), ["Speaker 1", "Speaker 2"])
+    }
+
+    func testEngineLabelsInTheTextAreNotWrittenTwice() {
+        let text = SpeakerTranscriptBuilder.textWithSpeakers([
+            TranscriptionSegment(text: "Speaker B: Good morning.", start: 0, end: 1, speakerLabel: "Speaker B"),
+            TranscriptionSegment(text: "Hello.", start: 1, end: 2, speakerLabel: "Speaker A"),
+        ])
+        XCTAssertEqual(text, "Speaker B: Good morning.\n\nSpeaker A: Hello.")
+    }
+
     func testPremiumChangesRedrawTheSpeakerViews() async {
         let coordinator = makeCoordinator()
         let premium = PassthroughSubject<Void, Never>()

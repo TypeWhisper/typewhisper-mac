@@ -212,6 +212,13 @@ final class SpeakerVoiceProfileService: ObservableObject {
     /// Removes the voice; names already given in recordings stay.
     func deleteProfile(_ profileID: UUID) {
         store.delete(profileID: profileID)
+        // Names the profile only suggested are guesses without it; confirmed names stay.
+        for record in historyService.recordsWithSpeakerNames() {
+            for entry in record.speakerNames?.entries ?? []
+            where entry.profileID == profileID && entry.isSuggestion == true {
+                historyService.setSpeakerName("", for: entry.speakerID, inRecordID: record.id)
+            }
+        }
     }
 
     /// Recordings where a speaker is linked to the profile, newest first.

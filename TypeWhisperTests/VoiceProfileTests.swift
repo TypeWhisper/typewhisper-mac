@@ -305,6 +305,20 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
                        [first, second].sorted { $0.uuidString < $1.uuidString })
     }
 
+    func testDeletingAProfileClearsItsSuggestionsAndKeepsConfirmedNames() throws {
+        let first = try addRecording()
+        history.setSpeakerName("Anna", for: "S1", inRecordID: first)
+        service.enroll("S1", inRecordID: first)
+        let profileID = try XCTUnwrap(store.profiles.first?.id)
+        let second = try addRecording()
+        XCTAssertEqual(service.state(of: "S1", inRecordID: second), .suggestion)
+
+        service.deleteProfile(profileID)
+
+        XCTAssertNil(names(second)?.displayName(for: "S1"))
+        XCTAssertEqual(names(first)?.displayName(for: "S1"), "Anna")
+    }
+
     func testRejectingASuggestionClearsTheNameAndKeepsTheProfile() throws {
         let first = try addRecording()
         history.setSpeakerName("Anna", for: "S1", inRecordID: first)
