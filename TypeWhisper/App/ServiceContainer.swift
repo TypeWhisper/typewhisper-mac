@@ -392,7 +392,7 @@ final class ServiceContainer: ObservableObject {
 
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
-        let router = APIRouter(apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests)
+        let router = APIRouter(authenticationProvider: apiAuthenticator.authenticationRequirement)
         let settingsBackupService = SettingsBackupAutomationService(
             workflowService: workflowService,
             dictionaryService: dictionaryService,

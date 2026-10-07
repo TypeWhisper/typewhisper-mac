@@ -397,7 +397,13 @@ final class SpeakerWorkspaceModel: ObservableObject {
         var table = names
         // The merged speaker's name survives when the target has none.
         if var moved = table, moved.displayName(for: target) == nil, let name = moved.displayName(for: source) {
-            moved.setName(name, for: target, profileID: moved.profileID(for: source))
+            // A name a voice profile only suggested stays a suggestion.
+            moved.setName(
+                name,
+                for: target,
+                profileID: moved.profileID(for: source),
+                isSuggestion: moved.isSuggestion(for: source)
+            )
             table = moved
         }
         table?.setName("", for: source)

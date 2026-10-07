@@ -405,6 +405,19 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.isAudible("S1"))
     }
 
+    func testMergingKeepsASuggestedNameASuggestion() throws {
+        let model = try makeModel()
+        history.setSpeakerName("", for: "S1", inRecordID: recordID)
+        history.setSpeakerName("Guess", for: "S2", profileID: UUID(), isSuggestion: true, inRecordID: recordID)
+        model.reload()
+
+        model.merge("S2", into: "S1", undoManager: nil)
+
+        let names = try XCTUnwrap(history.record(withID: recordID)?.speakerNames)
+        XCTAssertEqual(names.displayName(for: "S1"), "Guess")
+        XCTAssertTrue(names.isSuggestion(for: "S1"))
+    }
+
     func testAnEditThatRemovesAllTextIsRejected() throws {
         _ = try makeModel()
         let transcript = try XCTUnwrap(history.record(withID: recordID)?.speakerTranscript)
