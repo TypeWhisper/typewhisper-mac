@@ -436,6 +436,8 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
             XCTAssertEqual(modelManager.selectedProviderId, "local")
             XCTAssertEqual(fallback.restores, 1)
             XCTAssertEqual(fallback.selectionAtRestore, "local")
+            // The fallback is temporary; the saved choice stays (#1533).
+            XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "missing")
         }
     }
 
@@ -617,7 +619,9 @@ private final class ReconciledRestorePlugin: TranscriptionEnginePlugin, PassiveM
         requests += 1
         guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         restores += 1
-        selectionAtRestore = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine)
+        // The selection the host's matcher sees: a temporary fallback, else the saved engine.
+        selectionAtRestore = PluginManager.temporaryFallbackEngine.withLock { $0 }
+            ?? UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine)
         // Remain unconfigured, like a missing asset or a failed load.
     }
     var providerDisplayName: String { providerId }

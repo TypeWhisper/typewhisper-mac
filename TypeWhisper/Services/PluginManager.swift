@@ -921,6 +921,11 @@ final class PluginManager: ObservableObject {
     /// predicate is read by plugins from arbitrary contexts, so the builder must
     /// touch no actor-isolated state. The compiler enforces that here, which is why
     /// the closure captures a plain `Set` rather than the manager or the plugin.
+    /// The engine dictation uses while the saved one is unavailable (#1533). It
+    /// lives in memory only, so the saved choice stays intact, and the matcher
+    /// treats it as the selected engine until the saved one is usable again.
+    nonisolated static let temporaryFallbackEngine = OSAllocatedUnfairLock<String?>(initialState: nil)
+
     nonisolated static func selectionMatcher(
         forEnginesExposedBy exposed: Set<String>,
         defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
@@ -940,7 +945,8 @@ final class PluginManager: ObservableObject {
             // is missing or no longer usable, and a selection written then cannot
             // cancel a restore task that activation has already spawned. Permitting
             // during that window is what let an unselected engine's model load.
-            guard let selected = defaults().string(forKey: UserDefaultsKeys.selectedEngine),
+            guard let selected = temporaryFallbackEngine.withLock({ $0 })
+                    ?? defaults().string(forKey: UserDefaultsKeys.selectedEngine),
                   !selected.isEmpty
             else { return false }
             return exposed.contains(selected)
