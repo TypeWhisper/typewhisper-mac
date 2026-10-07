@@ -436,24 +436,46 @@ final class MicrosoftAIPluginTests: XCTestCase {
         }
     }
 
-    func testRejectsAudioBeyondMAIModelCardDurationLimitBeforeNetworking() async throws {
+    func testLongDiarizedRecordingGivesEveryChunkItsOwnSpeakerNumbers() async throws {
+        // MAI numbers the speakers anew in every request, so speaker 1 in the
+        // second chunk need not be speaker 1 from the first.
         let plugin = MicrosoftAIPlugin()
-        plugin.activate(host: try configuredHost())
-        let oversized = AudioData(
-            samples: [],
-            wavData: Data(),
-            duration: MicrosoftAITranscriptionClient.maximumAudioDuration + 1
+        plugin.activate(host: try configuredHost(defaults: ["speakerDiarizationEnabled": true]))
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Self.successResponseData, Self.httpResponse(statusCode: 200)),
+                .success(
+                    Data(#"{"durationMilliseconds":1000,"combinedPhrases":[{"text":"Tschüss"}],"phrases":[{"offsetMilliseconds":500,"durationMilliseconds":500,"text":"Tschüss","locale":"de-DE","speaker":1}]}"#.utf8),
+                    Self.httpResponse(statusCode: 200)
+                ),
+            ])
+        }
+
+        // Just over ten minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 601)
+        let result = try await plugin.transcribeStructured(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 601),
+            language: "de",
+            translate: false,
+            prompt: nil
         )
 
-        do {
-            _ = try await plugin.transcribeStructured(
-                audio: oversized,
-                language: nil,
-                translate: false,
-                prompt: nil
-            )
-            XCTFail("Expected file limit error")
-        } catch PluginTranscriptionError.fileTooLarge {
+        XCTAssertEqual(result.text, "Speaker 1: Hallo Welt\nSpeaker 2: Willkommen\nSpeaker 3: Tschüss")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2", "Speaker 3"])
+        XCTAssertEqual(result.segments.first?.start, 0.25)
+        let secondChunkStart = try XCTUnwrap(result.segments.last?.start)
+        XCTAssertGreaterThan(secondChunkStart, 271, "shifted by the first chunk's length")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        for request in requests {
+            let body = try XCTUnwrap(request.httpBody)
+            // Ten minutes of 16 kHz 16-bit WAV plus the request definition,
+            // far below the 250 MB limit.
+            XCTAssertLessThan(body.count, 600 * 32_000 + 10_000)
+            let definition = String(decoding: body.prefix(2_000), as: UTF8.self)
+            XCTAssertTrue(definition.contains("\"diarization\":{\"enabled\":true}"))
         }
     }
 

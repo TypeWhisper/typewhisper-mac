@@ -205,8 +205,6 @@ struct MicrosoftAITranscriptionClient: Sendable {
         }
     }
 
-    static let maximumAudioDuration: TimeInterval = 2 * 60 * 60
-    static let maximumAudioBytes = 300_000_000
     static let requestTimeout: TimeInterval = 180
 
     let endpoint: URL
@@ -220,10 +218,6 @@ struct MicrosoftAITranscriptionClient: Sendable {
         transcriptStyle: MicrosoftAITranscriptStyle,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
-        guard audio.duration <= Self.maximumAudioDuration,
-              audio.wavData.count <= Self.maximumAudioBytes else {
-            throw PluginTranscriptionError.fileTooLarge
-        }
         guard let url = MicrosoftAIEndpoint.transcriptionURL(baseURL: endpoint) else {
             throw PluginTranscriptionError.apiError("Invalid Azure Speech endpoint.")
         }
@@ -643,14 +637,24 @@ final class MicrosoftAIPlugin: NSObject,
             budget: dictionaryTermsBudget
         ).map(\.text)
 
-        return try await MicrosoftAITranscriptionClient(endpoint: endpoint, apiKey: apiKey).transcribe(
-            audio: audio,
-            model: selectedModel,
-            languageSelection: languageSelection,
-            dictionaryTerms: terms,
-            transcriptStyle: transcriptStyle,
-            speakerDiarizationEnabled: speakerDiarizationEnabled
-        )
+        // Ten-minute chunks stay far below the request limit of 2 hours and
+        // 250 MB and below the shorter one for speaker diarization. MAI numbers
+        // the speakers anew in every request; the chunks of a longer recording
+        // keep their labels under numbers of their own.
+        let client = MicrosoftAITranscriptionClient(endpoint: endpoint, apiKey: apiKey)
+        let model = selectedModel
+        let style = transcriptStyle
+        let diarizationEnabled = speakerDiarizationEnabled
+        return try await PluginAudioChunking.transcribeStructured(audio) { chunk in
+            try await client.transcribe(
+                audio: chunk,
+                model: model,
+                languageSelection: languageSelection,
+                dictionaryTerms: terms,
+                transcriptStyle: style,
+                speakerDiarizationEnabled: diarizationEnabled
+            )
+        }
     }
 
     func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
