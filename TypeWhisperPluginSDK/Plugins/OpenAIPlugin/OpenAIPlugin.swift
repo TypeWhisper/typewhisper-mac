@@ -791,7 +791,10 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         languages: [String]
     ) async throws -> PluginTranscriptionResult {
         // The endpoint takes at most 25 MB per request.
-        try await PluginAudioChunking.transcribe(audio) { chunk in
+        try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: PluginOpenAITranscriptionHelper.maximumChunkDuration(forModel: modelID)
+        ) { chunk in
             try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
                 try await performTranscription(
                     uploadFile: uploadFile,
