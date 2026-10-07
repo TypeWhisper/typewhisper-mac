@@ -645,6 +645,9 @@ final class XAIPlugin: NSObject,
         guard !translate else {
             throw PluginTranscriptionError.apiError("xAI STT does not support translation.")
         }
+        guard Self.streamsAudio(ofDuration: audio.duration) else {
+            return try await transcribeREST(audio: audio, language: language, apiKey: apiKey)
+        }
 
         do {
             let session = try await createStreamingSession(apiKey: apiKey, language: language, onProgress: onProgress)
@@ -1053,10 +1056,32 @@ final class XAIPlugin: NSObject,
         throw CancellationError()
     }
 
+    /// The stream takes audio at real-time pace, as xAI asks, so a two-hour
+    /// file would take two hours. Longer files go to the REST endpoint.
+    /// https://docs.x.ai/developers/rest-api-reference/inference/voice
+    static func streamsAudio(ofDuration duration: TimeInterval) -> Bool {
+        duration <= 5 * 60
+    }
+
+    /// xAI answers a REST request once the whole file is transcribed, about
+    /// 170 times faster than real time, and takes up to 500 MB. The answer
+    /// gets 2 s per audio minute, the whole request 4 s per audio minute more
+    /// for the upload.
+    /// https://docs.x.ai/developers/rest-api-reference/inference/voice
+    /// https://artificialanalysis.ai/speech-to-text
+    static func restTimeouts(forAudioDuration duration: TimeInterval) -> (request: TimeInterval, resource: TimeInterval) {
+        let minutes = duration / 60
+        return (
+            request: min(max(120, minutes * 2), 1_200),
+            resource: min(max(600, minutes * 6), 7_200)
+        )
+    }
+
     private func transcribeREST(audio: AudioData, language: String?, apiKey: String) async throws -> PluginTranscriptionResult {
         guard let url = URL(string: "https://api.x.ai/v1/stt") else {
             throw XAIPluginError.invalidURL("https://api.x.ai/v1/stt")
         }
+        let timeouts = Self.restTimeouts(forAudioDuration: audio.duration)
 
         func makeRequest(uploadFile: PluginAudioUploadFile) -> URLRequest {
             let boundary = UUID().uuidString
@@ -1064,7 +1089,7 @@ final class XAIPlugin: NSObject,
             request.httpMethod = "POST"
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.timeoutInterval = 120
+            request.timeoutInterval = timeouts.request
 
             var body = Data()
             if let language, !language.isEmpty {
@@ -1082,7 +1107,10 @@ final class XAIPlugin: NSObject,
 
         let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
             ?? PluginAudioUploadEncoder.wavUpload(from: audio)
-        var (data, response) = try await PluginHTTPClient.data(for: makeRequest(uploadFile: preferredUpload))
+        var (data, response) = try await PluginHTTPClient.data(
+            for: makeRequest(uploadFile: preferredUpload),
+            resourceTimeout: timeouts.resource
+        )
         guard var httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
@@ -1092,7 +1120,8 @@ final class XAIPlugin: NSObject,
             responseData: data
            ) {
             (data, response) = try await PluginHTTPClient.data(
-                for: makeRequest(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio))
+                for: makeRequest(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio)),
+                resourceTimeout: timeouts.resource
             )
             guard let retryResponse = response as? HTTPURLResponse else {
                 throw PluginTranscriptionError.networkError("Invalid response")
