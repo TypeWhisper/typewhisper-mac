@@ -1096,13 +1096,19 @@ final class PluginManager: ObservableObject {
     /// Removes a plugin from the active runtime registry without unmapping its executable code.
     /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
     /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
-    func unloadPlugin(_ pluginId: String) {
+    /// - Parameter keepsSavedEngine: Pass `true` when the plugin comes straight
+    ///   back, as during an update. The saved dictation engine then stays, and
+    ///   `restoreProviderSelection()` bridges the gap with a temporary fallback
+    ///   (#1533). Disabling and uninstalling replace it, as the user asked for.
+    func unloadPlugin(_ pluginId: String, keepsSavedEngine: Bool = false) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
         let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
-        selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+        if !keepsSavedEngine {
+            selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+        }
 
         if plugin.isEnabled && plugin.isRuntimeLoaded {
             plugin.instance.deactivate()

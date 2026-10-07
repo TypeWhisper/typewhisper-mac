@@ -1147,7 +1147,10 @@ struct RecordingSettingsView: View {
                         }
                     }
                     .onChange(of: selectedProvider) { _, newValue in
-                        if let newValue {
+                        // `onAppear` mirrors the current selection into the picker,
+                        // which may be a temporary fallback; only a change the user
+                        // makes is saved (#1533).
+                        if let newValue, newValue != modelManager.selectedProviderId {
                             modelManager.selectProvider(newValue)
                         }
                     }

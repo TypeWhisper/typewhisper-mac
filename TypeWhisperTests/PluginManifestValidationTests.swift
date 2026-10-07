@@ -2818,6 +2818,40 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
     }
 
+    func testUpdatingTheSelectedPluginKeepsTheSavedEngine() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        switchable.isAvailable = true
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+
+        // An update unloads the old bundle before the new one is registered.
+        PluginManager.shared.unloadPlugin("com.typewhisper.mock.switchable", keepsSavedEngine: true)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-switchable")
+
+        let updated = MockSwitchableTranscriptionPlugin()
+        updated.isAvailable = true
+        PluginManager.shared.loadedPlugins.append(
+            Self.loadedPlugin(updated, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory)
+        )
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+    }
+
     /// Sets the saved dictation engine and returns a closure that puts the previous value back.
     private static func overrideSavedEngine(_ providerId: String?) -> () -> Void {
         let key = UserDefaultsKeys.selectedEngine
