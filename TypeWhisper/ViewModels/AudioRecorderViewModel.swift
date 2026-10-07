@@ -799,8 +799,14 @@ final class AudioRecorderViewModel: ObservableObject {
                 finalTranscriptionOutcome = .skipped
             }
 
-            // Emit final transcript to LiveTranscriptPlugin
-            if livePreviewEnabled && !partialText.isEmpty {
+            // Emit final transcript to LiveTranscriptPlugin. A failed live session's preview
+            // stopped early, so it is only final once a saved transcript replaced it.
+            let partialTextIsFinal = if case .transcriptSaved = finalTranscriptionOutcome {
+                true
+            } else {
+                !liveSessionFailed
+            }
+            if livePreviewEnabled && partialTextIsFinal && !partialText.isEmpty {
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                     text: partialText, isFinal: true, elapsedSeconds: recordingDuration
                 )))

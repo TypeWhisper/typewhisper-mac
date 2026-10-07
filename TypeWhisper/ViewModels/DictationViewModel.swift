@@ -2687,7 +2687,9 @@ final class DictationViewModel: ObservableObject {
         }
         let hasPreviewText = !previewText.isEmpty
 
-        if !partialText.isEmpty {
+        // A failed live session's preview stopped early; the completion event carries
+        // the final text instead.
+        if !liveSessionFailed, !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: partialText,

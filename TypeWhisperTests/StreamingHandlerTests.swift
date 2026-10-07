@@ -311,6 +311,8 @@ final class StreamingHandlerTests: XCTestCase {
         let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
         private(set) var lastPrompt: String?
         private(set) var liveSessionCreateCount = 0
+        /// Holds the next session creation until released, then fails it.
+        var failingCreationGate: SessionCreationGate?
 
         override init() {
             liveTranscriptionProgressMode = .rollingWindow
@@ -349,9 +351,29 @@ final class StreamingHandlerTests: XCTestCase {
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
             liveSessionCreateCount += 1
+            if let gate = failingCreationGate {
+                failingCreationGate = nil
+                await gate.wait()
+                throw PluginTranscriptionError.networkError("session setup failed")
+            }
             lastPrompt = prompt
             await session.setOnProgress(onProgress)
             return session
+        }
+    }
+
+    private actor SessionCreationGate {
+        private var continuation: CheckedContinuation<Void, Never>?
+        private(set) var isWaiting = false
+
+        func wait() async {
+            isWaiting = true
+            await withCheckedContinuation { continuation = $0 }
+        }
+
+        func release() {
+            continuation?.resume()
+            continuation = nil
         }
     }
 
@@ -1517,6 +1539,88 @@ final class StreamingHandlerTests: XCTestCase {
         let outcome = await handler.finish()
 
         XCTAssertEqual(outcome.result?.text, "finished")
+    }
+
+    func testCancelledPredecessorCleanupKeepsReplacementAppendFailure() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        let creationGate = SessionCreationGate()
+        plugin.failingCreationGate = creationGate
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let nextOffset = OSAllocatedUnfairLock(initialState: 0)
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                nextOffset.withLock { offset in
+                    offset += 1600
+                    return (Array(repeating: 0.25, count: 1600), offset)
+                }
+            },
+            bufferedDurationProvider: { 0.1 }
+        )
+        func startHiddenSession() {
+            handler.start(
+                streamPrompt: "Live Terms",
+                engineOverrideId: plugin.providerId,
+                selectedProviderId: plugin.providerId,
+                languageSelection: .exact("en"),
+                task: .transcribe,
+                cloudModelOverride: nil,
+                allowLiveTranscription: true,
+                previewHidden: true,
+                stateCheck: { true }
+            )
+        }
+
+        startHiddenSession()
+        for _ in 0..<50 {
+            if await creationGate.isWaiting { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let creationIsWaiting = await creationGate.isWaiting
+        XCTAssertTrue(creationIsWaiting)
+
+        // The replacement starts while the first session is still being created; that
+        // creation then fails, and the replacement later loses audio.
+        await plugin.session.setAppendError(
+            PluginTranscriptionError.networkError("Socket is not connected"),
+            afterSuccessfulAppends: 1
+        )
+        startHiddenSession()
+        await creationGate.release()
+        for _ in 0..<50 where plugin.liveSessionCreateCount < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(plugin.liveSessionCreateCount, 2)
+        try await Task.sleep(for: .milliseconds(1_000))
+
+        let outcome = await handler.finish()
+
+        guard case .failed = outcome else {
+            return XCTFail("Expected a failed live session, got \(outcome)")
+        }
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {

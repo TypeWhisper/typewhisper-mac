@@ -181,7 +181,7 @@ final class StreamingHandler: @unchecked Sendable {
             guard !previewHidden else {
                 logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=preview-hidden")
                 await MainActor.run { [weak self] in
-                    self?.clearStreamingState(notifyStreamingStopped: true)
+                    self?.clearStreamingStateUnlessCancelled()
                 }
                 return
             }
@@ -192,7 +192,7 @@ final class StreamingHandler: @unchecked Sendable {
             ) else {
                 logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=policy-opt-out")
                 await MainActor.run { [weak self] in
-                    self?.clearStreamingState(notifyStreamingStopped: true)
+                    self?.clearStreamingStateUnlessCancelled()
                 }
                 return
             }
@@ -491,6 +491,15 @@ final class StreamingHandler: @unchecked Sendable {
             state.sessionGeneration &+= 1
         }
         progressText.withLock { $0 = "" }
+    }
+
+    /// Clears state when a session ends on its own. A cancelled session skips this: the
+    /// stop, finish or restart that cancelled it already cleared the state, which a
+    /// replacement session may own by now.
+    @MainActor
+    private func clearStreamingStateUnlessCancelled() {
+        guard !Task.isCancelled else { return }
+        clearStreamingState(notifyStreamingStopped: true)
     }
 
     @MainActor

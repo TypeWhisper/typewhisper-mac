@@ -7780,12 +7780,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
+            EventBus.shared?.emissionObserverForTesting = nil
             dictationContext = nil
             TestSupport.remove(appSupportDirectory)
         }
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
+        var finalPartialTexts: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .partialTranscriptionUpdate(let payload) = event, payload.isFinal {
+                finalPartialTexts.append(payload.text)
+            }
+        }
         let livePlugin = MockLiveDictationPlugin()
         livePlugin.failsAudioAppend = true
         PluginManager.shared.loadedPlugins.append(LoadedPlugin(
@@ -7839,6 +7846,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let batchSamples = livePlugin.lastBatchTranscriptionSamples
         XCTAssertEqual(Array(batchSamples.prefix(recording.count)), recording)
         XCTAssertTrue(batchSamples.dropFirst(recording.count).allSatisfy { $0 == 0 })
+        XCTAssertEqual(finalPartialTexts, [])
     }
 
     /// Returns the live-dictation session count before and after the browser URL

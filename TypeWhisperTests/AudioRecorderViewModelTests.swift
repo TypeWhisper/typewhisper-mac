@@ -923,6 +923,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         modelManager.selectProvider(livePlugin.providerId)
         let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
         viewModel.livePreviewEnabled = true
+        var finalPartialTexts: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .partialTranscriptionUpdate(let payload) = event, payload.isFinal {
+                finalPartialTexts.append(payload.text)
+            }
+        }
 
         let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
         for _ in 0..<50 where livePlugin.liveSessionCreateCount == 0 {
@@ -941,6 +947,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         XCTAssertEqual(recording.transcriptionFailure?.phase, .finalTranscription)
+        XCTAssertEqual(finalPartialTexts, [])
     }
 
     func testSuccessfulTranscriptSaveClearsPriorRecorderFailure() async throws {
