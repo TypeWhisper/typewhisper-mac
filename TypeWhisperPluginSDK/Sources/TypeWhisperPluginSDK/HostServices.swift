@@ -211,25 +211,16 @@ public enum PluginHTTPClient {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = resourceTimeout
         config.timeoutIntervalForResource = resourceTimeout
-        let session = sessionFactory(config)
-        defer { session.finishTasksAndInvalidate() }
-
-        let method = request.httpMethod ?? "GET"
-        let url = request.url?.absoluteString ?? "unknown"
-        logger.info("\(method) \(url) (dedicated session, resourceTimeout=\(resourceTimeout))")
-        do {
-            return try await session.data(for: request)
-        } catch {
-            throw describingRejectedLargeUpload(error, request: request)
-        }
+        return try await dataWithRetries(for: request, policy: .default, dedicatedConfiguration: config)
     }
 
     /// A resource timeout for `data(for:resourceTimeout:)` that gives an
-    /// upload of `byteCount` bytes the time 256 kbit/s needs. Bodies up to
-    /// 19.2 MB keep the shared session's 600 s; a recording of several hours
-    /// takes longer than that on a slow uplink.
+    /// upload of `byteCount` bytes the time 256 kbit/s needs, plus five
+    /// minutes to connect and answer. Bodies up to 9.6 MB keep the shared
+    /// session's 600 s; a recording of several hours takes far longer on a
+    /// slow uplink.
     public static func resourceTimeout(forUploadOf byteCount: Int) -> TimeInterval {
-        max(longRunningResourceTimeout, Double(byteCount) / 32_000)
+        max(longRunningResourceTimeout, Double(byteCount) / 32_000 + 300)
     }
 
     /// Upload caps of cloud transcription APIs start at 25 MB (OpenAI, Groq).
@@ -322,6 +313,9 @@ public enum PluginHTTPClient {
     }
 
     /// Runs `request` against the shared session, retrying transient failures.
+    /// With a `dedicatedConfiguration`, every attempt runs on a session of its
+    /// own instead, for requests that need longer than the shared session's
+    /// resource timeout.
     ///
     /// Two failure shapes reach this and they are not the same:
     ///
@@ -339,7 +333,8 @@ public enum PluginHTTPClient {
     /// is called out in the pull request rather than silently relied upon.
     private static func dataWithRetries(
         for request: URLRequest,
-        policy: PluginHTTPRetryPolicy
+        policy: PluginHTTPRetryPolicy,
+        dedicatedConfiguration: URLSessionConfiguration? = nil
     ) async throws -> (Data, URLResponse) {
         let deadline = ContinuousClock.now + retrySchedulingBudget
         let method = request.httpMethod ?? "GET"
@@ -352,8 +347,16 @@ public enum PluginHTTPClient {
         var unsentRestarts = 0
 
         while true {
-            let session = sharedOrCreateSession()
-            logger.info("\(method) \(url) (attempt \(attempt + 1))")
+            let session = dedicatedConfiguration.map { sessionFactory($0) } ?? sharedOrCreateSession()
+            defer {
+                if dedicatedConfiguration != nil {
+                    session.finishTasksAndInvalidate()
+                }
+            }
+            let sessionDescription = dedicatedConfiguration.map {
+                ", dedicated session, resourceTimeout=\($0.timeoutIntervalForResource)"
+            } ?? ""
+            logger.info("\(method) \(url) (attempt \(attempt + 1)\(sessionDescription))")
             let start = ContinuousClock.now
 
             do {
@@ -424,7 +427,8 @@ public enum PluginHTTPClient {
                 // session that is no longer the shared one, `.cancelled` means the
                 // task was created after the invalidation and sent nothing; only
                 // then is it safe to start over, even for a POST.
-                if (error as? URLError)?.code == .cancelled,
+                if dedicatedConfiguration == nil,
+                   (error as? URLError)?.code == .cancelled,
                    !Task.isCancelled,
                    !isCurrentSharedSession(session),
                    unsentRestarts < retryMaxAttempts {
@@ -437,7 +441,9 @@ public enum PluginHTTPClient {
                     throw error
                 }
 
-                resetSharedSession(matching: session, reason: "transient network error")
+                if dedicatedConfiguration == nil {
+                    resetSharedSession(matching: session, reason: "transient network error")
+                }
 
                 // Compatibility, and it applies under BOTH policies: one immediate
                 // retry after the reset, for ANY transient error. This is exactly what

@@ -568,7 +568,7 @@ final class AssemblyAIPluginTests: XCTestCase {
         let uploadSession = try XCTUnwrap(sessions.last)
         XCTAssertEqual(uploadSession.requestedPaths, ["/v2/upload"])
         XCTAssertTrue(uploadSession.didInvalidate)
-        XCTAssertEqual(resourceTimeouts.values, [600, 625])
+        XCTAssertEqual(resourceTimeouts.values, [600, 925])
     }
 
     private static func queryItems(in url: URL) -> [String: String] {
