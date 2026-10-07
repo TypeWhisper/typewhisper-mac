@@ -379,13 +379,16 @@ public enum PluginHTTPClient {
                 let elapsed = ContinuousClock.now - start
                 // Another request's cancellation can invalidate the shared session
                 // after this request borrowed it but before its task started. That
-                // surfaces as `.cancelled` although this task was not cancelled, and
-                // nothing was sent, so start over on a fresh session.
+                // surfaces as `.cancelled` although this task was not cancelled.
+                // `finishTasksAndInvalidate()` lets running tasks finish, so on a
+                // session that is no longer the shared one, `.cancelled` means the
+                // task was created after the invalidation and sent nothing; only
+                // then is it safe to start over, even for a POST.
                 if (error as? URLError)?.code == .cancelled,
                    !Task.isCancelled,
+                   !isCurrentSharedSession(session),
                    attempt + 1 < retryMaxAttempts {
                     attempt += 1
-                    resetSharedSession(matching: session, reason: "request found its session invalidated")
                     logger.warning("\(method) \(url) cancelled by an invalidated session, retrying on a fresh one")
                     continue
                 }
@@ -615,6 +618,10 @@ public enum PluginHTTPClient {
             return false
         }
     }
+    private static func isCurrentSharedSession(_ session: any PluginHTTPClientSession) -> Bool {
+        lock.withLock { sharedSession === session }
+    }
+
     private static func resetSharedSession(matching session: any PluginHTTPClientSession, reason: String) {
         let didRemoveSharedSession = lock.withLock {
             guard let current = sharedSession, current === session else {

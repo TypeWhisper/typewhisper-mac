@@ -111,7 +111,12 @@ final class PluginHTTPClientTests: XCTestCase {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
             if store.sessionCount == 0 {
-                return store.makeSession(outcomes: [.failure(URLError(.cancelled))])
+                // Another request's cancellation resets the shared session between
+                // this request borrowing it and its task starting.
+                return store.makeSession(
+                    outcomes: [.failure(URLError(.cancelled))],
+                    beforeResponding: { PluginHTTPClient.resetSharedSession(reason: "other request cancelled") }
+                )
             }
             return store.makeSession(outcomes: [.success(Self.okResponse())])
         }
@@ -123,6 +128,21 @@ final class PluginHTTPClientTests: XCTestCase {
 
         XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
         XCTAssertEqual(store.sessionCount, 2)
+    }
+
+    func testCancelledPostOnTheSharedSessionIsNotSentAgain() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.failure(URLError(.cancelled))])
+        }
+
+        do {
+            _ = try await PluginHTTPClient.data(for: Self.request(path: "/post"), retry: .disabled)
+            XCTFail("expected the cancellation to be thrown")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .cancelled)
+        }
+        XCTAssertEqual(store.sessionCount, 1)
     }
 
     func testHTTPClientResourceTimeoutAllowsLongRunningRequests() async throws {
@@ -666,9 +686,14 @@ private final class MockHTTPSessionStore: @unchecked Sendable {
     func makeSession(
         outcomes: [Result<(Data, URLResponse), Error>],
         configuration: URLSessionConfiguration? = nil,
-        hangsUntilCancelled: Bool = false
+        hangsUntilCancelled: Bool = false,
+        beforeResponding: (@Sendable () -> Void)? = nil
     ) -> MockHTTPSession {
-        let session = MockHTTPSession(outcomes: outcomes, hangsUntilCancelled: hangsUntilCancelled)
+        let session = MockHTTPSession(
+            outcomes: outcomes,
+            hangsUntilCancelled: hangsUntilCancelled,
+            beforeResponding: beforeResponding
+        )
         lock.withLock {
             sessions.append(session)
             if let configuration {
@@ -686,10 +711,16 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
     private(set) var requestedRequests: [URLRequest] = []
     private(set) var didInvalidate = false
     private let hangsUntilCancelled: Bool
+    private let beforeResponding: (@Sendable () -> Void)?
 
-    init(outcomes: [Result<(Data, URLResponse), Error>], hangsUntilCancelled: Bool = false) {
+    init(
+        outcomes: [Result<(Data, URLResponse), Error>],
+        hangsUntilCancelled: Bool = false,
+        beforeResponding: (@Sendable () -> Void)? = nil
+    ) {
         self.outcomes = outcomes
         self.hangsUntilCancelled = hangsUntilCancelled
+        self.beforeResponding = beforeResponding
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -705,6 +736,7 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
         if hangsUntilCancelled {
             try await Task.sleep(for: .seconds(60))
         }
+        beforeResponding?()
         return try outcome.get()
     }
 
