@@ -1056,7 +1056,7 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
 
     /// gpt-4o-transcribe and gpt-4o-mini-transcribe return at most 2,000
     /// tokens, which fast speech reaches in about eight minutes.
-    static func maximumChunkDuration(forModel modelName: String) -> TimeInterval {
+    public static func maximumChunkDuration(forModel modelName: String) -> TimeInterval {
         let model = modelName.lowercased()
         guard model.contains("gpt-4o"), model.contains("transcribe") else {
             return PluginAudioChunking.defaultMaximumChunkDuration

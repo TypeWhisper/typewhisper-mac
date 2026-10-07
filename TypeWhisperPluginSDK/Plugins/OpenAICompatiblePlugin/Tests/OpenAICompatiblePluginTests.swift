@@ -534,6 +534,42 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"model\"\r\n\r\ngpt-transcribe\r\n"))
     }
 
+    func testAzureDeploymentBatchEndpointUsesShortChunksForGPT4oTranscribe() async throws {
+        // gpt-4o-transcribe returns at most 2,000 tokens.
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
+                "selectedModel": "gpt-4o-transcribe",
+            ],
+            secrets: ["api-key": "azure-key"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("2025-03-01-preview", for: plugin.providerId)
+        plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
+
+        let url = "https://foundry-example.services.ai.azure.com/openai/deployments/gpt-4o-transcribe/audio/transcriptions?api-version=2025-03-01-preview"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Six minutes: one request with ten-minute chunks, two with five.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 360)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 360),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "first second")
+        XCTAssertEqual(store.sessions.first?.requestedRequests.count, 2)
+    }
+
     func testAzureDeploymentBatchEndpointUploadsLongRecordingsInChunks() async throws {
         let host = try PluginTestHostServices(
             defaults: [
