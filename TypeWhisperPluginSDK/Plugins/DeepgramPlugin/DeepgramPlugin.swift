@@ -790,10 +790,7 @@ final class DeepgramPlugin: NSObject,
             URLQueryItem(name: "interim_results", value: "true"),
             URLQueryItem(name: "endpointing", value: "300"),
         ])
-        queryItems.append(URLQueryItem(
-            name: "language",
-            value: language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
-        ))
+        queryItems.append(URLQueryItem(name: "language", value: streamingLanguage(language)))
         queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
@@ -801,6 +798,31 @@ final class DeepgramPlugin: NSObject,
             throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
         }
         return requestURL
+    }
+
+    static func streamingLanguage(_ language: String?) -> String {
+        language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
+    }
+
+    // MARK: - Long Recordings
+
+    /// Deepgram reads a stream at no more than 1.25x real time, so a two-hour
+    /// file would stream for over 90 minutes, while the REST endpoint needs
+    /// seconds. Longer files skip the stream.
+    /// https://developers.deepgram.com/docs/recovering-from-connection-errors-and-timeouts-when-live-streaming-audio
+    static let maximumStreamedAudioDuration: TimeInterval = 5 * 60
+
+    /// Deepgram answers a REST request once the whole file is transcribed,
+    /// about 600 times faster than real time with Nova-3, and gives up with a
+    /// 504 after 10 minutes. The answer gets 2 s per audio minute, the whole
+    /// request 4 s per audio minute more for the upload.
+    /// https://developers.deepgram.com/docs/pre-recorded-audio
+    static func restTimeouts(forAudioDuration duration: TimeInterval) -> (request: TimeInterval, resource: TimeInterval) {
+        let minutes = duration / 60
+        return (
+            request: min(max(60, minutes * 2), 600),
+            resource: min(max(600, minutes * 6), 7_200)
+        )
     }
 
     // MARK: - Transcription (REST Fallback)
@@ -836,6 +858,18 @@ final class DeepgramPlugin: NSObject,
         }
         guard let modelId = _selectedModelId else {
             throw PluginTranscriptionError.noModelSelected
+        }
+
+        if audio.duration > Self.maximumStreamedAudioDuration {
+            // Without a language, REST would assume English where the stream recognizes any.
+            let result = try await transcribeREST(
+                audio: audio,
+                language: Self.streamingLanguage(language),
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
+            return PluginTranscriptionResult(text: result.text, detectedLanguage: language)
         }
 
         do {
@@ -897,6 +931,7 @@ final class DeepgramPlugin: NSObject,
             language: language,
             prompt: prompt
         )
+        let timeouts = Self.restTimeouts(forAudioDuration: audio.duration)
 
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             var request = URLRequest(url: requestURL)
@@ -904,9 +939,9 @@ final class DeepgramPlugin: NSObject,
             request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
             request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")
             request.httpBody = uploadFile.data
-            request.timeoutInterval = 60
+            request.timeoutInterval = timeouts.request
 
-            let (data, response) = try await PluginHTTPClient.data(for: request)
+            let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: timeouts.resource)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw PluginTranscriptionError.apiError("No HTTP response")
