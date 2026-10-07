@@ -317,6 +317,21 @@ The HTTP API is an advanced local automation surface. It binds to `127.0.0.1` on
 
 Enable the API server in Settings > Advanced (default port: `8978`).
 
+### Authentication
+
+The API server requires a bearer token by default. TypeWhisper creates the token once, keeps it in the Keychain, and writes it to an owner-only discovery file while the server runs. The command line tool, the Raycast extension, the MCP server, and the Pi extension read it automatically. Scripts can read it like this:
+
+```bash
+TYPEWHISPER_API_TOKEN="$(jq -r '.token' "$HOME/Library/Application Support/TypeWhisper/api-discovery.json")"
+curl -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" http://localhost:8978/v1/models
+```
+
+The `X-TypeWhisper-API-Token` header works as well. Every endpoint except `GET /v1/status` needs the token; the examples below leave the header out for brevity. Settings > Advanced > Copy API Token copies it to the clipboard.
+
+If the API server is turned on without a token when you update to 1.8.0, it keeps running without one until **Require API Token** is turned on, and Settings shows a warning. A server that was off during the update requires the token once it is turned on.
+
+Independent of the token, the server rejects requests that browsers send on behalf of other websites: a `Host` header other than `127.0.0.1`, `localhost`, or `[::1]`, an `Origin` from a website not served from this Mac (including `null`), and `Sec-Fetch-Site: cross-site` unless the `Origin` is a page served from this Mac. Such requests get `403`. Requests without these headers, such as those from `curl` or scripts, are not affected.
+
 ### Check Status
 
 ```bash
@@ -456,7 +471,7 @@ curl -X DELETE http://localhost:8978/v1/dictionary/corrections \
 
 ### Settings Backup
 
-The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup. While the API server is running, scripts can read its current bearer token from the owner-only discovery file:
+The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup. These examples include the bearer token from the discovery file (see [Authentication](#authentication)):
 
 ```bash
 TYPEWHISPER_API_TOKEN="$(jq -r '.token' "$HOME/Library/Application Support/TypeWhisper/api-discovery.json")"
@@ -613,7 +628,7 @@ curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"
 
 Each successful retranscription keeps the `recording_id`, assigns a new `completion_id`, and replaces the previous result. This is a list of the latest saved results, not a revision history. Failed attempts leave the last successful result available. `markdown_file` is included only when a Markdown transcript was saved and still exists; currently that applies to calendar recordings with meeting metadata. Audio and transcript paths refer to existing files.
 
-Completion receipts are saved alongside recordings as `<audio filename>.transcript-ready.json`. A separate `<audio filename>.recording-id.json` preserves the recording ID if the receipt is damaged, so retranscription can repair it without changing the ID. Both files are committed with the transcript and removed when the recording is deleted in TypeWhisper. Existing recordings become available here after their next successful transcription. Recordings without a saved transcript are omitted. The endpoint uses the same optional API token as the other private routes.
+Completion receipts are saved alongside recordings as `<audio filename>.transcript-ready.json`. A separate `<audio filename>.recording-id.json` preserves the recording ID if the receipt is damaged, so retranscription can repair it without changing the ID. Both files are committed with the transcript and removed when the recording is deleted in TypeWhisper. Existing recordings become available here after their next successful transcription. Recordings without a saved transcript are omitted. The endpoint uses the same API token as the other private routes.
 
 The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
 

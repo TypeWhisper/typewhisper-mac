@@ -38,7 +38,7 @@ final class APIServerViewModel: ObservableObject {
         self.isEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerEnabled)
         let savedPort = UserDefaults.standard.integer(forKey: UserDefaultsKeys.apiServerPort)
         self.port = savedPort > 0 ? UInt16(savedPort) : 8978
-        self.requiresAuthentication = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        self.requiresAuthentication = LocalAPIAuthenticator.storedRequiresAuthentication()
         apiAuthenticator.setRequiresAuthentication(requiresAuthentication)
 
         httpServer.onStateChange = { [weak self] running in
@@ -77,6 +77,10 @@ final class APIServerViewModel: ObservableObject {
                 isRunning = false
             }
         }
+    }
+
+    var currentAPIToken: String? {
+        apiAuthenticator.currentToken()
     }
 
     func stopServer() {
@@ -152,7 +156,7 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
 
     init(
         initialToken: String? = nil,
-        requiresAuthentication: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication),
+        requiresAuthentication: Bool = LocalAPIAuthenticator.storedRequiresAuthentication(),
         tokenLoader: @escaping @Sendable () -> String? = {
             KeychainService.load(service: LocalAPIAuthenticator.keychainService)
         },
@@ -166,13 +170,25 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
         self.tokenSaver = tokenSaver
     }
 
+    /// The token is required unless the user turned it off. People who ran
+    /// the API server before the token became the default keep running
+    /// without one, so their scripts keep working; settings warn them.
+    static func storedRequiresAuthentication(_ defaults: UserDefaults = .standard) -> Bool {
+        if let stored = defaults.object(forKey: UserDefaultsKeys.apiServerRequiresAuthentication) as? Bool {
+            return stored
+        }
+        let requiresAuthentication = !defaults.bool(forKey: UserDefaultsKeys.apiServerEnabled)
+        defaults.set(requiresAuthentication, forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        return requiresAuthentication
+    }
+
     func currentToken() -> String? {
         token.withLock { $0 }
     }
 
-    func tokenForEnforcedRequests() -> String? {
-        guard requiresAuthentication.withLock({ $0 }) else { return nil }
-        return currentToken()
+    func authenticationRequirement() -> APIAuthenticationRequirement {
+        guard requiresAuthentication.withLock({ $0 }) else { return .disabled }
+        return .required(token: currentToken())
     }
 
     func setRequiresAuthentication(_ enabled: Bool) {
