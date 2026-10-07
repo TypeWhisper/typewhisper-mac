@@ -194,7 +194,25 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             prompt: prompt,
             speakerDiarizationEnabled: speakerDiarizationEnabled
         )
-        return try await pollTranscription(transcriptId: transcriptId, apiKey: apiKey)
+        return try await pollTranscription(
+            transcriptId: transcriptId,
+            apiKey: apiKey,
+            attempts: Self.pollAttempts(forAudioDuration: audio.duration)
+        )
+    }
+
+    /// The shared HTTP session gives up on a request after 600 s. Uploading a
+    /// recording of several hours on a slow uplink takes longer, so the upload
+    /// gets as long as 256 kbit/s would need.
+    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
+        max(600, Double(byteCount) / 32_000)
+    }
+
+    /// Most files finish in under a minute (a 3 h 15 min podcast took 133 s),
+    /// but a long recording can wait in a queue. One poll per second for a
+    /// quarter of the audio duration, at least five minutes and at most an hour.
+    static func pollAttempts(forAudioDuration duration: TimeInterval) -> Int {
+        Int(min(max(duration / 4, 300), 3_600))
     }
 
     private func uploadAudio(uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
@@ -209,7 +227,10 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         request.httpBody = uploadFile.data
         request.timeoutInterval = 120
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: Self.uploadResourceTimeout(byteCount: uploadFile.data.count)
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -340,7 +361,11 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         }
     }
 
-    private func pollTranscription(transcriptId: String, apiKey: String) async throws -> PluginStructuredTranscriptionResult {
+    private func pollTranscription(
+        transcriptId: String,
+        apiKey: String,
+        attempts: Int
+    ) async throws -> PluginStructuredTranscriptionResult {
         guard let url = URL(string: "https://api.assemblyai.com/v2/transcript/\(transcriptId)") else {
             throw PluginTranscriptionError.apiError("Invalid poll URL")
         }
@@ -349,7 +374,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
 
-        for _ in 0..<300 {
+        for _ in 0..<attempts {
             try await Task.sleep(for: .seconds(1))
 
             // Same shape as the other pollers: the loop IS the retry, so it opts out.
@@ -375,7 +400,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             }
         }
 
-        throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
+        throw PluginTranscriptionError.apiError("Transcription timed out after \(attempts / 60) minutes")
     }
 
     static func parseCompletedTranscriptionResponse(_ json: [String: Any]) -> PluginStructuredTranscriptionResult {

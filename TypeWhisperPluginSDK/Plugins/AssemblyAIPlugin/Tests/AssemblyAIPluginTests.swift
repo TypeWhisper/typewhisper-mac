@@ -514,6 +514,72 @@ final class AssemblyAIPluginTests: XCTestCase {
         )
     }
 
+    func testPollingBudgetGrowsWithTheRecordingUpToAnHour() {
+        XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 1), 300)
+        XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 20 * 60), 300)
+        XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 2 * 3_600), 1_800)
+        XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 4 * 3_600), 3_600)
+        XCTAssertEqual(AssemblyAIPlugin.pollAttempts(forAudioDuration: 10 * 3_600), 3_600)
+    }
+
+    func testLongUploadsGetMoreTimeThanTheSharedSession() {
+        // Up to 600 s the upload stays on the shared session.
+        XCTAssertEqual(AssemblyAIPlugin.uploadResourceTimeout(byteCount: 200_000), 600)
+        XCTAssertEqual(AssemblyAIPlugin.uploadResourceTimeout(byteCount: 19_200_000), 600)
+        // Two hours are about 43 MB as 48 kbit/s AAC and 230 MB as WAV.
+        XCTAssertEqual(AssemblyAIPlugin.uploadResourceTimeout(byteCount: 43_200_000), 1_350)
+        XCTAssertEqual(AssemblyAIPlugin.uploadResourceTimeout(byteCount: 230_400_000), 7_200)
+    }
+
+    func testLargeUploadRunsOnADedicatedSessionWithTheLongerTimeout() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        let resourceTimeouts = TimeIntervalRecorder()
+        PluginHTTPClientTestHarness.configure { configuration in
+            resourceTimeouts.append(configuration.timeoutIntervalForResource)
+            guard configuration.timeoutIntervalForResource > 600 else {
+                return store.makeSession(outcomes: [
+                    .success(
+                        Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
+                        Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 400)
+                    ),
+                    .success(
+                        Data(#"{"id":"transcript_123"}"#.utf8),
+                        Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                    ),
+                    .success(
+                        Data(#"{"status":"completed","text":"hello","language_code":"en"}"#.utf8),
+                        Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript/transcript_123", statusCode: 200)
+                    ),
+                ])
+            }
+            return store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+            ])
+        }
+
+        // The WAV fallback uploads `wavData` as it is, so 20 MB of it stand in
+        // for a long recording without encoding one.
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: Data(count: 20_000_000), duration: 1.0)
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "hello")
+        let sessions = store.sessions
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(sessions.first?.requestedPaths, ["/v2/upload", "/v2/transcript", "/v2/transcript/transcript_123"])
+        let uploadSession = try XCTUnwrap(sessions.last)
+        XCTAssertEqual(uploadSession.requestedPaths, ["/v2/upload"])
+        XCTAssertTrue(uploadSession.didInvalidate)
+        XCTAssertEqual(resourceTimeouts.values, [600, 625])
+    }
+
     private static func queryItems(in url: URL) -> [String: String] {
         Dictionary(uniqueKeysWithValues: (URLComponents(
             url: url,
@@ -530,6 +596,21 @@ final class AssemblyAIPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+}
+
+private final class TimeIntervalRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [TimeInterval] = []
+
+    var values: [TimeInterval] {
+        lock.withLock { storage }
+    }
+
+    func append(_ value: TimeInterval) {
+        lock.withLock {
+            storage.append(value)
+        }
     }
 }
 
