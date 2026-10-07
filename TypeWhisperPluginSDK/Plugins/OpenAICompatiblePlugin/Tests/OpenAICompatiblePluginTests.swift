@@ -534,6 +534,43 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertTrue(body.contains("name=\"model\"\r\n\r\ngpt-transcribe\r\n"))
     }
 
+    func testAzureDeploymentBatchEndpointUploadsLongRecordingsInChunks() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
+                "selectedModel": "gpt-transcribe",
+            ],
+            secrets: ["api-key": "azure-key"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("2025-03-01-preview", for: plugin.providerId)
+        plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
+
+        let url = "https://foundry-example.services.ai.azure.com/openai/deployments/gpt-transcribe/audio/transcriptions?api-version=2025-03-01-preview"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Eleven minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "first second")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(requests.allSatisfy { ($0.httpBody?.count ?? .max) < 25 * 1_024 * 1_024 })
+    }
+
     func testAzureDeploymentBatchEndpointRequiresDatedAPIVersion() async throws {
         let host = try PluginTestHostServices(
             defaults: [

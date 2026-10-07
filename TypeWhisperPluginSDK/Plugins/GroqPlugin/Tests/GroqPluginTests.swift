@@ -112,6 +112,35 @@ final class GroqPluginTests: XCTestCase {
         XCTAssertFalse(bodyText.contains(#"filename="audio.wav""#))
     }
 
+    func testTranscribeUploadsLongRecordingsInChunksBelowTheUploadCap() async throws {
+        // Groq closes the connection on bodies over 25 MB (#1538).
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "whisper-large-v3"],
+            secrets: ["api-key": "groq-key"]
+        )
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.groq.com/openai/v1/audio/transcriptions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"text":" first","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":" second","language":"en"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Eleven minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let audio = AudioData(samples: samples, wavData: Data(), duration: 660)
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "first second")
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(requests.allSatisfy { ($0.httpBody?.count ?? .max) < 25 * 1_024 * 1_024 })
+    }
+
     func testTranscribeRetriesWithWavWhenGroqRejectsM4AUpload() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "whisper-large-v3"],

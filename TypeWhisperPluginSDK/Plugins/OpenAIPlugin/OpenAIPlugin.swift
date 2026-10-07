@@ -790,15 +790,18 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         keywords: [String],
         languages: [String]
     ) async throws -> PluginTranscriptionResult {
-        try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await performTranscription(
-                uploadFile: uploadFile,
-                apiKey: apiKey,
-                modelID: modelID,
-                prompt: prompt,
-                keywords: keywords,
-                languages: languages
-            )
+        // The endpoint takes at most 25 MB per request.
+        try await PluginAudioChunking.transcribe(audio) { chunk in
+            try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
+                try await performTranscription(
+                    uploadFile: uploadFile,
+                    apiKey: apiKey,
+                    modelID: modelID,
+                    prompt: prompt,
+                    keywords: keywords,
+                    languages: languages
+                )
+            }
         }
     }
 

@@ -461,6 +461,45 @@ final class PluginHTTPClientTests: XCTestCase {
                        "a GET is safe to repeat, so it uses the whole ladder")
     }
 
+    func testLostConnectionDuringALargeUploadNamesTheUploadSize() async throws {
+        // A proxy enforcing an upload cap closes the connection mid-body, so
+        // the 413 never arrives and URLSession reports -1005 (#1538).
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))])
+        }
+        var request = Self.request(path: "/large-upload")
+        request.httpBody = Data(count: 30_000_000)
+
+        do {
+            _ = try await PluginHTTPClient.data(for: request)
+            XCTFail("expected the lost connection")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+            XCTAssertEqual(
+                error.localizedDescription,
+                "The connection was lost while uploading 30.0 MB. The provider may not accept uploads of this size."
+            )
+        }
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths).count, 2,
+                       "the compatibility retry still runs")
+    }
+
+    func testLostConnectionDuringASmallUploadKeepsTheSystemMessage() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))])
+        }
+
+        do {
+            _ = try await PluginHTTPClient.data(for: Self.request(path: "/small-upload"))
+            XCTFail("expected the lost connection")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+            XCTAssertEqual(error.localizedDescription, URLError(.networkConnectionLost).localizedDescription)
+        }
+    }
+
     func testDoesNotRetry503OnANonIdempotentRequest() async throws {
         // Conceded after two independent reviewers pointed at the same exposure:
         // AssemblyAIPlugin.submitTranscription POSTs job creation through the default

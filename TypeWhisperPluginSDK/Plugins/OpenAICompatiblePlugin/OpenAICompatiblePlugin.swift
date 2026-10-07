@@ -870,16 +870,19 @@ final class OpenAICompatiblePlugin: NSObject,
 
         // TypeWhisper 1.6 RC1 does not export the SDK's apiVersion overload.
         // Keep this JSON request path in the plugin until that host is no longer supported.
-        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await self.performBatchTranscriptionRequest(
-                profile: profile,
-                uploadFile: uploadFile,
-                apiKey: apiKey,
-                modelName: modelId,
-                language: language,
-                translate: translate,
-                prompt: prompt
-            )
+        // Azure OpenAI takes at most 25 MB per request.
+        return try await PluginAudioChunking.transcribe(audio) { chunk in
+            try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
+                try await self.performBatchTranscriptionRequest(
+                    profile: profile,
+                    uploadFile: uploadFile,
+                    apiKey: apiKey,
+                    modelName: modelId,
+                    language: language,
+                    translate: translate,
+                    prompt: prompt
+                )
+            }
         }
     }
 

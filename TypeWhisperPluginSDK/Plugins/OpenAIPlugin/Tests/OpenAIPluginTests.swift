@@ -318,6 +318,38 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertFalse(body.contains("name=\"language\"\r\n"))
     }
 
+    func testGPTTranscribeUploadsLongRecordingsInChunks() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "gpt-transcribe"],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let url = "https://api.openai.com/v1/audio/transcriptions"
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+            ])
+        }
+
+        // Eleven minutes, more than one chunk.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "first second")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(requests.allSatisfy { ($0.httpBody?.count ?? .max) < 25 * 1_024 * 1_024 })
+    }
+
     func testGPTTranscribeOmitsEmptyContextKeywordsAndLanguages() async throws {
         let host = try PluginTestHostServices(
             defaults: [

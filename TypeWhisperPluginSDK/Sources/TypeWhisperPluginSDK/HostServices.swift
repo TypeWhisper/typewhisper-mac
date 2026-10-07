@@ -217,7 +217,35 @@ public enum PluginHTTPClient {
         let method = request.httpMethod ?? "GET"
         let url = request.url?.absoluteString ?? "unknown"
         logger.info("\(method) \(url) (dedicated session, resourceTimeout=\(resourceTimeout))")
-        return try await session.data(for: request)
+        do {
+            return try await session.data(for: request)
+        } catch {
+            throw describingRejectedLargeUpload(error, request: request)
+        }
+    }
+
+    /// Upload caps of cloud transcription APIs start at 25 MB (OpenAI, Groq).
+    /// A connection lost on a smaller body is more likely a network problem.
+    static let largeUploadByteCount = 20_000_000
+
+    /// Upload caps are often enforced by a proxy that closes the connection
+    /// once it has read part of an oversized body, before the client sees the
+    /// 413. URLSession then reports a lost connection, which reads like a
+    /// network problem and hides the size limit (#1538).
+    static func describingRejectedLargeUpload(_ error: any Error, request: URLRequest) -> any Error {
+        guard let urlError = error as? URLError,
+              urlError.code == .networkConnectionLost,
+              let byteCount = request.httpBody?.count,
+              byteCount >= largeUploadByteCount
+        else {
+            return error
+        }
+
+        let megabytes = String(format: "%.1f", Double(byteCount) / 1_000_000)
+        var userInfo = urlError.userInfo
+        userInfo[NSLocalizedDescriptionKey] = "The connection was lost while uploading \(megabytes) MB. "
+            + "The provider may not accept uploads of this size."
+        return URLError(urlError.code, userInfo: userInfo)
     }
 
     public static func ensureNetworkAccessIsAllowed() throws {
@@ -423,7 +451,7 @@ public enum PluginHTTPClient {
                       let delay = backoffDelay(forAttempt: attempt, deadline: deadline, retryAfter: nil)
                 else {
                     logger.error("\(method) \(url) transient failure after \(elapsed), not retrying further: \(error.localizedDescription)")
-                    throw error
+                    throw describingRejectedLargeUpload(error, request: request)
                 }
 
                 attempt += 1
@@ -1026,6 +1054,16 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         self.responseFormat = responseFormat
     }
 
+    /// gpt-4o-transcribe and gpt-4o-mini-transcribe return at most 2,000
+    /// tokens, which fast speech reaches in about eight minutes.
+    static func maximumChunkDuration(forModel modelName: String) -> TimeInterval {
+        let model = modelName.lowercased()
+        guard model.contains("gpt-4o"), model.contains("transcribe") else {
+            return PluginAudioChunking.defaultMaximumChunkDuration
+        }
+        return 300
+    }
+
     func normalizedAudioForUpload(_ audio: AudioData) -> AudioData {
         guard audio.duration < Self.minimumUploadDuration else { return audio }
 
@@ -1074,17 +1112,22 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        try await performTranscribe(
-            audio: audio,
-            apiKey: apiKey,
-            modelName: modelName,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            responseFormat: responseFormat,
-            requestTimeout: Self.defaultRequestTimeout,
-            apiVersion: apiVersion
-        )
+        try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumChunkDuration(forModel: modelName)
+        ) { chunk in
+            try await performTranscribe(
+                audio: chunk,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: Self.defaultRequestTimeout,
+                apiVersion: apiVersion
+            )
+        }
     }
 
     public func transcribe(
@@ -1121,17 +1164,22 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        try await performTranscribe(
-            audio: audio,
-            apiKey: apiKey,
-            modelName: modelName,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            responseFormat: responseFormat,
-            requestTimeout: requestTimeout,
-            apiVersion: apiVersion
-        )
+        try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumChunkDuration(forModel: modelName)
+        ) { chunk in
+            try await performTranscribe(
+                audio: chunk,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                apiVersion: apiVersion
+            )
+        }
     }
 
     public func transcribeCompressedAudio(
@@ -1168,28 +1216,33 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        let uploadAudio = normalizedAudioForUpload(audio)
-        let uploadFile: PluginAudioUploadFile
-        do {
-            uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
-        } catch {
-            throw PluginTranscriptionError.apiError(
-                "Failed to encode compressed upload: \(error.localizedDescription)"
+        try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumChunkDuration(forModel: modelName)
+        ) { chunk in
+            let uploadAudio = normalizedAudioForUpload(chunk)
+            let uploadFile: PluginAudioUploadFile
+            do {
+                uploadFile = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
+            } catch {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to encode compressed upload: \(error.localizedDescription)"
+                )
+            }
+
+            return try await performTranscribe(
+                audio: uploadAudio,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                uploadFile: uploadFile,
+                apiVersion: apiVersion
             )
         }
-
-        return try await performTranscribe(
-            audio: uploadAudio,
-            apiKey: apiKey,
-            modelName: modelName,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            responseFormat: responseFormat,
-            requestTimeout: requestTimeout,
-            uploadFile: uploadFile,
-            apiVersion: apiVersion
-        )
     }
 
     public func transcribeCompressedAudioWithWavFallback(
@@ -1226,11 +1279,28 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        let uploadAudio = normalizedAudioForUpload(audio)
-        let preferredUpload: PluginAudioUploadFile
-        do {
-            preferredUpload = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
-        } catch {
+        try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumChunkDuration(forModel: modelName)
+        ) { chunk in
+            let uploadAudio = normalizedAudioForUpload(chunk)
+            let preferredUpload: PluginAudioUploadFile
+            do {
+                preferredUpload = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
+            } catch {
+                return try await performTranscribe(
+                    audio: uploadAudio,
+                    apiKey: apiKey,
+                    modelName: modelName,
+                    language: language,
+                    translate: translate,
+                    prompt: prompt,
+                    responseFormat: responseFormat,
+                    requestTimeout: requestTimeout,
+                    apiVersion: apiVersion
+                )
+            }
+
             return try await performTranscribe(
                 audio: uploadAudio,
                 apiKey: apiKey,
@@ -1240,23 +1310,11 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 prompt: prompt,
                 responseFormat: responseFormat,
                 requestTimeout: requestTimeout,
-                apiVersion: apiVersion
+                uploadFile: preferredUpload,
+                apiVersion: apiVersion,
+                allowsWavFallback: true
             )
         }
-
-        return try await performTranscribe(
-            audio: uploadAudio,
-            apiKey: apiKey,
-            modelName: modelName,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            responseFormat: responseFormat,
-            requestTimeout: requestTimeout,
-            uploadFile: preferredUpload,
-            apiVersion: apiVersion,
-            allowsWavFallback: true
-        )
     }
 
     public func transcribeWithUploadFallback(
