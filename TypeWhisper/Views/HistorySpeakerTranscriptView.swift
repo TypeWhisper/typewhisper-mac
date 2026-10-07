@@ -1,88 +1,202 @@
 import SwiftUI
 
-/// The speaker part of a History record: detection status, or the speaker
-/// workspace once a transcript exists.
-struct HistorySpeakerTranscriptView: View {
+/// The slim row above a History record's text that offers speaker detection,
+/// shows its progress, or says why it cannot run.
+struct HistorySpeakerDetectionRow: View {
     let record: TranscriptionRecord
-    let audioURL: URL?
+    let hasAudio: Bool
     @ObservedObject var coordinator: SpeakerTranscriptCoordinator
-    let historyService: HistoryService
+    /// Called before detection starts, so the transcript shows by speaker.
+    let onStart: () -> Void
 
     var body: some View {
         if let stage = coordinator.stages[record.id] {
-            progress(stage)
-        } else if record.speakerTranscriptData != nil {
-            SpeakerWorkspaceView(
-                record: record,
-                audioURL: audioURL,
-                coordinator: coordinator,
-                historyService: historyService
-            )
-            // A new record gets its own workspace state and player.
-            .id(record.id)
-        } else {
-            failure
+            row(symbol: "person.2.wave.2", tint: .accentColor) {
+                progress(stage)
+            } actions: {
+                Button(String(localized: "Cancel")) {
+                    coordinator.cancel(recordID: record.id)
+                }
+            }
+        } else if record.speakerTranscriptData == nil, hasAudio, record.processingState == .ready {
+            idle
         }
     }
 
-    // MARK: - Status
-
-    private func progress(_ stage: SpeakerTranscriptCoordinator.Stage) -> some View {
-        VStack(spacing: 12) {
-            switch stage {
-            case .waiting:
-                ProgressView()
-                Text(String(localized: "speakers.status.waiting"))
-            case .transcribing:
-                ProgressView()
-                Text(String(localized: "speakers.status.transcribing"))
-            case .downloadingModels(let fraction):
-                ProgressView(value: fraction)
-                    .frame(maxWidth: 260)
-                Text(String(localized: "speakers.status.downloadingModel"))
-            case .detecting(let fraction):
-                ProgressView(value: fraction)
-                    .frame(maxWidth: 260)
-                Text(String(localized: "speakers.status.detecting"))
-            }
-            Button(String(localized: "Cancel")) {
-                coordinator.cancel(recordID: record.id)
-            }
-        }
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var failure: some View {
-        ContentUnavailableView {
-            Label(String(localized: "speakers.status.failed"), systemImage: "person.2.slash")
-        } description: {
-            if let reason = failureReason {
-                Text(reason)
-            }
-        } actions: {
-            if coordinator.startError(for: record) == .premiumRequired {
+    @ViewBuilder
+    private var idle: some View {
+        switch coordinator.startError(for: record) {
+        case .premiumRequired:
+            row(symbol: "lock.fill", tint: .purple) {
+                title(String(localized: "speakers.premium.required"))
+            } actions: {
                 Button(String(localized: "speakers.premium.open")) {
                     SettingsNavigationCoordinator.shared.navigate(to: .premium)
                 }
-            } else if coordinator.startError(for: record) == nil {
-                Button(String(localized: "speakers.action.tryAgain")) {
-                    coordinator.start(recordID: record.id)
+            }
+        case .providerUnavailable:
+            notice(String(localized: "speakers.status.providerUnavailable"))
+        case .audioMissing:
+            notice(String(localized: "speakers.status.audioMissing"))
+        case .timingMissing:
+            notice(String(localized: "speakers.status.timingMissing"))
+        case nil:
+            if record.speakerTranscriptState == .failed || record.speakerTranscriptState == .pending {
+                row(symbol: "exclamationmark.triangle.fill", tint: .orange) {
+                    title(String(localized: "speakers.status.failed"))
+                } actions: {
+                    Button(String(localized: "speakers.action.tryAgain")) { start(speakerCount: nil) }
                 }
+            } else {
+                invitation
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private var failureReason: String? {
-        switch coordinator.startError(for: record) {
-        case .premiumRequired: String(localized: "speakers.premium.required")
-        case .providerUnavailable: String(localized: "speakers.status.providerUnavailable")
-        case .audioMissing: String(localized: "speakers.status.audioMissing")
-        case .timingMissing: String(localized: "speakers.status.timingMissing")
-        case nil: nil
+    private var invitation: some View {
+        row {
+            ConversationSketch()
+        } content: {
+            VStack(alignment: .leading, spacing: 1) {
+                title(String(localized: "speakers.invite.title"))
+                Text(String(localized: "speakers.invite.description"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        } actions: {
+            HStack(spacing: 2) {
+                Button(String(localized: "speakers.toggle.title")) { start(speakerCount: nil) }
+                    .buttonStyle(.borderedProminent)
+                    .help(String(localized: "speakers.detect.help"))
+                Menu {
+                    Section(String(localized: "speakers.count.title")) {
+                        Button(String(localized: "speakers.count.automatic")) { start(speakerCount: nil) }
+                        ForEach(coordinator.selectableSpeakerCounts, id: \.self) { count in
+                            Button(count.formatted()) { start(speakerCount: count) }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help(String(localized: "speakers.count.title"))
+                .accessibilityLabel(String(localized: "speakers.count.title"))
+            }
         }
+    }
+
+    private func start(speakerCount: Int?) {
+        onStart()
+        coordinator.start(recordID: record.id, speakerCount: speakerCount)
+    }
+
+    @ViewBuilder
+    private func progress(_ stage: SpeakerTranscriptCoordinator.Stage) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            switch stage {
+            case .waiting:
+                title(String(localized: "speakers.status.waiting"))
+                ProgressView().progressViewStyle(.linear)
+            case .transcribing:
+                title(String(localized: "speakers.status.transcribing"))
+                ProgressView().progressViewStyle(.linear)
+            case .downloadingModels(let fraction):
+                title(String(localized: "speakers.status.downloadingModel"))
+                ProgressView(value: fraction)
+            case .detecting(let fraction):
+                title(String(localized: "speakers.status.detecting"))
+                ProgressView(value: fraction)
+            }
+        }
+        .controlSize(.small)
+    }
+
+    private func notice(_ text: String) -> some View {
+        row(symbol: "exclamationmark.triangle.fill", tint: .orange) {
+            Text(text)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } actions: {
+            EmptyView()
+        }
+    }
+
+    private func title(_ text: String) -> some View {
+        Text(text)
+            .font(.callout.weight(.semibold))
+            .lineLimit(1)
+    }
+
+    private func row<Content: View, Actions: View>(
+        symbol: String,
+        tint: Color,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        row(
+            leading: {
+                Image(systemName: symbol)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(tint)
+                    .frame(width: 30, height: 30)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(tint.opacity(0.14)))
+            },
+            content: content,
+            actions: actions
+        )
+    }
+
+    private func row<Leading: View, Content: View, Actions: View>(
+        @ViewBuilder leading: () -> Leading,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        HStack(spacing: 12) {
+            leading()
+                .accessibilityHidden(true)
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            actions()
+                .controlSize(.small)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.1))
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// Three small speech bubbles, a preview of the transcript by speaker.
+private struct ConversationSketch: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            bubble(width: 24, color: SpeakerBadge.palette[0], trailing: true)
+            bubble(width: 20, color: SpeakerBadge.palette[1], trailing: false)
+            bubble(width: 26, color: SpeakerBadge.palette[0], trailing: true)
+        }
+        .padding(.horizontal, 6)
+        .frame(width: 44, height: 32)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.06)))
+    }
+
+    private func bubble(width: CGFloat, color: Color, trailing: Bool) -> some View {
+        Capsule()
+            .fill(color.opacity(0.5))
+            .frame(width: width, height: 5)
+            .frame(maxWidth: .infinity, alignment: trailing ? .trailing : .leading)
     }
 }
 

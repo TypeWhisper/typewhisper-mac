@@ -404,6 +404,19 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         // Everyone muted plays all rather than nothing.
         XCTAssertTrue(model.isAudible("S1"))
     }
+
+    func testSpeakerNamedAsTheUserIsOwnSpeech() throws {
+        let model = try makeModel()
+        XCTAssertFalse(model.isOwnSpeaker("S1"))
+        XCTAssertFalse(model.isOwnSpeaker("S2"))
+
+        let me = String(localized: "speakers.me")
+        history.setSpeakerName(" \(me.lowercased()) ", for: "S2", inRecordID: recordID)
+        model.reload()
+
+        XCTAssertTrue(model.isOwnSpeaker("S2"))
+        XCTAssertFalse(model.isOwnSpeaker("S1"))
+    }
 }
 
 final class SpeakerTimedWordsTests: XCTestCase {

@@ -485,7 +485,6 @@
 		AA00000000000000000227 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000217 /* manifest.json */; };
 		AA00000000000000000228 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000218 /* Localizable.xcstrings */; };
 		AA00000000000000000229 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000027 /* TypeWhisperPluginSDK */; };
-		AA00000000000000000230 /* AudioPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000220 /* AudioPlaybackService.swift */; };
 		AA00000000000000000231 /* GranitePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000221 /* GranitePlugin.swift */; };
 		AA00000000000000000232 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000222 /* manifest.json */; };
 		AA00000000000000000233 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000223 /* Localizable.xcstrings */; };
@@ -1151,7 +1150,6 @@
 		BB00000000000000000217 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000218 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000219 /* LiveTranscriptPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LiveTranscriptPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000220 /* AudioPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioPlaybackService.swift; sourceTree = "<group>"; };
 		BB00000000000000000221 /* GranitePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GranitePlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000222 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000223 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -2018,7 +2016,6 @@
 				BB00000000000000000351 /* ObjCExceptionCatcher.m */,
 				C85600000000000000000002 /* CoreAudioHALCallbackContext.h */,
 				C85600000000000000000003 /* CoreAudioHALCallbackContext.c */,
-				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000362 /* SecureInputDiagnostics.swift */,
 				BB00000000000000000366 /* AccessibilityPermissionPane.swift */,
@@ -5173,7 +5170,6 @@
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
 				C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */,
-				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
 				AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */,
 				AA00000000000000000366 /* AccessibilityPermissionPane.swift in Sources */,

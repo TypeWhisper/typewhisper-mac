@@ -73,6 +73,13 @@ final class SpeakerWorkspaceModel: ObservableObject {
         SpeakerTranscriptPresentation.name(for: speakerID, names: names)
     }
 
+    /// True for the speaker named as the user, whose turns show on the right.
+    /// Detection names the microphone's speaker so in Recorder recordings.
+    func isOwnSpeaker(_ speakerID: String) -> Bool {
+        guard let name = names?.displayName(for: speakerID)?.trimmingCharacters(in: .whitespaces) else { return false }
+        return name.compare(String(localized: "speakers.me"), options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
     /// Reads the record again after it changed.
     func reload() {
         guard let record = historyService.record(withID: recordID) else { return }

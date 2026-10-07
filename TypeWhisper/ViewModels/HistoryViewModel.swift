@@ -224,7 +224,6 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var queryID = UUID()
     @Published private(set) var pendingDeletionIDs: Set<UUID> = []
 
-    let audioPlaybackService = AudioPlaybackService()
 
     private let historyService: HistoryService
     private let textDiffService: TextDiffService
@@ -1182,7 +1181,6 @@ final class HistoryViewModel: ObservableObject {
         switch transition {
         case .recordSelection(let selection):
             detailViewMode = .final
-            audioPlaybackService.stop()
             selectedRecordIDs = selection
         case .navigation(let selection):
             navigationSelection = selection
