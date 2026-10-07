@@ -921,6 +921,11 @@ final class PluginManager: ObservableObject {
     /// predicate is read by plugins from arbitrary contexts, so the builder must
     /// touch no actor-isolated state. The compiler enforces that here, which is why
     /// the closure captures a plain `Set` rather than the manager or the plugin.
+    /// The engine dictation uses while the saved one is unavailable (#1533). It
+    /// lives in memory only, so the saved choice stays intact, and the matcher
+    /// treats it as the selected engine until the saved one is usable again.
+    nonisolated static let temporaryFallbackEngine = OSAllocatedUnfairLock<String?>(initialState: nil)
+
     nonisolated static func selectionMatcher(
         forEnginesExposedBy exposed: Set<String>,
         defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
@@ -940,7 +945,8 @@ final class PluginManager: ObservableObject {
             // is missing or no longer usable, and a selection written then cannot
             // cancel a restore task that activation has already spawned. Permitting
             // during that window is what let an unselected engine's model load.
-            guard let selected = defaults().string(forKey: UserDefaultsKeys.selectedEngine),
+            guard let selected = temporaryFallbackEngine.withLock({ $0 })
+                    ?? defaults().string(forKey: UserDefaultsKeys.selectedEngine),
                   !selected.isEmpty
             else { return false }
             return exposed.contains(selected)
@@ -1090,13 +1096,33 @@ final class PluginManager: ObservableObject {
     /// Removes a plugin from the active runtime registry without unmapping its executable code.
     /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
     /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
-    func unloadPlugin(_ pluginId: String) {
+    /// Engine ids of plugins unloaded for an update, kept until the update is
+    /// gone or replaced, because the placeholder that stands in exposes none.
+    private var providerIdsAwaitingRelaunch: [String: Set<String>] = [:]
+
+    /// - Parameter keepsSavedEngine: Pass `true` when the plugin comes straight
+    ///   back, as during an update. The saved dictation engine then stays, and
+    ///   `restoreProviderSelection()` bridges the gap with a temporary fallback
+    ///   (#1533). Disabling and uninstalling replace it, as the user asked for.
+    func unloadPlugin(_ pluginId: String, keepsSavedEngine: Bool = false) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
-        let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+        var disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+        // An update can leave a restart-required placeholder that exposes no
+        // engines; uninstalling it must still replace the engines it stands for.
+        if disabledProviderIds.isEmpty {
+            disabledProviderIds = providerIdsAwaitingRelaunch[pluginId] ?? []
+        }
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
-        selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+        if keepsSavedEngine {
+            if !disabledProviderIds.isEmpty {
+                providerIdsAwaitingRelaunch[pluginId] = disabledProviderIds
+            }
+        } else {
+            providerIdsAwaitingRelaunch[pluginId] = nil
+            selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+        }
 
         if plugin.isEnabled && plugin.isRuntimeLoaded {
             plugin.instance.deactivate()

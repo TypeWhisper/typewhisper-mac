@@ -1075,7 +1075,8 @@ final class PluginRegistryService: ObservableObject {
         let incomingURL = hadExistingBundle ? stagingURL : destinationURL
 
         do {
-            PluginManager.shared.unloadPlugin(manifest.id)
+            // The new bundle replaces this one right away, so keep the user's engine.
+            PluginManager.shared.unloadPlugin(manifest.id, keepsSavedEngine: true)
 
             if copyBundle {
                 logger.info("Copying plugin bundle into install location: \(bundleURL.path, privacy: .public) -> \(incomingURL.path, privacy: .public)")

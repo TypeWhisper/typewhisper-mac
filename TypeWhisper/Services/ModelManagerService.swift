@@ -255,6 +255,8 @@ final class ModelManagerService: ObservableObject {
     init() {
         self.autoUnloadSeconds = ModelAutoUnloadPolicy.effectiveSeconds()
         self.selectedProviderId = UserDefaults.standard.string(forKey: providerKey)
+        // A temporary fallback belongs to the session that chose it.
+        PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
     }
 
     #if DEBUG
@@ -352,12 +354,14 @@ final class ModelManagerService: ObservableObject {
     }
 
     func selectProvider(_ providerId: String) {
+        PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
         selectedProviderId = providerId
         UserDefaults.standard.set(providerId, forKey: providerKey)
         reconcilePassiveModelRestore()
     }
 
     func clearProviderSelection() {
+        PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
         selectedProviderId = nil
         UserDefaults.standard.removeObject(forKey: providerKey)
         passiveRestoreSelection = nil
@@ -366,6 +370,13 @@ final class ModelManagerService: ObservableObject {
     func selectModel(_ providerId: String, modelId: String) {
         selectProvider(providerId)
         PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
+    }
+
+    /// Picks a model for an engine without making that engine the saved
+    /// choice, for the engine that is in use, which may be a temporary fallback.
+    func selectModel(_ modelId: String, of providerId: String) {
+        PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
+        objectWillChange.send()
     }
 
     func loadModel(_ providerId: String, modelId: String) async throws {
@@ -591,21 +602,46 @@ final class ModelManagerService: ObservableObject {
 
     /// Re-validate provider selection after plugins have been loaded.
     /// If the selected plugin is missing, fall back to the first available engine.
+    /// Runs at launch and on every plugin manager change, including the moments
+    /// while a plugin is being installed or reloaded. A fallback chosen then only
+    /// lasts until the saved engine is usable again; it never replaces the saved
+    /// choice, which used to switch dictation to another engine for good (#1533).
     func restoreProviderSelection() {
         defer { reconcilePassiveModelRestore() }
-        if let providerId = selectedProviderId,
-           let engine = PluginManager.shared.transcriptionEngine(for: providerId),
-           canUseForTranscription(engine) {
+        let savedProviderId = UserDefaults.standard.string(forKey: providerKey)
+
+        if let savedProviderId, isUsableForTranscription(savedProviderId) {
+            PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
+            if selectedProviderId != savedProviderId {
+                selectedProviderId = savedProviderId
+            }
             return
         }
-        // Selected provider doesn't exist - find a fallback
-        if let fallback = PluginManager.shared.transcriptionEngines.first(where: { $0.isConfigured && canUseForTranscription($0) }) {
-            selectProvider(fallback.providerId)
-        } else if let anyEngine = PluginManager.shared.transcriptionEngines.first(where: { canUseForTranscription($0) }) {
-            selectProvider(anyEngine.providerId)
-        } else {
-            clearProviderSelection()
+        if let providerId = selectedProviderId, isUsableForTranscription(providerId) {
+            return
         }
+
+        let engines = PluginManager.shared.transcriptionEngines
+        let fallback = engines.first(where: { $0.isConfigured && canUseForTranscription($0) })
+            ?? engines.first(where: { canUseForTranscription($0) })
+        guard let fallback else {
+            PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
+            selectedProviderId = nil
+            passiveRestoreSelection = nil
+            return
+        }
+
+        if savedProviderId == nil {
+            selectProvider(fallback.providerId)
+        } else {
+            PluginManager.temporaryFallbackEngine.withLock { $0 = fallback.providerId }
+            selectedProviderId = fallback.providerId
+        }
+    }
+
+    private func isUsableForTranscription(_ providerId: String) -> Bool {
+        guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { return false }
+        return canUseForTranscription(engine)
     }
 
     /// Activation hydrates auth and profiles before selection can be reconciled.

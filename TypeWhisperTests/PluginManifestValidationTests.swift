@@ -2409,6 +2409,34 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         }
     }
 
+    private final class MockSwitchableTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, PluginAuthRoleStatusProviding, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.switchable" }
+        static var pluginName: String { "Mock Switchable" }
+
+        var isAvailable = false
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        var providerId: String { "mock-switchable" }
+        var providerDisplayName: String { "Mock Switchable" }
+        var isConfigured: Bool { true }
+        var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        func selectModel(_ modelId: String) {}
+
+        func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+            isAvailable
+                ? .available
+                : PluginAuthRoleStatus(isAvailable: false, unavailableReason: "Not ready yet.", requiredCredentialLabel: nil)
+        }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+        }
+    }
+
     private final class MockLifecyclePolicyAwarePlugin: NSObject, TypeWhisperPlugin, HostModelLifecyclePolicyAwarePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.lifecycle-aware" }
         static var pluginName: String { "Mock Lifecycle Aware" }
@@ -2719,6 +2747,142 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         modelManager.restoreProviderSelection()
 
         XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+    }
+
+    func testTemporaryFallbackKeepsTheSavedEngineAndReturnsToIt() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-switchable")
+
+        switchable.isAvailable = true
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-switchable")
+    }
+
+    func testFallbackIsSavedWhenNoEngineWasChosenYet() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine(nil)
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-compatible")
+    }
+
+    func testSavedEngineSurvivesAMomentWithoutAnyEngine() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = []
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNil(modelManager.selectedProviderId)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-switchable")
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        switchable.isAvailable = true
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+        ]
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+    }
+
+    func testUpdatingTheSelectedPluginKeepsTheSavedEngine() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        switchable.isAvailable = true
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+
+        // An update unloads the old bundle before the new one is registered.
+        PluginManager.shared.unloadPlugin("com.typewhisper.mock.switchable", keepsSavedEngine: true)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-compatible")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-switchable")
+
+        let updated = MockSwitchableTranscriptionPlugin()
+        updated.isAvailable = true
+        PluginManager.shared.loadedPlugins.append(
+            Self.loadedPlugin(updated, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory)
+        )
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+    }
+
+    /// Sets the saved dictation engine and returns a closure that puts the previous value back.
+    private static func overrideSavedEngine(_ providerId: String?) -> () -> Void {
+        let key = UserDefaultsKeys.selectedEngine
+        let original = UserDefaults.standard.object(forKey: key)
+        if let providerId {
+            UserDefaults.standard.set(providerId, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        return {
+            if let original {
+                UserDefaults.standard.set(original, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+    }
+
+    private static func loadedPlugin(_ instance: some TypeWhisperPlugin, id: String, directory: URL) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: id,
+                name: id,
+                version: "1.0.0",
+                principalClass: String(describing: type(of: instance))
+            ),
+            instance: instance,
+            bundle: Bundle.main,
+            sourceURL: directory,
+            isEnabled: true
+        )
     }
 
     func testWatchFolderSelectionClearsMissingSavedEngine() throws {
