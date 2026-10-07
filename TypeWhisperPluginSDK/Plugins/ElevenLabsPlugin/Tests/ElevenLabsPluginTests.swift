@@ -404,6 +404,90 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(calls.values, ["realtime", "failure", "rest"])
     }
 
+    func testAutomaticModeSendsOnlyRecordingsUpToFiveMinutesToRealtime() {
+        XCTAssertEqual(
+            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 300),
+            .realtime
+        )
+        XCTAssertEqual(
+            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 301),
+            .rest
+        )
+        XCTAssertEqual(
+            ElevenLabsPlugin.transcriptionTransport(mode: .restOnly, keyterms: [], audioDuration: 1),
+            .rest
+        )
+    }
+
+    func testRESTTimeoutsGrowWithAudioDuration() {
+        let short = ElevenLabsPlugin.restTimeouts(forAudioDuration: 60)
+        XCTAssertEqual(short.request, 120)
+        XCTAssertEqual(short.resource, 600)
+
+        let twoHours = ElevenLabsPlugin.restTimeouts(forAudioDuration: 2 * 3_600)
+        XCTAssertEqual(twoHours.request, 480)
+        XCTAssertEqual(twoHours.resource, 960)
+
+        let fourHours = ElevenLabsPlugin.restTimeouts(forAudioDuration: 4 * 3_600)
+        XCTAssertEqual(fourHours.request, 960)
+        XCTAssertEqual(fourHours.resource, 1_920)
+
+        let beyondLimit = ElevenLabsPlugin.restTimeouts(forAudioDuration: 20 * 3_600)
+        XCTAssertEqual(beyondLimit.request, 2_400)
+        XCTAssertEqual(beyondLimit.resource, 7_200)
+    }
+
+    func testShortRESTRequestKeepsDefaultTimeouts() async throws {
+        let resourceTimeouts = TimeoutRecorder()
+        let request = try await captureRESTRequest(resourceTimeouts: resourceTimeouts)
+
+        XCTAssertEqual(request.timeoutInterval, 120)
+        XCTAssertEqual(resourceTimeouts.values, [600])
+    }
+
+    func testLongRecordingInAutomaticModeUsesBatchEndpointWithLongTimeouts() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "scribe_v2"],
+            secrets: ["api-key": "elevenlabs-key"]
+        )
+        let plugin = ElevenLabsPlugin()
+        plugin.activate(host: host)
+        XCTAssertTrue(plugin.supportsStreaming)
+
+        let store = PluginHTTPClientSessionStore()
+        let resourceTimeouts = TimeoutRecorder()
+        PluginHTTPClientTestHarness.configure { configuration in
+            resourceTimeouts.append(configuration.timeoutIntervalForResource)
+            return store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"Long transcript","language_code":"de"}"#.utf8),
+                    Self.httpResponse(url: "https://api.elevenlabs.io/v1/speech-to-text", statusCode: 200)
+                )
+            ])
+        }
+
+        // The duration drives routing and timeouts; one second of samples keeps encoding fast.
+        let samples = [Float](repeating: 0.3, count: 16_000)
+        let progressRecorder = StringRecorder()
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 2 * 3_600),
+            language: "de",
+            translate: false,
+            prompt: nil,
+            onProgress: { text in
+                progressRecorder.append(text)
+                return true
+            }
+        )
+
+        XCTAssertEqual(result.text, "Long transcript")
+        XCTAssertEqual(progressRecorder.values, ["Long transcript"])
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.path, "/v1/speech-to-text")
+        XCTAssertEqual(request.timeoutInterval, 480)
+        XCTAssertEqual(resourceTimeouts.values, [960])
+    }
+
     func testSettingsUIExposesLocalizedOptionsAndStableAccessibilityIdentifiers() throws {
         let source = try String(
             contentsOf: Self.pluginRoot.appendingPathComponent("ElevenLabsPlugin.swift"),
@@ -451,6 +535,7 @@ final class ElevenLabsPluginTests: XCTestCase {
     private func captureRESTRequest(
         prompt: String? = nil,
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
+        resourceTimeouts: TimeoutRecorder = TimeoutRecorder(),
         configure: (ElevenLabsPlugin) -> Void = { _ in }
     ) async throws -> URLRequest {
         let host = try PluginTestHostServices(
@@ -462,8 +547,9 @@ final class ElevenLabsPluginTests: XCTestCase {
         configure(plugin)
 
         let store = PluginHTTPClientSessionStore()
-        PluginHTTPClientTestHarness.configure { _ in
-            store.makeSession(outcomes: [
+        PluginHTTPClientTestHarness.configure { configuration in
+            resourceTimeouts.append(configuration.timeoutIntervalForResource)
+            return store.makeSession(outcomes: [
                 .success(
                     Data(#"{"text":"REST transcript","language_code":"en"}"#.utf8),
                     Self.httpResponse(url: "https://api.elevenlabs.io/v1/speech-to-text", statusCode: 200)
@@ -524,6 +610,18 @@ private final class StringRecorder: @unchecked Sendable {
     }
 
     func append(_ value: String) {
+        valuesLock.withLock { $0.append(value) }
+    }
+}
+
+private final class TimeoutRecorder: @unchecked Sendable {
+    private let valuesLock = OSAllocatedUnfairLock(initialState: [TimeInterval]())
+
+    var values: [TimeInterval] {
+        valuesLock.withLock { $0 }
+    }
+
+    func append(_ value: TimeInterval) {
         valuesLock.withLock { $0.append(value) }
     }
 }

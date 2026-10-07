@@ -135,6 +135,10 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     static let maximumKeytermCount = 1_000
     static let maximumKeytermCharacterCount = 49
     static let maximumKeytermWordCount = 5
+    /// The realtime API takes a recording as one live stream with commits
+    /// every 36 seconds and documents no session length. The batch endpoint
+    /// transcribes long files in parallel, so longer files go there.
+    static let maximumRealtimeAudioDuration: TimeInterval = 5 * 60
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
@@ -318,7 +322,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         }
 
         let keyterms = activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
-        if transcriptionTransport(keyterms: keyterms) == .rest {
+        if transcriptionTransport(keyterms: keyterms, audioDuration: audio.duration) == .rest {
             let result = try await transcribeREST(
                 audio: audio,
                 language: language,
@@ -379,6 +383,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         guard let url = URL(string: "https://api.elevenlabs.io/v1/speech-to-text") else {
             throw PluginTranscriptionError.apiError("Invalid ElevenLabs REST URL")
         }
+        let timeouts = Self.restTimeouts(forAudioDuration: audio.duration)
 
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             let boundary = UUID().uuidString
@@ -386,7 +391,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             request.httpMethod = "POST"
             request.setValue(apiKey, forHTTPHeaderField: "xi-api-key")
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.timeoutInterval = 120
+            request.timeoutInterval = timeouts.request
 
             var body = Data()
             body.appendMultipartFile(
@@ -425,7 +430,7 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             body.append("--\(boundary)--\r\n".data(using: .utf8)!)
             request.httpBody = body
 
-            let (data, response) = try await PluginHTTPClient.data(for: request)
+            let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: timeouts.resource)
 
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw PluginTranscriptionError.apiError("No HTTP response")
@@ -583,17 +588,36 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
     static func transcriptionTransport(
         mode: ElevenLabsTranscriptionMode,
-        keyterms: [String]
+        keyterms: [String],
+        audioDuration: TimeInterval
     ) -> ElevenLabsTranscriptionTransport {
-        mode == .restOnly || !keyterms.isEmpty ? .rest : .realtime
+        mode == .restOnly || !keyterms.isEmpty || audioDuration > maximumRealtimeAudioDuration
+            ? .rest
+            : .realtime
     }
 
     func transcriptionTransport(
         prompt: String?,
-        dictionaryTermHints: [PluginDictionaryTermHint]
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        audioDuration: TimeInterval = 0
     ) -> ElevenLabsTranscriptionTransport {
         transcriptionTransport(
-            keyterms: activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints)
+            keyterms: activeKeyterms(prompt: prompt, dictionaryTermHints: dictionaryTermHints),
+            audioDuration: audioDuration
+        )
+    }
+
+    /// The batch endpoint answers once the whole file is transcribed, about
+    /// 78 times faster than real time with Scribe v2, and takes up to 10 hours.
+    /// The answer gets 4 s per audio minute, the whole request 4 s per audio
+    /// minute more for the upload.
+    /// https://elevenlabs.io/docs/capabilities/speech-to-text
+    /// https://artificialanalysis.ai/speech-to-text
+    static func restTimeouts(forAudioDuration duration: TimeInterval) -> (request: TimeInterval, resource: TimeInterval) {
+        let minutes = duration / 60
+        return (
+            request: min(max(120, minutes * 4), 2_400),
+            resource: min(max(600, minutes * 8), 7_200)
         )
     }
 
@@ -625,8 +649,11 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
         return Self.validKeyterms(from: terms)
     }
 
-    private func transcriptionTransport(keyterms: [String]) -> ElevenLabsTranscriptionTransport {
-        Self.transcriptionTransport(mode: _transcriptionMode, keyterms: keyterms)
+    private func transcriptionTransport(
+        keyterms: [String],
+        audioDuration: TimeInterval
+    ) -> ElevenLabsTranscriptionTransport {
+        Self.transcriptionTransport(mode: _transcriptionMode, keyterms: keyterms, audioDuration: audioDuration)
     }
 
     static func realtimeURL(language: String?, modelId: String, noVerbatim: Bool) throws -> URL {
