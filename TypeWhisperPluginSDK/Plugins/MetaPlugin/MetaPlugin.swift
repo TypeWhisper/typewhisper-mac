@@ -959,14 +959,27 @@ final class MetaPlugin: NSObject,
         let keywords = PluginDictionaryTerms.normalizedTermHints(from: dictionaryTermHints + promptHints)
             .map(\.text)
 
-        return try await MetaTranscriptionClient(apiKey: apiKey).transcribe(
-            audio: audio,
-            model: model,
-            mode: transcriptionMode,
-            languageHints: languageHints,
-            keywords: keywords
-        )
+        // Meta numbers the speakers anew in every request; the chunks of a
+        // longer recording keep their labels under numbers of their own.
+        let client = MetaTranscriptionClient(apiKey: apiKey)
+        let mode = transcriptionMode
+        return try await PluginAudioChunking.transcribeStructured(
+            audio,
+            maximumChunkDuration: Self.maximumRequestDuration
+        ) { chunk in
+            try await client.transcribe(
+                audio: chunk,
+                model: model,
+                mode: mode,
+                languageHints: languageHints,
+                keywords: keywords
+            )
+        }
     }
+
+    /// Meta takes at most 10 minutes or 32 MB per request; nine minutes are
+    /// 17.3 MB as WAV.
+    static let maximumRequestDuration: TimeInterval = 540
 
     private static func legacyResult(
         from result: PluginStructuredTranscriptionResult

@@ -206,10 +206,16 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
         let client = MistralAPIClient(apiKey: apiKey)
         let sttModelId = lock.withLock { _selectedModelId }
         let sttModel = (sttModelId?.isEmpty == false) ? sttModelId! : "voxtral-mini-latest"
+        // Chat with audio takes about 20 minutes per request and gets base64
+        // WAV; the transcription endpoint takes 15 to 60 minutes per model.
         if Self.chatTranscriptionModelIds.contains(sttModel) {
-            return try await client.transcribeViaChat(audio: audio, language: language, model: sttModel)
+            return try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: 300) { chunk in
+                try await client.transcribeViaChat(audio: chunk, language: language, model: sttModel)
+            }
         }
-        return try await client.transcribe(audio: audio, language: language, model: sttModel)
+        return try await PluginAudioChunking.transcribe(audio) { chunk in
+            try await client.transcribe(audio: chunk, language: language, model: sttModel)
+        }
     }
 }
 

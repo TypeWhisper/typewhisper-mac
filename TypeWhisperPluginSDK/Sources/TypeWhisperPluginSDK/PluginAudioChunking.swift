@@ -27,17 +27,103 @@ public enum PluginAudioChunking {
         maximumChunkDuration: TimeInterval = defaultMaximumChunkDuration,
         transcribeChunk: (AudioData) async throws -> PluginTranscriptionResult
     ) async throws -> PluginTranscriptionResult {
+        guard let chunks = try await transcribeChunks(
+            audio,
+            maximumChunkDuration: maximumChunkDuration,
+            transcribeChunk: transcribeChunk
+        ) else {
+            return try await transcribeChunk(audio)
+        }
+
+        let results = chunks.map(\.result)
+        return PluginTranscriptionResult(
+            text: joinedText(results.map(\.text)),
+            detectedLanguage: mostFrequentLanguage(results.compactMap(\.detectedLanguage)),
+            segments: chunks.flatMap { chunk in
+                chunk.result.segments.map {
+                    PluginTranscriptionSegment(text: $0.text, start: $0.start + chunk.offset, end: $0.end + chunk.offset)
+                }
+            }
+        )
+    }
+
+    /// Like `transcribe`, for engines that label speakers. An engine numbers
+    /// the speakers anew in every request, so labels from different chunks
+    /// cannot be matched. Each chunk's speakers get numbers of their own
+    /// instead: one person may appear under several numbers, but two people
+    /// never end up under one.
+    public static func transcribeStructured(
+        _ audio: AudioData,
+        maximumChunkDuration: TimeInterval = defaultMaximumChunkDuration,
+        transcribeChunk: (AudioData) async throws -> PluginStructuredTranscriptionResult
+    ) async throws -> PluginStructuredTranscriptionResult {
+        guard let chunks = try await transcribeChunks(
+            audio,
+            maximumChunkDuration: maximumChunkDuration,
+            transcribeChunk: transcribeChunk
+        ) else {
+            return try await transcribeChunk(audio)
+        }
+
+        var segments: [PluginStructuredTranscriptionSegment] = []
+        var texts: [String] = []
+        var speakerCount = 0
+        for chunk in chunks {
+            var speakers: [String: String] = [:]
+            let chunkSegments = chunk.result.segments.map { segment in
+                let speaker = segment.speakerLabel.map { label in
+                    if let speaker = speakers[label] { return speaker }
+                    speakerCount += 1
+                    speakers[label] = "Speaker \(speakerCount)"
+                    return "Speaker \(speakerCount)"
+                }
+                return PluginStructuredTranscriptionSegment(
+                    text: segment.text,
+                    start: segment.start + chunk.offset,
+                    end: segment.end + chunk.offset,
+                    speakerLabel: speaker,
+                    speakerConfidence: segment.speakerConfidence
+                )
+            }
+            segments += chunkSegments
+            // Engines write the labels into the text as well, so labelled
+            // text is rebuilt from the renumbered segments.
+            if speakers.isEmpty {
+                texts.append(chunk.result.text)
+            } else {
+                texts.append(chunkSegments.map { segment in
+                    let text = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return segment.speakerLabel.map { "\($0): \(text)" } ?? text
+                }.joined(separator: "\n"))
+            }
+        }
+
+        let results = chunks.map(\.result)
+        return PluginStructuredTranscriptionResult(
+            text: speakerCount == 0
+                ? joinedText(texts)
+                : texts.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n"),
+            detectedLanguage: mostFrequentLanguage(results.compactMap(\.detectedLanguage)),
+            segments: segments
+        )
+    }
+
+    /// Transcribes the chunks of `audio` in order, or returns nil when it fits
+    /// into one chunk. Word times reported by the chunks refer to the whole
+    /// recording.
+    private static func transcribeChunks<Result>(
+        _ audio: AudioData,
+        maximumChunkDuration: TimeInterval,
+        transcribeChunk: (AudioData) async throws -> Result
+    ) async throws -> [(offset: TimeInterval, result: Result)]? {
         let ranges = chunkRanges(
             for: audio.samples,
             maximumChunkSampleCount: Int(maximumChunkDuration * Double(sampleRate))
         )
-        guard ranges.count > 1 else {
-            return try await transcribeChunk(audio)
-        }
+        guard ranges.count > 1 else { return nil }
 
         let collectsWords = PluginWordTimings.collector != nil
-        var results: [PluginTranscriptionResult] = []
-        var segments: [PluginTranscriptionSegment] = []
+        var chunks: [(offset: TimeInterval, result: Result)] = []
         var words: [PluginWordTiming] = []
 
         for range in ranges {
@@ -52,34 +138,24 @@ public enum PluginAudioChunking {
 
             // Each chunk reports its own words, and a report replaces the
             // previous one, so every chunk gets its own collector.
-            let result: PluginTranscriptionResult
             if collectsWords {
                 let chunkWords = PluginWordTimingCollector()
-                result = try await PluginWordTimings.$collector.withValue(chunkWords) {
+                let result = try await PluginWordTimings.$collector.withValue(chunkWords) {
                     try await transcribeChunk(chunk)
                 }
                 words += chunkWords.words.map {
                     PluginWordTiming(text: $0.text, start: $0.start + offset, end: $0.end + offset)
                 }
+                chunks.append((offset, result))
             } else {
-                result = try await transcribeChunk(chunk)
-            }
-
-            results.append(result)
-            segments += result.segments.map {
-                PluginTranscriptionSegment(text: $0.text, start: $0.start + offset, end: $0.end + offset)
+                chunks.append((offset, try await transcribeChunk(chunk)))
             }
         }
 
         if collectsWords {
             PluginWordTimings.report(words)
         }
-
-        return PluginTranscriptionResult(
-            text: joinedText(results.map(\.text)),
-            detectedLanguage: mostFrequentLanguage(results.compactMap(\.detectedLanguage)),
-            segments: segments
-        )
+        return chunks
     }
 
     /// Splits `samples` into the fewest chunks of at most

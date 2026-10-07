@@ -117,6 +117,58 @@ final class PluginAudioChunkingTests: XCTestCase {
         ])
     }
 
+    func testStructuredChunksGiveEveryChunkItsOwnSpeakerNumbers() async throws {
+        let audio = Self.audio(Self.speech(seconds: 100))
+        var chunkIndex = 0
+
+        let result = try await PluginAudioChunking.transcribeStructured(audio, maximumChunkDuration: 60) { _ in
+            defer { chunkIndex += 1 }
+            // Both chunks call their speakers A and B.
+            return PluginStructuredTranscriptionResult(
+                text: "A: one\nB: two\nA: three",
+                detectedLanguage: "en",
+                segments: [
+                    PluginStructuredTranscriptionSegment(text: "one", start: 1, end: 2, speakerLabel: "A"),
+                    PluginStructuredTranscriptionSegment(text: "two", start: 3, end: 4, speakerLabel: "B"),
+                    PluginStructuredTranscriptionSegment(text: "three", start: 5, end: 6, speakerLabel: "A"),
+                ].map {
+                    PluginStructuredTranscriptionSegment(
+                        text: "\($0.text)\(chunkIndex)", start: $0.start, end: $0.end, speakerLabel: $0.speakerLabel
+                    )
+                }
+            )
+        }
+
+        XCTAssertEqual(result.segments.map(\.speakerLabel), [
+            "Speaker 1", "Speaker 2", "Speaker 1",
+            "Speaker 3", "Speaker 4", "Speaker 3",
+        ])
+        XCTAssertEqual(result.text, """
+        Speaker 1: one0
+        Speaker 2: two0
+        Speaker 1: three0
+        Speaker 3: one1
+        Speaker 4: two1
+        Speaker 3: three1
+        """)
+        XCTAssertEqual(result.segments[0].start, 1)
+        XCTAssertGreaterThan(result.segments[3].start, 40, "shifted by the first chunk's length")
+        XCTAssertEqual(result.detectedLanguage, "en")
+    }
+
+    func testStructuredChunksWithoutSpeakersJoinTheirTexts() async throws {
+        let audio = Self.audio(Self.speech(seconds: 100))
+        var chunkIndex = 0
+
+        let result = try await PluginAudioChunking.transcribeStructured(audio, maximumChunkDuration: 60) { _ in
+            defer { chunkIndex += 1 }
+            return PluginStructuredTranscriptionResult(text: chunkIndex == 0 ? "Hello." : "World.")
+        }
+
+        XCTAssertEqual(result.text, "Hello. World.")
+        XCTAssertTrue(result.segments.isEmpty)
+    }
+
     func testAFailingChunkFailsTheTranscription() async {
         let audio = Self.audio(Self.speech(seconds: 100))
         var calls = 0
