@@ -1671,15 +1671,6 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertLessThan(SonioxPlugin.maximumChunkDuration, 300 * 60)
     }
 
-    func testLongUploadsGetMoreTimeThanTheSharedSession() {
-        // Up to 600 s the upload stays on the shared session.
-        XCTAssertEqual(SonioxPlugin.uploadResourceTimeout(byteCount: 200_000), 600)
-        XCTAssertEqual(SonioxPlugin.uploadResourceTimeout(byteCount: 19_200_000), 600)
-        // Two hours are about 43 MB as 48 kbit/s AAC and 230 MB as WAV.
-        XCTAssertEqual(SonioxPlugin.uploadResourceTimeout(byteCount: 43_200_000), 1_350)
-        XCTAssertEqual(SonioxPlugin.uploadResourceTimeout(byteCount: 230_400_000), 7_200)
-    }
-
     func testLargeUploadRunsOnADedicatedSessionWithTheLongerTimeout() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
         let plugin = SonioxPlugin()
@@ -1753,7 +1744,7 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(uploadSession.requestedPaths, ["/v1/files"])
         XCTAssertTrue(uploadSession.didInvalidate)
         let uploadBody = try XCTUnwrap(uploadSession.requestedRequests.first?.httpBody)
-        XCTAssertEqual(resourceTimeouts.values, [600, SonioxPlugin.uploadResourceTimeout(byteCount: uploadBody.count)])
+        XCTAssertEqual(resourceTimeouts.values, [600, PluginHTTPClient.resourceTimeout(forUploadOf: uploadBody.count)])
         XCTAssertGreaterThan(resourceTimeouts.values.last ?? 0, 600)
     }
 

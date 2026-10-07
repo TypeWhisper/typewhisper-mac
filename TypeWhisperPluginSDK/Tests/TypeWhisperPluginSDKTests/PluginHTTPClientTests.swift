@@ -461,6 +461,15 @@ final class PluginHTTPClientTests: XCTestCase {
                        "a GET is safe to repeat, so it uses the whole ladder")
     }
 
+    func testLongUploadsGetMoreTimeThanTheSharedSession() {
+        // Up to 600 s the upload stays on the shared session.
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 200_000), 600)
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 19_200_000), 600)
+        // Two hours are about 43 MB as 48 kbit/s AAC and 230 MB as WAV.
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 43_200_000), 1_350)
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 230_400_000), 7_200)
+    }
+
     func testLostConnectionDuringALargeUploadNamesTheUploadSize() async throws {
         // A proxy enforcing an upload cap closes the connection mid-body, so
         // the 413 never arrives and URLSession reports -1005 (#1538).

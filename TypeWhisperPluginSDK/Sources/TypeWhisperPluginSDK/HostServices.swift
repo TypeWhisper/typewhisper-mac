@@ -224,6 +224,14 @@ public enum PluginHTTPClient {
         }
     }
 
+    /// A resource timeout for `data(for:resourceTimeout:)` that gives an
+    /// upload of `byteCount` bytes the time 256 kbit/s needs. Bodies up to
+    /// 19.2 MB keep the shared session's 600 s; a recording of several hours
+    /// takes longer than that on a slow uplink.
+    public static func resourceTimeout(forUploadOf byteCount: Int) -> TimeInterval {
+        max(longRunningResourceTimeout, Double(byteCount) / 32_000)
+    }
+
     /// Upload caps of cloud transcription APIs start at 25 MB (OpenAI, Groq).
     /// A connection lost on a smaller body is more likely a network problem.
     static let largeUploadByteCount = 20_000_000

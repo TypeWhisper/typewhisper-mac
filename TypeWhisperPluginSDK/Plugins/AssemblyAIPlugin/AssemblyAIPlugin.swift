@@ -201,12 +201,6 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         )
     }
 
-    /// The shared HTTP session gives up on a request after 600 s. Uploading a
-    /// recording of several hours on a slow uplink takes longer, so the upload
-    /// gets as long as 256 kbit/s would need.
-    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
-        max(600, Double(byteCount) / 32_000)
-    }
 
     /// Most files finish in under a minute (a 3 h 15 min podcast took 133 s),
     /// but a long recording can wait in a queue. One poll per second for a
@@ -229,7 +223,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
 
         let (data, response) = try await PluginHTTPClient.data(
             for: request,
-            resourceTimeout: Self.uploadResourceTimeout(byteCount: uploadFile.data.count)
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: uploadFile.data.count)
         )
 
         guard let httpResponse = response as? HTTPURLResponse else {

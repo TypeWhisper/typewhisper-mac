@@ -280,12 +280,6 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
     /// enterprise plans), so longer recordings go out in parts of two hours.
     private static let maximumChunkDuration: TimeInterval = 120 * 60
 
-    /// The shared HTTP session gives up on a request after 600 s. Uploading a
-    /// recording of several hours on a slow uplink takes longer, so the upload
-    /// gets as long as 256 kbit/s would need.
-    private static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
-        max(600, Double(byteCount) / 32_000)
-    }
 
     /// Gladia needs about a minute per hour of audio, but a backlog has taken
     /// several minutes per file. One poll per second for a quarter of the audio
@@ -319,7 +313,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
         let (data, response) = try await PluginHTTPClient.data(
             for: request,
-            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: body.count)
         )
 
         guard let httpResponse = response as? HTTPURLResponse else {

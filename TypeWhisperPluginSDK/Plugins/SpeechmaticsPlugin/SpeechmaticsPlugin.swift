@@ -241,12 +241,6 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         )
     }
 
-    /// The shared HTTP session gives up on a request after 600 s. Uploading a
-    /// recording of several hours on a slow uplink takes longer, so the upload
-    /// gets as long as 256 kbit/s would need.
-    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
-        max(600, Double(byteCount) / 32_000)
-    }
 
     /// Speechmatics documents batch speeds down to 0.2 times real time
     /// (Enhanced on CPU), which is 48 minutes for four hours of audio. One poll
@@ -309,7 +303,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
 
         let (data, response) = try await PluginHTTPClient.data(
             for: request,
-            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: body.count)
         )
 
         guard let httpResponse = response as? HTTPURLResponse else {

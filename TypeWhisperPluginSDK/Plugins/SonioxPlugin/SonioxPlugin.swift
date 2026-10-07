@@ -1401,12 +1401,6 @@ final class SonioxPlugin: NSObject,
     /// longer recordings go out in parts of at most four and a half hours.
     static let maximumChunkDuration: TimeInterval = 270 * 60
 
-    /// The shared HTTP session gives up on a request after 600 s. Uploading a
-    /// recording of several hours on a slow uplink takes longer, so the upload
-    /// gets as long as 256 kbit/s would need.
-    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
-        max(600, Double(byteCount) / 32_000)
-    }
 
     /// Soniox returns an hour of audio within a few minutes, depending on load.
     /// One poll per second for a quarter of the audio duration, at least five
@@ -1746,7 +1740,7 @@ final class SonioxPlugin: NSObject,
 
         let (data, response) = try await PluginHTTPClient.data(
             for: request,
-            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: body.count)
         )
 
         guard let httpResponse = response as? HTTPURLResponse else {

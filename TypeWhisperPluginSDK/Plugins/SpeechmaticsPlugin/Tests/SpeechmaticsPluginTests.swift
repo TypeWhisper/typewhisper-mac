@@ -83,15 +83,6 @@ final class SpeechmaticsPluginTests: XCTestCase {
         XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 10 * 3_600), 7_200)
     }
 
-    func testLongUploadsGetMoreTimeThanTheSharedSession() {
-        // Up to 600 s the upload stays on the shared session.
-        XCTAssertEqual(SpeechmaticsPlugin.uploadResourceTimeout(byteCount: 200_000), 600)
-        XCTAssertEqual(SpeechmaticsPlugin.uploadResourceTimeout(byteCount: 19_200_000), 600)
-        // Two hours are about 43 MB as 48 kbit/s AAC and 230 MB as WAV.
-        XCTAssertEqual(SpeechmaticsPlugin.uploadResourceTimeout(byteCount: 43_200_000), 1_350)
-        XCTAssertEqual(SpeechmaticsPlugin.uploadResourceTimeout(byteCount: 230_400_000), 7_200)
-    }
-
     func testUnsupportedLanguagesAreNoLongerAdvertised() {
         let plugin = SpeechmaticsPlugin()
         for code in ["gu", "is", "ka", "kk", "ml", "mk", "pa", "sq", "sr", "te"] {
