@@ -111,10 +111,13 @@ final class SpeakerWorkspaceModel: ObservableObject {
         guard let record = historyService.record(withID: recordID) else { return }
         let transcript = record.speakerTranscript
         let names = record.speakerNames
-        guard transcript != self.transcript || names != self.names else { return }
+        let words = record.speakerWords.sorted { $0.start < $1.start }
+        // Word timing can change on its own, when a detection run stored new
+        // timing but found no speakers.
+        guard transcript != self.transcript || names != self.names || words != self.words else { return }
         self.transcript = transcript
         self.names = names
-        words = record.speakerWords.sorted { $0.start < $1.start }
+        self.words = words
         wordTokens = [:]
         let turns = transcript.map(SpeakerTranscriptPresentation.turns(of:)) ?? []
         microphoneSpeakerID = Self.microphoneSpeaker(of: turns, ownSpeech: record.speakerOwnSpeech)

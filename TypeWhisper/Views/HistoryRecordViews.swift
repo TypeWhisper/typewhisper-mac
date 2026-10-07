@@ -216,6 +216,7 @@ struct HistoryRecordDetailView: View {
         }
         .onChange(of: record.speakerTranscriptData) { speakers.reload() }
         .onChange(of: record.speakerNamesData) { speakers.reload() }
+        .onChange(of: record.speakerWordsData) { speakers.reload() }
         .confirmationDialog(
             String(localized: "speakers.redetect.title"),
             isPresented: Binding(

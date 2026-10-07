@@ -1270,21 +1270,23 @@ final class CloudFolderSyncController: ObservableObject {
             await syncNow()
             return true
         }
+        // Speaker components held back at the last sync are released once every
+        // recent device reads them: after an update, or when an old device has
+        // not synced for long enough.
+        let state = syncMode == .automaticICloud ? automaticState : customState
+        let now = Date()
+        let releasesSpeakerComponents = !CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+            devices: devices, ownDeviceId: state.deviceId, now: lastSyncDate ?? now
+        ) && CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+            devices: packageDevices ?? devices, ownDeviceId: state.deviceId, now: now
+        )
         if let packageDevices, packageDevices != devices {
-            let state = syncMode == .automaticICloud ? automaticState : customState
-            let now = Date()
-            // A device that now reads speaker components releases the ones held back for it.
-            let releasesSpeakerComponents = !CloudFolderSyncEngine.speakerComponentsCanBeWritten(
-                devices: devices, ownDeviceId: state.deviceId, now: now
-            ) && CloudFolderSyncEngine.speakerComponentsCanBeWritten(
-                devices: packageDevices, ownDeviceId: state.deviceId, now: now
-            )
             devices = packageDevices
             deviceCount = packageDevices.count
-            if releasesSpeakerComponents {
-                await syncNow()
-                return true
-            }
+        }
+        if releasesSpeakerComponents {
+            await syncNow()
+            return true
         }
         return false
     }
