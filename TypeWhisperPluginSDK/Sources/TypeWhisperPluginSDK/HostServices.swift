@@ -317,7 +317,7 @@ public enum PluginHTTPClient {
             let start = ContinuousClock.now
 
             do {
-                let (data, response) = try await session.data(for: request)
+                let (data, response) = try await dataStartingFreshAfterCancellation(for: request, on: session)
                 let elapsed = ContinuousClock.now - start
                 let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                 logger.info("\(method) \(url) -> \(status) (\(elapsed))")
@@ -411,6 +411,24 @@ public enum PluginHTTPClient {
                 logger.warning("\(method) \(url) transient failure after \(elapsed), retrying in \(delay) (attempt \(attempt + 1)): \(error.localizedDescription)")
                 try await sleeper(delay)
             }
+        }
+    }
+
+    /// Cancelling a request mid-upload can leave its pooled connection broken while
+    /// the session still hands it out. When a live preview was cancelled at the end
+    /// of a dictation, the final transcription started on that connection 28 ms later
+    /// and hung until its request timeout (#1532). The reset runs in the cancellation
+    /// handler, synchronously with `Task.cancel()`, so it lands before any request the
+    /// caller starts next.
+    private static func dataStartingFreshAfterCancellation(
+        for request: URLRequest,
+        on session: any PluginHTTPClientSession
+    ) async throws -> (Data, URLResponse) {
+        nonisolated(unsafe) let cancelledSession = session
+        return try await withTaskCancellationHandler {
+            try await session.data(for: request)
+        } onCancel: {
+            resetSharedSession(matching: cancelledSession, reason: "request cancelled")
         }
     }
 

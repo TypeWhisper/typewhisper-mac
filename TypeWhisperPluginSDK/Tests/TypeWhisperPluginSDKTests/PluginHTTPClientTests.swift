@@ -56,6 +56,50 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.sessions[1].requestedPaths, ["/retry"])
     }
 
+    func testCancelledRequestMovesTheNextRequestToAFreshSession() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(
+                outcomes: [.success(Self.okResponse())],
+                hangsUntilCancelled: store.sessions.isEmpty
+            )
+        }
+
+        let preview = Task { try await PluginHTTPClient.data(for: Self.request(path: "/preview")) }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while store.sessions.first?.requestedPaths.isEmpty ?? true {
+            XCTAssertLessThan(ContinuousClock.now, deadline, "the preview request never started")
+            await Task.yield()
+        }
+
+        preview.cancel()
+        let (data, _) = try await PluginHTTPClient.data(for: Self.request(path: "/final"))
+
+        XCTAssertEqual(String(data: data, encoding: .utf8), "ok")
+        XCTAssertEqual(store.sessions.count, 2)
+        guard store.sessions.count == 2 else { return }
+        XCTAssertTrue(store.sessions[0].didInvalidate)
+        XCTAssertEqual(store.sessions[0].requestedPaths, ["/preview"])
+        XCTAssertEqual(store.sessions[1].requestedPaths, ["/final"])
+        let previewResult = await preview.result
+        XCTAssertThrowsError(try previewResult.get())
+    }
+
+    func testCompletedRequestsKeepTheSharedSession() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.success(Self.okResponse())])
+        }
+
+        let first = Task { try await PluginHTTPClient.data(for: Self.request(path: "/first")) }
+        _ = try await first.value
+        first.cancel()
+        _ = try await PluginHTTPClient.data(for: Self.request(path: "/second"))
+
+        XCTAssertEqual(store.sessions.count, 1)
+        XCTAssertFalse(store.sessions[0].didInvalidate)
+    }
+
     func testHTTPClientResourceTimeoutAllowsLongRunningRequests() async throws {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { configuration in
@@ -588,9 +632,10 @@ private final class MockHTTPSessionStore: @unchecked Sendable {
 
     func makeSession(
         outcomes: [Result<(Data, URLResponse), Error>],
-        configuration: URLSessionConfiguration? = nil
+        configuration: URLSessionConfiguration? = nil,
+        hangsUntilCancelled: Bool = false
     ) -> MockHTTPSession {
-        let session = MockHTTPSession(outcomes: outcomes)
+        let session = MockHTTPSession(outcomes: outcomes, hangsUntilCancelled: hangsUntilCancelled)
         lock.withLock {
             sessions.append(session)
             if let configuration {
@@ -607,9 +652,11 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
     private(set) var requestedPaths: [String] = []
     private(set) var requestedRequests: [URLRequest] = []
     private(set) var didInvalidate = false
+    private let hangsUntilCancelled: Bool
 
-    init(outcomes: [Result<(Data, URLResponse), Error>]) {
+    init(outcomes: [Result<(Data, URLResponse), Error>], hangsUntilCancelled: Bool = false) {
         self.outcomes = outcomes
+        self.hangsUntilCancelled = hangsUntilCancelled
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
@@ -622,6 +669,9 @@ private final class MockHTTPSession: PluginHTTPClientSession, @unchecked Sendabl
             return outcomes.first ?? .failure(URLError(.badServerResponse))
         }
 
+        if hangsUntilCancelled {
+            try await Task.sleep(for: .seconds(60))
+        }
         return try outcome.get()
     }
 
