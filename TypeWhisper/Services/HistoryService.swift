@@ -19,6 +19,7 @@ struct HistoryQuery: Sendable {
         case all
         case inbox
         case withAudio
+        case withSpeakers
         case failed
     }
 
@@ -91,6 +92,16 @@ struct HistoryPostFilter {
             || (record.appName.map { Self.text($0, contains: searchText) } ?? false)
             || (record.appDomain.map { Self.text($0, contains: searchText) } ?? false)
             || sourcesMatchingSearch.contains(record.source)
+            || matchesSpeakerName(record)
+    }
+
+    /// Recordings are also found by the names of their speakers. Only the
+    /// names are decoded, not the transcript they belong to: a name from an
+    /// earlier detection run still finds the recording.
+    private func matchesSpeakerName(_ record: TranscriptionRecord) -> Bool {
+        guard let data = record.speakerNamesData,
+              let names = try? JSONDecoder().decode(SpeakerNameTable.self, from: data) else { return false }
+        return names.entries.contains { Self.text($0.displayName, contains: searchText) }
     }
 
     /// Case-insensitive and diacritic-sensitive, like the former lowercased comparison,
@@ -131,6 +142,7 @@ struct HistoryFacets: Sendable {
     let totalCount: Int
     let inboxCount: Int
     let audioCount: Int
+    let speakerCount: Int
     let failedCount: Int
     let apps: [HistoryAppFacet]
     let devices: [HistoryDeviceFacet]
@@ -166,6 +178,10 @@ final class HistoryService: ObservableObject {
     private let historySyncPreferences: HistorySyncPreferences?
 
     private(set) var totalRecords: Int = 0
+
+    /// Called with the IDs of records right after they were deleted, so data
+    /// kept elsewhere for them, such as voice embeddings, goes too.
+    var onRecordsDeleted: (([UUID]) -> Void)?
 
     /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
     /// as dictations persisted after insertion, pass the generation they were captured in.
@@ -409,6 +425,255 @@ final class HistoryService: ObservableObject {
         refreshRecentRecords()
     }
 
+    // MARK: - Speaker transcripts
+
+    /// Where the audio of a recording or imported file with speaker detection is stored.
+    func speakerAudioFileURL(forRecordID id: UUID) -> URL {
+        audioDirectory.appendingPathComponent(Self.speakerAudioFileName(for: id))
+    }
+
+    nonisolated static func speakerAudioFileName(for recordID: UUID) -> String {
+        "\(recordID.uuidString).m4a"
+    }
+
+    /// Adds a Recorder recording or an imported file whose audio was already
+    /// written to `speakerAudioFileURL(forRecordID:)`. The record waits for
+    /// speaker detection (`pending`) unless a finished transcript is given.
+    @discardableResult
+    func addSpeakerRecord(
+        id: UUID,
+        timestamp: Date = Date(),
+        text: String,
+        title: String?,
+        source: RecordingSource,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String? = nil,
+        timedText: [TimedTextEntry],
+        granularity: TimedTextGranularity,
+        words: [TranscriptionWord] = [],
+        ownSpeech: [ClosedRange<TimeInterval>] = [],
+        transcript: SpeakerTranscript? = nil,
+        capturedInClearGeneration: Int? = nil
+    ) -> Bool {
+        let audioFileName = Self.speakerAudioFileName(for: id)
+        // A recording captured before History was cleared stays cleared.
+        let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
+        guard !wasCleared, let texts = Self.validatedRecordTexts(
+            rawText: text,
+            finalText: text,
+            durationSeconds: durationSeconds
+        ), transcript?.isValid != false else {
+            try? FileManager.default.removeItem(at: audioDirectory.appendingPathComponent(audioFileName))
+            return false
+        }
+        let record = TranscriptionRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: title.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed.isEmpty ? "unknown" : engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioFileName
+        )
+        record.originDeviceID = historySyncPreferences?.deviceID ?? ""
+        record.originPlatformRaw = "macOS"
+        record.source = source
+        // History audio sync carries WAV only; speaker audio follows with speaker sync.
+        record.historySyncAudioEligible = false
+        record.timedText = timedText
+        record.timedTextGranularity = granularity
+        record.speakerWords = words
+        record.speakerOwnSpeech = ownSpeech
+        record.speakerTranscript = transcript
+        record.speakerTranscriptState = transcript == nil ? .pending : .ready
+        if transcript != nil { record.speakerTranscriptUpdatedAt = Date() }
+        modelContext.insert(record)
+        save()
+        refreshRecentRecords()
+        return true
+    }
+
+    func setSpeakerTranscriptState(_ state: SpeakerTranscriptState?, forRecordID id: UUID) {
+        guard let record = record(withID: id), record.speakerTranscriptState != state else { return }
+        record.speakerTranscriptState = state
+        save()
+        refreshRecentRecords()
+    }
+
+    func setTimedText(
+        _ timedText: [TimedTextEntry],
+        granularity: TimedTextGranularity,
+        words: [TranscriptionWord] = [],
+        wordsAreFromSecondPass: Bool = false,
+        forRecordID id: UUID
+    ) {
+        guard let record = record(withID: id) else { return }
+        record.timedText = timedText
+        record.timedTextGranularity = granularity
+        record.speakerWords = words
+        record.speakerWordsAreFromSecondPass = wordsAreFromSecondPass ? true : nil
+        save()
+    }
+
+    /// Stores the result of a detection run. Names given for an earlier run
+    /// no longer apply and are removed unless new ones are passed.
+    @discardableResult
+    func storeSpeakerTranscript(
+        _ transcript: SpeakerTranscript,
+        names: SpeakerNameTable? = nil,
+        forRecordID id: UUID
+    ) -> Bool {
+        guard transcript.isValid, let record = record(withID: id) else { return false }
+        let now = Date()
+        // A new run replaces the names too, even when it carries none over.
+        if record.speakerNamesData != nil || names != nil { record.speakerNamesUpdatedAt = now }
+        record.speakerTranscript = transcript
+        record.speakerNames = names.flatMap { $0.applies(to: transcript) ? $0.stamped(against: nil, at: now) : nil }
+        record.speakerTranscriptState = .ready
+        record.speakerTranscriptUpdatedAt = now
+        save()
+        refreshRecentRecords()
+        return true
+    }
+
+    /// Stores a correction of the current transcript: reassigned, merged,
+    /// split, or edited turns. Speakers are numbered again by first
+    /// appearance and their names move with them.
+    @discardableResult
+    func updateSpeakerTranscript(
+        _ transcript: SpeakerTranscript,
+        names: SpeakerNameTable?,
+        forRecordID id: UUID,
+        updatesText: Bool = false
+    ) -> Bool {
+        guard let record = record(withID: id),
+              record.speakerTranscript?.revision == transcript.revision else { return false }
+        let (renumbered, newSpeakerIDs) = transcript.renumbered()
+        guard renumbered.isValid else { return false }
+        // An edit that removes all text would leave the record's text and
+        // the transcript out of step.
+        let text = Self.sanitize(renumbered.joinedText)
+        guard !updatesText || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let movedNames = names?.renamingSpeakers(newSpeakerIDs)
+        let now = Date()
+        if record.speakerTranscript != renumbered { record.speakerTranscriptUpdatedAt = now }
+        // Names moved to renumbered speakers are new names there; the old
+        // speakers' names are recorded as removed so other devices drop them.
+        let newNames = movedNames
+            .map { $0.stamped(against: record.speakerNames, at: now) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        if !(newNames?.hasSameNames(as: record.speakerNames) ?? (record.speakerNames == nil)) {
+            record.speakerNamesUpdatedAt = now
+        }
+        record.speakerTranscript = renumbered
+        record.speakerNames = newNames
+        if updatesText {
+            record.finalText = text
+            record.renderedDocument = nil
+            record.synchronizedStructuredDocument = nil
+            record.wordsCount = text.split(separator: " ").count
+            record.contentUpdatedAt = Date()
+        }
+        save()
+        refreshRecentRecords()
+        return true
+    }
+
+    /// The newest records with speaker detection, whatever its state.
+    func speakerRecords(limit: Int) -> [TranscriptionRecord] {
+        var descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.speakerTranscriptStateRaw != nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Records that have speaker names, newest first.
+    func recordsWithSpeakerNames() -> [TranscriptionRecord] {
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.speakerNamesData != nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    /// Renames the speakers linked to a voice profile in every recording.
+    func renameSpeakers(linkedTo profileID: UUID, to name: String) {
+        var changed = false
+        let now = Date()
+        for record in recordsWithSpeakerNames() {
+            guard let original = record.speakerNames else { continue }
+            var names = original
+            for entry in names.entries where entry.profileID == profileID && entry.displayName != name {
+                names.setName(name, for: entry.speakerID, profileID: profileID, isSuggestion: entry.isSuggestion == true)
+                changed = true
+                // A renamed suggestion is still only a suggestion and is not synced.
+                if entry.isSuggestion != true { record.speakerNamesUpdatedAt = now }
+            }
+            record.speakerNames = names.stamped(against: original, at: now)
+        }
+        guard changed else { return }
+        save()
+        refreshRecentRecords()
+    }
+
+    func setSpeakerName(
+        _ name: String,
+        for speakerID: String,
+        profileID: UUID? = nil,
+        isSuggestion: Bool = false,
+        inRecordID id: UUID
+    ) {
+        guard let record = record(withID: id), let transcript = record.speakerTranscript else { return }
+        var names = record.speakerNames ?? SpeakerNameTable(transcriptRevision: transcript.revision)
+        let confirmedBefore = names.confirmedEntries
+        names.setName(name, for: speakerID, profileID: profileID, isSuggestion: isSuggestion)
+        let now = Date()
+        let stamped = names.stamped(against: record.speakerNames, at: now)
+        // Suggestions from a voice profile stay on this device; only confirmed names sync.
+        let confirmedAfter = stamped.confirmedEntries
+        if confirmedAfter.count != confirmedBefore.count
+            || !zip(confirmedAfter, confirmedBefore).allSatisfy({ $0.isSameName(as: $1) }) {
+            record.speakerNamesUpdatedAt = now
+        }
+        record.speakerNames = stamped.isEmpty ? nil : stamped
+        save()
+        refreshRecentRecords()
+    }
+
+    /// Speaker detection does not survive a quit; such records can be retried.
+    func failInterruptedSpeakerTranscripts() {
+        let pending = SpeakerTranscriptState.pending.rawValue
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.speakerTranscriptStateRaw == pending }
+        )
+        guard let records = try? modelContext.fetch(descriptor), !records.isEmpty else { return }
+        for record in records {
+            record.speakerTranscriptState = .failed
+        }
+        save()
+        refreshRecentRecords()
+    }
+
+    /// Names given to speakers in earlier recordings, most recent first.
+    func speakerNameHistory() -> [String] {
+        var descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.speakerNamesData != nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 200
+        var seen = Set<String>()
+        return ((try? modelContext.fetch(descriptor)) ?? [])
+            .flatMap { $0.speakerNames?.entries.map(\.displayName) ?? [] }
+            .filter { seen.insert(SpeakerTranscriptPresentation.nameKey($0)).inserted }
+    }
+
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
         guard let fileName = record.audioFileName else { return nil }
         let url = audioDirectory.appendingPathComponent(fileName)
@@ -456,34 +721,40 @@ final class HistoryService: ObservableObject {
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {
-        historySyncPreferences?.recordExplicitDeletion(record.id)
+        let id = record.id
+        historySyncPreferences?.recordExplicitDeletion(id)
         deleteAudioFile(for: record)
         modelContext.delete(record)
         save()
         refreshRecentRecords()
+        onRecordsDeleted?([id])
     }
 
     func deleteRecords(_ records: [TranscriptionRecord]) {
-        historySyncPreferences?.recordExplicitDeletions(records.map(\.id))
+        let ids = records.map(\.id)
+        historySyncPreferences?.recordExplicitDeletions(ids)
         for record in records {
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
         save()
         refreshRecentRecords()
+        onRecordsDeleted?(ids)
     }
 
     func clearAll() {
         clearGeneration += 1
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
-            historySyncPreferences?.recordExplicitDeletions(allRecords.map(\.id))
+            let ids = allRecords.map(\.id)
+            historySyncPreferences?.recordExplicitDeletions(ids)
             for record in allRecords {
                 deleteAudioFile(for: record)
                 modelContext.delete(record)
             }
             save()
             refreshRecentRecords()
+            onRecordsDeleted?(ids)
         } catch {
             logger.error("Failed to clear records: \(error.localizedDescription)")
         }
@@ -667,6 +938,7 @@ final class HistoryService: ObservableObject {
         totalCount: 0,
         inboxCount: 0,
         audioCount: 0,
+        speakerCount: 0,
         failedCount: 0,
         apps: [],
         devices: []
@@ -690,6 +962,7 @@ final class HistoryService: ObservableObject {
         var totalCount = 0
         var inboxCount = 0
         var audioCount = 0
+        var speakerCount = 0
         var failedCount = 0
         var apps: [String: AppAccumulator] = [:]
         var devices: [DeviceKey: Int] = [:]
@@ -705,6 +978,7 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.processingStateRaw,
             \TranscriptionRecord.audioFileName,
             \TranscriptionRecord.remoteAudioRelativePath,
+            \TranscriptionRecord.speakerTranscriptStateRaw,
         ]
 
         try context.enumerate(descriptor, batchSize: 500) { record in
@@ -712,6 +986,7 @@ final class HistoryService: ObservableObject {
             totalCount += 1
             if record.isOpenInInbox { inboxCount += 1 }
             if record.audioFileName != nil || record.hasRemoteAudio { audioCount += 1 }
+            if record.speakerTranscriptStateRaw != nil { speakerCount += 1 }
             if record.processingState == .failed { failedCount += 1 }
 
             if let bundleID = record.appBundleIdentifier,
@@ -742,6 +1017,7 @@ final class HistoryService: ObservableObject {
             totalCount: totalCount,
             inboxCount: inboxCount,
             audioCount: audioCount,
+            speakerCount: speakerCount,
             failedCount: failedCount,
             apps: apps.map {
                 HistoryAppFacet(bundleID: $0.key, name: $0.value.name, count: $0.value.count)
@@ -859,13 +1135,15 @@ final class HistoryService: ObservableObject {
             return
         }
         guard !old.isEmpty else { return }
-        historySyncPreferences?.recordRetentionPrunes(old.map(\.id))
+        let ids = old.map(\.id)
+        historySyncPreferences?.recordRetentionPrunes(ids)
         for record in old {
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
         save()
         refreshRecentRecords()
+        onRecordsDeleted?(ids)
     }
 
     func completeInbox(_ record: TranscriptionRecord) {
@@ -956,16 +1234,47 @@ final class HistoryService: ObservableObject {
                     )
                 }
             )
+            let transcript = synchronizedSpeakerTranscript(for: record)
             return UserDataSyncHistoryRecord(
                 content: content,
                 inbox: inbox,
                 audio: synchronizedAudioDescriptor(for: record),
+                transcript: transcript,
+                speakers: transcript.flatMap { synchronizedSpeakerNames(for: record, transcript: $0) },
                 localAudioFileURL: record.historySyncAudioEligible
                     ? audioFileURL(for: record)
                     : nil,
                 audioEligible: record.historySyncAudioEligible
             )
         }
+    }
+
+    /// The speaker transcript as a sync component, once it is finished and
+    /// has changed on some device.
+    private func synchronizedSpeakerTranscript(for record: TranscriptionRecord) -> UserDataSyncHistoryTranscriptV1? {
+        guard record.speakerTranscriptState == .ready,
+              record.speakerTranscriptUpdatedAt.timeIntervalSince1970 > 0,
+              let transcript = record.speakerTranscript, transcript.isValid else { return nil }
+        return UserDataSyncHistoryTranscriptV1(
+            recordID: record.id,
+            updatedAt: record.speakerTranscriptUpdatedAt,
+            transcript: transcript
+        )
+    }
+
+    /// The confirmed speaker names as a sync component; an empty list
+    /// removes the names on other devices.
+    private func synchronizedSpeakerNames(
+        for record: TranscriptionRecord,
+        transcript: UserDataSyncHistoryTranscriptV1
+    ) -> UserDataSyncHistorySpeakersV1? {
+        guard record.speakerNamesUpdatedAt.timeIntervalSince1970 > 0 else { return nil }
+        return UserDataSyncHistorySpeakersV1(
+            recordID: record.id,
+            updatedAt: record.speakerNamesUpdatedAt,
+            transcriptRevision: transcript.revision,
+            table: record.speakerNames
+        )
     }
 
     func userDataSyncHistoryDeletions() -> [UserDataSyncHistoryDeletion] {
@@ -978,6 +1287,7 @@ final class HistoryService: ObservableObject {
     }
 
     func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        var deletedIDs: [UUID] = []
         for mutation in mutations {
             switch mutation {
             case .upsertHistoryContent(let content):
@@ -1036,10 +1346,50 @@ final class HistoryService: ObservableObject {
                 record.remoteAudioDurationSeconds = audio.durationSeconds
                 record.audioUpdatedAt = audio.updatedAt
                 record.historySyncAudioEligible = false
+            case .upsertHistoryTranscript(let transcript):
+                guard historySyncPreferences?.isSuppressed(transcript.recordID) != true,
+                      transcript.isValid else { continue }
+                let record = remoteRecord(for: transcript.recordID, timestamp: transcript.updatedAt)
+                guard transcript.updatedAt >= record.speakerTranscriptUpdatedAt else { continue }
+                record.speakerTranscript = transcript.speakerTranscript
+                record.speakerTranscriptState = .ready
+                record.speakerTranscriptUpdatedAt = transcript.updatedAt
+            case .upsertHistorySpeakers(let speakers):
+                guard historySyncPreferences?.isSuppressed(speakers.recordID) != true,
+                      speakers.isValid else { continue }
+                let record = remoteRecord(for: speakers.recordID, timestamp: speakers.updatedAt)
+                // Read the stored table directly: the names may arrive before their transcript.
+                let local = record.speakerNamesData.flatMap {
+                    try? JSONDecoder().decode(SpeakerNameTable.self, from: $0)
+                }
+                if var merged = local, merged.transcriptRevision == speakers.transcriptRevision {
+                    // Same transcript: merge name by name, so concurrent names
+                    // for different speakers on two devices both survive.
+                    let publishes = merged.merge(
+                        names: speakers.entries,
+                        cleared: speakers.cleared,
+                        remoteDate: speakers.updatedAt,
+                        localDate: record.speakerNamesUpdatedAt
+                    )
+                    record.speakerNamesData = try? JSONEncoder().encode(merged)
+                    let newest = max(record.speakerNamesUpdatedAt, speakers.updatedAt)
+                    // Holding a name the sender lacks: publish the merged table
+                    // with a newer date so the sender converges.
+                    record.speakerNamesUpdatedAt = publishes
+                        ? max(newest, Date(), speakers.updatedAt.addingTimeInterval(0.001))
+                        : newest
+                } else {
+                    guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { continue }
+                    record.speakerNamesData = try? JSONEncoder().encode(
+                        speakers.nameTable(keepingSuggestionsFrom: local)
+                    )
+                    record.speakerNamesUpdatedAt = speakers.updatedAt
+                }
             case .deleteHistory(let recordID):
                 if let record = record(withID: recordID) {
                     deleteAudioFile(for: record)
                     modelContext.delete(record)
+                    deletedIDs.append(recordID)
                 }
             case .upsertDictionary,
                  .deleteDictionary,
@@ -1050,6 +1400,7 @@ final class HistoryService: ObservableObject {
         }
         try modelContext.save()
         refreshRecentRecords()
+        if !deletedIDs.isEmpty { onRecordsDeleted?(deletedIDs) }
     }
 
     func installSynchronizedAudio(recordID: UUID, sourceURL: URL) throws {
@@ -1184,6 +1535,8 @@ final class HistoryService: ObservableObject {
             predicate = #Predicate { $0.inboxStateRaw == openInboxState }
         case .withAudio:
             predicate = #Predicate { $0.audioFileName != nil || $0.remoteAudioRelativePath != nil }
+        case .withSpeakers:
+            predicate = #Predicate { $0.speakerTranscriptStateRaw != nil }
         case .failed:
             predicate = #Predicate { $0.processingStateRaw == failedProcessingState }
         }
@@ -1265,6 +1618,7 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.sourceRaw,
             \TranscriptionRecord.originDeviceID,
             \TranscriptionRecord.originPlatformRaw,
+            \TranscriptionRecord.speakerNamesData,
         ]
         var ids: [UUID] = []
         let totalCount = try enumerateMatches(

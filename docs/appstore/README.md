@@ -108,10 +108,12 @@ The marketplace lists the bundled plugins from
 `AppStore/Resources/AppStorePluginCatalog.json`. Installing a plugin marks it as
 installed and loads the bundled copy; plugins that are not installed are never
 loaded. Apple Speech is installed on first launch, as in the direct app.
+Speaker Detection belongs to the Premium speaker feature: it is always loaded,
+is managed on the Speakers page and is not listed in the marketplace.
 
 | Status | Plugins |
 |---|---|
-| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
+| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
 | Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), and the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB) |
 | Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local): they run external programs or downloaded binaries |
 

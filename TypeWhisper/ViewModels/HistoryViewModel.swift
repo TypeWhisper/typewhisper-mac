@@ -52,6 +52,7 @@ enum HistoryCollectionScope: String, CaseIterable, Identifiable, Hashable {
     case inbox
     case all
     case withAudio
+    case withSpeakers
     case failed
 
     var id: String { rawValue }
@@ -61,6 +62,7 @@ enum HistoryCollectionScope: String, CaseIterable, Identifiable, Hashable {
         case .inbox: String(localized: "Inbox")
         case .all: String(localized: "All History")
         case .withAudio: String(localized: "With Audio")
+        case .withSpeakers: String(localized: "speakers.mailbox.title")
         case .failed: String(localized: "Failed")
         }
     }
@@ -70,6 +72,7 @@ enum HistoryCollectionScope: String, CaseIterable, Identifiable, Hashable {
         case .inbox: "tray"
         case .all: "clock.arrow.circlepath"
         case .withAudio: "waveform"
+        case .withSpeakers: "person.2"
         case .failed: "exclamationmark.triangle"
         }
     }
@@ -221,7 +224,6 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var queryID = UUID()
     @Published private(set) var pendingDeletionIDs: Set<UUID> = []
 
-    let audioPlaybackService = AudioPlaybackService()
 
     private let historyService: HistoryService
     private let textDiffService: TextDiffService
@@ -259,6 +261,7 @@ final class HistoryViewModel: ObservableObject {
     }
     @Published private(set) var inboxCount = 0
     @Published private(set) var audioCount = 0
+    @Published private(set) var speakerCount = 0
     @Published private(set) var failedCount = 0
 
     init(
@@ -287,6 +290,7 @@ final class HistoryViewModel: ObservableObject {
         hasMoreRecords = records.count < totalMatchingRecordCount
         inboxCount = records.count(where: \.isOpenInInbox)
         audioCount = records.count(where: Self.hasAudio)
+        speakerCount = records.count { $0.speakerTranscriptState != nil }
         failedCount = records.count { $0.processingState == .failed }
         devices = syncController?.devices ?? []
         availableApps = Self.computeAvailableApps(records)
@@ -359,6 +363,7 @@ final class HistoryViewModel: ObservableObject {
         case .inbox: inboxCount
         case .all: historyService.totalRecords
         case .withAudio: audioCount
+        case .withSpeakers: speakerCount
         case .failed: failedCount
         }
     }
@@ -861,6 +866,7 @@ final class HistoryViewModel: ObservableObject {
             case .inbox: .inbox
             case .all: .all
             case .withAudio: .withAudio
+            case .withSpeakers: .withSpeakers
             case .failed: .failed
             }
         case .device(let deviceID):
@@ -985,6 +991,7 @@ final class HistoryViewModel: ObservableObject {
     private func applyFacets(_ facets: HistoryFacets) {
         inboxCount = facets.inboxCount
         audioCount = facets.audioCount
+        speakerCount = facets.speakerCount
         failedCount = facets.failedCount
         availableApps = facets.apps
             .sorted {
@@ -1174,7 +1181,6 @@ final class HistoryViewModel: ObservableObject {
         switch transition {
         case .recordSelection(let selection):
             detailViewMode = .final
-            audioPlaybackService.stop()
             selectedRecordIDs = selection
         case .navigation(let selection):
             navigationSelection = selection
@@ -1213,6 +1219,7 @@ final class HistoryViewModel: ObservableObject {
         case .inbox: records.filter(\.isOpenInInbox)
         case .all: records
         case .withAudio: records.filter(Self.hasAudio)
+        case .withSpeakers: records.filter { $0.speakerTranscriptState != nil }
         case .failed: records.filter { $0.processingState == .failed }
         }
     }

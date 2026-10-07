@@ -18,6 +18,9 @@ final class WatchFolderViewModel: ObservableObject {
     @Published var outputFormat: WatchFolderOutputFormat = .markdown {
         didSet { UserDefaults.standard.set(outputFormat.rawValue, forKey: UserDefaultsKeys.watchFolderOutputFormat) }
     }
+    @Published var detectSpeakers: Bool = false {
+        didSet { UserDefaults.standard.set(detectSpeakers, forKey: UserDefaultsKeys.watchFolderDetectSpeakers) }
+    }
     @Published var deleteSourceFiles: Bool = false {
         didSet { UserDefaults.standard.set(deleteSourceFiles, forKey: UserDefaultsKeys.watchFolderDeleteSource) }
     }
@@ -65,10 +68,17 @@ final class WatchFolderViewModel: ObservableObject {
         let engineId: String?
         let modelId: String?
         let languageSelection: LanguageSelection
+        /// Labels the output by speaker (Premium).
+        var detectSpeakers = false
     }
 
     var transcriptionOverrides: TranscriptionOverrides {
-        TranscriptionOverrides(engineId: selectedEngine, modelId: selectedModel, languageSelection: languageSelection)
+        TranscriptionOverrides(
+            engineId: selectedEngine,
+            modelId: selectedModel,
+            languageSelection: languageSelection,
+            detectSpeakers: detectSpeakers
+        )
     }
 
     var availableEngines: [TranscriptionEnginePlugin] {
@@ -171,6 +181,7 @@ final class WatchFolderViewModel: ObservableObject {
             storedValue: UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderOutputFormat)
         )
         deleteSourceFiles = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDeleteSource)
+        detectSpeakers = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderDetectSpeakers)
         autoStartOnLaunch = UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart)
         languageSelection = LanguageSelection(
             storedValue: UserDefaults.standard.string(forKey: UserDefaultsKeys.watchFolderLanguage),

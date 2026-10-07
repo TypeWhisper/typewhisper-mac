@@ -115,8 +115,10 @@ final class PremiumSettingsViewTests: XCTestCase {
         XCTAssertEqual(commercial.action(for: .calendarMeeting), .openSettings(.calendarMeeting))
         XCTAssertEqual(commercial.action(for: .correctionLearning), .openSettings(.correctionLearning))
         XCTAssertEqual(commercial.action(for: .cloudSync), .manageAccess)
+        XCTAssertEqual(commercial.action(for: .speakerWorkspace), .openSettings(.speakerWorkspace))
 
         let account = access(hasPremiumEntitlement: true, isSignedIn: true)
+        XCTAssertEqual(account.action(for: .speakerWorkspace), .openSettings(.speakerWorkspace))
         XCTAssertEqual(account.action(for: .calendarMeeting), .openSettings(.calendarMeeting))
         XCTAssertEqual(account.action(for: .correctionLearning), .manageAccess)
         XCTAssertEqual(account.action(for: .cloudSync), .openSettings(.cloudSync))
@@ -155,6 +157,13 @@ final class PremiumSettingsViewTests: XCTestCase {
                             XCTAssertEqual(snapshot.action(for: .calendarMeeting), .none)
                             XCTAssertEqual(snapshot.action(for: .correctionLearning), .none)
                             XCTAssertEqual(snapshot.action(for: .cloudSync), .none)
+                            XCTAssertEqual(snapshot.action(for: .speakerWorkspace), .none)
+                            XCTAssertEqual(
+                                snapshot.requirement(for: .speakerWorkspace),
+                                .commercialOrPremiumAccount
+                            )
+                        } else {
+                            XCTAssertEqual(snapshot.requirement(for: .speakerWorkspace), .available)
                         }
                     }
                 }

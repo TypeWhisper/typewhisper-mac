@@ -159,6 +159,9 @@ enum UserDefaultsKeys {
     static let recorderTranscriptionLanguage = "recorderTranscriptionLanguage"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
+    static let recorderDetectSpeakers = "recorderDetectSpeakers"
+    static let calendarMeetingDetectSpeakers = "calendarMeetingDetectSpeakers"
+    static let speakerStripCollapsed = "speakerStripCollapsed"
 
     // MARK: - File Transcription
     static let fileTranscriptionEngine = "fileTranscriptionEngine"
@@ -180,6 +183,7 @@ enum UserDefaultsKeys {
     static let watchFolderOutputFormat = "watchFolderOutputFormat"
     static let watchFolderDeleteSource = "watchFolderDeleteSource"
     static let watchFolderAutoStart = "watchFolderAutoStart"
+    static let watchFolderDetectSpeakers = "watchFolderDetectSpeakers"
     static let watchFolderLanguage = "watchFolderLanguage"
     static let watchFolderEngine = "watchFolderEngine"
     static let watchFolderModel = "watchFolderModel"

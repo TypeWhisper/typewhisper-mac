@@ -120,11 +120,12 @@ enum UserDataExportService {
     static let settingsBackupFileName = "settings-backup.json"
     static let readmeFileName = "README.txt"
 
-    /// Top-level entries of the Application Support folder that are not user
-    /// data: installed plugin bundles, the marketplace cache, legacy model
-    /// downloads, and the local API port/token files.
+    /// Top-level entries of the Application Support folder that are not
+    /// exported: installed plugin bundles, the marketplace cache, legacy model
+    /// downloads, the local API port/token files, and voice profiles, which
+    /// are biometric data that stays on this Mac.
     static let excludedTopLevelNames: Set<String> = [
-        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json",
+        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "VoiceProfiles",
     ]
 
     /// Model download folders inside `PluginData/<pluginId>/`, compared

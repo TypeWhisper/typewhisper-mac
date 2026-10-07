@@ -132,6 +132,11 @@ struct FileTranscriptionView: View {
                         Text(WatchFolderOutputFormat.vtt.displayName).tag(WatchFolderOutputFormat.vtt)
                     }
 
+                    SpeakerDetectionToggle(
+                        isOn: $watchFolder.detectSpeakers,
+                        descriptionKey: "speakers.toggle.watchFolderDescription"
+                    )
+
                     Toggle(String(localized: "watchFolder.deleteSource"), isOn: $watchFolder.deleteSourceFiles)
 
                     Toggle(String(localized: "watchFolder.autoStart"), isOn: $watchFolder.autoStartOnLaunch)

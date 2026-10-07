@@ -324,7 +324,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         let segments: [PluginTranscriptionSegment]
         if let tokenTimings = finalResult.tokenTimings, !tokenTimings.isEmpty {
-            segments = Self.groupTokensIntoSegments(tokenTimings)
+            let words = Self.groupTokensIntoWords(tokenTimings)
+            segments = Self.groupWordsIntoSegments(words)
+            PluginWordTimings.report(words)
         } else {
             segments = []
         }
@@ -367,15 +369,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
     // MARK: - Token-to-Segment Grouping
 
-    private static func groupTokensIntoSegments(_ tokenTimings: [TokenTiming]) -> [PluginTranscriptionSegment] {
-        // Phase 1: Group sub-word tokens into words
-        struct WordTiming {
-            let word: String
-            let start: Double
-            let end: Double
-        }
-
-        var words: [WordTiming] = []
+    static func groupTokensIntoWords(_ tokenTimings: [TokenTiming]) -> [PluginWordTiming] {
+        var words: [PluginWordTiming] = []
         var currentWord = ""
         var wordStart: Double = 0
         var wordEnd: Double = 0
@@ -389,7 +384,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             if startsNewWord && !currentWord.isEmpty {
                 let trimmed = currentWord.trimmingCharacters(in: .whitespaces)
                 if !trimmed.isEmpty {
-                    words.append(WordTiming(word: trimmed, start: wordStart, end: wordEnd))
+                    words.append(PluginWordTiming(text: trimmed, start: wordStart, end: wordEnd))
                 }
                 currentWord = ""
             }
@@ -405,12 +400,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         let lastTrimmed = currentWord.trimmingCharacters(in: .whitespaces)
         if !lastTrimmed.isEmpty {
-            words.append(WordTiming(word: lastTrimmed, start: wordStart, end: wordEnd))
+            words.append(PluginWordTiming(text: lastTrimmed, start: wordStart, end: wordEnd))
         }
+        return words
+    }
 
+    /// Groups words into sentence segments (split at sentence-ending punctuation or pause > 0.8s).
+    static func groupWordsIntoSegments(_ words: [PluginWordTiming]) -> [PluginTranscriptionSegment] {
         guard !words.isEmpty else { return [] }
 
-        // Phase 2: Group words into sentence segments (split at sentence-ending punctuation or pause > 0.8s)
         let sentenceEndings: Set<Character> = [".", "?", "!"]
         let pauseThreshold: Double = 0.8
 
@@ -421,10 +419,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         for i in 0..<words.count {
             let word = words[i]
-            segmentWords.append(word.word)
+            segmentWords.append(word.text)
             segmentEnd = word.end
 
-            let isSentenceEnd = word.word.last.map { sentenceEndings.contains($0) } ?? false
+            let isSentenceEnd = word.text.last.map { sentenceEndings.contains($0) } ?? false
             let hasLongPause = i + 1 < words.count && (words[i + 1].start - word.end) > pauseThreshold
             let isLast = i == words.count - 1
 

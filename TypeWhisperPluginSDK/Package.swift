@@ -204,6 +204,18 @@ let package = Package(
             ]
         ),
         .target(
+            name: "SpeakerDiarizationPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Plugins/SpeakerDiarizationPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "CohereLocalPlugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -592,6 +604,15 @@ let package = Package(
                 "ParakeetPlugin",
             ],
             path: "Plugins/ParakeetPlugin/Tests"
+        ),
+        .testTarget(
+            name: "SpeakerDiarizationPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "SpeakerDiarizationPlugin",
+            ],
+            path: "Plugins/SpeakerDiarizationPlugin/Tests"
         ),
         .testTarget(
             name: "CohereLocalPluginTests",

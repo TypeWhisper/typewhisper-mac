@@ -1030,6 +1030,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "premium-calendar": .calendarMeeting
         case "premium-learning": .correctionLearning
         case "premium-sync": .cloudSync
+        case "premium-speakers": .speakerWorkspace
         default: nil
         }
     }
@@ -1040,7 +1041,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if AppConstants.screenshotState == "history" {
+        if ["history", "history-speakers"].contains(AppConstants.screenshotState) {
             ManagedAppWindowOpener.shared.open(id: "history")
             prepareScreenshotHistoryWindow()
             return
@@ -1127,7 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSSize(width: 640, height: 820)
         case .cloudSync:
             NSSize(width: 640, height: 640)
-        case .access, .correctionLearning:
+        case .access, .correctionLearning, .speakerWorkspace:
             nil
         }
         prepareScreenshotWindow(window, contentSize: contentSize)

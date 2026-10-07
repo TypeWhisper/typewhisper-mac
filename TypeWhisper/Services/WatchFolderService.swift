@@ -150,6 +150,8 @@ enum WatchFolderExportBuilder {
 @MainActor
 final class WatchFolderService: ObservableObject {
     @Published var isWatching: Bool = false
+    /// Labels a transcription's segments by speaker; throws without Premium.
+    var speakerLabeler: (@MainActor (TranscriptionResult, [Float]) async throws -> [TranscriptionSegment])?
     @Published var currentlyProcessing: String?
     @Published var processedFiles: [ProcessedFileItem] = []
 
@@ -325,6 +327,20 @@ final class WatchFolderService: ObservableObject {
         }
     }
 
+    /// A result whose text and segments carry the speaker labels, as cloud
+    /// engines with speaker labels return them.
+    static func result(_ result: TranscriptionResult, labelledWith segments: [TranscriptionSegment]) -> TranscriptionResult {
+        TranscriptionResult(
+            text: SpeakerTranscriptBuilder.textWithSpeakers(segments),
+            detectedLanguage: result.detectedLanguage,
+            duration: result.duration,
+            processingTime: result.processingTime,
+            engineUsed: result.engineUsed,
+            segments: segments,
+            words: result.words
+        )
+    }
+
     private func transcribeFile(
         url: URL,
         fingerprint: String,
@@ -338,13 +354,24 @@ final class WatchFolderService: ObservableObject {
 
         do {
             let samples = try await audioFileService.loadAudioSamples(from: url)
-            let result = try await modelManagerService.transcribe(
+            var result = try await modelManagerService.transcribe(
                 audioSamples: samples,
                 languageSelection: overrides.languageSelection,
                 task: .transcribe,
                 engineOverrideId: overrides.engineId,
                 cloudModelOverride: overrides.modelId
             )
+            if overrides.detectSpeakers, let speakerLabeler {
+                // Without Premium or without speakers the file is still written, unlabelled.
+                do {
+                    let labelled = try await speakerLabeler(result, samples)
+                    if labelled.contains(where: { $0.speakerLabel != nil }) {
+                        result = Self.result(result, labelledWith: labelled)
+                    }
+                } catch {
+                    logger.error("Speaker detection failed for watch-folder file: \(error.localizedDescription, privacy: .public)")
+                }
+            }
 
             let outputName = url.deletingPathExtension().lastPathComponent
             let exportDate = Date()

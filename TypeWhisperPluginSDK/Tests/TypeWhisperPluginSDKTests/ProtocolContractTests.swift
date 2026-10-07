@@ -517,6 +517,50 @@ private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Senda
     }
 }
 
+private final class MockSpeakerDiarizationPlugin: SpeakerDiarizationProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.diarization"
+    static let pluginName = "Mock Diarization"
+
+    private(set) var modelsInstalled = false
+    private(set) var lastRequest: PluginDiarizationRequest?
+
+    init() {}
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var diarizationProviderId: String { "mock-diarization" }
+    var diarizationProviderDisplayName: String { "Mock Diarization" }
+    var areDiarizationModelsInstalled: Bool { modelsInstalled }
+    var supportedSpeakerCounts: ClosedRange<Int> { 2...4 }
+
+    func prepareDiarizationModels(onProgress: @Sendable @escaping (Double) -> Void) async throws {
+        modelsInstalled = true
+        onProgress(1)
+    }
+
+    func deleteDiarizationModels() async throws {
+        modelsInstalled = false
+    }
+
+    func unloadDiarizationModels() async {}
+
+    func diarize(
+        _ request: PluginDiarizationRequest,
+        onProgress: @Sendable @escaping (Double) -> Void
+    ) async throws -> PluginDiarizationResult {
+        lastRequest = request
+        return PluginDiarizationResult(
+            turns: [
+                PluginSpeakerTurn(speakerLabel: "A", start: 0, end: 1),
+                PluginSpeakerTurn(speakerLabel: "B", start: 1, end: 2),
+            ],
+            speakerEmbeddings: ["A": [0.5], "B": [0.25]],
+            speakerEmbeddingModel: "mock-embedding",
+            engine: "mock-diarizer"
+        )
+    }
+}
+
 final class ProtocolContractTests: XCTestCase {
     @MainActor
     func testPluginUserInterfaceDescriptorsSupportMenusAndSettingsSidebarItems() {
@@ -884,6 +928,53 @@ final class ProtocolContractTests: XCTestCase {
 
         XCTAssertEqual(downloadedModelPlugin.deletedModelIds, ["local-small"])
         XCTAssertTrue(downloadedModelPlugin.downloadedModels.isEmpty)
+    }
+
+    func testWordTimingsReachOnlyACollectorOfTheCallingTask() async {
+        let words = [PluginWordTiming(text: "Hello", start: 0, end: 0.4)]
+        // Without a collector the report does nothing.
+        PluginWordTimings.report(words)
+
+        let collector = PluginWordTimingCollector()
+        await PluginWordTimings.$collector.withValue(collector) {
+            await Task.yield()
+            PluginWordTimings.report([PluginWordTiming(text: "Old", start: 0, end: 0.1)])
+            PluginWordTimings.report(words)
+        }
+        PluginWordTimings.report([PluginWordTiming(text: "Late", start: 1, end: 2)])
+
+        XCTAssertEqual(collector.words, words)
+    }
+
+    func testSpeakerDiarizationProtocolIsOptionalAndCarriesTurnsAndEmbeddings() async throws {
+        let legacyPlugin: Any = MockTranscriptionPlugin()
+        let provider = MockSpeakerDiarizationPlugin()
+        let erasedProvider: Any = provider
+
+        XCTAssertFalse(legacyPlugin is any SpeakerDiarizationProviderPlugin)
+        XCTAssertTrue(erasedProvider is any SpeakerDiarizationProviderPlugin)
+        XCTAssertFalse(provider.areDiarizationModelsInstalled)
+
+        try await provider.prepareDiarizationModels { _ in }
+        let result = try await provider.diarize(
+            PluginDiarizationRequest(audioURL: URL(fileURLWithPath: "/tmp/audio.m4a"), duration: 2, speakerCount: 2)
+        ) { _ in }
+
+        XCTAssertEqual(result.turns, [
+            PluginSpeakerTurn(speakerLabel: "A", start: 0, end: 1),
+            PluginSpeakerTurn(speakerLabel: "B", start: 1, end: 2),
+        ])
+        XCTAssertEqual(result.speakerEmbeddings["A"], [0.5])
+        XCTAssertEqual(result.speakerEmbeddingModel, "mock-embedding")
+        XCTAssertEqual(result.engine, "mock-diarizer")
+        XCTAssertNil(result.modelVersion)
+        XCTAssertEqual(provider.lastRequest?.speakerCount, 2)
+        XCTAssertNil(PluginDiarizationRequest(audioURL: URL(fileURLWithPath: "/tmp/a"), duration: 1).speakerCount)
+        XCTAssertTrue(PluginDiarizationResult(turns: [], engine: "x").speakerEmbeddings.isEmpty)
+        XCTAssertNil(PluginDiarizationResult(turns: [], engine: "x").speakerEmbeddingModel)
+
+        try await provider.deleteDiarizationModels()
+        XCTAssertFalse(provider.areDiarizationModelsInstalled)
     }
 
     func testStructuredTranscriptionProtocolIsOptionalAndCarriesSpeakerMetadata() async throws {

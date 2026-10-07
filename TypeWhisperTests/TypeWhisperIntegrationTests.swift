@@ -2190,6 +2190,85 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(responseText.contains("Access-Control-Allow-Headers: Content-Type"))
     }
 
+    func testHistoryAPIListsSpeakersAndSegmentsOnRequest() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = try await MainActor.run { () -> APIContext in
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+            let id = UUID()
+            try SpeakerAudioWriter.writeAAC(
+                samples: [Float](repeating: 0, count: 16_000),
+                to: context.historyService.speakerAudioFileURL(forRecordID: id)
+            )
+            XCTAssertTrue(context.historyService.addSpeakerRecord(
+                id: id,
+                text: "Good morning. Morning.",
+                title: "Meeting",
+                source: .recorder,
+                durationSeconds: 2,
+                language: "en",
+                engineUsed: "test",
+                timedText: [],
+                granularity: .segment,
+                transcript: SpeakerTranscript(source: .localDiarizer, segments: [
+                    SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 1, speakerID: "S1"),
+                    SpeakerTranscriptSegment(text: "Morning.", start: 1, end: 2, speakerID: "S2"),
+                ])
+            ))
+            context.historyService.setSpeakerName("Anna", for: "S1", inRecordID: id)
+            // A name a voice profile only suggested is not returned as the speaker's name.
+            context.historyService.setSpeakerName("Guess", for: "S2", profileID: UUID(), isSuggestion: true, inRecordID: id)
+            context.historyService.addRecord(
+                rawText: "A dictation",
+                finalText: "A dictation",
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+            return context
+        }
+        let router = try XCTUnwrap(context?.router)
+
+        let plain = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "GET", path: "/v1/history", queryParams: [:], headers: [:], body: Data()))
+        )
+        let detailed = try Self.jsonObject(
+            await router.route(HTTPRequest(
+                method: "GET",
+                path: "/v1/history",
+                queryParams: ["include": "speaker_segments"],
+                headers: [:],
+                body: Data()
+            ))
+        )
+
+        let plainEntries = try XCTUnwrap(plain["entries"] as? [[String: Any]])
+        let meeting = try XCTUnwrap(plainEntries.first { $0["app_name"] as? String == "Meeting" })
+        let dictation = try XCTUnwrap(plainEntries.first { $0["text"] as? String == "A dictation" })
+        XCTAssertEqual(meeting["speaker_state"] as? String, "ready")
+        XCTAssertEqual(
+            meeting["speakers"] as? [[String: String]],
+            [["id": "S1", "name": "Anna"], ["id": "S2", "name": SpeakerTranscriptBuilder.outputLabel(for: "S2")]]
+        )
+        XCTAssertNil(meeting["speaker_segments"])
+        XCTAssertNil(dictation["speaker_state"])
+        XCTAssertNil(dictation["speakers"])
+
+        let detailedEntries = try XCTUnwrap(detailed["entries"] as? [[String: Any]])
+        let segments = try XCTUnwrap(
+            detailedEntries.first { $0["app_name"] as? String == "Meeting" }?["speaker_segments"] as? [[String: Any]]
+        )
+        XCTAssertEqual(segments.map { $0["speaker"] as? String }, ["S1", "S2"])
+        XCTAssertEqual(segments.map { $0["text"] as? String }, ["Good morning.", "Morning."])
+    }
+
     func testAPIHandlersExposeStatusHistoryAndRules() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -2956,6 +3035,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(rawResponse.status, 400)
         XCTAssertEqual((rawJSON["error"] as? [String: Any])?["message"] as? String, "Invalid 'x-apply-corrections' value")
+
+        for (header, value) in [("x-detect-speakers", "maybe"), ("x-speaker-count", "0")] {
+            let response = await router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/transcribe",
+                    queryParams: [:],
+                    headers: ["content-type": "audio/wav", header: value],
+                    body: wavData
+                )
+            )
+            XCTAssertEqual(response.status, 400)
+            XCTAssertEqual(
+                (try Self.jsonObject(response)["error"] as? [String: Any])?["message"] as? String,
+                "Invalid '\(header)' value"
+            )
+        }
 
         let boundary = "Boundary-\(UUID().uuidString)"
         let multipartResponse = await router.route(

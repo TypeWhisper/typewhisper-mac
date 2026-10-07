@@ -136,8 +136,37 @@ struct HistoryRecordDetailView: View {
 
     let record: TranscriptionRecord
     @ObservedObject var viewModel: HistoryViewModel
+    @ObservedObject private var coordinator: SpeakerTranscriptCoordinator
+    /// Speakers, playback and corrections; one player for every record with audio.
+    @StateObject private var speakers: SpeakerWorkspaceModel
+    @State private var showsSpeakers = true
+    @State private var pendingSpeakerCount: SpeakerCountChoice?
+
+    private enum SpeakerCountChoice: Identifiable, Equatable {
+        case automatic
+        case fixed(Int)
+
+        var id: Int { count ?? 0 }
+        var count: Int? {
+            if case .fixed(let count) = self { return count }
+            return nil
+        }
+    }
+
+    init(record: TranscriptionRecord, viewModel: HistoryViewModel) {
+        self.record = record
+        self.viewModel = viewModel
+        let coordinator = ServiceContainer.shared.speakerTranscriptCoordinator
+        self.coordinator = coordinator
+        _speakers = StateObject(wrappedValue: SpeakerWorkspaceModel(
+            recordID: record.id,
+            historyService: ServiceContainer.shared.historyService,
+            voices: coordinator.voices
+        ))
+    }
 
     var body: some View {
+        let audioURL = viewModel.audioFileURL(for: record)
         VStack(spacing: 0) {
             identityHeader
             Divider()
@@ -150,14 +179,68 @@ struct HistoryRecordDetailView: View {
                 Divider()
             }
 
-            if record.audioFileName != nil {
-                audioSurface
-                Divider()
+            HistorySpeakerDetectionRow(
+                record: record,
+                hasAudio: audioURL != nil,
+                coordinator: coordinator,
+                onStart: { showsSpeakers = true }
+            )
+
+            if showsSpeakerTranscript {
+                SpeakerWorkspaceView(
+                    record: record,
+                    audioURL: audioURL,
+                    coordinator: coordinator,
+                    model: speakers
+                )
+            } else {
+                textSurface
             }
 
-            contentSurface
+            if audioURL != nil {
+                SpeakerPlayerBar(
+                    model: speakers,
+                    playback: speakers.playback,
+                    title: record.appName ?? record.source.displayName,
+                    audioURL: audioURL
+                )
+            }
         }
         .background(Color(nsColor: .textBackgroundColor))
+        .onAppear {
+            if let audioURL { speakers.playback.load(url: audioURL) }
+        }
+        .onDisappear { speakers.playback.unload() }
+        .onChange(of: audioURL) { _, url in
+            if let url { speakers.playback.load(url: url) } else { speakers.playback.unload() }
+        }
+        .onChange(of: record.speakerTranscriptData) { speakers.reload() }
+        .onChange(of: record.speakerNamesData) { speakers.reload() }
+        .onChange(of: record.speakerWordsData) { speakers.reload() }
+        .confirmationDialog(
+            String(localized: "speakers.redetect.title"),
+            isPresented: Binding(
+                get: { pendingSpeakerCount != nil },
+                set: { if !$0 { pendingSpeakerCount = nil } }
+            ),
+            presenting: pendingSpeakerCount
+        ) { choice in
+            Button(String(localized: "speakers.action.detectAgain"), role: .destructive) {
+                speakers.playback.pause()
+                showsSpeakers = true
+                coordinator.start(recordID: record.id, speakerCount: choice.count)
+            }
+        } message: { _ in
+            Text(String(localized: "speakers.redetect.message"))
+        }
+    }
+
+    private var hasSpeakerTranscript: Bool {
+        record.speakerTranscriptData != nil
+    }
+
+    private var showsSpeakerTranscript: Bool {
+        hasSpeakerTranscript && showsSpeakers
     }
 
     private var identityHeader: some View {
@@ -166,6 +249,7 @@ struct HistoryRecordDetailView: View {
                 Text(record.timestamp, format: .dateTime.weekday().day().month().year().hour().minute())
                     .font(.headline)
                 Spacer()
+                headerControls
                 if record.isOpenInInbox {
                     Label(String(localized: "Inbox"), systemImage: "tray.full")
                         .foregroundStyle(.tint)
@@ -243,48 +327,63 @@ struct HistoryRecordDetailView: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
-    @ViewBuilder
-    private var audioSurface: some View {
-        if let url = viewModel.audioFileURL(for: record) {
-            HistoryAudioPlaybackStrip(
-                audioURL: url,
-                playbackService: viewModel.audioPlaybackService
-            )
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-            .background(.bar)
-        }
-    }
-
-    private var contentSurface: some View {
-        VStack(spacing: 0) {
-            if record.wasPostProcessed {
+    /// Text version, the switch between the transcript by speaker and the
+    /// text, and the speaker actions.
+    private var headerControls: some View {
+        HStack(spacing: 10) {
+            if record.wasPostProcessed, !showsSpeakerTranscript {
                 Picker(String(localized: "Text Version"), selection: $viewModel.detailViewMode) {
                     Text(String(localized: "Final")).tag(HistoryDetailViewMode.final)
                     Text(String(localized: "Original")).tag(HistoryDetailViewMode.original)
                     Text(String(localized: "Changes")).tag(HistoryDetailViewMode.changes)
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .labelsHidden()
-                .frame(maxWidth: 360)
-                .padding(12)
+                .fixedSize()
+                .help(String(localized: "Text Version"))
             }
 
+            if hasSpeakerTranscript {
+                Toggle(String(localized: "speakers.view.speakers"), isOn: $showsSpeakers)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .help(String(localized: "speakers.view.toggle.help"))
+
+                SpeakerRedetectMenu(
+                    coordinator: coordinator,
+                    record: record,
+                    onDetectAgain: { pendingSpeakerCount = $0.map(SpeakerCountChoice.fixed) ?? .automatic }
+                )
+                SpeakerExportMenu(model: speakers, title: record.appName)
+            }
+        }
+        .font(.body)
+        .foregroundStyle(.primary)
+    }
+
+    private var textSurface: some View {
+        VStack(spacing: 0) {
             if viewModel.showCorrectionBanner, !viewModel.correctionSuggestions.isEmpty {
                 Label(String(localized: "Corrections added to the dictionary"), systemImage: "book.badge.checkmark")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+                    .padding(.top, 10)
             }
 
             switch viewModel.detailViewMode {
             case .final:
-                TextEditor(text: $viewModel.editedText)
-                    .font(.body)
-                    .padding(14)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .disabled(!viewModel.canEditSelectedRecord)
+                if hasSpeakerTranscript {
+                    // Text with speakers is edited by paragraph in the
+                    // conversation, so the transcript and the text stay in step.
+                    readOnlyText(AttributedString(record.finalText))
+                } else {
+                    TextEditor(text: $viewModel.editedText)
+                        .font(.body)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .disabled(!viewModel.canEditSelectedRecord)
+                }
             case .original:
                 readOnlyText(AttributedString(record.rawText))
             case .changes:
@@ -372,56 +471,5 @@ struct HistoryRecordDetailView: View {
             if index < segments.count - 1 { result += AttributedString(" ") }
         }
         return result
-    }
-}
-
-private struct HistoryAudioPlaybackStrip: View {
-    let audioURL: URL
-    @ObservedObject var playbackService: AudioPlaybackService
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Button {
-                playbackService.togglePlayPause(url: audioURL)
-            } label: {
-                Image(systemName: playbackService.isPlaying ? "pause.fill" : "play.fill")
-                    .frame(width: 20)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(playbackService.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
-
-            if playbackService.duration > 0 {
-                Slider(
-                    value: Binding(
-                        get: { playbackService.currentTime },
-                        set: { value in playbackService.seek(to: value) }
-                    ),
-                    in: 0...playbackService.duration
-                )
-                .controlSize(.small)
-                .accessibilityLabel(String(localized: "Playback position"))
-
-                Text(time(playbackService.currentTime) + " / " + time(playbackService.duration))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(String(localized: "Audio"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([audioURL])
-            } label: {
-                Image(systemName: "folder")
-            }
-            .buttonStyle(.borderless)
-            .help(String(localized: "Show in Finder"))
-        }
-    }
-
-    private func time(_ seconds: TimeInterval) -> String {
-        String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60)
     }
 }

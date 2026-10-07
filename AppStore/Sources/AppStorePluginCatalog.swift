@@ -18,6 +18,11 @@ enum AppStorePluginCatalog {
     /// Plugins installed on first launch, matching the direct-distribution app.
     static let defaultInstalledPluginIDs: Set<String> = ["com.typewhisper.speechanalyzer"]
 
+    /// Plugins that belong to an app feature rather than the marketplace, as in
+    /// the direct-distribution app: always loaded and never listed. Speaker
+    /// detection is managed on the Speakers page.
+    static let appFeaturePluginIDs: Set<String> = ["com.typewhisper.speaker-diarization"]
+
     private static let installedPluginIDsKey = "appStore.installedPluginIDs"
 
     struct Entry: Decodable {
@@ -54,7 +59,8 @@ enum AppStorePluginCatalog {
     }
 
     static func isInstalled(_ pluginId: String, userDefaults: UserDefaults = .standard) -> Bool {
-        installedPluginIDs(userDefaults: userDefaults).contains(pluginId)
+        appFeaturePluginIDs.contains(pluginId)
+            || installedPluginIDs(userDefaults: userDefaults).contains(pluginId)
     }
 
     static func setInstalled(_ installed: Bool, pluginId: String, userDefaults: UserDefaults = .standard) {
@@ -96,7 +102,8 @@ enum AppStorePluginCatalog {
     /// Marketplace entries for every bundled plugin that runs on this Mac.
     static func registryPlugins(bundle: Bundle = .main) -> [RegistryPlugin] {
         entries(bundle: bundle).compactMap { entry in
-            guard let pluginsURL = bundle.builtInPlugInsURL else { return nil }
+            guard !appFeaturePluginIDs.contains(entry.id),
+                  let pluginsURL = bundle.builtInPlugInsURL else { return nil }
             let bundleURL = pluginsURL.appendingPathComponent(entry.bundleName, isDirectory: true)
             guard let manifest = manifest(at: bundleURL) else {
                 logger.error("Bundled plugin \(entry.id, privacy: .public) has no readable manifest")

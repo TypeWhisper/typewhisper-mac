@@ -50,6 +50,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
         case .cloudSync:
             historyPart = .sync
             navigate(to: .history)
+        case .speakerWorkspace:
+            navigate(to: .speakers)
         }
     }
 

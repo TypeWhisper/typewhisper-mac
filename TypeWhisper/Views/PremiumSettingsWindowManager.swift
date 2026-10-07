@@ -6,6 +6,7 @@ enum PremiumSettingsDestination: String, CaseIterable, Hashable, Sendable {
     case calendarMeeting
     case correctionLearning
     case cloudSync
+    case speakerWorkspace
 }
 
 @MainActor
@@ -31,6 +32,7 @@ struct PremiumSettingsWindowFactories {
     let calendarMeeting: Factory
     let correctionLearning: Factory
     let cloudSync: Factory
+    let speakerWorkspace: Factory
 
     func makeDefinition(
         for destination: PremiumSettingsDestination
@@ -44,6 +46,8 @@ struct PremiumSettingsWindowFactories {
             correctionLearning()
         case .cloudSync:
             cloudSync()
+        case .speakerWorkspace:
+            speakerWorkspace()
         }
     }
 
@@ -112,6 +116,24 @@ struct PremiumSettingsWindowFactories {
                             licenseService: .shared,
                             premiumAccount: ServiceContainer.shared.premiumAccountService,
                             syncController: ServiceContainer.shared.cloudFolderSyncController,
+                            onManageAccess: {
+                                PremiumSettingsWindowManager.shared.present(.access)
+                            }
+                        )
+                    )
+                )
+            },
+            speakerWorkspace: {
+                PremiumSettingsWindowDefinition(
+                    title: String(localized: "premium.window.speakers.title"),
+                    preferredSize: CGSize(width: 580, height: 520),
+                    minimumSize: CGSize(width: 520, height: 420),
+                    accessibilityIdentifier: "premium.window.speakers",
+                    content: AnyView(
+                        PremiumSpeakerSettingsWindow(
+                            licenseService: .shared,
+                            premiumAccount: ServiceContainer.shared.premiumAccountService,
+                            coordinator: ServiceContainer.shared.speakerTranscriptCoordinator,
                             onManageAccess: {
                                 PremiumSettingsWindowManager.shared.present(.access)
                             }
@@ -289,6 +311,40 @@ struct PremiumCalendarMeetingSettingsWindow: View {
         #else
         String(localized: "premium.window.calendar.locked")
         #endif
+    }
+}
+
+@MainActor
+private struct PremiumSpeakerSettingsWindow: View {
+    @ObservedObject private var license: LicenseService
+    @ObservedObject private var premiumAccount: PremiumAccountService
+    private let coordinator: SpeakerTranscriptCoordinator
+    private let onManageAccess: () -> Void
+
+    init(
+        licenseService: LicenseService,
+        premiumAccount: PremiumAccountService,
+        coordinator: SpeakerTranscriptCoordinator,
+        onManageAccess: @escaping () -> Void
+    ) {
+        self.license = licenseService
+        self.premiumAccount = premiumAccount
+        self.coordinator = coordinator
+        self.onManageAccess = onManageAccess
+    }
+
+    var body: some View {
+        if SpeakerWorkspacePremiumAccess.isGranted(
+            hasCommercialLicense: license.hasCommercialLicense,
+            hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement
+        ) {
+            SpeakerDetectionSettingsSection(coordinator: coordinator)
+        } else {
+            PremiumLockedDetailView(
+                message: String(localized: "premium.window.speakers.locked"),
+                onManageAccess: onManageAccess
+            )
+        }
     }
 }
 

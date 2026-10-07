@@ -194,6 +194,8 @@ final class AudioRecorderViewModel: ObservableObject {
         /// a usable transcript.
         let liveSessionFailed: Bool
         let calendarEvent: CalendarMeetingTranscriptMetadata?
+        /// When the microphone carried the user's own speech, for speaker detection.
+        var ownSpeech: [ClosedRange<TimeInterval>] = []
     }
 
     struct RecordingTranscriptionFailure: Codable, Equatable, Sendable {
@@ -286,6 +288,12 @@ final class AudioRecorderViewModel: ObservableObject {
             recorderService.micDuckingMode = micDuckingMode
         }
     }
+    /// Saves each transcribed recording to History and detects its speakers (Premium).
+    @Published var detectSpeakers: Bool {
+        didSet { defaults.set(detectSpeakers, forKey: UserDefaultsKeys.recorderDetectSpeakers) }
+    }
+    var speakerRecordIntake: SpeakerRecordIntake?
+
     @Published var trackMode: AudioRecorderService.TrackMode {
         didSet {
             defaults.set(trackMode.rawValue, forKey: UserDefaultsKeys.recorderTrackMode)
@@ -438,6 +446,7 @@ final class AudioRecorderViewModel: ObservableObject {
             self.micEnabled = defaults.bool(forKey: UserDefaultsKeys.recorderMicEnabled)
         }
         self.systemAudioEnabled = defaults.bool(forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
+        self.detectSpeakers = defaults.bool(forKey: UserDefaultsKeys.recorderDetectSpeakers)
 
         if let formatString = defaults.string(forKey: UserDefaultsKeys.recorderOutputFormat),
            let format = AudioRecorderService.OutputFormat(rawValue: formatString) {
@@ -778,7 +787,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult,
                     liveSessionFailed: liveSessionFailed,
-                    calendarEvent: calendarEvent
+                    calendarEvent: calendarEvent,
+                    ownSpeech: stoppedRecording.ownSpeech
                 )
                 if let apiSessionID {
                     markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
@@ -1104,7 +1114,9 @@ final class AudioRecorderViewModel: ObservableObject {
                 calendarEvent: item.calendarEvent
             )
 
-            _ = await self.runRetranscription(request)
+            // A recording transcribed before may already have its speaker record.
+            let hadTranscript = FileManager.default.fileExists(atPath: self.transcriptURL(for: url).path)
+            _ = await self.runRetranscription(request, addsSpeakerRecord: !hadTranscript)
         }
     }
 
@@ -1302,7 +1314,10 @@ final class AudioRecorderViewModel: ObservableObject {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 partialText = text
-                return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+                // The transcript is saved first; adding the speaker record can take seconds.
+                let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
+                await addSpeakerRecordIfWanted(result, request: request)
+                return outcome
             } else if previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             } else {
@@ -1334,7 +1349,10 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    private func runRetranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
+    private func runRetranscription(
+        _ request: FinalTranscriptionRequest,
+        addsSpeakerRecord: Bool
+    ) async -> FinalTranscriptionOutcome {
         let effectiveTask = resolvedTask(for: request)
 
         do {
@@ -1351,7 +1369,11 @@ final class AudioRecorderViewModel: ObservableObject {
                 return .failed(recordedFailure)
             }
 
-            return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+            let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
+            if addsSpeakerRecord {
+                await addSpeakerRecordIfWanted(result, request: request)
+            }
+            return outcome
         } catch is CancellationError {
             return .skipped
         } catch {
@@ -1368,6 +1390,23 @@ final class AudioRecorderViewModel: ObservableObject {
             }
             return .skipped
         }
+    }
+
+    /// Calendar-meeting recordings detect speakers unless that was turned off;
+    /// other recordings follow the Recorder's switch. The intake checks Premium.
+    private func addSpeakerRecordIfWanted(_ result: TranscriptionResult, request: FinalTranscriptionRequest) async {
+        let wanted = request.calendarEvent != nil
+            ? defaults.object(forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) as? Bool ?? true
+            : detectSpeakers
+        guard wanted, let speakerRecordIntake else { return }
+        _ = await speakerRecordIntake(SpeakerRecordingInput(
+            result: result,
+            samples: request.buffer,
+            title: request.outputURL.deletingPathExtension().lastPathComponent,
+            source: .recorder,
+            modelUsed: request.modelOverrideId,
+            ownSpeech: request.ownSpeech
+        ))
     }
 
     private func transcribeFinalRecording(

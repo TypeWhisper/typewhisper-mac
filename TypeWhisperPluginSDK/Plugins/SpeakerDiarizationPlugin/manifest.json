@@ -1,0 +1,21 @@
+{
+    "id": "com.typewhisper.speaker-diarization",
+    "name": "Speaker Detection",
+    "version": "1.0.0",
+    "minHostVersion": "1.8.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "On-device speaker detection for recordings and file transcriptions. Tells who spoke when; the audio never leaves your Mac.",
+    "descriptions": {
+        "de": "Sprechererkennung auf dem Gerät für Aufnahmen und Dateitranskriptionen. Erkennt, wer wann gesprochen hat; das Audio verlässt deinen Mac nicht.",
+        "ja": "録音とファイル文字起こしのためのオンデバイス話者検出です。誰がいつ話したかを判別し、音声はMacの外に送信されません。"
+    },
+    "category": "utility",
+    "iconSystemName": "person.2.wave.2.fill",
+    "principalClass": "SpeakerDiarizationPlugin",
+    "requiresAPIKey": false
+}

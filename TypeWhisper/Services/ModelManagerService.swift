@@ -960,18 +960,22 @@ final class ModelManagerService: ObservableObject {
             plugin: plugin
         )
 
-        let result = try await transcribeWithResolvedLanguageSelection(
-            plugin: plugin,
-            audio: audio,
-            languageSelection: runtimeSelection,
-            task: task,
-            prompt: prompt,
-            dictionaryTermHints: dictionaryTermHints
-        )
+        // Speaker detection for the API and watch folders needs the word times too.
+        let wordTimings = PluginWordTimingCollector()
+        let result = try await PluginWordTimings.$collector.withValue(wordTimings) {
+            try await transcribeWithResolvedLanguageSelection(
+                plugin: plugin,
+                audio: audio,
+                languageSelection: runtimeSelection,
+                task: task,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints
+            )
+        }
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
-        return TranscriptionNormalizationService.normalizeResult(
+        var normalized = TranscriptionNormalizationService.normalizeResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
             configuredLanguage: runtimeSelection.requestedLanguage,
@@ -983,6 +987,10 @@ final class ModelManagerService: ObservableObject {
             task: task,
             normalizeNumbers: normalizeNumbers
         )
+        normalized.words = wordTimings.words.map {
+            TranscriptionWord(text: $0.text, start: $0.start, end: $0.end)
+        }
+        return normalized
     }
 
     func transcribe(
@@ -1114,20 +1122,23 @@ final class ModelManagerService: ObservableObject {
             plugin: plugin
         )
 
-        let result = try await transcribeWithResolvedLanguageSelection(
-            plugin: plugin,
-            audio: audio,
-            languageSelection: runtimeSelection,
-            task: task,
-            prompt: prompt,
-            dictionaryTermHints: dictionaryTermHints,
-            onProgress: onProgress,
-            onSourceProgress: onSourceProgress
-        )
+        let wordTimings = PluginWordTimingCollector()
+        let result = try await PluginWordTimings.$collector.withValue(wordTimings) {
+            try await transcribeWithResolvedLanguageSelection(
+                plugin: plugin,
+                audio: audio,
+                languageSelection: runtimeSelection,
+                task: task,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
+            )
+        }
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
 
-        return TranscriptionNormalizationService.normalizeResult(
+        var normalized = TranscriptionNormalizationService.normalizeResult(
             text: result.text,
             detectedLanguage: result.detectedLanguage,
             configuredLanguage: runtimeSelection.requestedLanguage,
@@ -1139,6 +1150,10 @@ final class ModelManagerService: ObservableObject {
             task: task,
             normalizeNumbers: normalizeNumbers
         )
+        normalized.words = wordTimings.words.map {
+            TranscriptionWord(text: $0.text, start: $0.start, end: $0.end)
+        }
+        return normalized
     }
 
     // MARK: - Dictation Prewarm

@@ -378,6 +378,8 @@ Optional parameters:
 - `task` - `transcribe` (default) or `translate` (translates to English, WhisperKit only).
 - `target_language` - ISO 639-1 code for translation target language (e.g., `es`, `fr`). Uses Apple Translate.
 - `apply_corrections` - Boolean, default `true`. Set to `false` to return raw transcription text without Dictionary Corrections. For raw body uploads, send `x-apply-corrections: false`.
+- `detect_speakers` - Boolean, default `false`. Adds a `speaker` (`Speaker 1`, `Speaker 2`, …) to each segment of a `verbose_json` response. Needs Premium. For raw body uploads, send `x-detect-speakers: true`.
+- `speaker_count` - Number of speakers, when known. Omit it to detect the number. For raw body uploads, send `x-speaker-count`.
 
 Uploads to `/v1/transcribe` are limited to 256 MiB, including stdin uploads from the CLI. Requests above that size return `413 Payload Too Large`. Local CLI file paths use a direct handoff to the running TypeWhisper app instead of uploading the file bytes.
 

@@ -426,6 +426,12 @@ final class PluginManager: ObservableObject {
             }
     }
 
+    var speakerDiarizationProviders: [any SpeakerDiarizationProviderPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
+    }
+
     var memoryStoragePlugins: [MemoryStoragePlugin] {
         loadedPlugins
             .filter { $0.isEnabled }

@@ -4,6 +4,8 @@ enum UserDataSyncHistoryComponent: String, Codable, CaseIterable, Sendable {
     case content
     case inbox
     case audio
+    case transcript
+    case speakers
 }
 
 struct UserDataSyncHistoryStructuredDocumentV1: Codable, Equatable, Sendable {
@@ -244,16 +246,196 @@ struct UserDataSyncHistoryAudioV1: Codable, Equatable, Sendable {
     }
 }
 
+/// A record's transcript by speaker. Written when speakers are detected
+/// again or corrected, so rarely; names sync separately in `speakers`.
+struct UserDataSyncHistoryTranscriptV1: Codable, Equatable, Sendable {
+    struct Source: Codable, Equatable, Sendable {
+        /// `local` or `provider`; other values from newer clients count as `local`.
+        let kind: String
+        let engine: String
+        let modelVersion: String?
+    }
+
+    struct Segment: Codable, Equatable, Sendable {
+        let start: Double
+        let end: Double
+        let text: String
+        let speakerID: String?
+        let speakerConfidence: Double?
+    }
+
+    let recordID: UUID
+    let updatedAt: Date
+    /// New for every detection run; names refer to it.
+    let revision: UUID
+    let source: Source
+    let requestedSpeakerCount: Int?
+    let segments: [Segment]
+
+    init(recordID: UUID, updatedAt: Date, transcript: SpeakerTranscript) {
+        self.recordID = recordID
+        self.updatedAt = updatedAt
+        revision = transcript.revision
+        source = Source(
+            kind: transcript.source.kind.rawValue,
+            engine: transcript.source.engine,
+            modelVersion: transcript.source.modelVersion
+        )
+        requestedSpeakerCount = transcript.requestedSpeakerCount
+        segments = transcript.segments.map {
+            Segment(
+                start: $0.start,
+                end: $0.end,
+                text: $0.text,
+                speakerID: $0.speakerID,
+                speakerConfidence: $0.speakerConfidence
+            )
+        }
+    }
+
+    var speakerTranscript: SpeakerTranscript {
+        SpeakerTranscript(
+            revision: revision,
+            source: .init(
+                kind: SpeakerTranscript.Source.Kind(rawValue: source.kind) ?? .local,
+                engine: source.engine,
+                modelVersion: source.modelVersion
+            ),
+            segments: segments.map {
+                SpeakerTranscriptSegment(
+                    text: $0.text,
+                    start: $0.start,
+                    end: $0.end,
+                    speakerID: $0.speakerID,
+                    speakerConfidence: $0.speakerConfidence
+                )
+            },
+            requestedSpeakerCount: requestedSpeakerCount
+        )
+    }
+
+    var isValid: Bool { speakerTranscript.isValid }
+}
+
+/// The names given to a record's speakers. Small, so renaming does not
+/// upload the transcript again. Each name and each removal carries its own
+/// date, so devices that name different speakers at the same time both keep
+/// their names.
+struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
+    struct Name: Codable, Equatable, Sendable {
+        let speakerID: String
+        let displayName: String
+        /// No longer written: voice profile links stay on their device.
+        /// Read for payloads of earlier builds and ignored.
+        let profileID: UUID?
+        /// When the name was given; without it the payload's date counts.
+        let updatedAt: Date?
+
+        init(speakerID: String, displayName: String, profileID: UUID? = nil, updatedAt: Date? = nil) {
+            self.speakerID = speakerID
+            self.displayName = displayName
+            self.profileID = profileID
+            self.updatedAt = updatedAt
+        }
+    }
+
+    let recordID: UUID
+    let updatedAt: Date
+    /// Names apply only to the transcript with this revision.
+    let transcriptRevision: UUID
+    let names: [Name]
+    /// Names removed on purpose, so an older name from another device does
+    /// not come back.
+    let cleared: [SpeakerNameTable.ClearedName]
+
+    private enum CodingKeys: String, CodingKey {
+        case recordID, updatedAt, transcriptRevision, names, cleared
+    }
+
+    /// The confirmed names of a table. Names only suggested by a voice
+    /// profile are a guess of this device and are not written.
+    init(recordID: UUID, updatedAt: Date, transcriptRevision: UUID, table: SpeakerNameTable?) {
+        self.recordID = recordID
+        self.updatedAt = updatedAt
+        self.transcriptRevision = transcriptRevision
+        let table = table?.transcriptRevision == transcriptRevision ? table : nil
+        names = (table?.confirmedEntries ?? []).map {
+            Name(speakerID: $0.speakerID, displayName: $0.displayName, updatedAt: $0.updatedAt ?? updatedAt)
+        }
+        cleared = table?.cleared ?? []
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recordID = try container.decode(UUID.self, forKey: .recordID)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        transcriptRevision = try container.decode(UUID.self, forKey: .transcriptRevision)
+        names = try container.decode([Name].self, forKey: .names)
+        cleared = try container.decodeIfPresent([SpeakerNameTable.ClearedName].self, forKey: .cleared) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recordID, forKey: .recordID)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(transcriptRevision, forKey: .transcriptRevision)
+        try container.encode(names, forKey: .names)
+        if !cleared.isEmpty { try container.encode(cleared, forKey: .cleared) }
+    }
+
+    var isValid: Bool {
+        let speakerIDs = names.map(\.speakerID) + cleared.map(\.speakerID)
+        return Set(speakerIDs).count == speakerIDs.count
+            && cleared.allSatisfy { SpeakerTranscript.isValidSpeakerID($0.speakerID) }
+            && names.allSatisfy { name in
+                let trimmed = name.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+                return SpeakerTranscript.isValidSpeakerID(name.speakerID)
+                    && !trimmed.isEmpty
+                    && name.displayName.count <= SpeakerNameTable.maximumNameLength
+            }
+    }
+
+    /// The names as table entries, each with its date. Without profile
+    /// links: another device's profile means nothing here.
+    var entries: [SpeakerNameTable.Entry] {
+        names.map {
+            SpeakerNameTable.Entry(
+                speakerID: $0.speakerID,
+                displayName: $0.displayName,
+                updatedAt: $0.updatedAt ?? updatedAt
+            )
+        }
+    }
+
+    /// The name table these names make, keeping this device's pending
+    /// suggestions for speakers the names do not cover.
+    func nameTable(keepingSuggestionsFrom local: SpeakerNameTable?) -> SpeakerNameTable {
+        var table = SpeakerNameTable(transcriptRevision: transcriptRevision)
+        _ = table.merge(names: entries, cleared: cleared, remoteDate: updatedAt, localDate: updatedAt)
+        if let local, local.transcriptRevision == transcriptRevision {
+            for entry in local.entries
+            where entry.isSuggestion == true && table.displayName(for: entry.speakerID) == nil {
+                table.setName(entry.displayName, for: entry.speakerID, profileID: entry.profileID, isSuggestion: true)
+            }
+        }
+        return table
+    }
+}
+
 struct UserDataSyncHistoryRecord: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case content
         case inbox
         case audio
+        case transcript
+        case speakers
     }
 
     let content: UserDataSyncHistoryContentV1
     let inbox: UserDataSyncHistoryInboxV1
     let audio: UserDataSyncHistoryAudioV1?
+    let transcript: UserDataSyncHistoryTranscriptV1?
+    let speakers: UserDataSyncHistorySpeakersV1?
     let localAudioFileURL: URL?
     let audioEligible: Bool
 
@@ -261,12 +443,16 @@ struct UserDataSyncHistoryRecord: Codable, Equatable, Sendable {
         content: UserDataSyncHistoryContentV1,
         inbox: UserDataSyncHistoryInboxV1,
         audio: UserDataSyncHistoryAudioV1?,
+        transcript: UserDataSyncHistoryTranscriptV1? = nil,
+        speakers: UserDataSyncHistorySpeakersV1? = nil,
         localAudioFileURL: URL?,
         audioEligible: Bool
     ) {
         self.content = content
         self.inbox = inbox
         self.audio = audio
+        self.transcript = transcript
+        self.speakers = speakers
         self.localAudioFileURL = localAudioFileURL
         self.audioEligible = audioEligible
     }
@@ -276,6 +462,8 @@ struct UserDataSyncHistoryRecord: Codable, Equatable, Sendable {
         content = try container.decode(UserDataSyncHistoryContentV1.self, forKey: .content)
         inbox = try container.decode(UserDataSyncHistoryInboxV1.self, forKey: .inbox)
         audio = try container.decodeIfPresent(UserDataSyncHistoryAudioV1.self, forKey: .audio)
+        transcript = try container.decodeIfPresent(UserDataSyncHistoryTranscriptV1.self, forKey: .transcript)
+        speakers = try container.decodeIfPresent(UserDataSyncHistorySpeakersV1.self, forKey: .speakers)
         localAudioFileURL = nil
         audioEligible = false
     }

@@ -98,6 +98,8 @@ final class ServiceContainer: ObservableObject {
     let appStorePremiumService: AppStorePremiumService
     #endif
     let supporterDiscordService: SupporterDiscordService
+    let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
+    let speakerVoiceProfileService: SpeakerVoiceProfileService
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
     let calendarMeetingAutomationController: CalendarMeetingAutomationController
 
@@ -107,6 +109,8 @@ final class ServiceContainer: ObservableObject {
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
+    /// File transcription for the Speakers page: every file gets a speaker transcript.
+    let speakerTranscriptionViewModel: FileTranscriptionViewModel
     let dictationRecoveryViewModel: DictationRecoveryViewModel
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
@@ -285,6 +289,92 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
+        let speakerCoordinator = SpeakerTranscriptCoordinator(
+            historyService: historyService,
+            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first },
+            premiumAccess: { [licenseService, premiumAccountService] in
+                SpeakerWorkspacePremiumAccess.isGranted(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
+                )
+            }
+        )
+        speakerCoordinator.observePremiumChanges([
+            licenseService.objectWillChange.eraseToAnyPublisher(),
+            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
+        ])
+        speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
+            let samples = try await audioFileService.loadAudioSamples(from: url)
+            return try await modelManagerService.transcribe(
+                audioSamples: samples,
+                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+                task: .transcribe,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+        }
+        speakerCoordinator.wordTimingSource = { [audioFileService, modelManagerService] url, language in
+            // Parakeet reports when each word is spoken and runs on this Mac.
+            let engineID = "parakeet"
+            let log = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
+            guard let engine = PluginManager.shared?.transcriptionEngine(for: engineID) else {
+                log.info("Word timing pass skipped: Parakeet is not installed")
+                return []
+            }
+            guard modelManagerService.canPrepareForTranscription(engine) else {
+                log.info("Word timing pass skipped: Parakeet has no model to load")
+                return []
+            }
+            // Engines store a code or a name ("de", "German").
+            let language = SpeakerTranscriptBuilder.languageCode(from: language)
+            let languages = engine.supportedLanguages
+            if let language, !languages.isEmpty,
+               !languages.contains(where: { language.hasPrefix($0) || $0.hasPrefix(language) }) {
+                log.info("Word timing pass skipped: Parakeet does not support \(language, privacy: .public)")
+                return []
+            }
+            let samples = try await audioFileService.loadAudioSamples(from: url)
+            let result = try await modelManagerService.transcribe(
+                audioSamples: samples,
+                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+                task: .transcribe,
+                engineOverrideId: engineID,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+            // The words are matched to another engine's text, which may
+            // punctuate differently.
+            return result.words.compactMap { word in
+                let text = word.text.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
+                return text.isEmpty ? nil : TranscriptionWord(text: text, start: word.start, end: word.end)
+            }
+        }
+        speakerVoiceProfileService = SpeakerVoiceProfileService(
+            store: VoiceProfileStore(),
+            historyService: historyService,
+            premiumAccess: { [speakerCoordinator] in speakerCoordinator.hasPremiumAccess }
+        )
+        speakerCoordinator.voices = speakerVoiceProfileService
+        speakerTranscriptCoordinator = speakerCoordinator
+        watchFolderService.speakerLabeler = { [speakerCoordinator] result, samples in
+            try await speakerCoordinator.labelingSpeakers(in: result, samples: samples)
+        }
+        speakerTranscriptionViewModel = FileTranscriptionViewModel(
+            modelManager: modelManagerService,
+            audioFileService: audioFileService,
+            dictionaryService: dictionaryService,
+            detectsSpeakers: true
+        )
+        speakerTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
+            await speakerCoordinator.addRecording($0)
+        }
+        speakerTranscriptionViewModel.speakerRecordRemoval = { [speakerCoordinator, historyService] recordID in
+            speakerCoordinator.cancel(recordID: recordID)
+            historyService.deleteRecord(withID: recordID)
+        }
+        audioRecorderViewModel.speakerRecordIntake = { [speakerCoordinator] in
+            await speakerCoordinator.addRecording($0)
+        }
         calendarMeetingCountdownModel = CalendarMeetingCountdownModel(
             hotkeyService: hotkeyService,
             onButtonAction: {
@@ -341,7 +431,8 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecorderViewModel: audioRecorderViewModel,
-            settingsBackupService: settingsBackupService
+            settingsBackupService: settingsBackupService,
+            speakerCoordinator: speakerTranscriptCoordinator
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
@@ -415,6 +506,7 @@ final class ServiceContainer: ObservableObject {
         modelManagerService.observePluginManager()
         promptProcessingService.observePluginManager()
         fileTranscriptionViewModel.observePluginManager()
+        speakerTranscriptionViewModel.observePluginManager()
         dictationRecoveryViewModel.observePluginManager()
         settingsViewModel.observePluginManager()
         audioRecorderViewModel.observePluginManager()
@@ -434,6 +526,8 @@ final class ServiceContainer: ObservableObject {
         #endif
 
         calendarMeetingAutomationController.initialize()
+        historyService.failInterruptedSpeakerTranscripts()
+        speakerVoiceProfileService.removeEmbeddingsOfDeletedRecordings()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
