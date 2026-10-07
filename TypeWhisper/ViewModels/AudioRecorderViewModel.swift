@@ -728,11 +728,12 @@ final class AudioRecorderViewModel: ObservableObject {
             let stoppedRecording = await recorderService.stopCapture(
                 includeTranscriptionSamples: shouldTranscribe
             )
-            async let liveSessionResultTask = streamingHandler.finish(
+            async let liveSessionFinishTask = streamingHandler.finish(
                 finalSamples: stoppedRecording.transcriptionSamples
             )
             async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
-            let (liveSessionResult, url) = await (liveSessionResultTask, finalizedURLTask)
+            let (liveSessionFinish, url) = await (liveSessionFinishTask, finalizedURLTask)
+            let liveSessionResult = liveSessionFinish.result
 
             if let url, let calendarEvent {
                 do {

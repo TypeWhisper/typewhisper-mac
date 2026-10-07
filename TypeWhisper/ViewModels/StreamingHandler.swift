@@ -5,6 +5,19 @@ import TypeWhisperPluginSDK
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "StreamingHandler")
 
 final class StreamingHandler: @unchecked Sendable {
+    enum FinishOutcome {
+        /// No live session ran.
+        case noLiveSession
+        case finished(TranscriptionResult)
+        /// The live session lost audio or could not finalize, so its preview may be
+        /// missing part of the recording; the caller transcribes the full recording.
+        case failed
+
+        var result: TranscriptionResult? {
+            if case .finished(let result) = self { result } else { nil }
+        }
+    }
+
     private struct SharedState {
         var confirmedStreamingText = ""
         var liveSessionHandle: ModelManagerService.LiveTranscriptionSessionHandle?
@@ -14,9 +27,6 @@ final class StreamingHandler: @unchecked Sendable {
         var task: TranscriptionTask = .transcribe
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
-        /// The session only produces the final result: no batch preview loop, and a
-        /// failed finalization yields nil so the caller transcribes the full recording.
-        var previewHidden = false
         var liveSessionAppendFailed = false
     }
 
@@ -132,7 +142,6 @@ final class StreamingHandler: @unchecked Sendable {
             state.configuredLanguage = languageSelection.requestedLanguage
             state.configuredLanguageCandidates = languageSelection.selectedCodes
             state.task = task
-            state.previewHidden = previewHidden
         }
         onStreamingStateChange?(true)
 
@@ -199,7 +208,7 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     @MainActor
-    func finish(finalSamples: [Float]? = nil) async -> TranscriptionResult? {
+    func finish(finalSamples: [Float]? = nil) async -> FinishOutcome {
         let finishStart = CFAbsoluteTimeGetCurrent()
         func elapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - finishStart) * 1000) }
 
@@ -213,16 +222,16 @@ final class StreamingHandler: @unchecked Sendable {
 
         guard let handle = claimLiveSessionHandleForFinish() else {
             clearStreamingState(notifyStreamingStopped: true)
-            return nil
+            return .noLiveSession
         }
 
-        // A hidden session missing audio must not produce the final text; the caller
-        // transcribes the full recording instead.
-        if sharedState.withLock({ $0.previewHidden && $0.liveSessionAppendFailed }) {
-            logger.info("Hidden live session lost audio during recording, using batch transcription")
+        // A session missing audio must not produce the final text, and its preview
+        // stopped growing when the audio stopped arriving.
+        if sharedState.withLock({ $0.liveSessionAppendFailed }) {
+            logger.info("Live session lost audio during recording, transcribing the full recording")
             await modelManager.cancelLiveTranscriptionSession(handle)
             clearStreamingState(notifyStreamingStopped: true)
-            return nil
+            return .failed
         }
 
         let stablePreviewBeforeFinish = sharedState.withLock { $0.confirmedStreamingText }
@@ -251,25 +260,13 @@ final class StreamingHandler: @unchecked Sendable {
             let finalText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
             progressText.withLock { $0 = finalText }
             sharedState.withLock { $0.confirmedStreamingText = finalText }
-            return finalResult
+            return .finished(finalResult)
         } catch {
-            logger.warning("Finalizing live transcription failed: \(error.localizedDescription, privacy: .public) [flushedTailSamples=\(String(describing: delta.samples.count), privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
+            // The tail or the provider's final words may be missing from the preview.
+            logger.warning("Finalizing live transcription failed, transcribing the full recording: \(error.localizedDescription, privacy: .public) [flushedTailSamples=\(String(describing: delta.samples.count), privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
             await modelManager.cancelLiveTranscriptionSession(handle)
-            if !sharedState.withLock({ $0.previewHidden }),
-               let previewResult = stablePreviewResult(
-                stablePreviewBeforeFinish,
-                handle: handle
-            ) {
-                logger.info("Using stable live preview because final live transcription failed")
-                clearStreamingState(notifyStreamingStopped: true)
-
-                let finalText = previewResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                progressText.withLock { $0 = finalText }
-                sharedState.withLock { $0.confirmedStreamingText = finalText }
-                return previewResult
-            }
             clearStreamingState(notifyStreamingStopped: true)
-            return nil
+            return .failed
         }
     }
 
@@ -480,7 +477,6 @@ final class StreamingHandler: @unchecked Sendable {
             state.configuredLanguageCandidates = []
             state.task = .transcribe
             state.sampleCursor = 0
-            state.previewHidden = false
             state.liveSessionAppendFailed = false
         }
         progressText.withLock { $0 = "" }
@@ -657,32 +653,6 @@ final class StreamingHandler: @unchecked Sendable {
         let finalLooksTiny = finalLength <= 8
         let previewIsMuchLonger = previewLength >= max(12, finalLength * 4)
         return finalLooksTiny && previewIsMuchLonger
-    }
-
-    private func stablePreviewResult(
-        _ stablePreview: String,
-        handle: ModelManagerService.LiveTranscriptionSessionHandle
-    ) -> TranscriptionResult? {
-        let preview = stablePreview.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isSubstantiveStablePreview(preview) else { return nil }
-
-        let configuredLanguage = sharedState.withLock { $0.configuredLanguage }
-        let configuredLanguageCandidates = sharedState.withLock { $0.configuredLanguageCandidates }
-        let task = sharedState.withLock { $0.task }
-        let normalizeNumbers = sharedState.withLock { $0.normalizeNumbers }
-
-        return TranscriptionNormalizationService.normalizeResult(
-            text: preview,
-            detectedLanguage: nil,
-            configuredLanguage: configuredLanguage,
-            configuredLanguageCandidates: configuredLanguageCandidates,
-            duration: bufferedDurationProvider(),
-            processingTime: 0.001,
-            engineUsed: handle.providerId,
-            segments: [],
-            task: task,
-            normalizeNumbers: normalizeNumbers
-        )
     }
 
     nonisolated static func isSubstantiveStablePreview(_ preview: String) -> Bool {
