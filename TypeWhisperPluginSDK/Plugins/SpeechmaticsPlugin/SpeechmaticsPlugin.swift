@@ -234,7 +234,26 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
                 prompt: prompt
             )
         }
-        return try await pollJob(jobId: jobId, apiKey: apiKey)
+        return try await pollJob(
+            jobId: jobId,
+            apiKey: apiKey,
+            attempts: Self.pollAttempts(forAudioDuration: audio.duration)
+        )
+    }
+
+    /// The shared HTTP session gives up on a request after 600 s. Uploading a
+    /// recording of several hours on a slow uplink takes longer, so the upload
+    /// gets as long as 256 kbit/s would need.
+    static func uploadResourceTimeout(byteCount: Int) -> TimeInterval {
+        max(600, Double(byteCount) / 32_000)
+    }
+
+    /// Speechmatics documents batch speeds down to 0.2 times real time
+    /// (Enhanced on CPU), which is 48 minutes for four hours of audio. One poll
+    /// per second for half the audio duration, at least five minutes and at
+    /// most two hours.
+    static func pollAttempts(forAudioDuration duration: TimeInterval) -> Int {
+        Int(min(max(duration / 2, 300), 7_200))
     }
 
     private func submitJob(
@@ -288,7 +307,10 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         request.httpBody = body
         request.timeoutInterval = 120
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
+        let (data, response) = try await PluginHTTPClient.data(
+            for: request,
+            resourceTimeout: Self.uploadResourceTimeout(byteCount: body.count)
+        )
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.apiError("No HTTP response")
@@ -317,7 +339,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         return jobId
     }
 
-    private func pollJob(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
+    private func pollJob(jobId: String, apiKey: String, attempts: Int) async throws -> PluginTranscriptionResult {
         guard let statusURL = URL(string: "https://\(batchHost)/v2/jobs/\(jobId)") else {
             throw PluginTranscriptionError.apiError("Invalid job URL")
         }
@@ -326,10 +348,10 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         statusRequest.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         statusRequest.timeoutInterval = 15
 
-        for _ in 0..<300 {
+        for _ in 0..<attempts {
             try await Task.sleep(for: .seconds(1))
 
-            // This loop already re-issues on any non-200, up to 300 times. A ladder here
+            // This loop already re-issues on any non-200, once per attempt. A ladder here
             // would multiply the loop's own bound rather than add resilience.
             let (data, response) = try await PluginHTTPClient.data(for: statusRequest, retry: .disabled)
 
@@ -356,7 +378,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
             }
         }
 
-        throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
+        throw PluginTranscriptionError.apiError("Transcription timed out after \(attempts / 60) minutes")
     }
 
     private func fetchTranscript(jobId: String, apiKey: String) async throws -> PluginTranscriptionResult {
