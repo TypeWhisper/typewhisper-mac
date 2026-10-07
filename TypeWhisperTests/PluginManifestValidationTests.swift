@@ -107,7 +107,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifestExpectations = [
             ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.7.0"),
             ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
+            ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.8.0"),
         ]
 
         for (relativePath, expectedMinHostVersion) in manifestExpectations {
@@ -185,7 +185,7 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
     }
 
-    func testSonioxPlugin129RequiresCompatibleHost17() throws {
+    func testSonioxPlugin129RequiresCompatibleHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json"
         )
@@ -193,7 +193,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.2.9")
-        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
@@ -209,7 +209,7 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
-    func testVercelAIGatewayPlugin102RequiresCompatibleHost17() throws {
+    func testVercelAIGatewayPlugin102RequiresCompatibleHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/VercelAIGatewayPlugin/manifest.json"
         )
@@ -217,7 +217,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.0.2")
-        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.categories, ["transcription", "llm"])
