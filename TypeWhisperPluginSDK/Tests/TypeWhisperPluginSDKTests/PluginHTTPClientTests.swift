@@ -65,7 +65,10 @@ final class PluginHTTPClientTests: XCTestCase {
             )
         }
 
-        let preview = Task { _ = try await PluginHTTPClient.data(for: Self.request(path: "/preview")) }
+        // Built outside the task: capturing the test class's metatype in the
+        // closure trips the region-based isolation checker on Xcode 26.
+        let previewRequest = Self.request(path: "/preview")
+        let preview = Task { _ = try await PluginHTTPClient.data(for: previewRequest) }
         let deadline = ContinuousClock.now + .seconds(5)
         while !store.firstSessionHasRequests, ContinuousClock.now < deadline {
             await Task.yield()
@@ -94,7 +97,8 @@ final class PluginHTTPClientTests: XCTestCase {
             store.makeSession(outcomes: [.success(Self.okResponse())])
         }
 
-        let first = Task { _ = try await PluginHTTPClient.data(for: Self.request(path: "/first")) }
+        let firstRequest = Self.request(path: "/first")
+        let first = Task { _ = try await PluginHTTPClient.data(for: firstRequest) }
         try await first.value
         first.cancel()
         _ = try await PluginHTTPClient.data(for: Self.request(path: "/second"))
