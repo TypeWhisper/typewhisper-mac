@@ -404,13 +404,14 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(calls.values, ["realtime", "failure", "rest"])
     }
 
-    func testAutomaticModeSendsOnlyRecordingsUpToFiveMinutesToRealtime() {
+    func testAutomaticModeStreamsOnlyRecordingsThatFitIntoOneCommit() {
+        // The realtime API commits on its own after about 36 seconds.
         XCTAssertEqual(
-            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 300),
+            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 30),
             .realtime
         )
         XCTAssertEqual(
-            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 301),
+            ElevenLabsPlugin.transcriptionTransport(mode: .automatic, keyterms: [], audioDuration: 31),
             .rest
         )
         XCTAssertEqual(

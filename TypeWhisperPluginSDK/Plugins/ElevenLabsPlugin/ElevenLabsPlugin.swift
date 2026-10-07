@@ -135,10 +135,13 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
     static let maximumKeytermCount = 1_000
     static let maximumKeytermCharacterCount = 49
     static let maximumKeytermWordCount = 5
-    /// The realtime API takes a recording as one live stream with commits
-    /// every 36 seconds and documents no session length. The batch endpoint
-    /// transcribes long files in parallel, so longer files go there.
-    static let maximumRealtimeAudioDuration: TimeInterval = 5 * 60
+    /// The realtime API commits on its own after about 36 seconds of audio,
+    /// and no message marks the transcript of the final commit. A recording
+    /// sent as one stream ends one second after the first committed
+    /// transcript, so a longer one could lose its end. Recordings that fit
+    /// into one commit stream; longer ones go to the batch endpoint, which
+    /// transcribes them many times faster than real time.
+    static let maximumRealtimeAudioDuration: TimeInterval = 30
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
