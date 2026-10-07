@@ -1021,6 +1021,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private var createCount = 0
         private var appendCount = 0
         private var cancelCount = 0
+        private var batchSamples: [Float] = []
         var failsFinalization = false
         /// Every audio append throws, like a live connection that dropped.
         var failsAudioAppend = false
@@ -1039,6 +1040,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             lock.withLock { cancelCount }
         }
 
+        var lastBatchTranscriptionSamples: [Float] {
+            lock.withLock { batchSamples }
+        }
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -1046,7 +1051,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         func selectModel(_ modelId: String) {}
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            PluginTranscriptionResult(text: "batch", detectedLanguage: language)
+            lock.withLock { batchSamples = audio.samples }
+            return PluginTranscriptionResult(text: "batch", detectedLanguage: language)
         }
 
         func createLiveTranscriptionSession(
@@ -7810,9 +7816,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {}
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-        }
+        let recording = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.stopRecordingOverride = { _ in recording }
 
         let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
@@ -7830,6 +7835,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.rawText, "batch")
         XCTAssertEqual(livePlugin.liveSessionCancelCount, 1)
+        // Every recorded sample reached batch transcription; the rest is silent padding.
+        let batchSamples = livePlugin.lastBatchTranscriptionSamples
+        XCTAssertEqual(Array(batchSamples.prefix(recording.count)), recording)
+        XCTAssertTrue(batchSamples.dropFirst(recording.count).allSatisfy { $0 == 0 })
     }
 
     /// Returns the live-dictation session count before and after the browser URL

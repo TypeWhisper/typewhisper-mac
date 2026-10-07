@@ -190,6 +190,9 @@ final class AudioRecorderViewModel: ObservableObject {
         let prompt: String?
         let dictionaryTermHints: [PluginDictionaryTermHint]
         let liveSessionResult: TranscriptionResult?
+        /// The live session lost audio or could not finalize, so its preview is not
+        /// a usable transcript.
+        let liveSessionFailed: Bool
         let calendarEvent: CalendarMeetingTranscriptMetadata?
     }
 
@@ -734,6 +737,7 @@ final class AudioRecorderViewModel: ObservableObject {
             async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
             let (liveSessionFinish, url) = await (liveSessionFinishTask, finalizedURLTask)
             let liveSessionResult = liveSessionFinish.result
+            let liveSessionFailed = if case .failed = liveSessionFinish { true } else { false }
 
             if let url, let calendarEvent {
                 do {
@@ -773,6 +777,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     prompt: dictionaryPrompt,
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult,
+                    liveSessionFailed: liveSessionFailed,
                     calendarEvent: calendarEvent
                 )
                 if let apiSessionID {
@@ -1089,6 +1094,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId),
                 dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
                 liveSessionResult: nil,
+                liveSessionFailed: false,
                 calendarEvent: item.calendarEvent
             )
 
@@ -1260,10 +1266,13 @@ final class AudioRecorderViewModel: ObservableObject {
         isTranscribing = true
         defer { isTranscribing = false }
 
+        // A failed live session's preview stopped at the failure, so it never stands in
+        // for the transcript.
+        let previewCanBeTranscript = !request.liveSessionFailed
         let buffer = request.buffer
         guard buffer.count > 8000 else { // At least 0.5s of audio
             // Use streaming result as final if buffer too short
-            if !partialText.isEmpty {
+            if previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             } else if let liveSessionResult = request.liveSessionResult {
                 let text = liveSessionResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1288,7 +1297,7 @@ final class AudioRecorderViewModel: ObservableObject {
             if !text.isEmpty {
                 partialText = text
                 return saveTranscriptOutcome(text, for: request.outputURL, request: request)
-            } else if !partialText.isEmpty {
+            } else if previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             } else {
                 let failure = makeTranscriptionFailure(
@@ -1305,7 +1314,7 @@ final class AudioRecorderViewModel: ObservableObject {
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // Fall back to streaming result
-            if !partialText.isEmpty {
+            if previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             }
             let failure = makeTranscriptionFailure(
@@ -1517,6 +1526,7 @@ final class AudioRecorderViewModel: ObservableObject {
             prompt: nil,
             dictionaryTermHints: [],
             liveSessionResult: nil,
+            liveSessionFailed: false,
             calendarEvent: nil
         )
         let failure = makeTranscriptionFailure(

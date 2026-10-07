@@ -1,6 +1,7 @@
 import AudioToolbox
 import AVFoundation
 import XCTest
+import os
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
@@ -899,6 +900,47 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertFalse(failure.providerError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         XCTAssertTrue(session.error?.contains(failure.phase.displayName) == true)
         XCTAssertTrue(session.error?.contains(failure.providerError) == true)
+    }
+
+    func testDroppedLiveSessionRecordsFailureInsteadOfSavingPreview() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager()
+        let livePlugin = AudioRecorderDroppingLivePlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.dropping-live",
+                name: "Dropping Live",
+                version: "1.0.0",
+                principalClass: "AudioRecorderDroppingLivePlugin"
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: makeTemporaryDirectory(),
+            isEnabled: true
+        ))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(livePlugin.providerId)
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+        viewModel.livePreviewEnabled = true
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        for _ in 0..<50 where livePlugin.liveSessionCreateCount == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+        // The preview froze at the words recognized before the connection dropped.
+        viewModel.partialText = "words before the drop"
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertNil(session.text)
+        XCTAssertEqual(livePlugin.batchTranscriptionCount, 1)
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        XCTAssertEqual(recording.transcriptionFailure?.phase, .finalTranscription)
     }
 
     func testSuccessfulTranscriptSaveClearsPriorRecorderFailure() async throws {
@@ -2530,6 +2572,56 @@ private final class AudioRecorderRestorableTranscriptionPlugin: NSObject, Transc
     ) async throws -> PluginTranscriptionResult {
         guard isConfigured else { throw PluginTranscriptionError.notConfigured }
         return PluginTranscriptionResult(text: "restored transcription", detectedLanguage: language)
+    }
+}
+
+/// Its live session drops on every append, and batch transcription fails too.
+private final class AudioRecorderDroppingLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.dropping-live"
+    static let pluginName = "Dropping Live"
+
+    var providerId: String { "dropping-live" }
+    var providerDisplayName: String { "Dropping Live" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
+    var selectedModelId: String? { "live" }
+    var supportsTranslation: Bool { false }
+    private let counts = OSAllocatedUnfairLock(initialState: (sessions: 0, batch: 0))
+
+    var liveSessionCreateCount: Int { counts.withLock { $0.sessions } }
+    var batchTranscriptionCount: Int { counts.withLock { $0.batch } }
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        counts.withLock { $0.batch += 1 }
+        throw PluginTranscriptionError.networkError("The Internet connection appears to be offline.")
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        counts.withLock { $0.sessions += 1 }
+        return DroppingSession()
+    }
+
+    private actor DroppingSession: LiveTranscriptionSession {
+        func appendAudio(samples: [Float]) async throws {
+            throw PluginTranscriptionError.networkError("Socket is not connected")
+        }
+
+        func finish() async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "", detectedLanguage: nil)
+        }
+
+        func cancel() async {}
     }
 }
 

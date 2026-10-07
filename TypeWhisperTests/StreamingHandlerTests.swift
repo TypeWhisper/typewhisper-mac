@@ -453,7 +453,9 @@ final class StreamingHandlerTests: XCTestCase {
             appendWasReleased = false
         }
 
-        func releaseBlockedAppend() {
+        /// Lets the blocked append return, or throw `error` once it resumes.
+        func releaseBlockedAppend(throwing error: PluginTranscriptionError? = nil) {
+            blockedAppendError = error
             appendWasReleased = true
             appendReleaseContinuation?.resume()
             appendReleaseContinuation = nil
@@ -487,6 +489,10 @@ final class StreamingHandlerTests: XCTestCase {
                     }
                 }
                 appendIsBlocked = false
+                if let blockedAppendError {
+                    self.blockedAppendError = nil
+                    throw blockedAppendError
+                }
             }
 
             let progressText: String
@@ -520,6 +526,7 @@ final class StreamingHandlerTests: XCTestCase {
         private var finishError: PluginTranscriptionError?
         private var appendError: PluginTranscriptionError?
         private var appendsBeforeError = 0
+        private var blockedAppendError: PluginTranscriptionError?
     }
 
     override func tearDown() {
@@ -1428,6 +1435,88 @@ final class StreamingHandlerTests: XCTestCase {
         await finalStopTask?.value
         let finalCancellation = await plugin.session.cancellationSnapshot()
         XCTAssertFalse(finalCancellation.observedDuringAppend)
+    }
+
+    func testReplacedSessionAppendFailureDoesNotFailNextSession() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let nextOffset = OSAllocatedUnfairLock(initialState: 0)
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                nextOffset.withLock { offset in
+                    offset += 1600
+                    return (Array(repeating: 0.25, count: 1600), offset)
+                }
+            },
+            bufferedDurationProvider: { 0.1 }
+        )
+
+        await plugin.session.prepareToBlockNextAppend()
+        handler.start(
+            streamPrompt: "First session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+        for _ in 0..<50 {
+            if await plugin.session.isAppendBlocked() { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let appendIsBlocked = await plugin.session.isAppendBlocked()
+        XCTAssertTrue(appendIsBlocked)
+
+        // A website workflow restarts streaming while the first session's append is
+        // in flight; that append then fails after the restart reset the state.
+        handler.start(
+            streamPrompt: "Second session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+        await plugin.session.releaseBlockedAppend(
+            throwing: PluginTranscriptionError.networkError("cancelled")
+        )
+        for _ in 0..<50 where plugin.liveSessionCreateCount < 2 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(plugin.liveSessionCreateCount, 2)
+        try await Task.sleep(for: .milliseconds(400))
+
+        let outcome = await handler.finish()
+
+        XCTAssertEqual(outcome.result?.text, "finished")
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {

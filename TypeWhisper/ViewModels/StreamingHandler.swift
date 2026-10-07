@@ -28,6 +28,9 @@ final class StreamingHandler: @unchecked Sendable {
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
         var liveSessionAppendFailed = false
+        /// Advances on every reset, so a replaced session's late append failure is
+        /// not attributed to the session that follows it.
+        var sessionGeneration: UInt64 = 0
     }
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
@@ -137,11 +140,12 @@ final class StreamingHandler: @unchecked Sendable {
             (provider as? LiveTranscriptionProgressModeProviding)?.liveTranscriptionProgressMode == .completeSnapshot
 
         resetStreamingState()
-        sharedState.withLock { state in
+        let sessionGeneration = sharedState.withLock { state in
             state.normalizeNumbers = normalizeNumbers
             state.configuredLanguage = languageSelection.requestedLanguage
             state.configuredLanguageCandidates = languageSelection.selectedCodes
             state.task = task
+            return state.sessionGeneration
         }
         onStreamingStateChange?(true)
 
@@ -170,7 +174,7 @@ final class StreamingHandler: @unchecked Sendable {
             ) {
                 logger.info("Live transcript preview using live session providerId=\(handle.providerId, privacy: .public)")
                 self.sharedState.withLock { $0.liveSessionHandle = handle }
-                await self.runLiveSessionLoop(stateCheck: stateCheck)
+                await self.runLiveSessionLoop(sessionGeneration: sessionGeneration, stateCheck: stateCheck)
                 return
             }
 
@@ -386,7 +390,10 @@ final class StreamingHandler: @unchecked Sendable {
         }
     }
 
-    private func runLiveSessionLoop(stateCheck: @escaping @MainActor @Sendable () -> Bool) async {
+    private func runLiveSessionLoop(
+        sessionGeneration: UInt64,
+        stateCheck: @escaping @MainActor @Sendable () -> Bool
+    ) async {
         while !Task.isCancelled {
             guard await stateCheck() else { break }
             let delta = nextBufferDelta()
@@ -398,7 +405,10 @@ final class StreamingHandler: @unchecked Sendable {
                     try await handle.session.appendAudio(samples: delta.samples)
                 } catch {
                     logger.warning("Live transcription append failed: \(error.localizedDescription)")
-                    sharedState.withLock { $0.liveSessionAppendFailed = true }
+                    sharedState.withLock { state in
+                        guard state.sessionGeneration == sessionGeneration else { return }
+                        state.liveSessionAppendFailed = true
+                    }
                     break
                 }
             }
@@ -478,6 +488,7 @@ final class StreamingHandler: @unchecked Sendable {
             state.task = .transcribe
             state.sampleCursor = 0
             state.liveSessionAppendFailed = false
+            state.sessionGeneration &+= 1
         }
         progressText.withLock { $0 = "" }
     }
