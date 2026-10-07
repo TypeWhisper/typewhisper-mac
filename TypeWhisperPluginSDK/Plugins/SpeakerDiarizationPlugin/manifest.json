@@ -5,6 +5,9 @@
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
     "author": "TypeWhisper",
     "description": "On-device speaker detection for recordings and file transcriptions. Tells who spoke when; the audio never leaves your Mac.",
     "descriptions": {

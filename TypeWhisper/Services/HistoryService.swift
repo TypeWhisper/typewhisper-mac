@@ -552,6 +552,10 @@ final class HistoryService: ObservableObject {
               record.speakerTranscript?.revision == transcript.revision else { return false }
         let (renumbered, newSpeakerIDs) = transcript.renumbered()
         guard renumbered.isValid else { return false }
+        // An edit that removes all text would leave the record's text and
+        // the transcript out of step.
+        let text = Self.sanitize(renumbered.joinedText)
+        guard !updatesText || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
         let movedNames = names?.renamingSpeakers(newSpeakerIDs)
         let now = Date()
         if record.speakerTranscript != renumbered { record.speakerTranscriptUpdatedAt = now }
@@ -566,14 +570,11 @@ final class HistoryService: ObservableObject {
         record.speakerTranscript = renumbered
         record.speakerNames = newNames
         if updatesText {
-            let text = Self.sanitize(renumbered.joinedText)
-            if !text.isEmpty {
-                record.finalText = text
-                record.renderedDocument = nil
-                record.synchronizedStructuredDocument = nil
-                record.wordsCount = text.split(separator: " ").count
-                record.contentUpdatedAt = Date()
-            }
+            record.finalText = text
+            record.renderedDocument = nil
+            record.synchronizedStructuredDocument = nil
+            record.wordsCount = text.split(separator: " ").count
+            record.contentUpdatedAt = Date()
         }
         save()
         refreshRecentRecords()

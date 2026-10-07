@@ -89,6 +89,66 @@ extension SpeakerTranscriptPresentation {
         return result
     }
 
+    /// The sentences of `text` with times from another transcription of the
+    /// same audio. A pass that only provides timing must not replace the
+    /// saved text, so its words are matched to the text like word timing of
+    /// another engine. Empty for text without spaces between words.
+    static func timedSentences(
+        of text: String,
+        duration: TimeInterval,
+        timing: TranscriptionResult
+    ) -> [TimedTextEntry] {
+        let source = text as NSString
+        var words = timing.words
+        if words.isEmpty {
+            // Without word timing the words are spread over their segment.
+            words = timing.segments.flatMap { segment -> [TranscriptionWord] in
+                let parts = segment.text.split(whereSeparator: \.isWhitespace)
+                guard !parts.isEmpty else { return [] }
+                let step = max(0, segment.end - segment.start) / Double(parts.count)
+                return parts.enumerated().map { index, part in
+                    let start = segment.start + step * Double(index)
+                    return TranscriptionWord(text: String(part), start: start, end: start + step)
+                }
+            }
+        }
+        let end = max(duration, words.last?.end ?? 0)
+        guard source.length > 0, !words.isEmpty, end > 0 else { return [] }
+
+        let paragraph = SpeakerParagraph(turnIndex: 0, speakerID: "", start: 0, end: end, text: text, segmentRange: 0..<1)
+        let segment = SpeakerTranscriptSegment(text: text, start: 0, end: end, speakerID: nil, speakerConfidence: nil)
+        let ranges = wordRanges(in: source)
+        let timed = timedWords(of: paragraph, segments: [segment], words: words)
+        guard ranges.count > 1, ranges.count == timed.count else { return [] }
+
+        var sentences: [NSRange] = []
+        source.enumerateSubstrings(
+            in: NSRange(location: 0, length: source.length),
+            options: [.bySentences, .substringNotRequired]
+        ) { _, range, _, _ in sentences.append(range) }
+
+        var spans: [(first: Int, last: Int)] = []
+        var next = 0
+        for sentence in sentences {
+            let first = next
+            while next < ranges.count, ranges[next].location < NSMaxRange(sentence) { next += 1 }
+            if next > first { spans.append((first, next - 1)) }
+        }
+        return spans.enumerated().map { index, span in
+            let location = ranges[span.first].location
+            let range = NSRange(location: location, length: NSMaxRange(ranges[span.last]) - location)
+            let start = timed[span.first].start
+            let following = index + 1 < spans.count ? timed[spans[index + 1].first].start : end
+            return TimedTextEntry(
+                text: source.substring(with: range),
+                start: start,
+                end: max(start, following),
+                utf16Location: range.location,
+                utf16Length: range.length
+            )
+        }
+    }
+
     private static func wordRanges(in source: NSString) -> [NSRange] {
         let separators = CharacterSet.whitespacesAndNewlines
         var ranges: [NSRange] = []

@@ -405,6 +405,18 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.isAudible("S1"))
     }
 
+    func testAnEditThatRemovesAllTextIsRejected() throws {
+        _ = try makeModel()
+        let transcript = try XCTUnwrap(history.record(withID: recordID)?.speakerTranscript)
+        let emptied = transcript.replacingText(ofSegmentsIn: 0..<transcript.segments.count, with: " ")
+
+        XCTAssertFalse(history.updateSpeakerTranscript(emptied, names: nil, forRecordID: recordID, updatesText: true))
+
+        let record = try XCTUnwrap(history.record(withID: recordID))
+        XCTAssertEqual(record.speakerTranscript, transcript)
+        XCTAssertEqual(record.finalText, "Good morning everyone. Shall we start now? Yes, let us begin. Fine.")
+    }
+
     func testSpeakerNamedAsTheUserIsOwnSpeech() throws {
         let model = try makeModel()
         XCTAssertFalse(model.isOwnSpeaker("S1"))

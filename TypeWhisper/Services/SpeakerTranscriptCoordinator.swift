@@ -446,12 +446,26 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             if granularity == .none, let timingSource {
                 stages[recordID] = .transcribing
                 let result = try await timingSource(audioURL, language)
-                timedText = SpeakerTranscriptBuilder.timedText(from: result.segments)
+                // The pass only provides times; the saved text stays. Its
+                // words then belong to another text, like a second pass.
+                let sentences = SpeakerTranscriptPresentation.timedSentences(
+                    of: text,
+                    duration: duration,
+                    timing: result
+                )
+                let keepsText = !sentences.isEmpty
+                timedText = keepsText ? sentences : SpeakerTranscriptBuilder.timedText(from: result.segments)
                 granularity = timedText.isEmpty ? .none : .segment
-                words = result.words
-                hasWordTiming = !words.isEmpty
+                hasWordTiming = !result.words.isEmpty
+                words = keepsText ? [] : result.words
                 try Task.checkCancellation()
-                historyService.setTimedText(timedText, granularity: granularity, words: words, forRecordID: recordID)
+                historyService.setTimedText(
+                    timedText,
+                    granularity: granularity,
+                    words: result.words,
+                    wordsAreFromSecondPass: keepsText,
+                    forRecordID: recordID
+                )
             }
             if !hasWordTiming, granularity != .none, let wordTimingSource {
                 stages[recordID] = .transcribing

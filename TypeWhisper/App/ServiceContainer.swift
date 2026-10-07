@@ -364,6 +364,10 @@ final class ServiceContainer: ObservableObject {
         speakerTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)
         }
+        speakerTranscriptionViewModel.speakerRecordRemoval = { [speakerCoordinator, historyService] recordID in
+            speakerCoordinator.cancel(recordID: recordID)
+            historyService.deleteRecord(withID: recordID)
+        }
         audioRecorderViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)
         }

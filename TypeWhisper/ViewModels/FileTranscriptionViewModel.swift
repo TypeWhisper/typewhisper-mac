@@ -127,6 +127,9 @@ final class FileTranscriptionViewModel: ObservableObject {
     /// (Premium). True for the instance behind the Speakers page.
     let detectsSpeakers: Bool
     var speakerRecordIntake: SpeakerRecordIntake?
+    /// Stops detection for a record added by `speakerRecordIntake` and deletes
+    /// it, for a file cancelled while its record was added.
+    var speakerRecordRemoval: (@MainActor (UUID) -> Void)?
 
     private let modelManager: ModelManagerService
     private let audioFileService: AudioFileService
@@ -502,9 +505,12 @@ final class FileTranscriptionViewModel: ObservableObject {
                     modelUsed: selectedModel
                 ))
                 guard files.indices.contains(index), files[index].id == itemID else { return }
+                // A file cancelled while its record was added leaves no record behind.
+                guard !cancellationFlag.isCancelled else {
+                    if let recordID { speakerRecordRemoval?(recordID) }
+                    throw CancellationError()
+                }
                 files[index].historyRecordID = recordID
-                // Cancelling while the record was added must not end as done.
-                guard !cancellationFlag.isCancelled else { throw CancellationError() }
             }
             files[index].state = .done
             files[index].phaseDescription = String(localized: "Done")

@@ -401,6 +401,52 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.speakerTranscriptState, .ready)
     }
 
+    func testTimingPassKeepsTheSavedTextWhenItHearsDifferentWords() async throws {
+        let id = UUID()
+        let audioFileName = history.writeAudioFile([Float](repeating: 0.1, count: 64_000), forRecordID: id)
+        XCTAssertTrue(history.addRecord(
+            id: id,
+            rawText: "Hello there. How are you today?",
+            finalText: "Hello there. How are you today?",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 4,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: audioFileName
+        ))
+        provider.turns = [
+            PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 1.5),
+            PluginSpeakerTurn(speakerLabel: "y", start: 1.5, end: 4),
+        ]
+        let coordinator = makeCoordinator()
+        coordinator.timingSource = { _, language in
+            TranscriptionResult(
+                text: "hello their how are you to day",
+                detectedLanguage: language,
+                duration: 4,
+                processingTime: 0.1,
+                engineUsed: "test",
+                segments: [
+                    TranscriptionSegment(text: "hello their", start: 0, end: 1.4),
+                    TranscriptionSegment(text: "how are you to day", start: 1.6, end: 4),
+                ]
+            )
+        }
+
+        XCTAssertNil(coordinator.start(recordID: id))
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        XCTAssertEqual(record.timedText.map(\.text), ["Hello there.", "How are you today?"])
+        XCTAssertEqual(record.timedText.first?.start, 0)
+        XCTAssertEqual(record.timedText.last?.start ?? 0, 1.6, accuracy: 0.01)
+        let transcript = try XCTUnwrap(record.speakerTranscript)
+        XCTAssertEqual(transcript.segments.map(\.text), ["Hello there.", "How are you today?"])
+        XCTAssertEqual(transcript.segments.map(\.speakerID), ["S1", "S2"])
+        XCTAssertEqual(record.finalText, "Hello there. How are you today?")
+    }
+
     func testRecordingWithoutWordTimingGetsItFromTheSecondPass() async throws {
         provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
         let coordinator = makeCoordinator()
