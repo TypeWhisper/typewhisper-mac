@@ -515,7 +515,11 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         for name in remoteNames {
             let date = name.updatedAt ?? remoteDate
             if let local = localStamp(of: name.speakerID), local > date { continue }
-            setName(name.displayName, for: name.speakerID, profileID: name.profileID)
+            // Profile links stay on their device: the same name keeps this
+            // device's link, another name has none here.
+            let current = confirmedEntries.first { $0.speakerID == name.speakerID }
+            let profileID = current?.displayName == name.displayName ? current?.profileID : nil
+            setName(name.displayName, for: name.speakerID, profileID: profileID)
             if let index = entries.firstIndex(where: { $0.speakerID == name.speakerID }) {
                 entries[index].updatedAt = date
             }
@@ -532,7 +536,7 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         let remoteRemoved = Set(remoteCleared.map(\.speakerID))
         let hasNamesTheRemoteLacks = confirmedEntries.contains { entry in
             guard let remote = remoteNamed[entry.speakerID] else { return true }
-            return remote.displayName != entry.displayName || remote.profileID != entry.profileID
+            return remote.displayName != entry.displayName
         }
         let hasRemovalsTheRemoteLacks = cleared.contains { !remoteRemoved.contains($0.speakerID) }
         return hasNamesTheRemoteLacks || hasRemovalsTheRemoteLacks

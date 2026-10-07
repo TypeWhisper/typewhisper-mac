@@ -429,6 +429,16 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.isOwnSpeaker("S2"))
         XCTAssertFalse(model.isOwnSpeaker("S1"))
     }
+
+    func testSpeakerOnTheMicrophoneIsOwnSpeechWhateverItsName() {
+        let turns = [
+            SpeakerTranscriptTurn(index: 0, speakerID: "S1", start: 0, end: 6, text: "", segmentRange: 0..<2),
+            SpeakerTranscriptTurn(index: 1, speakerID: "S2", start: 6, end: 7, text: "", segmentRange: 2..<3),
+        ]
+        XCTAssertEqual(SpeakerWorkspaceModel.microphoneSpeaker(of: turns, ownSpeech: [5.9...7]), "S2")
+        XCTAssertNil(SpeakerWorkspaceModel.microphoneSpeaker(of: turns, ownSpeech: []))
+        XCTAssertNil(SpeakerWorkspaceModel.microphoneSpeaker(of: turns, ownSpeech: [0...1]), "a short overlap is no own speech")
+    }
 }
 
 final class SpeakerTimedWordsTests: XCTestCase {

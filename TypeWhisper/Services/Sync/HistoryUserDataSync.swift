@@ -325,8 +325,8 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
     struct Name: Codable, Equatable, Sendable {
         let speakerID: String
         let displayName: String
-        /// Links the name to a voice profile on the device that wrote it;
-        /// opaque elsewhere and without voice data.
+        /// No longer written: voice profile links stay on their device.
+        /// Read for payloads of earlier builds and ignored.
         let profileID: UUID?
         /// When the name was given; without it the payload's date counts.
         let updatedAt: Date?
@@ -360,7 +360,7 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
         self.transcriptRevision = transcriptRevision
         let table = table?.transcriptRevision == transcriptRevision ? table : nil
         names = (table?.confirmedEntries ?? []).map {
-            Name(speakerID: $0.speakerID, displayName: $0.displayName, profileID: $0.profileID, updatedAt: $0.updatedAt ?? updatedAt)
+            Name(speakerID: $0.speakerID, displayName: $0.displayName, updatedAt: $0.updatedAt ?? updatedAt)
         }
         cleared = table?.cleared ?? []
     }
@@ -395,13 +395,13 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
             }
     }
 
-    /// The names as table entries, each with its date.
+    /// The names as table entries, each with its date. Without profile
+    /// links: another device's profile means nothing here.
     var entries: [SpeakerNameTable.Entry] {
         names.map {
             SpeakerNameTable.Entry(
                 speakerID: $0.speakerID,
                 displayName: $0.displayName,
-                profileID: $0.profileID,
                 updatedAt: $0.updatedAt ?? updatedAt
             )
         }

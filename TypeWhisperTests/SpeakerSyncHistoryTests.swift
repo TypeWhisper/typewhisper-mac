@@ -155,6 +155,30 @@ final class SpeakerSyncHistoryTests: XCTestCase {
         XCTAssertEqual(voices.state(of: "S1", inRecordID: recordID), .none)
     }
 
+    func testVoiceProfileLinksStayOnTheirDevice() throws {
+        try addPendingRecording()
+        history.storeSpeakerTranscript(transcript, forRecordID: recordID)
+        let localProfile = UUID()
+        history.setSpeakerName("Anna", for: "S1", profileID: localProfile, inRecordID: recordID)
+        history.setSpeakerName("Ben", for: "S2", profileID: UUID(), inRecordID: recordID)
+        let namesStamp = try XCTUnwrap(record?.speakerNamesUpdatedAt)
+        XCTAssertEqual(exported?.speakers?.names.map(\.profileID), [nil, nil])
+
+        var remote = SpeakerNameTable(transcriptRevision: transcript.revision)
+        remote.setName("Anna", for: "S1", profileID: UUID())
+        remote.setName("Bernd", for: "S2", profileID: UUID())
+        try history.applyUserDataSyncMutations([.upsertHistorySpeakers(UserDataSyncHistorySpeakersV1(
+            recordID: recordID,
+            updatedAt: namesStamp.addingTimeInterval(60),
+            transcriptRevision: transcript.revision,
+            table: remote
+        ))])
+
+        XCTAssertEqual(record?.speakerNames?.profileID(for: "S1"), localProfile)
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S2"), "Bernd")
+        XCTAssertNil(record?.speakerNames?.profileID(for: "S2"))
+    }
+
     func testOlderRemoteDataLosesAndLocalSuggestionsSurviveRemoteNames() throws {
         try addPendingRecording()
         history.storeSpeakerTranscript(transcript, forRecordID: recordID)

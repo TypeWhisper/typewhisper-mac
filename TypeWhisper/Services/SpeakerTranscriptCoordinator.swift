@@ -322,6 +322,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         let id = UUID()
         let audioURL = historyService.speakerAudioFileURL(forRecordID: id)
         let samples = input.samples
+        let clearGeneration = historyService.clearGeneration
         let didWriteAudio = await Task.detached(priority: .utility) {
             do {
                 try SpeakerAudioWriter.writeAAC(samples: samples, to: audioURL)
@@ -344,7 +345,8 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             granularity: timedText.isEmpty ? .none : .segment,
             words: input.result.words,
             ownSpeech: input.ownSpeech,
-            transcript: providerTranscript
+            transcript: providerTranscript,
+            capturedInClearGeneration: clearGeneration
         ) else { return nil }
 
         if providerTranscript == nil {

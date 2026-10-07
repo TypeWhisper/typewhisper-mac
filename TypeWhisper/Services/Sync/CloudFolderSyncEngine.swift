@@ -491,7 +491,7 @@ enum CloudFolderSyncEngine {
         state.knownLocalItemIDs = Set(synchronizedRecords.keys)
         state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
         // Withheld components stay pending; only what another device sent counts as exported.
-        let receivedKeys = stateKeys(changedBy: mutations)
+        let receivedKeys = Self.receivedSpeakerComponentKeys(from: mutations)
         for key in fileResult.withheldKeys where !receivedKeys.contains(key) {
             state.exportedItemVersions[key] = stateSnapshot.exportedItemVersions[key]
         }
@@ -510,6 +510,14 @@ enum CloudFolderSyncEngine {
         for itemID in republishedItemIDs {
             state.exportedItemVersions.removeValue(forKey: itemID)
         }
+        // Names merged from two devices are newer than the ones read and go out again.
+        let republishedSpeakerKeys = Self.speakerKeysRequiringRepublish(
+            afterApplying: mutations,
+            records: synchronizedRecords
+        )
+        for key in republishedSpeakerKeys {
+            state.exportedItemVersions.removeValue(forKey: key)
+        }
         state.appliedOperationIDs.formUnion(operations.map(\.operationId))
         state.lastSyncAt = now
 
@@ -523,7 +531,7 @@ enum CloudFolderSyncEngine {
                 + fileResult.assetDiagnostics,
             devices: fileResult.deviceReadResult.devices,
             packageFingerprint: fileResult.packageFingerprint,
-            requiresFollowUpSync: !republishedItemIDs.isEmpty
+            requiresFollowUpSync: !republishedItemIDs.isEmpty || !republishedSpeakerKeys.isEmpty
         )
     }
 
@@ -1397,6 +1405,49 @@ enum CloudFolderSyncEngine {
             }
         }
         return keys
+    }
+
+    /// The speaker components another device actually sent, unlike
+    /// `stateKeys(changedBy:)`, which lists every component of a changed record.
+    private static func receivedSpeakerComponentKeys(from mutations: [UserDataSyncMutation]) -> Set<String> {
+        var keys = Set<String>()
+        for mutation in mutations {
+            switch mutation {
+            case .upsertHistoryTranscript(let transcript):
+                keys.insert(speakerComponentKey(recordID: transcript.recordID, component: .transcript))
+            case .upsertHistorySpeakers(let speakers):
+                keys.insert(speakerComponentKey(recordID: speakers.recordID, component: .speakers))
+            case .deleteHistory(let recordID):
+                keys.insert(speakerComponentKey(recordID: recordID, component: .transcript))
+                keys.insert(speakerComponentKey(recordID: recordID, component: .speakers))
+            default:
+                continue
+            }
+        }
+        return keys
+    }
+
+    /// Speaker names whose merge kept names this device had and the other
+    /// did not: the stored names are newer than the ones applied.
+    private static func speakerKeysRequiringRepublish(
+        afterApplying mutations: [UserDataSyncMutation],
+        records: [String: CloudFolderSyncRecord]
+    ) -> Set<String> {
+        Set(mutations.compactMap { mutation in
+            guard case .upsertHistorySpeakers(let speakers) = mutation else { return nil }
+            let key = speakerComponentKey(recordID: speakers.recordID, component: .speakers)
+            guard let record = records[key], record.version != versionString(for: speakers.updatedAt) else {
+                return nil
+            }
+            return key
+        })
+    }
+
+    private static func speakerComponentKey(recordID: UUID, component: UserDataSyncHistoryComponent) -> String {
+        UserDataSyncIdentity.historyStateKey(
+            itemID: UserDataSyncIdentity.historyItemID(recordID: recordID),
+            component: component
+        )
     }
 
     private static func dictionaryItemIDsRequiringRepublish(

@@ -1271,8 +1271,20 @@ final class CloudFolderSyncController: ObservableObject {
             return true
         }
         if let packageDevices, packageDevices != devices {
+            let state = syncMode == .automaticICloud ? automaticState : customState
+            let now = Date()
+            // A device that now reads speaker components releases the ones held back for it.
+            let releasesSpeakerComponents = !CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+                devices: devices, ownDeviceId: state.deviceId, now: now
+            ) && CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+                devices: packageDevices, ownDeviceId: state.deviceId, now: now
+            )
             devices = packageDevices
             deviceCount = packageDevices.count
+            if releasesSpeakerComponents {
+                await syncNow()
+                return true
+            }
         }
         return false
     }

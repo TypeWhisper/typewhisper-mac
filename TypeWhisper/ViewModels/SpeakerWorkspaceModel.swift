@@ -27,6 +27,8 @@ final class SpeakerWorkspaceModel: ObservableObject {
     /// Speakers in order of first appearance.
     @Published private(set) var speakerIDs: [String] = []
     @Published private(set) var activeTurnIndex: Int?
+    /// The speaker heard on the microphone channel, if the recording has one.
+    private(set) var microphoneSpeakerID: String?
     @Published private(set) var activeParagraphID: Int?
     /// The word being spoken, as an index into the active paragraph's words.
     /// Kept apart so a new word redraws only the active paragraph.
@@ -73,11 +75,35 @@ final class SpeakerWorkspaceModel: ObservableObject {
         SpeakerTranscriptPresentation.name(for: speakerID, names: names)
     }
 
-    /// True for the speaker named as the user, whose turns show on the right.
-    /// Detection names the microphone's speaker so in Recorder recordings.
+    /// True for the user's own speaker, whose turns show on the right: the
+    /// speaker heard on the microphone channel of a Recorder recording, or
+    /// one named as the user ("Me" in the app's language).
     func isOwnSpeaker(_ speakerID: String) -> Bool {
+        if speakerID == microphoneSpeakerID { return true }
         guard let name = names?.displayName(for: speakerID)?.trimmingCharacters(in: .whitespaces) else { return false }
         return name.compare(String(localized: "speakers.me"), options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
+
+    /// The speaker whose turns are mostly where the microphone carried the
+    /// user's speech; nil without a microphone channel.
+    static func microphoneSpeaker(
+        of turns: [SpeakerTranscriptTurn],
+        ownSpeech: [ClosedRange<TimeInterval>]
+    ) -> String? {
+        guard !ownSpeech.isEmpty else { return nil }
+        var spoken: [String: TimeInterval] = [:]
+        var onMicrophone: [String: TimeInterval] = [:]
+        for turn in turns {
+            spoken[turn.speakerID, default: 0] += max(0, turn.end - turn.start)
+            for range in ownSpeech {
+                let overlap = min(turn.end, range.upperBound) - max(turn.start, range.lowerBound)
+                if overlap > 0 { onMicrophone[turn.speakerID, default: 0] += overlap }
+            }
+        }
+        guard let best = onMicrophone.max(by: { $0.value < $1.value }),
+              let total = spoken[best.key], total > 0,
+              best.value >= total / 2 else { return nil }
+        return best.key
     }
 
     /// Reads the record again after it changed.
@@ -91,6 +117,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         words = record.speakerWords.sorted { $0.start < $1.start }
         wordTokens = [:]
         let turns = transcript.map(SpeakerTranscriptPresentation.turns(of:)) ?? []
+        microphoneSpeakerID = Self.microphoneSpeaker(of: turns, ownSpeech: record.speakerOwnSpeech)
         self.turns = turns
         rows = turns.flatMap { turn in
             SpeakerTranscriptPresentation.paragraphs(of: turn, in: transcript!).enumerated().map {

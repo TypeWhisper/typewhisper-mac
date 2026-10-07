@@ -2803,6 +2803,28 @@ final class CloudFolderSyncTests: XCTestCase {
         let again = try await syncMac(at: 30)
         XCTAssertEqual(again.operationsWritten, 0)
 
+        // An edit of the same record's text from the phone does not count as
+        // receiving the held-back components.
+        let phoneOperations = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("ops/ios-phone", isDirectory: true)
+        try FileManager.default.createDirectory(at: phoneOperations, withIntermediateDirectories: true)
+        let edited = Self.historyRecord(
+            recordID: recordID,
+            finalText: "Good morning, Anna.",
+            contentUpdatedAt: Self.date(31),
+            inboxState: "none",
+            inboxUpdatedAt: Self.date(10)
+        )
+        try Self.entitlementEncoder.encode(CloudFolderSyncOperation.upsertHistory(
+            itemID: UserDataSyncIdentity.historyItemID(recordID: recordID),
+            component: .content,
+            generation: macState.historyGeneration,
+            deviceId: "ios-phone",
+            content: edited.content
+        )).write(to: phoneOperations.appendingPathComponent("edit.json"))
+        let phoneEdit = try await syncMac(at: 33)
+        XCTAssertEqual(phoneEdit.mutationsApplied, 1)
+
         // After the phone's update the pending components are uploaded.
         try writePhone(capabilities: [CloudFolderSyncDeviceRecord.speakerTranscriptCapability], updatedAt: Self.date(35))
         let released = try await syncMac(at: 40)

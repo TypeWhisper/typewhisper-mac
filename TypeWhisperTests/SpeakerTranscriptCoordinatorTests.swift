@@ -296,6 +296,29 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(provider.requests.count, 1)
     }
 
+    func testSpeakerRecordCapturedBeforeClearHistoryIsNotAdded() throws {
+        let id = UUID()
+        let audioURL = history.speakerAudioFileURL(forRecordID: id)
+        try SpeakerAudioWriter.writeAAC(samples: [Float](repeating: 0, count: 16_000), to: audioURL)
+        let generation = history.clearGeneration
+        history.clearAll()
+
+        XCTAssertFalse(history.addSpeakerRecord(
+            id: id,
+            text: "Hello",
+            title: nil,
+            source: .importedFile,
+            durationSeconds: 1,
+            language: nil,
+            engineUsed: "test",
+            timedText: [TimedTextEntry(text: "Hello", start: 0, end: 1, utf16Location: 0, utf16Length: 5)],
+            granularity: .segment,
+            capturedInClearGeneration: generation
+        ))
+        XCTAssertNil(history.record(withID: id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: audioURL.path))
+    }
+
     func testDetectionInterruptedByAQuitBecomesFailed() async throws {
         let id = UUID()
         try SpeakerAudioWriter.writeAAC(

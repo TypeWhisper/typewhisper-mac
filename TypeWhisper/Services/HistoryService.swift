@@ -454,10 +454,13 @@ final class HistoryService: ObservableObject {
         granularity: TimedTextGranularity,
         words: [TranscriptionWord] = [],
         ownSpeech: [ClosedRange<TimeInterval>] = [],
-        transcript: SpeakerTranscript? = nil
+        transcript: SpeakerTranscript? = nil,
+        capturedInClearGeneration: Int? = nil
     ) -> Bool {
         let audioFileName = Self.speakerAudioFileName(for: id)
-        guard let texts = Self.validatedRecordTexts(
+        // A recording captured before History was cleared stays cleared.
+        let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
+        guard !wasCleared, let texts = Self.validatedRecordTexts(
             rawText: text,
             finalText: text,
             durationSeconds: durationSeconds
