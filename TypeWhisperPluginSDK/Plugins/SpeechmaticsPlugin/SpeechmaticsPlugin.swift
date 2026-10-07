@@ -244,10 +244,10 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
 
     /// Speechmatics documents batch speeds down to 0.2 times real time
     /// (Enhanced on CPU), which is 48 minutes for four hours of audio. One poll
-    /// per second for half the audio duration, at least five minutes and at
-    /// most two hours.
+    /// per second for half the audio duration, at least five minutes. Only the
+    /// file size is capped (1 GB), so the budget has no ceiling either.
     static func pollAttempts(forAudioDuration duration: TimeInterval) -> Int {
-        Int(min(max(duration / 2, 300), 7_200))
+        Int(max(duration / 2, 300))
     }
 
     private func submitJob(

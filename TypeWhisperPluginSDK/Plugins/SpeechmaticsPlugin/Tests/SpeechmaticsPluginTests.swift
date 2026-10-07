@@ -75,12 +75,13 @@ final class SpeechmaticsPluginTests: XCTestCase {
         XCTAssertTrue(SpeechmaticsPlugin.supportsRealtimeStreaming(language: "zh"))
     }
 
-    func testPollingBudgetGrowsWithTheRecordingUpToTwoHours() {
+    func testPollingBudgetGrowsWithTheRecording() {
         XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 1), 300)
         XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 10 * 60), 300)
         XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 2 * 3_600), 3_600)
         XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 4 * 3_600), 7_200)
-        XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 10 * 3_600), 7_200)
+        // At 0.2 times real time, ten hours take two; half the duration covers it.
+        XCTAssertEqual(SpeechmaticsPlugin.pollAttempts(forAudioDuration: 10 * 3_600), 18_000)
     }
 
     func testUnsupportedLanguagesAreNoLongerAdvertised() {
