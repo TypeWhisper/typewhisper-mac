@@ -466,6 +466,9 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
             throw PluginTranscriptionError.notConfigured
         }
         let resolved = Self.resolveLanguage(selection: languageSelection)
+        guard Self.streamsAudio(ofDuration: audio.duration) else {
+            return try await transcribeREST(audio: audio, language: resolved, apiKey: apiKey)
+        }
 
         do {
             return try await transcribeWebSocket(
@@ -482,6 +485,13 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
                 apiKey: apiKey
             )
         }
+    }
+
+    /// The realtime endpoint takes a recording as one stream and documents no
+    /// session length. Longer files go to the prerecorded endpoint, which takes
+    /// them in five-minute requests.
+    static func streamsAudio(ofDuration duration: TimeInterval) -> Bool {
+        duration <= maximumRequestDuration
     }
 
     /// Reson8 accepts one language query parameter, not an ordered hint list.
@@ -519,11 +529,30 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         guard let url = components.url else {
             throw PluginTranscriptionError.apiError("Failed to construct request URL")
         }
+        return try await PluginAudioChunking.transcribe(
+            audio,
+            maximumChunkDuration: Self.maximumRequestDuration
+        ) { chunk in
+            try await transcribeRESTRequest(url: url, samples: chunk.samples, language: language, apiKey: apiKey)
+        }
+    }
+
+    /// The prerecorded endpoint rejects bodies above an undocumented size with
+    /// 413 and has to answer within the 60-second request timeout; five
+    /// minutes are 9.6 MB as PCM.
+    static let maximumRequestDuration: TimeInterval = 300
+
+    private func transcribeRESTRequest(
+        url: URL,
+        samples: [Float],
+        language: String?,
+        apiKey: String
+    ) async throws -> PluginTranscriptionResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
         request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Self.floatToPCM16(audio.samples)
+        request.httpBody = Self.floatToPCM16(samples)
         request.timeoutInterval = 60
 
         let (data, response) = try await PluginHTTPClient.data(for: request)

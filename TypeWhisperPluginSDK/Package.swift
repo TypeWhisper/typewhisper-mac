@@ -762,6 +762,7 @@ let package = Package(
             name: "Reson8PluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
                 "Reson8Plugin",
             ],
             path: "Plugins/Reson8Plugin/Tests"

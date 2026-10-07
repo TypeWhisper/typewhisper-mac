@@ -86,6 +86,21 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
 
     // MARK: - Transcription (Custom HTTP with CF Headers)
 
+    /// Cloudflare answers 524 when the origin sends nothing for 125 seconds
+    /// and takes at most 100 MB per upload on Free and Pro plans. A long
+    /// recording goes out in five-minute chunks, which stay below both as
+    /// long as the ASR server transcribes faster than about 2.5x real time.
+    /// https://developers.cloudflare.com/fundamentals/reference/connection-limits/
+    /// https://developers.cloudflare.com/support/troubleshooting/http-status-codes/4xx-client-error/error-413/
+    static let maximumChunkDuration: TimeInterval = 5 * 60
+
+    /// The ASR server answers once the audio is transcribed. A request waits
+    /// 30 s per audio minute, up to just past Cloudflare's 125 s, so a 524
+    /// reaches the user instead of a client timeout.
+    static func requestTimeout(forAudioDuration duration: TimeInterval) -> TimeInterval {
+        min(max(30, duration / 60 * 30), 130)
+    }
+
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         guard let baseURL = _baseURL, !baseURL.isEmpty else {
             throw PluginTranscriptionError.notConfigured
@@ -102,12 +117,12 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
             throw PluginTranscriptionError.apiError("Invalid URL: \(endpoint)")
         }
 
-        func perform(uploadFile: PluginAudioUploadFile) async throws -> (Data, HTTPURLResponse) {
+        func perform(uploadFile: PluginAudioUploadFile, audioDuration: TimeInterval) async throws -> (Data, HTTPURLResponse) {
             let boundary = UUID().uuidString
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.timeoutInterval = 30
+            request.timeoutInterval = Self.requestTimeout(forAudioDuration: audioDuration)
 
             // Cloudflare tunnel service token headers
             if let cfId = _cfClientId, !cfId.isEmpty,
@@ -149,43 +164,48 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
             return (responseData, httpResponse)
         }
 
-        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
-        var (responseData, httpResponse) = try await perform(uploadFile: preferredUpload)
-        if preferredUpload.format != "wav",
-           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
-            statusCode: httpResponse.statusCode,
-            responseData: responseData
-           ) {
-            (responseData, httpResponse) = try await perform(uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio))
-        }
+        return try await PluginAudioChunking.transcribe(audio, maximumChunkDuration: Self.maximumChunkDuration) { chunk in
+            let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: chunk))
+                ?? PluginAudioUploadEncoder.wavUpload(from: chunk)
+            var (responseData, httpResponse) = try await perform(uploadFile: preferredUpload, audioDuration: chunk.duration)
+            if preferredUpload.format != "wav",
+               PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                statusCode: httpResponse.statusCode,
+                responseData: responseData
+               ) {
+                (responseData, httpResponse) = try await perform(
+                    uploadFile: PluginAudioUploadEncoder.wavUpload(from: chunk),
+                    audioDuration: chunk.duration
+                )
+            }
 
-        switch httpResponse.statusCode {
-        case 200:
-            break
-        case 401:
-            throw PluginTranscriptionError.invalidApiKey
-        case 403:
-            throw PluginTranscriptionError.apiError("Cloudflare access denied (403). Check your CF service token credentials.")
-        case 429:
-            throw PluginTranscriptionError.rateLimited
-        case 413:
-            throw PluginTranscriptionError.fileTooLarge
-        default:
-            let errorMessage = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
-        }
+            switch httpResponse.statusCode {
+            case 200:
+                break
+            case 401:
+                throw PluginTranscriptionError.invalidApiKey
+            case 403:
+                throw PluginTranscriptionError.apiError("Cloudflare access denied (403). Check your CF service token credentials.")
+            case 429:
+                throw PluginTranscriptionError.rateLimited
+            case 413:
+                throw PluginTranscriptionError.fileTooLarge
+            default:
+                let errorMessage = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
+                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
+            }
 
-        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
-            from: responseData,
-            response: httpResponse
-        ) {
-            throw PluginTranscriptionError.apiError(
-                "Failed to parse Cloudflare response: \(htmlPageSummary)"
-            )
-        }
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: responseData,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse Cloudflare response: \(htmlPageSummary)"
+                )
+            }
 
-        return try Self.parseTranscriptionResponse(responseData)
+            return try Self.parseTranscriptionResponse(responseData)
+        }
     }
 
     private static func parseTranscriptionResponse(_ data: Data) throws -> PluginTranscriptionResult {

@@ -205,9 +205,10 @@ struct MicrosoftAITranscriptionClient: Sendable {
         }
     }
 
-    static let maximumAudioDuration: TimeInterval = 2 * 60 * 60
-    static let maximumAudioBytes = 300_000_000
     static let requestTimeout: TimeInterval = 180
+    /// The REST reference allows 2 hours and 250 MB per request. An hour is
+    /// 115 MB as WAV, and recordings up to an hour keep one speaker numbering.
+    static let maximumChunkDuration: TimeInterval = 60 * 60
 
     let endpoint: URL
     let apiKey: String
@@ -220,10 +221,6 @@ struct MicrosoftAITranscriptionClient: Sendable {
         transcriptStyle: MicrosoftAITranscriptStyle,
         speakerDiarizationEnabled: Bool
     ) async throws -> PluginStructuredTranscriptionResult {
-        guard audio.duration <= Self.maximumAudioDuration,
-              audio.wavData.count <= Self.maximumAudioBytes else {
-            throw PluginTranscriptionError.fileTooLarge
-        }
         guard let url = MicrosoftAIEndpoint.transcriptionURL(baseURL: endpoint) else {
             throw PluginTranscriptionError.apiError("Invalid Azure Speech endpoint.")
         }
@@ -266,7 +263,7 @@ struct MicrosoftAITranscriptionClient: Sendable {
 
         let (data, response) = try await PluginHTTPClient.data(
             for: request,
-            resourceTimeout: Self.requestTimeout
+            resourceTimeout: PluginHTTPClient.resourceTimeout(forUploadOf: request.httpBody?.count ?? 0)
         )
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Azure Speech returned no HTTP response.")
@@ -643,14 +640,25 @@ final class MicrosoftAIPlugin: NSObject,
             budget: dictionaryTermsBudget
         ).map(\.text)
 
-        return try await MicrosoftAITranscriptionClient(endpoint: endpoint, apiKey: apiKey).transcribe(
-            audio: audio,
-            model: selectedModel,
-            languageSelection: languageSelection,
-            dictionaryTerms: terms,
-            transcriptStyle: transcriptStyle,
-            speakerDiarizationEnabled: speakerDiarizationEnabled
-        )
+        // MAI numbers the speakers anew in every request; the chunks of a
+        // longer recording keep their labels under numbers of their own.
+        let client = MicrosoftAITranscriptionClient(endpoint: endpoint, apiKey: apiKey)
+        let model = selectedModel
+        let style = transcriptStyle
+        let diarizationEnabled = speakerDiarizationEnabled
+        return try await PluginAudioChunking.transcribeStructured(
+            audio,
+            maximumChunkDuration: MicrosoftAITranscriptionClient.maximumChunkDuration
+        ) { chunk in
+            try await client.transcribe(
+                audio: chunk,
+                model: model,
+                languageSelection: languageSelection,
+                dictionaryTerms: terms,
+                transcriptStyle: style,
+                speakerDiarizationEnabled: diarizationEnabled
+            )
+        }
     }
 
     func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {

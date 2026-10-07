@@ -436,25 +436,33 @@ final class MicrosoftAIPluginTests: XCTestCase {
         }
     }
 
-    func testRejectsAudioBeyondMAIModelCardDurationLimitBeforeNetworking() async throws {
+    func testRecordingsUpToAnHourKeepOneSpeakerNumbering() async throws {
+        // MAI numbers the speakers anew in every request, so splitting would
+        // number them anew every chunk; an hour still goes out at once.
+        XCTAssertEqual(MicrosoftAITranscriptionClient.maximumChunkDuration, 3_600)
+
         let plugin = MicrosoftAIPlugin()
-        plugin.activate(host: try configuredHost())
-        let oversized = AudioData(
-            samples: [],
-            wavData: Data(),
-            duration: MicrosoftAITranscriptionClient.maximumAudioDuration + 1
+        plugin.activate(host: try configuredHost(defaults: ["speakerDiarizationEnabled": true]))
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Self.successResponseData, Self.httpResponse(statusCode: 200)),
+            ])
+        }
+
+        // Eleven minutes, which ten-minute chunks would have split.
+        let samples = [Float](repeating: 0.3, count: 16_000 * 660)
+        let result = try await plugin.transcribeStructured(
+            audio: AudioData(samples: samples, wavData: Data(), duration: 660),
+            language: "de",
+            translate: false,
+            prompt: nil
         )
 
-        do {
-            _ = try await plugin.transcribeStructured(
-                audio: oversized,
-                language: nil,
-                translate: false,
-                prompt: nil
-            )
-            XCTFail("Expected file limit error")
-        } catch PluginTranscriptionError.fileTooLarge {
-        }
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
     }
 
     func testManifestAndLocalizationAreValid() throws {
@@ -465,7 +473,7 @@ final class MicrosoftAIPluginTests: XCTestCase {
         XCTAssertEqual(manifest["principalClass"] as? String, "MicrosoftAIPlugin")
         XCTAssertEqual(manifest["hosting"] as? String, "cloud")
         XCTAssertEqual(manifest["iconResourceName"] as? String, "azure.svg")
-        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.7.0")
+        XCTAssertEqual(manifest["minHostVersion"] as? String, "1.8.0")
 
         XCTAssertTrue(
             FileManager.default.fileExists(

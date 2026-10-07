@@ -461,6 +461,94 @@ final class PluginHTTPClientTests: XCTestCase {
                        "a GET is safe to repeat, so it uses the whole ladder")
     }
 
+    func testLongUploadsGetMoreTimeThanTheSharedSession() {
+        // Up to 600 s the upload stays on the shared session.
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 200_000), 600)
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 9_600_000), 600)
+        // The transfer at 256 kbit/s plus five minutes to connect and answer.
+        // Two hours are about 43 MB as 48 kbit/s AAC and 230 MB as WAV.
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 43_200_000), 1_650)
+        XCTAssertEqual(PluginHTTPClient.resourceTimeout(forUploadOf: 230_400_000), 7_500)
+    }
+
+    func testDedicatedSessionRetriesAFailedConnection() async throws {
+        // Nothing reached the provider, so a long upload tries again on a fresh
+        // session with the same long timeout.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            if store.sessionCount == 0 {
+                return store.makeSession(outcomes: [.failure(URLError(.cannotConnectToHost))], configuration: configuration)
+            }
+            return store.makeSession(outcomes: [.success(Self.okResponse())], configuration: configuration)
+        }
+
+        let (_, response) = try await PluginHTTPClient.data(
+            for: Self.request(path: "/large-upload"),
+            resourceTimeout: 1_650
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(store.sessions.count, 2)
+        XCTAssertTrue(store.sessions.allSatisfy(\.didInvalidate))
+        XCTAssertEqual(store.configurations.map(\.timeoutIntervalForResource), [1_650, 1_650])
+    }
+
+    func testDedicatedSessionDoesNotRepeatAPostThatLostItsConnection() async throws {
+        // The provider may already have created the job; a second POST could
+        // create and bill another one.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(outcomes: [.failure(URLError(.networkConnectionLost))], configuration: configuration)
+        }
+        var request = Self.request(path: "/jobs")
+        request.httpBody = Data(count: 30_000_000)
+
+        do {
+            _ = try await PluginHTTPClient.data(for: request, resourceTimeout: 1_650)
+            XCTFail("expected the lost connection")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost)
+            XCTAssertTrue(error.localizedDescription.contains("30.0 MB"))
+        }
+        XCTAssertEqual(store.sessions.count, 1)
+    }
+
+    func testDedicatedSessionDoesNotRepeatARequestThatTimedOut() async throws {
+        // After a timeout of up to hours the provider may still be transcribing;
+        // sending the POST again would duplicate the work and double the wait.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            store.makeSession(outcomes: [.failure(URLError(.timedOut))], configuration: configuration)
+        }
+
+        do {
+            _ = try await PluginHTTPClient.data(for: Self.request(path: "/long-transcription"), resourceTimeout: 1_650)
+            XCTFail("expected the timeout")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
+        XCTAssertEqual(store.sessions.count, 1)
+    }
+
+    func testDedicatedSessionRetriesAStatusTheOriginNeverSaw() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { configuration in
+            if store.sessionCount == 0 {
+                return store.makeSession(outcomes: [.success(Self.statusResponse(522))], configuration: configuration)
+            }
+            return store.makeSession(outcomes: [.success(Self.okResponse())], configuration: configuration)
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+
+        let (_, response) = try await PluginHTTPClient.data(
+            for: Self.request(path: "/large-upload"),
+            resourceTimeout: 1_650
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(store.sessions.count, 2)
+    }
+
     func testLostConnectionDuringALargeUploadNamesTheUploadSize() async throws {
         // A proxy enforcing an upload cap closes the connection mid-body, so
         // the 413 never arrives and URLSession reports -1005 (#1538).

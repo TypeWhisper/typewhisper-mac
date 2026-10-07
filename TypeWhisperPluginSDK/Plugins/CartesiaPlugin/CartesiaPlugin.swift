@@ -399,15 +399,17 @@ final class CartesiaPlugin: NSObject,
             languageHints: languageHints,
             configuredLanguage: _transcriptionLanguage
         )
+        let resourceTimeout = Self.transcriptionTimeouts(forAudioDuration: audio.duration).resource
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             let request = try Self.makeTranscriptionRequest(
                 uploadFile: uploadFile,
                 apiKey: apiKey,
                 modelId: Self.sttModelId,
-                language: resolvedLanguage
+                language: resolvedLanguage,
+                audioDuration: audio.duration
             )
 
-            let (data, response) = try await PluginHTTPClient.data(for: request)
+            let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: resourceTimeout)
             try Self.validateHTTPResponse(
                 data: data,
                 response: response,
@@ -625,11 +627,26 @@ extension CartesiaPlugin {
         return "\(name) (\(code))"
     }
 
+    /// Cartesia answers once the whole file is transcribed and documents
+    /// neither a length limit nor a speed; it splits long files on its side.
+    /// The answer gets 6 s per audio minute, enough at ten times real time,
+    /// the whole request 4 s per audio minute more for the upload. Without a
+    /// documented limit, neither has a ceiling.
+    /// https://docs.cartesia.ai/api-reference/stt/transcribe
+    static func transcriptionTimeouts(forAudioDuration duration: TimeInterval) -> (request: TimeInterval, resource: TimeInterval) {
+        let minutes = duration / 60
+        return (
+            request: max(600, minutes * 6),
+            resource: max(600, minutes * 10)
+        )
+    }
+
     static func makeTranscriptionRequest(
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
         modelId: String,
-        language: String?
+        language: String?,
+        audioDuration: TimeInterval
     ) throws -> URLRequest {
         guard let url = URL(string: "\(apiBaseURL)/stt") else {
             throw CartesiaPluginError.invalidURL("\(apiBaseURL)/stt")
@@ -641,7 +658,7 @@ extension CartesiaPlugin {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue(apiVersion, forHTTPHeaderField: "Cartesia-Version")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 600
+        request.timeoutInterval = transcriptionTimeouts(forAudioDuration: audioDuration).request
 
         var body = Data()
         body.appendMultipartFile(

@@ -81,16 +81,24 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin {
             throw PluginTranscriptionError.notConfigured
         }
 
-        let request = try Self.makePreRecordedRequest(
-            wavData: audio.wavData,
-            apiKey: apiKey,
-            requestedLanguage: language,
-            selectedLanguageMode: snapshot.selectedModelId ?? Self.defaultLanguageMode
-        )
+        let languageMode = snapshot.selectedModelId ?? Self.defaultLanguageMode
+        // Smallest AI recommends splitting recordings longer than 10 minutes.
+        return try await PluginAudioChunking.transcribe(audio) { chunk in
+            let request = try Self.makePreRecordedRequest(
+                wavData: chunk.wavData,
+                apiKey: apiKey,
+                requestedLanguage: language,
+                selectedLanguageMode: languageMode
+            )
 
-        let (data, response) = try await PluginHTTPClient.data(for: request)
-        try Self.validateHTTPResponse(data: data, response: response)
-        return try Self.parsePreRecordedResponse(data)
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            try Self.validateHTTPResponse(data: data, response: response)
+            // A quiet stretch of a longer recording must not fail the whole transcript.
+            return try Self.parsePreRecordedResponse(
+                data,
+                allowsEmptyTranscription: chunk.samples.count < audio.samples.count
+            )
+        }
     }
 
     var settingsView: AnyView? {
@@ -246,7 +254,10 @@ extension SmallestAIPlugin {
         return request
     }
 
-    static func parsePreRecordedResponse(_ data: Data) throws -> PluginTranscriptionResult {
+    static func parsePreRecordedResponse(
+        _ data: Data,
+        allowsEmptyTranscription: Bool = false
+    ) throws -> PluginTranscriptionResult {
         let response: PreRecordedResponse
         do {
             response = try JSONDecoder().decode(PreRecordedResponse.self, from: data)
@@ -260,8 +271,8 @@ extension SmallestAIPlugin {
             )
         }
 
-        let text = response.transcription ?? response.text
-        guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let text = response.transcription ?? response.text ?? ""
+        guard allowsEmptyTranscription || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw PluginTranscriptionError.apiError("Smallest Pulse response did not include a transcription")
         }
 
