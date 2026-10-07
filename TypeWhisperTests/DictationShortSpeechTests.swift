@@ -508,6 +508,48 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
         }
     }
 
+    func testSmartInsertionDoesNotAddSpacesAroundSharedKanaMarks() {
+        let cases: [(name: String, value: String, insertion: String)] = [
+            ("Prolonged sound mark", "カー", "ド"),
+            ("Halfwidth voiced sound mark", "ｶｷ", "ﾞ")
+        ]
+
+        for testCase in cases {
+            let context = TextInsertionService.InsertionContext(
+                value: testCase.value,
+                selectedRange: NSRange(location: 1, length: 0),
+                selectedText: nil,
+                previousCharacter: nil,
+                nextCharacter: nil
+            )
+
+            XCTAssertEqual(
+                DictationInsertionTextFormatter.textForInsertion(
+                    testCase.insertion,
+                    insertionContext: context
+                ),
+                testCase.insertion,
+                testCase.name
+            )
+        }
+    }
+
+    func testSmartInsertionKeepsSpaceBetweenDecomposedLatinCharacters() {
+        // U+0323 carries scx=Han; a decomposed Latin letter must still count as Latin.
+        let context = TextInsertionService.InsertionContext(
+            value: "Ha\u{0323}",
+            selectedRange: NSRange(location: 3, length: 0),
+            selectedText: nil,
+            previousCharacter: nil,
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("o\u{0323}c", insertionContext: context),
+            " o\u{0323}c"
+        )
+    }
+
     func testSmartInsertionPreservesSpacesAtMixedLatinCJKBoundaries() {
         let context = TextInsertionService.InsertionContext(
             value: "AB",
