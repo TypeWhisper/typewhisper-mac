@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.vercel-ai-gateway",
     "name": "Vercel AI Gateway",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

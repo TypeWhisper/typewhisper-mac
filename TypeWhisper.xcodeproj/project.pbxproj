@@ -6299,7 +6299,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = XAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.xai;
 				PRODUCT_NAME = XAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6322,7 +6322,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = XAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.xai;
 				PRODUCT_NAME = XAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6345,7 +6345,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.3.4;
+				MARKETING_VERSION = 1.3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6368,7 +6368,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.3.4;
+				MARKETING_VERSION = 1.3.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6391,7 +6391,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GeminiPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
@@ -6414,7 +6414,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GeminiPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
@@ -6437,7 +6437,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
 				PRODUCT_NAME = MistralAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6460,7 +6460,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MistralAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.minerale.mistralai;
 				PRODUCT_NAME = MistralAIPlugin;
 				SKIP_INSTALL = YES;
@@ -6853,7 +6853,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAICompatiblePlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.openai-compatible";
 				PRODUCT_NAME = OpenAICompatiblePlugin;
 				SKIP_INSTALL = YES;
@@ -6876,7 +6876,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAICompatiblePlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.10;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.openai-compatible";
 				PRODUCT_NAME = OpenAICompatiblePlugin;
 				SKIP_INSTALL = YES;
@@ -7055,7 +7055,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = DeepgramPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.17;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.deepgram;
 				PRODUCT_NAME = DeepgramPlugin;
 				SKIP_INSTALL = YES;
@@ -7078,7 +7078,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = DeepgramPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.17;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.deepgram;
 				PRODUCT_NAME = DeepgramPlugin;
 				SKIP_INSTALL = YES;
@@ -7101,7 +7101,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = AssemblyAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.assemblyai;
 				PRODUCT_NAME = AssemblyAIPlugin;
 				SKIP_INSTALL = YES;
@@ -7124,7 +7124,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = AssemblyAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.assemblyai;
 				PRODUCT_NAME = AssemblyAIPlugin;
 				SKIP_INSTALL = YES;
@@ -7147,7 +7147,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = Reson8Plugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.reson8;
 				PRODUCT_NAME = Reson8Plugin;
 				SKIP_INSTALL = YES;
@@ -7170,7 +7170,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = Reson8Plugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.reson8;
 				PRODUCT_NAME = Reson8Plugin;
 				SKIP_INSTALL = YES;
@@ -7193,7 +7193,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SmallestAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.smallest-pulse";
 				PRODUCT_NAME = SmallestAIPlugin;
 				SKIP_INSTALL = YES;
@@ -7216,7 +7216,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SmallestAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.smallest-pulse";
 				PRODUCT_NAME = SmallestAIPlugin;
 				SKIP_INSTALL = YES;
@@ -7393,7 +7393,7 @@
 					/usr/lib/swift,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cartesia";
 				PRODUCT_NAME = CartesiaPlugin;
 				SKIP_INSTALL = YES;
@@ -7430,7 +7430,7 @@
 					/usr/lib/swift,
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cartesia";
 				PRODUCT_NAME = CartesiaPlugin;
 				SKIP_INSTALL = YES;
@@ -7779,7 +7779,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
 				PRODUCT_NAME = CloudflareASRPlugin;
 				SDKROOT = macosx;
@@ -7803,7 +7803,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = CloudflareASRPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cloudflare-asr";
 				PRODUCT_NAME = CloudflareASRPlugin;
 				SDKROOT = macosx;
@@ -7827,7 +7827,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = VercelAIGatewayPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.vercel-ai-gateway";
 				PRODUCT_NAME = VercelAIGatewayPlugin;
 				SDKROOT = macosx;
@@ -7851,7 +7851,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = VercelAIGatewayPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.3;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.vercel-ai-gateway";
 				PRODUCT_NAME = VercelAIGatewayPlugin;
 				SDKROOT = macosx;
@@ -7875,7 +7875,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MetaPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.meta;
 				PRODUCT_NAME = MetaPlugin;
 				SDKROOT = macosx;
@@ -7899,7 +7899,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MetaPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.meta;
 				PRODUCT_NAME = MetaPlugin;
 				SDKROOT = macosx;
@@ -7923,7 +7923,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MicrosoftAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.microsoft-ai";
 				PRODUCT_NAME = MicrosoftAIPlugin;
 				SDKROOT = macosx;
@@ -7947,7 +7947,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = MicrosoftAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.microsoft-ai";
 				PRODUCT_NAME = MicrosoftAIPlugin;
 				SDKROOT = macosx;
@@ -8473,7 +8473,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GladiaPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gladia;
 				PRODUCT_NAME = GladiaPlugin;
 				SDKROOT = macosx;
@@ -8497,7 +8497,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
 				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
@@ -8521,7 +8521,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GladiaPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gladia;
 				PRODUCT_NAME = GladiaPlugin;
 				SDKROOT = macosx;
@@ -8545,7 +8545,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = ElevenLabsPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.elevenlabs;
 				PRODUCT_NAME = ElevenLabsPlugin;
 				SDKROOT = macosx;
@@ -8569,7 +8569,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
@@ -8593,7 +8593,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.2.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
@@ -8617,7 +8617,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = CoherePlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cohere;
 				PRODUCT_NAME = CoherePlugin;
 				SDKROOT = macosx;
@@ -8641,7 +8641,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = CoherePlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.5;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.cohere;
 				PRODUCT_NAME = CoherePlugin;
 				SDKROOT = macosx;
@@ -8713,7 +8713,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SpeechmaticsPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.speechmatics;
 				PRODUCT_NAME = SpeechmaticsPlugin;
 				SDKROOT = macosx;
@@ -8737,7 +8737,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SpeechmaticsPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.speechmatics;
 				PRODUCT_NAME = SpeechmaticsPlugin;
 				SDKROOT = macosx;
@@ -8809,7 +8809,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenRouterPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openrouter;
 				PRODUCT_NAME = OpenRouterPlugin;
 				SDKROOT = macosx;
@@ -8833,7 +8833,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenRouterPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openrouter;
 				PRODUCT_NAME = OpenRouterPlugin;
 				SDKROOT = macosx;
