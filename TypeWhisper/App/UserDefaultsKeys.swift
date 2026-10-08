@@ -89,6 +89,8 @@ enum UserDefaultsKeys {
     // MARK: - Dictionary
     static let activatedTermPacks = "activatedTermPacks" // Legacy - kept for migration cleanup
     static let activatedTermPackStates = "activatedTermPackStates"
+    static let termPackPreciseBoostingMigrated = "termPackPreciseBoostingMigrated"
+    static let termPackEntryOverrides = "termPackEntryOverrides"
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
     static let dismissedDictionaryTermsSettingSuggestions = "dismissedDictionaryTermsSettingSuggestions"

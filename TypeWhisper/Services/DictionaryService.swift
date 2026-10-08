@@ -422,6 +422,27 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    /// Sets the boosting threshold of several term entries with a single save+reload.
+    func setCtcMinSimilarity(_ ctcMinSimilarity: Float?, forTermEntryIDs ids: Set<UUID>) {
+        guard let context = modelContext, !ids.isEmpty else { return }
+
+        let normalized = Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
+        let now = Date()
+        for entry in entries where entry.type == .term && ids.contains(entry.id) {
+            entry.ctcMinSimilarity = normalized
+            entry.updatedAt = now
+        }
+
+        do {
+            try context.save()
+            loadEntries()
+        } catch {
+            context.rollback()
+            loadEntries()
+            logger.error("Failed to update term boosting: \(error.localizedDescription)")
+        }
+    }
+
     /// Get all enabled terms as a comma-separated string for Whisper prompt.
     /// Truncates at 600 characters to stay within the API's 224-token limit.
     func enabledTerms() -> [String] {
