@@ -1305,6 +1305,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/",
       "releases": [
         {
+          "version": "1.0.13",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 258131,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-elevenlabs-v1.0.13/ElevenLabsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.12",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
