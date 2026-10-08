@@ -2020,6 +2020,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/openrouter/",
       "releases": [
         {
+          "version": "1.1.9",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 269431,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.1.9/OpenRouterPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.8",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
