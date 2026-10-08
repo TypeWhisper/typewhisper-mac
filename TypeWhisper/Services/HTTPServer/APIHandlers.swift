@@ -14,6 +14,7 @@ final class APIHandlers: @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
     private let audioRecorderViewModel: AudioRecorderViewModel
+    private let audioDeviceService: AudioDeviceService
     private let settingsBackupService: SettingsBackupAutomationService
     private let speakerCoordinator: SpeakerTranscriptCoordinator?
 
@@ -26,6 +27,7 @@ final class APIHandlers: @unchecked Sendable {
         dictionaryService: DictionaryService,
         dictationViewModel: DictationViewModel,
         audioRecorderViewModel: AudioRecorderViewModel,
+        audioDeviceService: AudioDeviceService,
         settingsBackupService: SettingsBackupAutomationService,
         speakerCoordinator: SpeakerTranscriptCoordinator? = nil
     ) {
@@ -37,6 +39,7 @@ final class APIHandlers: @unchecked Sendable {
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
         self.audioRecorderViewModel = audioRecorderViewModel
+        self.audioDeviceService = audioDeviceService
         self.settingsBackupService = settingsBackupService
         self.speakerCoordinator = speakerCoordinator
     }
@@ -74,6 +77,8 @@ final class APIHandlers: @unchecked Sendable {
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
         router.register("GET", "/v1/settings/export", handler: handleExportSettings)
         router.register("POST", "/v1/settings/import", handler: handleImportSettings)
+        router.register("GET", "/v1/settings/audio", handler: handleGetAudioSettings)
+        router.register("PATCH", "/v1/settings/audio", handler: handlePatchAudioSettings)
     }
 
     // MARK: - /v1/settings
@@ -104,6 +109,57 @@ final class APIHandlers: @unchecked Sendable {
         } catch {
             apiLogger.error("Settings import failed: \(error.localizedDescription, privacy: .public)")
             return .error(status: 500, message: "Could not import TypeWhisper settings")
+        }
+    }
+
+    // MARK: - /v1/settings/audio
+
+    private func handleGetAudioSettings(_ request: HTTPRequest) async -> HTTPResponse {
+        let audioDeviceService = self.audioDeviceService
+        let dictationViewModel = self.dictationViewModel
+        let state = await MainActor.run {
+            APIAudioSettings.state(audioDeviceService: audioDeviceService, dictationViewModel: dictationViewModel)
+        }
+        return .json(state)
+    }
+
+    private func handlePatchAudioSettings(_ request: HTTPRequest) async -> HTTPResponse {
+        let patch: APIAudioSettings.Patch
+        do {
+            patch = try APIAudioSettings.parsePatch(request.body)
+        } catch {
+            return .error(status: 400, message: error.message)
+        }
+
+        let audioDeviceService = self.audioDeviceService
+        let dictationViewModel = self.dictationViewModel
+        let audioRecorderViewModel = self.audioRecorderViewModel
+        return await MainActor.run {
+            guard !APIAudioSettings.isAudioInUse(
+                dictationState: dictationViewModel.state,
+                recorderState: audioRecorderViewModel.state
+            ) else {
+                return .error(status: 409, message: "Audio settings cannot change while TypeWhisper is recording or processing")
+            }
+
+            // Same setters the settings window uses, so the change persists and applies to the next recording.
+            if let inputPriority = patch.inputPriority {
+                audioDeviceService.replaceInputDevicePriorityList(inputPriority)
+            }
+            if let audioDuckingEnabled = patch.audioDuckingEnabled {
+                dictationViewModel.audioDuckingEnabled = audioDuckingEnabled
+            }
+            if let audioDuckingLevel = patch.audioDuckingLevel {
+                dictationViewModel.audioDuckingLevel = audioDuckingLevel
+            }
+            if let pauseMediaDuringRecording = patch.pauseMediaDuringRecording {
+                dictationViewModel.mediaPauseEnabled = pauseMediaDuringRecording
+            }
+            if let soundFeedbackEnabled = patch.soundFeedbackEnabled {
+                dictationViewModel.soundFeedbackEnabled = soundFeedbackEnabled
+            }
+
+            return .json(APIAudioSettings.state(audioDeviceService: audioDeviceService, dictationViewModel: dictationViewModel))
         }
     }
 

@@ -528,6 +528,33 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         setInputDevicePriorityList([])
     }
 
+    /// Replaces the whole list in one step, as the HTTP API does when a script
+    /// applies or restores saved audio settings. Disconnected entries are kept.
+    func replaceInputDevicePriorityList(_ items: [AudioInputDevicePriorityItem]) {
+        setInputDevicePriorityList(items)
+    }
+
+    var systemDefaultInputDeviceUID: String? {
+        guard let deviceID = defaultInputDeviceController.defaultInputDeviceID() else { return nil }
+        return inputDevices.first(where: { $0.deviceID == deviceID })?.uid ?? Self.deviceUID(for: deviceID)
+    }
+
+    /// The input the next recording would capture from: the first available
+    /// priority entry, otherwise the macOS default input.
+    func activeRecordingInput() -> AudioInputDevicePriorityItem? {
+        let selection = resolvedRecordingInputSelection()
+        if let uid = selection.deviceUID {
+            return AudioInputDevicePriorityItem(uid: uid, name: selection.deviceName ?? uid)
+        }
+
+        guard let deviceID = selection.deviceID ?? defaultInputDeviceController.defaultInputDeviceID() else {
+            return nil
+        }
+        let listedDevice = inputDevices.first(where: { $0.deviceID == deviceID })
+        guard let uid = listedDevice?.uid ?? Self.deviceUID(for: deviceID) else { return nil }
+        return AudioInputDevicePriorityItem(uid: uid, name: listedDevice?.name ?? Self.deviceName(for: deviceID) ?? uid)
+    }
+
     func selectInputDeviceAsPrimary(_ uid: String) {
         pendingPrimaryPriorityReplacementUID = uid
         if selectedDeviceUID == uid {

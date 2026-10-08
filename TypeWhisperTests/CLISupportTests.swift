@@ -224,6 +224,68 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(recorder.recordedRequest?.url?.query, "mode=replace")
     }
 
+    func testCLIClientReadsAndPatchesAudioSettings() async throws {
+        let recorder = RequestRecorder()
+        let state = Data(#"{"input_priority":[]}"#.utf8)
+        let client = CLIClient(
+            port: 9876,
+            apiToken: "cli-token",
+            transport: { request in
+                recorder.record(request)
+                return (state, Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+
+        let current = try await client.audioSettings()
+        XCTAssertEqual(current, state)
+        XCTAssertEqual(recorder.recordedRequest?.url?.path, "/v1/settings/audio")
+        XCTAssertEqual(recorder.recordedRequest?.httpMethod, "GET")
+
+        let changes = Data(#"{"audio_ducking_enabled":false}"#.utf8)
+        let updated = try await client.updateAudioSettings(changes)
+        XCTAssertEqual(updated, state)
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/settings/audio")
+        XCTAssertEqual(request.httpMethod, "PATCH")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+        XCTAssertEqual(request.httpBody, changes)
+    }
+
+    func testOutputFormatterRendersAudioSettings() {
+        let state = Data("""
+            {"input_devices":[{"id":"bh","name":"BlackHole 2ch","is_system_default":false},
+                              {"id":"mic","name":"MacBook Pro Microphone","is_system_default":true}],
+             "input_priority":[{"id":"quadcast","name":"HyperX QuadCast 2"},{"id":"bh","name":"BlackHole 2ch"}],
+             "active_input":{"id":"bh","name":"BlackHole 2ch"},
+             "audio_ducking_enabled":true,"audio_ducking_level":0.2,
+             "pause_media_during_recording":false,"sound_feedback_enabled":true}
+            """.utf8)
+
+        XCTAssertEqual(OutputFormatter.formatAudioSettings(state, json: false), """
+            Active input: BlackHole 2ch [bh]
+            Input priority:
+              1. HyperX QuadCast 2 [quadcast] (not connected)
+              2. BlackHole 2ch [bh]
+            Available inputs:
+              BlackHole 2ch [bh]
+              MacBook Pro Microphone [mic] (system default)
+            Audio ducking: on (20% volume)
+            Pause media during recording: off
+            Sound feedback: on
+            """)
+
+        let systemDefault = Data(#"{"input_devices":[],"input_priority":[],"active_input":null,"audio_ducking_enabled":false,"audio_ducking_level":0,"pause_media_during_recording":true,"sound_feedback_enabled":false}"#.utf8)
+        XCTAssertEqual(OutputFormatter.formatAudioSettings(systemDefault, json: false), """
+            Active input: none
+            Input priority: system default
+            Available inputs:
+            Audio ducking: off
+            Pause media during recording: on
+            Sound feedback: off
+            """)
+    }
+
     func testCLIClientTranscribeStdinKeepsMultipartUploadPath() async throws {
         let recorder = RequestRecorder()
         let client = CLIClient(

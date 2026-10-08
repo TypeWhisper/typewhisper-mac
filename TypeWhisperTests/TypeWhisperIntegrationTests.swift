@@ -2471,6 +2471,350 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    // MARK: - /v1/settings/audio
+
+    private static let audioSettingsDefaultsKeys = [
+        UserDefaultsKeys.inputDevicePriorityList,
+        UserDefaultsKeys.selectedInputDeviceUID,
+        UserDefaultsKeys.audioDuckingEnabled,
+        UserDefaultsKeys.audioDuckingLevel,
+        UserDefaultsKeys.mediaPauseEnabled,
+        UserDefaultsKeys.soundFeedbackEnabled,
+    ]
+
+    /// Fake devices: BlackHole, a USB microphone that is the macOS default input,
+    /// and a priority list whose first entry is not connected.
+    @MainActor
+    private static func makeAudioSettingsAPIContext(appSupportDirectory: URL) -> APIContext {
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.audioDuckingEnabled)
+        UserDefaults.standard.set(0.2, forKey: UserDefaultsKeys.audioDuckingLevel)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.mediaPauseEnabled)
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+
+        let context = makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(transports: [:]),
+            audioDeviceDefaultInputController: APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: 70_702)
+        )
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: 70_701, name: "BlackHole 2ch", uid: "BlackHole2ch_UID"),
+            AudioInputDevice(deviceID: 70_702, name: "USB Microphone", uid: "usb-microphone-uid"),
+        ]
+        context.audioDeviceService.replaceInputDevicePriorityList([
+            AudioInputDevicePriorityItem(uid: "quadcast-uid", name: "HyperX QuadCast 2"),
+            AudioInputDevicePriorityItem(uid: "usb-microphone-uid", name: "USB Microphone"),
+        ])
+        return context
+    }
+
+    private static func audioSettingsPatch(_ body: String) -> HTTPRequest {
+        HTTPRequest(
+            method: "PATCH",
+            path: "/v1/settings/audio",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: Data(body.utf8)
+        )
+    }
+
+    private static let audioSettingsGet = HTTPRequest(
+        method: "GET",
+        path: "/v1/settings/audio",
+        queryParams: [:],
+        headers: [:],
+        body: Data()
+    )
+
+    func testAudioSettingsEndpointReportsDevicesPriorityAndActiveInput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalDefaults = Self.audioSettingsDefaultsKeys.map { UserDefaults.standard.object(forKey: $0) }
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            for (key, value) in zip(Self.audioSettingsDefaultsKeys, originalDefaults) {
+                Self.restoreUserDefault(value, forKey: key)
+            }
+        }
+
+        context = await MainActor.run { Self.makeAudioSettingsAPIContext(appSupportDirectory: appSupportDirectory) }
+        let router = try XCTUnwrap(context).router
+
+        let response = await router.route(Self.audioSettingsGet)
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(response.contentType, "application/json")
+        let state = try Self.jsonObject(response)
+        XCTAssertEqual(
+            Set(state.keys),
+            [
+                "input_devices", "input_priority", "active_input", "audio_ducking_enabled",
+                "audio_ducking_level", "pause_media_during_recording", "sound_feedback_enabled",
+            ]
+        )
+        let devices = try XCTUnwrap(state["input_devices"] as? [[String: Any]])
+        XCTAssertEqual(devices.map { $0["id"] as? String }, ["BlackHole2ch_UID", "usb-microphone-uid"])
+        XCTAssertEqual(devices.map { $0["name"] as? String }, ["BlackHole 2ch", "USB Microphone"])
+        XCTAssertEqual(devices.map { $0["is_system_default"] as? Bool }, [false, true])
+        let priority = try XCTUnwrap(state["input_priority"] as? [[String: Any]])
+        XCTAssertEqual(priority.map { $0["id"] as? String }, ["quadcast-uid", "usb-microphone-uid"])
+        XCTAssertEqual(priority.map { $0["name"] as? String }, ["HyperX QuadCast 2", "USB Microphone"])
+        // The disconnected QuadCast is skipped.
+        XCTAssertEqual((state["active_input"] as? [String: Any])?["id"] as? String, "usb-microphone-uid")
+        XCTAssertEqual(state["audio_ducking_enabled"] as? Bool, true)
+        XCTAssertEqual(state["audio_ducking_level"] as? Double, 0.2)
+        XCTAssertEqual(state["pause_media_during_recording"] as? Bool, false)
+        XCTAssertEqual(state["sound_feedback_enabled"] as? Bool, true)
+
+        let blackHoleFirst = await router.route(Self.audioSettingsPatch(
+            #"{"input_priority":[{"id":"BlackHole2ch_UID","name":"BlackHole 2ch"}]}"#
+        ))
+        XCTAssertEqual(blackHoleFirst.status, 200)
+        let blackHoleState = try Self.jsonObject(blackHoleFirst)
+        XCTAssertEqual((blackHoleState["active_input"] as? [String: Any])?["id"] as? String, "BlackHole2ch_UID")
+        XCTAssertEqual((blackHoleState["active_input"] as? [String: Any])?["name"] as? String, "BlackHole 2ch")
+        let resolvedUID = await MainActor.run { context?.audioDeviceService.resolvedRecordingInputSelection().deviceUID }
+        XCTAssertEqual(resolvedUID, "BlackHole2ch_UID")
+
+        // An empty list means the macOS default input.
+        let systemDefault = await router.route(Self.audioSettingsPatch(#"{"input_priority":[]}"#))
+        XCTAssertEqual(systemDefault.status, 200)
+        let systemDefaultState = try Self.jsonObject(systemDefault)
+        XCTAssertEqual((systemDefaultState["input_priority"] as? [Any])?.count, 0)
+        XCTAssertEqual((systemDefaultState["active_input"] as? [String: Any])?["id"] as? String, "usb-microphone-uid")
+        XCTAssertNil(UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList))
+
+        // Without any input the key stays present as null.
+        await MainActor.run {
+            context?.audioDeviceService.inputDevices = []
+        }
+        let noInput = await router.route(Self.audioSettingsGet)
+        let noInputBody = try XCTUnwrap(String(data: noInput.body, encoding: .utf8))
+        XCTAssertTrue(noInputBody.contains(#""active_input":null"#), noInputBody)
+    }
+
+    func testAudioSettingsPatchRejectsUnknownFieldsAndInvalidValuesWithoutChangingAnything() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalDefaults = Self.audioSettingsDefaultsKeys.map { UserDefaults.standard.object(forKey: $0) }
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            for (key, value) in zip(Self.audioSettingsDefaultsKeys, originalDefaults) {
+                Self.restoreUserDefault(value, forKey: key)
+            }
+        }
+
+        context = await MainActor.run { Self.makeAudioSettingsAPIContext(appSupportDirectory: appSupportDirectory) }
+        let router = try XCTUnwrap(context).router
+        let before = await router.route(Self.audioSettingsGet).body
+
+        let invalidBodies: [(body: String, message: String)] = [
+            ("", "Request body must be a JSON object"),
+            ("[]", "Request body must be a JSON object"),
+            ("not json", "Request body must be a JSON object"),
+            (
+                #"{"audio_ducking_enabled":false,"noise_suppression":true}"#,
+                "Unknown field 'noise_suppression'. TypeWhisper for macOS accepts: input_priority, audio_ducking_enabled, audio_ducking_level, pause_media_during_recording, sound_feedback_enabled"
+            ),
+            (#"{"active_input":{"id":"BlackHole2ch_UID"}}"#, "'active_input' is read-only"),
+            (#"{"input_devices":[]}"#, "'input_devices' is read-only"),
+            (#"{"audio_ducking_enabled":1}"#, "'audio_ducking_enabled' must be true or false"),
+            (#"{"audio_ducking_enabled":"false"}"#, "'audio_ducking_enabled' must be true or false"),
+            (#"{"pause_media_during_recording":null}"#, "'pause_media_during_recording' must be true or false"),
+            (#"{"sound_feedback_enabled":0}"#, "'sound_feedback_enabled' must be true or false"),
+            (#"{"audio_ducking_level":true}"#, "'audio_ducking_level' must be a number from 0 to 1"),
+            (#"{"audio_ducking_level":"0.1"}"#, "'audio_ducking_level' must be a number from 0 to 1"),
+            (#"{"audio_ducking_level":-0.1}"#, "'audio_ducking_level' must be a number from 0 to 1"),
+            (#"{"audio_ducking_enabled":false,"audio_ducking_level":1.5}"#, "'audio_ducking_level' must be a number from 0 to 1"),
+            (#"{"input_priority":"BlackHole2ch_UID"}"#, #"'input_priority' must be an array of {"id", "name"} objects"#),
+            (#"{"input_priority":["BlackHole2ch_UID"]}"#, #"input_priority[0] must be an object with "id" and optional "name""#),
+            (#"{"input_priority":[{"name":"BlackHole 2ch"}]}"#, "input_priority[0].id must be a device ID string"),
+            (#"{"input_priority":[{"id":"  "}]}"#, "input_priority[0].id must not be empty"),
+            (#"{"input_priority":[{"id":"a"},{"id":"a"}]}"#, "input_priority lists 'a' more than once"),
+            (#"{"input_priority":[{"id":"a","is_system_default":true}]}"#, "Unknown field 'is_system_default' in input_priority[0]"),
+            (#"{"input_priority":[{"id":"a","name":5}]}"#, "input_priority[0].name must be a string"),
+        ]
+
+        for invalid in invalidBodies {
+            let response = await router.route(Self.audioSettingsPatch(invalid.body))
+            XCTAssertEqual(response.status, 400, invalid.body)
+            let error = try Self.jsonObject(response)["error"] as? [String: Any]
+            XCTAssertEqual(error?["code"] as? String, "bad_request", invalid.body)
+            XCTAssertEqual(error?["message"] as? String, invalid.message, invalid.body)
+        }
+
+        let after = await router.route(Self.audioSettingsGet).body
+        XCTAssertEqual(
+            try JSONSerialization.jsonObject(with: after) as? NSDictionary,
+            try JSONSerialization.jsonObject(with: before) as? NSDictionary
+        )
+        XCTAssertEqual(UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled) as? Bool, true)
+
+        // A name is optional; disconnected devices keep the ID as their name.
+        let withoutName = await router.route(Self.audioSettingsPatch(
+            #"{"input_priority":[{"id":"BlackHole2ch_UID"},{"id":"not-connected-uid"}]}"#
+        ))
+        XCTAssertEqual(withoutName.status, 200)
+        let priority = try Self.jsonObject(withoutName)["input_priority"] as? [[String: Any]]
+        XCTAssertEqual(priority?.map { $0["name"] as? String }, ["BlackHole 2ch", "not-connected-uid"])
+    }
+
+    func testAudioSettingsPatchReturnsConflictWhileRecordingOrProcessing() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalDefaults = Self.audioSettingsDefaultsKeys.map { UserDefaults.standard.object(forKey: $0) }
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            for (key, value) in zip(Self.audioSettingsDefaultsKeys, originalDefaults) {
+                Self.restoreUserDefault(value, forKey: key)
+            }
+        }
+
+        context = await MainActor.run { Self.makeAudioSettingsAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let patch = Self.audioSettingsPatch(
+            #"{"input_priority":[{"id":"BlackHole2ch_UID"}],"audio_ducking_enabled":false}"#
+        )
+
+        let busyDictationStates: [DictationViewModel.State] = [
+            .recording, .processing, .inserting, .promptSelection("text"), .promptProcessing("Prompt"),
+        ]
+        for busyState in busyDictationStates {
+            await MainActor.run { apiContext.dictationViewModel.state = busyState }
+            let response = await apiContext.router.route(patch)
+            XCTAssertEqual(response.status, 409, "\(busyState)")
+            XCTAssertEqual(
+                (try Self.jsonObject(response)["error"] as? [String: Any])?["message"] as? String,
+                "Audio settings cannot change while TypeWhisper is recording or processing"
+            )
+        }
+
+        await MainActor.run {
+            apiContext.dictationViewModel.state = .idle
+            apiContext.audioRecorderViewModel.state = .recording
+        }
+        let recorderBusy = await apiContext.router.route(patch)
+        XCTAssertEqual(recorderBusy.status, 409)
+
+        // Reading stays possible during a recording.
+        let readWhileRecording = await apiContext.router.route(Self.audioSettingsGet)
+        XCTAssertEqual(readWhileRecording.status, 200)
+
+        let unchanged = await MainActor.run {
+            (
+                priority: apiContext.audioDeviceService.inputDevicePriorityList.map(\.uid),
+                ducking: apiContext.dictationViewModel.audioDuckingEnabled
+            )
+        }
+        XCTAssertEqual(unchanged.priority, ["quadcast-uid", "usb-microphone-uid"])
+        XCTAssertTrue(unchanged.ducking)
+
+        await MainActor.run {
+            apiContext.audioRecorderViewModel.state = .finalizing
+        }
+        let recorderFinalizing = await apiContext.router.route(patch)
+        XCTAssertEqual(recorderFinalizing.status, 409)
+
+        await MainActor.run {
+            apiContext.audioRecorderViewModel.state = .idle
+            apiContext.dictationViewModel.state = .error("Microphone unavailable")
+        }
+        let afterError = await apiContext.router.route(patch)
+        XCTAssertEqual(afterError.status, 200)
+    }
+
+    func testAudioSettingsPatchAppliesDemoSettingsAndRestoresSavedStateLosslessly() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalDefaults = Self.audioSettingsDefaultsKeys.map { UserDefaults.standard.object(forKey: $0) }
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            for (key, value) in zip(Self.audioSettingsDefaultsKeys, originalDefaults) {
+                Self.restoreUserDefault(value, forKey: key)
+            }
+        }
+
+        context = await MainActor.run { Self.makeAudioSettingsAPIContext(appSupportDirectory: appSupportDirectory) }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+        await MainActor.run {
+            apiContext.dictationViewModel.audioDuckingLevel = 0.35
+            apiContext.dictationViewModel.mediaPauseEnabled = true
+        }
+
+        // 1. Remember the current state.
+        let saved = try Self.jsonObject(await router.route(Self.audioSettingsGet))
+        let savedPriorityDefaults = UserDefaults.standard.data(forKey: UserDefaultsKeys.inputDevicePriorityList)
+
+        // 2. Demo settings: BlackHole first, no ducking, no media pause, no sounds.
+        let demo = await router.route(Self.audioSettingsPatch("""
+            {"input_priority":[{"id":"BlackHole2ch_UID","name":"BlackHole 2ch"}],
+             "audio_ducking_enabled":false,"audio_ducking_level":0,
+             "pause_media_during_recording":false,"sound_feedback_enabled":false}
+            """))
+        XCTAssertEqual(demo.status, 200)
+        let demoState = try Self.jsonObject(demo)
+        XCTAssertEqual((demoState["active_input"] as? [String: Any])?["id"] as? String, "BlackHole2ch_UID")
+        XCTAssertEqual(demoState["audio_ducking_enabled"] as? Bool, false)
+        XCTAssertEqual(demoState["audio_ducking_level"] as? Double, 0)
+        XCTAssertEqual(demoState["pause_media_during_recording"] as? Bool, false)
+        XCTAssertEqual(demoState["sound_feedback_enabled"] as? Bool, false)
+
+        // The change goes through the same view model state the settings window binds to and is persisted.
+        let applied = await MainActor.run {
+            (
+                selectedUID: apiContext.audioDeviceService.selectedDeviceUID,
+                ducking: apiContext.dictationViewModel.audioDuckingEnabled,
+                mediaPause: apiContext.dictationViewModel.mediaPauseEnabled,
+                sound: apiContext.dictationViewModel.soundFeedbackEnabled
+            )
+        }
+        XCTAssertEqual(applied.selectedUID, "BlackHole2ch_UID")
+        XCTAssertFalse(applied.ducking)
+        XCTAssertFalse(applied.mediaPause)
+        XCTAssertFalse(applied.sound)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID), "BlackHole2ch_UID")
+        XCTAssertEqual(UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingEnabled) as? Bool, false)
+        XCTAssertEqual(UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool, false)
+        XCTAssertEqual(UserDefaults.standard.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool, false)
+
+        // 3. Restore the remembered writable fields.
+        var restoreBody = saved
+        restoreBody.removeValue(forKey: "input_devices")
+        restoreBody.removeValue(forKey: "active_input")
+        let restore = await router.route(HTTPRequest(
+            method: "PATCH",
+            path: "/v1/settings/audio",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try JSONSerialization.data(withJSONObject: restoreBody)
+        ))
+        XCTAssertEqual(restore.status, 200)
+        XCTAssertEqual(try Self.jsonObject(restore) as NSDictionary, saved as NSDictionary)
+        let reread = await router.route(Self.audioSettingsGet)
+        XCTAssertEqual(try Self.jsonObject(reread) as NSDictionary, saved as NSDictionary)
+
+        // The stored list, including the disconnected QuadCast, matches the original byte for byte.
+        XCTAssertEqual(UserDefaults.standard.data(forKey: UserDefaultsKeys.inputDevicePriorityList), savedPriorityDefaults)
+        let restored = await MainActor.run {
+            (
+                priority: apiContext.audioDeviceService.inputDevicePriorityList,
+                selectedUID: apiContext.audioDeviceService.selectedDeviceUID,
+                level: apiContext.dictationViewModel.audioDuckingLevel,
+                mediaPause: apiContext.dictationViewModel.mediaPauseEnabled
+            )
+        }
+        XCTAssertEqual(restored.priority, [
+            AudioInputDevicePriorityItem(uid: "quadcast-uid", name: "HyperX QuadCast 2"),
+            AudioInputDevicePriorityItem(uid: "usb-microphone-uid", name: "USB Microphone"),
+        ])
+        XCTAssertEqual(restored.selectedUID, "usb-microphone-uid")
+        XCTAssertEqual(restored.level, 0.35)
+        XCTAssertTrue(restored.mediaPause)
+    }
+
     func testDictionaryTermsEndpointsReplaceMergeAndDeleteSingleTerm() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -12733,6 +13077,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecorderViewModel: audioRecorderViewModel,
+            audioDeviceService: audioDeviceService,
             settingsBackupService: settingsBackupService
         )
         handlers.register(on: router)

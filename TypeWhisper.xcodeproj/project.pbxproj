@@ -228,6 +228,7 @@
 		AA00000000000000000043 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000043 /* HTTPServer.swift */; };
 		AA00000000000000000044 /* APIHandlers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000044 /* APIHandlers.swift */; };
 		AA12990000000000000001 /* APITranslation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB12990000000000000001 /* APITranslation.swift */; };
+		AA0A5E7700000000000000A1 /* APIAudioSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0A5E7700000000000000A1 /* APIAudioSettings.swift */; };
 		AA12990000000000000002 /* APIHandlersTargetLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB12990000000000000002 /* APIHandlersTargetLanguageTests.swift */; };
 		AA12990000000000000003 /* TranslationServiceBatchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB12990000000000000003 /* TranslationServiceBatchTests.swift */; };
 		AA00000000000000000045 /* APIServerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000045 /* APIServerViewModel.swift */; };
@@ -890,6 +891,7 @@
 		BB00000000000000000043 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
 		BB00000000000000000044 /* APIHandlers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIHandlers.swift; sourceTree = "<group>"; };
 		BB12990000000000000001 /* APITranslation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APITranslation.swift; sourceTree = "<group>"; };
+		BB0A5E7700000000000000A1 /* APIAudioSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIAudioSettings.swift; sourceTree = "<group>"; };
 		BB12990000000000000002 /* APIHandlersTargetLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIHandlersTargetLanguageTests.swift; sourceTree = "<group>"; };
 		BB12990000000000000003 /* TranslationServiceBatchTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranslationServiceBatchTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000045 /* APIServerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIServerViewModel.swift; sourceTree = "<group>"; };
@@ -2261,6 +2263,7 @@
 				BB00000000000000000043 /* HTTPServer.swift */,
 				BB00000000000000000044 /* APIHandlers.swift */,
 				BB12990000000000000001 /* APITranslation.swift */,
+				BB0A5E7700000000000000A1 /* APIAudioSettings.swift */,
 				BB12990000000000000002 /* APIHandlersTargetLanguageTests.swift */,
 			);
 			path = HTTPServer;
@@ -5196,6 +5199,7 @@
 				AA00000000000000000043 /* HTTPServer.swift in Sources */,
 				AA00000000000000000044 /* APIHandlers.swift in Sources */,
 				AA12990000000000000001 /* APITranslation.swift in Sources */,
+				AA0A5E7700000000000000A1 /* APIAudioSettings.swift in Sources */,
 				AA00000000000000000045 /* APIServerViewModel.swift in Sources */,
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
 				AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */,

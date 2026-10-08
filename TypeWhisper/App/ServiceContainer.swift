@@ -431,6 +431,7 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecorderViewModel: audioRecorderViewModel,
+            audioDeviceService: audioDeviceService,
             settingsBackupService: settingsBackupService,
             speakerCoordinator: speakerTranscriptCoordinator
         )
