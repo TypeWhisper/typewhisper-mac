@@ -3069,6 +3069,14 @@
       "homepageURL": "https://www.cartesia.ai/",
       "releases": [
         {
+          "version": "1.0.5",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 258331,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cartesia-v1.0.5/CartesiaPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.4",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
