@@ -3328,6 +3328,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/meta/",
       "releases": [
         {
+          "version": "1.0.1",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 335049,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-meta-v1.0.1/MetaPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.0",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
