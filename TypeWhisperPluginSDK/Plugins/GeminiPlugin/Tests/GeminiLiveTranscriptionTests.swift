@@ -571,26 +571,27 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
     }
 
     func testTranscriptStillArrivingExtendsWaitPastTimeout() async throws {
+        let clock = GeminiTestClock()
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket, maximumFinishTime: .milliseconds(1_500))
+        let session = try await makeSession(socket: socket, clock: clock, maximumFinishTime: .milliseconds(1_500))
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Quick test"}}}"#))
-        socket.onSend = { message in
-            guard isGeminiEndMessage(message) else { return }
-            Task {
-                try await Task.sleep(for: .milliseconds(300))
-                socket.enqueue(#"{"serverContent":{"interimInputTranscription":{"text":"Quick test number one."}}}"#)
-                try await Task.sleep(for: .milliseconds(300))
-                socket.enqueue(#"{"serverContent":{"inputTranscription":{"text":"Quick test number one. The last words are purple."}}}"#)
-            }
-        }
 
-        let start = ContinuousClock.now
-        let result = try await finishWithWatchdog(session)
-        let elapsed = start.duration(to: .now)
+        let finish = Task { try await finishWithWatchdog(session) }
+        try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
+        clock.advance(by: .milliseconds(300))
+        try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Quick test number one."}}}"#))
+        clock.advance(by: .milliseconds(300))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertFalse(socket.isClosed, "Text still arriving must extend the wait past the 400 ms timeout")
 
+        try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Quick test number one. The last words are purple."}}}"#))
+        clock.advance(by: .milliseconds(899))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertFalse(socket.isClosed)
+        clock.advance(by: .milliseconds(1))
+
+        let result = try await finish.value
         XCTAssertEqual(result.text, "Quick test number one. The last words are purple.")
-        XCTAssertGreaterThan(elapsed, .milliseconds(600))
-        XCTAssertLessThan(elapsed, .milliseconds(1_800))
     }
 
     func testTranscriptExtensionStopsAtMaximumFinishTime() async throws {
