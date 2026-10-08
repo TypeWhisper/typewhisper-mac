@@ -153,6 +153,30 @@ do {
         let result = try await client.importSettings(backupData, replaceExisting: replaceExisting)
         print(OutputFormatter.formatSettingsImport(result, json: jsonOutput))
 
+    case "audio":
+        let data: Data
+        switch positionalArgs.first {
+        case nil:
+            data = try await client.audioSettings()
+        case "set" where positionalArgs.count == 2:
+            let changes: Data
+            if positionalArgs[1] == "-" {
+                changes = FileHandle.standardInput.readDataToEndOfFile()
+                guard !changes.isEmpty else { throw CLIError.stdinEmpty }
+            } else {
+                let fileURL = settingsFileURL(for: positionalArgs[1])
+                guard FileManager.default.fileExists(atPath: fileURL.path) else {
+                    throw CLIError.fileNotFound(fileURL.path)
+                }
+                changes = try Data(contentsOf: fileURL)
+            }
+            data = try await client.updateAudioSettings(changes)
+        default:
+            printError("Error: Use 'audio' to show audio settings or 'audio set <file>' to change them.")
+            exit(1)
+        }
+        print(OutputFormatter.formatAudioSettings(data, json: jsonOutput))
+
     case "transcribe":
         let fileURL: URL?
         if let path = positionalArgs.first, path != "-" {
@@ -210,6 +234,8 @@ func printUsage() {
           models               List available models
           export <file>        Export a settings backup as JSON
           import <file>        Import all settings from a JSON backup
+          audio                Show microphone priority, ducking and sound settings
+          audio set <file>     Change audio settings from a JSON file (or - for stdin)
 
         Global options:
           --port <N>           Server port (default: auto-detect)
@@ -238,6 +264,8 @@ func printUsage() {
           typewhisper export typewhisper-settings.json
           typewhisper import typewhisper-settings.json
           typewhisper import typewhisper-settings.json --replace
+          typewhisper audio --json
+          echo '{"audio_ducking_enabled": false}' | typewhisper audio set -
           typewhisper transcribe recording.wav
           typewhisper transcribe recording.wav --language de --json
           typewhisper transcribe recording.wav --language-hint de --language-hint en

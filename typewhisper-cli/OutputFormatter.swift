@@ -129,6 +129,51 @@ enum OutputFormatter {
         return lines.joined(separator: "\n")
     }
 
+    static func formatAudioSettings(_ data: Data, json: Bool) -> String {
+        if json {
+            return prettyJSON(data)
+        }
+        guard let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return prettyJSON(data)
+        }
+
+        func device(_ value: Any?) -> String? {
+            guard let device = value as? [String: Any], let id = device["id"] as? String else { return nil }
+            return "\(device["name"] as? String ?? id) [\(id)]"
+        }
+        func onOff(_ key: String) -> String {
+            settings[key] as? Bool == true ? "on" : "off"
+        }
+
+        let devices = settings["input_devices"] as? [[String: Any]] ?? []
+        let availableIDs = Set(devices.compactMap { $0["id"] as? String })
+        let priority = settings["input_priority"] as? [[String: Any]] ?? []
+
+        var lines = ["Active input: \(device(settings["active_input"]) ?? "none")"]
+        if priority.isEmpty {
+            lines.append("Input priority: system default")
+        } else {
+            lines.append("Input priority:")
+            for (index, item) in priority.enumerated() {
+                let connected = (item["id"] as? String).map(availableIDs.contains) ?? false
+                lines.append("  \(index + 1). \(device(item) ?? "?")\(connected ? "" : " (not connected)")")
+            }
+        }
+        lines.append("Available inputs:")
+        for item in devices {
+            let isDefault = item["is_system_default"] as? Bool == true
+            lines.append("  \(device(item) ?? "?")\(isDefault ? " (system default)" : "")")
+        }
+        var ducking = onOff("audio_ducking_enabled")
+        if settings["audio_ducking_enabled"] as? Bool == true, let level = settings["audio_ducking_level"] as? Double {
+            ducking += " (\(Int((level * 100).rounded()))% volume)"
+        }
+        lines.append("Audio ducking: \(ducking)")
+        lines.append("Pause media during recording: \(onOff("pause_media_during_recording"))")
+        lines.append("Sound feedback: \(onOff("sound_feedback_enabled"))")
+        return lines.joined(separator: "\n")
+    }
+
     private static func prettyJSON(_ data: Data) -> String {
         if let obj = try? JSONSerialization.jsonObject(with: data),
            let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),

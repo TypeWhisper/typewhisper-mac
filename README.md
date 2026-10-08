@@ -503,6 +503,59 @@ curl --fail --silent --show-error -X POST "http://localhost:8978/v1/settings/imp
 
 An import skips history entries, workflows, profiles, and prompt actions that already exist unchanged, so importing a backup onto the Mac it came from does not duplicate them. The default `mode=merge` adds everything else and only fills empty hotkey slots. `mode=replace` also overwrites existing workflows, profiles, and prompt actions with the same name and the hotkeys contained in the backup. Neither mode deletes anything.
 
+### Audio Settings
+
+`GET /v1/settings/audio` returns the microphone priority list and the recording audio options from Settings > Dictation. `PATCH /v1/settings/audio` changes any subset of them through the same code path as the settings window: the change applies to the next recording, persists across restarts, and shows up in the open settings window. TypeWhisper for Windows serves the same contract.
+
+```bash
+# Show available inputs, the priority list, and the input the next recording would use
+curl http://localhost:8978/v1/settings/audio
+
+# Record from BlackHole and turn off ducking
+curl -X PATCH http://localhost:8978/v1/settings/audio \
+  -H "Content-Type: application/json" \
+  -d '{"input_priority":[{"id":"BlackHole2ch_UID","name":"BlackHole 2ch"}],"audio_ducking_enabled":false}'
+
+# Use the macOS default input
+curl -X PATCH http://localhost:8978/v1/settings/audio \
+  -H "Content-Type: application/json" \
+  -d '{"input_priority":[]}'
+```
+
+```json
+{
+  "input_devices": [{"id": "BlackHole2ch_UID", "name": "BlackHole 2ch", "is_system_default": false}],
+  "input_priority": [{"id": "AppleUSBAudioEngine:HyperX:QuadCast 2", "name": "HyperX QuadCast 2"}],
+  "active_input": {"id": "BuiltInMicrophoneDevice", "name": "MacBook Pro Microphone"},
+  "audio_ducking_enabled": true,
+  "audio_ducking_level": 0.2,
+  "pause_media_during_recording": false,
+  "sound_feedback_enabled": true
+}
+```
+
+| Field | Writable | Description |
+|-------|----------|-------------|
+| `input_devices` | no | Input devices that are connected now. `id` is the CoreAudio device UID. |
+| `input_priority` | yes | The saved priority list, including devices that are not connected. Each entry needs an `id`; `name` is optional and is replaced by the current name while the device is connected. `[]` records from the macOS default input. |
+| `active_input` | no | The input the next recording would use: the first connected entry of `input_priority`, otherwise the macOS default input. `null` when there is no input. |
+| `audio_ducking_enabled` | yes | Reduce the system volume during recording. |
+| `audio_ducking_level` | yes | Share of the current volume kept during recording, from `0` (mute) to `1`. The settings slider offers 0 to 0.5. |
+| `pause_media_during_recording` | yes | Pause media playback during recording. |
+| `sound_feedback_enabled` | yes | Play start, success, and error sounds. |
+
+A successful `PATCH` returns the full state, as `GET` does. It returns `400` for invalid JSON, a value of the wrong type or range, a duplicate or empty device ID, a read-only field, or an unknown field; in that case nothing changes. TypeWhisper for macOS supports every writable field of the shared contract. A field that only another platform offers is an unknown field here, and the error message names it together with the fields macOS accepts. While a dictation or the recorder is recording or still processing, `PATCH` returns `409` and changes nothing; `GET` keeps working.
+
+To change the settings temporarily, save the `GET` response, send your changes, and later send the saved writable fields back:
+
+```bash
+saved="$(curl --fail --silent http://localhost:8978/v1/settings/audio)"
+# ... change settings, record ...
+jq 'del(.input_devices, .active_input)' <<<"$saved" | \
+  curl --fail --silent -X PATCH http://localhost:8978/v1/settings/audio \
+    -H "Content-Type: application/json" --data-binary @-
+```
+
 ### Workflows
 
 ```bash
@@ -666,6 +719,8 @@ typewhisper models              # List available models
 typewhisper transcribe file.wav # Transcribe an audio file
 typewhisper export settings.json # Export all supported settings
 typewhisper import settings.json # Import all categories in a backup
+typewhisper audio               # Show microphone priority, ducking and sound settings
+typewhisper audio set changes.json # Change audio settings (see Audio Settings above)
 ```
 
 ### Options
@@ -704,6 +759,9 @@ typewhisper import ~/.config/typewhisper/settings.json --json
 
 # Apply edits made to that file, including changed hotkeys
 typewhisper import ~/.config/typewhisper/settings.json --replace
+
+# Record from BlackHole until you switch back
+echo '{"input_priority":[{"id":"BlackHole2ch_UID"}]}' | typewhisper audio set -
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
