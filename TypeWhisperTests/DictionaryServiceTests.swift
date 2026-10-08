@@ -1292,6 +1292,173 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testTermPackTermsStartAtPreciseBoostingWithoutChangingManualTerms() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryPackPrecise-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "Rust")
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+
+        viewModel.activatePack(makeTermPack(id: "community-rust", terms: ["Rust", "Tokio"]))
+
+        XCTAssertNil(try XCTUnwrap(service.entries.first { $0.original == "Rust" }).ctcMinSimilarity)
+        XCTAssertEqual(
+            try XCTUnwrap(service.entries.first { $0.original == "Tokio" }).ctcMinSimilarity,
+            Float(DictionaryViewModel.preciseCtcMinSimilarity)
+        )
+        XCTAssertEqual(
+            viewModel.termBoostingLabel(for: service.entries.first { $0.original == "Tokio" }?.ctcMinSimilarity),
+            DictionaryViewModel.TermBoostingMode.precise.displayName
+        )
+    }
+
+    @MainActor
+    func testTermPackEntryOverridesSurviveTogglesAndUpdates() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryPackOverrides-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let apple = makeTermPack(
+            id: "apple",
+            terms: ["Combine", "Express", "Core Data"],
+            corrections: [TermPackCorrection(original: "swift ui", replacement: "SwiftUI")]
+        )
+        let devOps = makeTermPack(id: "devops", terms: ["Ansible"])
+
+        viewModel.activatePack(apple)
+        viewModel.activatePack(devOps)
+
+        func entry(_ original: String) -> DictionaryEntry? {
+            service.entries.first { $0.original == original }
+        }
+        let combine = try XCTUnwrap(entry("Combine"))
+        let combineID = combine.id
+        service.updateEntry(combine, original: "Combine", replacement: nil, caseSensitive: true, ctcMinSimilarity: 0.95)
+        service.setEntryEnabled(try XCTUnwrap(entry("Express")), enabled: false)
+        let coreData = try XCTUnwrap(entry("Core Data"))
+        service.updateEntry(coreData, original: "Core Data", replacement: nil, caseSensitive: true, ctcMinSimilarity: nil)
+        service.setEntryEnabled(try XCTUnwrap(entry("swift ui")), enabled: false)
+        let ansible = try XCTUnwrap(entry("Ansible"))
+        service.setEntryEnabled(ansible, enabled: false)
+
+        // Toggling another pack leaves the entries untouched.
+        viewModel.togglePack(devOps)
+        viewModel.togglePack(devOps)
+        XCTAssertEqual(entry("Combine")?.id, combineID)
+        XCTAssertEqual(entry("Combine")?.ctcMinSimilarity, 0.95)
+        XCTAssertEqual(entry("Express")?.isEnabled, false)
+        XCTAssertEqual(entry("Ansible")?.isEnabled, false)
+
+        // Toggling the pack itself restores its overrides.
+        viewModel.deactivatePack(apple)
+        XCTAssertNil(entry("Combine"))
+        viewModel.activatePack(apple)
+        XCTAssertEqual(entry("Combine")?.ctcMinSimilarity, 0.95)
+        XCTAssertEqual(entry("Express")?.isEnabled, false)
+        XCTAssertEqual(entry("Express")?.ctcMinSimilarity, Float(DictionaryViewModel.preciseCtcMinSimilarity))
+        XCTAssertEqual(entry("Core Data")?.isEnabled, true)
+        XCTAssertNil(try XCTUnwrap(entry("Core Data")).ctcMinSimilarity)
+        XCTAssertEqual(entry("swift ui")?.isEnabled, false)
+
+        // An update keeps overrides of remaining terms, applies changed spelling and case
+        // sensitivity, adds new terms at the pack default and forgets terms the pack dropped.
+        let updatedApple = makeTermPack(
+            id: "apple",
+            terms: ["COMBINE", "Core Data", "SwiftData"],
+            corrections: [TermPackCorrection(original: "Swift UI", replacement: "SwiftUI", caseSensitive: false)],
+            version: "1.1.0"
+        )
+        let combineBeforeUpdateID = try XCTUnwrap(entry("Combine")).id
+        let correctionBeforeUpdateID = try XCTUnwrap(entry("swift ui")).id
+        viewModel.updatePack(updatedApple)
+        XCTAssertEqual(entry("COMBINE")?.id, combineBeforeUpdateID)
+        XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, 0.95)
+        XCTAssertNil(entry("Express"))
+        XCTAssertEqual(entry("SwiftData")?.ctcMinSimilarity, Float(DictionaryViewModel.preciseCtcMinSimilarity))
+        let updatedCorrection = try XCTUnwrap(entry("Swift UI"))
+        XCTAssertEqual(updatedCorrection.id, correctionBeforeUpdateID)
+        XCTAssertEqual(updatedCorrection.caseSensitive, false)
+        XCTAssertEqual(updatedCorrection.isEnabled, false)
+
+        // Overrides of a deactivated pack survive a relaunch.
+        viewModel.deactivatePack(updatedApple)
+        let relaunchedViewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        relaunchedViewModel.activatePack(updatedApple)
+        XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, 0.95)
+        XCTAssertEqual(entry("Swift UI")?.isEnabled, false)
+
+        // Resetting all packs forgets the overrides.
+        relaunchedViewModel.requestReset(.deactivateAllTermPacks)
+        relaunchedViewModel.confirmReset()
+        relaunchedViewModel.activatePack(updatedApple)
+        XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, Float(DictionaryViewModel.preciseCtcMinSimilarity))
+        XCTAssertEqual(entry("Swift UI")?.isEnabled, true)
+    }
+
+    @MainActor
+    func testExistingAutoPackTermsMigrateToPreciseOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryPackMigration-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntries([
+            (type: .term, original: "Tokio", replacement: nil, caseSensitive: true),
+            (type: .term, original: "Manual", replacement: nil, caseSensitive: false),
+        ])
+        let legacyState = ActivatedTermPackState(
+            packID: "community-rust",
+            source: "community",
+            installedVersion: "1.0.0",
+            installedTerms: ["Tokio"],
+            installedCorrections: [],
+            requiresCommercialLicense: nil
+        )
+        defaults.set(try JSONEncoder().encode([legacyState]), forKey: UserDefaultsKeys.activatedTermPackStates)
+
+        _ = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let precise = Float(DictionaryViewModel.preciseCtcMinSimilarity)
+        XCTAssertEqual(service.entries.first { $0.original == "Tokio" }?.ctcMinSimilarity, precise)
+        XCTAssertNil(try XCTUnwrap(service.entries.first { $0.original == "Manual" }).ctcMinSimilarity)
+
+        // A later choice of Auto is respected.
+        let tokio = try XCTUnwrap(service.entries.first { $0.original == "Tokio" })
+        service.updateEntry(tokio, original: "Tokio", replacement: nil, caseSensitive: true, ctcMinSimilarity: nil)
+        _ = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        XCTAssertNil(try XCTUnwrap(service.entries.first { $0.original == "Tokio" }).ctcMinSimilarity)
+    }
+
+    private func makeTermPack(
+        id: String,
+        terms: [String],
+        corrections: [TermPackCorrection] = [],
+        version: String = "1.0.0"
+    ) -> TermPack {
+        TermPack(
+            id: id,
+            name: id,
+            description: "Test pack",
+            icon: "shippingbox",
+            terms: terms,
+            corrections: corrections,
+            version: version,
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+    }
+
+    @MainActor
     func testClearAutoLearnedResetRequiresConfirmationAndPreservesOtherEntries() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
