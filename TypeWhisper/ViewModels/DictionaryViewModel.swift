@@ -947,7 +947,8 @@ class DictionaryViewModel: ObservableObject {
 
         var newStates: [String: ActivatedTermPackState] = [:]
         var entriesToAdd: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)] = []
-        var respelledTerms: [(entry: DictionaryEntry, term: String)] = []
+        // Reused entries whose pack definition changed spelling or case sensitivity
+        var refreshedEntries: [(entry: DictionaryEntry, original: String, replacement: String?, caseSensitive: Bool)] = []
 
         for state in sortedStates {
             let restoredOverrides = inactivePackEntryOverrides[state.packID] ?? [:]
@@ -959,7 +960,7 @@ class DictionaryViewModel: ObservableObject {
                 installedTerms.append(term)
                 if let entry = reusableEntries.removeValue(forKey: key) {
                     if entry.original != term {
-                        respelledTerms.append((entry, term))
+                        refreshedEntries.append((entry, term, nil, entry.caseSensitive))
                     }
                 } else {
                     let override = restoredOverrides[key]
@@ -985,7 +986,13 @@ class DictionaryViewModel: ObservableObject {
                 let key = Self.correctionKey(original: correction.original, replacement: correction.replacement)
                 guard claimedKeys.insert(key).inserted else { continue }
                 installedCorrections.append(correction)
-                if reusableEntries.removeValue(forKey: key) == nil {
+                if let entry = reusableEntries.removeValue(forKey: key) {
+                    if entry.original != correction.original
+                        || entry.replacement != correction.replacement
+                        || entry.caseSensitive != correction.caseSensitive {
+                        refreshedEntries.append((entry, correction.original, correction.replacement, correction.caseSensitive))
+                    }
+                } else {
                     entriesToAdd.append((
                         type: .correction,
                         original: correction.original,
@@ -1021,12 +1028,12 @@ class DictionaryViewModel: ObservableObject {
         if !reusableEntries.isEmpty {
             dictionaryService.deleteEntries(Array(reusableEntries.values))
         }
-        for (entry, term) in respelledTerms {
+        for (entry, original, replacement, caseSensitive) in refreshedEntries {
             dictionaryService.updateEntry(
                 entry,
-                original: term,
-                replacement: nil,
-                caseSensitive: entry.caseSensitive,
+                original: original,
+                replacement: replacement,
+                caseSensitive: caseSensitive,
                 ctcMinSimilarity: entry.ctcMinSimilarity
             )
         }
@@ -1094,7 +1101,9 @@ class DictionaryViewModel: ObservableObject {
         let autoTermIDs = Set(dictionaryService.entries.filter {
             managedIDs.contains($0.id) && $0.type == .term && $0.ctcMinSimilarity == nil
         }.map(\.id))
-        dictionaryService.setCtcMinSimilarity(Self.packTermCtcMinSimilarity, forTermEntryIDs: autoTermIDs)
+        guard dictionaryService.setCtcMinSimilarity(Self.packTermCtcMinSimilarity, forTermEntryIDs: autoTermIDs) else {
+            return
+        }
         defaults.set(true, forKey: UserDefaultsKeys.termPackPreciseBoostingMigrated)
     }
 

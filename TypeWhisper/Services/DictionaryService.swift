@@ -423,8 +423,11 @@ final class DictionaryService: ObservableObject {
     }
 
     /// Sets the boosting threshold of several term entries with a single save+reload.
-    func setCtcMinSimilarity(_ ctcMinSimilarity: Float?, forTermEntryIDs ids: Set<UUID>) {
-        guard let context = modelContext, !ids.isEmpty else { return }
+    /// Returns false when the change could not be saved.
+    @discardableResult
+    func setCtcMinSimilarity(_ ctcMinSimilarity: Float?, forTermEntryIDs ids: Set<UUID>) -> Bool {
+        guard !ids.isEmpty else { return true }
+        guard let context = modelContext else { return false }
 
         let normalized = Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
         let now = Date()
@@ -436,10 +439,12 @@ final class DictionaryService: ObservableObject {
         do {
             try context.save()
             loadEntries()
+            return true
         } catch {
             context.rollback()
             loadEntries()
             logger.error("Failed to update term boosting: \(error.localizedDescription)")
+            return false
         }
     }
 

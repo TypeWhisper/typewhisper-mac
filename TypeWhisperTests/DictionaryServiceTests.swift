@@ -1368,35 +1368,39 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertNil(try XCTUnwrap(entry("Core Data")).ctcMinSimilarity)
         XCTAssertEqual(entry("swift ui")?.isEnabled, false)
 
-        // An update keeps overrides of remaining terms, adds new terms at the pack default
-        // and forgets terms the pack dropped.
+        // An update keeps overrides of remaining terms, applies changed spelling and case
+        // sensitivity, adds new terms at the pack default and forgets terms the pack dropped.
         let updatedApple = makeTermPack(
             id: "apple",
             terms: ["COMBINE", "Core Data", "SwiftData"],
-            corrections: [TermPackCorrection(original: "swift ui", replacement: "SwiftUI")],
+            corrections: [TermPackCorrection(original: "Swift UI", replacement: "SwiftUI", caseSensitive: false)],
             version: "1.1.0"
         )
         let combineBeforeUpdateID = try XCTUnwrap(entry("Combine")).id
+        let correctionBeforeUpdateID = try XCTUnwrap(entry("swift ui")).id
         viewModel.updatePack(updatedApple)
         XCTAssertEqual(entry("COMBINE")?.id, combineBeforeUpdateID)
         XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, 0.95)
         XCTAssertNil(entry("Express"))
         XCTAssertEqual(entry("SwiftData")?.ctcMinSimilarity, Float(DictionaryViewModel.preciseCtcMinSimilarity))
-        XCTAssertEqual(entry("swift ui")?.isEnabled, false)
+        let updatedCorrection = try XCTUnwrap(entry("Swift UI"))
+        XCTAssertEqual(updatedCorrection.id, correctionBeforeUpdateID)
+        XCTAssertEqual(updatedCorrection.caseSensitive, false)
+        XCTAssertEqual(updatedCorrection.isEnabled, false)
 
         // Overrides of a deactivated pack survive a relaunch.
         viewModel.deactivatePack(updatedApple)
         let relaunchedViewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
         relaunchedViewModel.activatePack(updatedApple)
         XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, 0.95)
-        XCTAssertEqual(entry("swift ui")?.isEnabled, false)
+        XCTAssertEqual(entry("Swift UI")?.isEnabled, false)
 
         // Resetting all packs forgets the overrides.
         relaunchedViewModel.requestReset(.deactivateAllTermPacks)
         relaunchedViewModel.confirmReset()
         relaunchedViewModel.activatePack(updatedApple)
         XCTAssertEqual(entry("COMBINE")?.ctcMinSimilarity, Float(DictionaryViewModel.preciseCtcMinSimilarity))
-        XCTAssertEqual(entry("swift ui")?.isEnabled, true)
+        XCTAssertEqual(entry("Swift UI")?.isEnabled, true)
     }
 
     @MainActor
