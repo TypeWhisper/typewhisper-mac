@@ -3425,6 +3425,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/microsoft-ai/",
       "releases": [
         {
+          "version": "1.0.1",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 296139,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-microsoft-ai-v1.0.1/MicrosoftAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.0",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
