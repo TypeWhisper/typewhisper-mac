@@ -111,8 +111,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// repetitions and punctuated repeats ("no, no, no") are kept as
     /// deliberate emphasis.
     static func collapseStutters(in text: String) -> String {
-        let wordBoundary = #"[\p{L}\p{N}_'’-]"#
-        let word = #"(\p{L}+(?:['’-]\p{L}+)*)"#
+        let wordBoundary = #"[\p{L}\p{M}\p{N}_'’-]"#
+        let word = #"([\p{L}\p{M}]+(?:['’-][\p{L}\p{M}]+)*)"#
         let pattern = #"(?i)(?<!"# + wordBoundary + #")"# + word + #"(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
@@ -174,8 +174,9 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         return ".!?…".contains(last)
     }
 
-    /// Whether `text` ends with an opening bracket or quote. A quote right
-    /// after a letter closes (`„ja“ äh nein`) and does not count.
+    /// Whether `text` ends with an opening bracket or quote. A quote opens
+    /// after whitespace or another opening delimiter (`(“`); right after a
+    /// letter it closes (`„ja“ äh nein`) and does not count.
     private static func endsWithOpeningDelimiter(_ text: String) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
         switch last.properties.generalCategory {
@@ -186,8 +187,13 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         default:
             guard last == "\"" || last == "'" else { return false }
         }
-        let beforeQuote = text.unicodeScalars.dropLast().last
-        return beforeQuote.map { CharacterSet.whitespacesAndNewlines.contains($0) } ?? true
+        guard let beforeQuote = text.unicodeScalars.dropLast().last else { return true }
+        switch beforeQuote.properties.generalCategory {
+        case .openPunctuation, .initialPunctuation:
+            return true
+        default:
+            return CharacterSet.whitespacesAndNewlines.contains(beforeQuote)
+        }
     }
 
     private static func appendRestoringCapital(_ segment: String, to text: inout String, capitalOwed: inout Bool) {
