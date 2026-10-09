@@ -565,8 +565,24 @@ final class APIHandlers: @unchecked Sendable {
             }
 
             if options.applyCorrections {
-                finalText = await MainActor.run {
-                    dictionaryService.applyCorrections(to: finalText)
+                // Correct the text and the returned segments in one pass so each
+                // correction is counted once per request.
+                let correctsSegments = options.responseFormat == "verbose_json"
+                let segmentTexts = correctsSegments ? responseSegments.map(\.text) : []
+                let correctedTexts = await MainActor.run {
+                    dictionaryService.applyCorrections(to: [finalText] + segmentTexts)
+                }
+                finalText = correctedTexts.first ?? finalText
+                if correctsSegments {
+                    responseSegments = zip(responseSegments, correctedTexts.dropFirst()).map { segment, correctedText in
+                        TranscriptionSegment(
+                            text: correctedText,
+                            start: segment.start,
+                            end: segment.end,
+                            speakerLabel: segment.speakerLabel,
+                            speakerConfidence: segment.speakerConfidence
+                        )
+                    }
                 }
             }
 
