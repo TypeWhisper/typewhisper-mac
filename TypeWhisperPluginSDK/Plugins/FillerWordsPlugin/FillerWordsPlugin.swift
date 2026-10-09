@@ -216,7 +216,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
                opensSentence(stripped, fillerIsAttached: fillerIsAttached) {
                 capitalOwed = true
             }
-            if fillerIsAttached, endsWithOpeningDelimiter(stripped, fillerIsAttached: true) {
+            if joinsOpeningDelimiter {
+                // An earlier filler already left the next word to join the
+                // delimiter: `“Um, uh, hello”` -> `“Hello”`.
+            } else if fillerIsAttached, endsWithOpeningDelimiter(stripped, fillerIsAttached: true) {
                 joinsOpeningDelimiter = true
             } else {
                 stripped += " "
@@ -300,24 +303,30 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         capitalOwed = false
 
         // Only an ordinary word takes the capital, optionally after opening
-        // quotes or brackets. Mixed-case spellings ("iPhone", "eBay"), URLs,
-        // handles and other identifiers stay as they are.
-        let token = segment[tokenStart...].prefix { !$0.isWhitespace && $0 != "<" }
-        var index = token.startIndex
-        while index < token.endIndex {
-            if token[index...].hasPrefix(htmlQuote) {
-                index = token.index(index, offsetBy: htmlQuote.count)
-            } else if token[index].isQuoteOrBracket {
-                index = token.index(after: index)
+        // quotes or brackets and their padding (`« hello »`). Mixed-case
+        // spellings ("iPhone", "eBay"), URLs, handles and other identifiers
+        // stay as they are.
+        var index = tokenStart
+        var skippedDelimiter = false
+        while index < segment.endIndex {
+            if segment[index...].hasPrefix(htmlQuote) {
+                index = segment.index(index, offsetBy: htmlQuote.count)
+                skippedDelimiter = true
+            } else if segment[index].isQuoteOrBracket {
+                index = segment.index(after: index)
+                skippedDelimiter = true
+            } else if skippedDelimiter, segment[index] == " " || segment[index] == "\t" {
+                index = segment.index(after: index)
             } else {
                 break
             }
         }
-        guard index < token.endIndex, token[index].isLetter else {
+        guard index < segment.endIndex, segment[index].isLetter else {
             text += segment
             return
         }
-        let word = token[index...].prefix { $0.isLetter || "'’-".contains($0) }
+        let token = segment[index...].prefix { !$0.isWhitespace && $0 != "<" }
+        let word = token.prefix { $0.isLetter || "'’-".contains($0) }
         let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
         guard !word.dropFirst().contains(where: \.isUppercase),
               trailing.allSatisfy({ ".,!?;:…".contains($0) || $0.isQuoteOrBracket }) else {
