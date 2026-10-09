@@ -392,6 +392,17 @@ final class AudioRecorderViewModel: ObservableObject {
     private var currentRecordingEngine: RecordingEngine {
         RecordingEngine(providerId: effectiveProviderId, modelId: availableSelectedModel)
     }
+    private func isLoaded(_ engine: RecordingEngine) -> Bool {
+        engine.providerId.flatMap { PluginManager.shared?.transcriptionEngine(for: $0) } != nil
+    }
+    /// An update during the recording can drop the model it started with.
+    private static func validated(_ engine: RecordingEngine) -> RecordingEngine {
+        guard let modelId = engine.modelId, let providerId = engine.providerId,
+              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId) else { return engine }
+        let modelIds = Set((plugin.modelCatalog + plugin.transcriptionModels).map(\.id))
+        guard !modelIds.isEmpty, !modelIds.contains(modelId) else { return engine }
+        return RecordingEngine(providerId: providerId, modelId: nil)
+    }
 
     var effectiveProviderId: String? {
         availableSelectedEngine ?? modelManager.selectedProviderId
@@ -594,6 +605,16 @@ final class AudioRecorderViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        pluginManager.uninstalledTranscriptionEngines
+            .sink { [weak self] providerIds in self?.forgetUninstalledEngines(providerIds) }
+            .store(in: &cancellables)
+    }
+
+    /// An uninstalled engine's choice goes; one that is only gone for now stays.
+    private func forgetUninstalledEngines(_ providerIds: Set<String>) {
+        guard let selectedEngine, providerIds.contains(selectedEngine) else { return }
+        self.selectedEngine = nil
+        selectedModel = nil
     }
 
     func canUseForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
@@ -788,7 +809,7 @@ final class AudioRecorderViewModel: ObservableObject {
             )
             async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
             let (liveSessionFinish, url) = await (liveSessionFinishTask, finalizedURLTask)
-            let liveSessionResult = liveSessionFinish.result
+            let liveResultFromStart = liveSessionFinish.result
             let liveSessionFailed = if case .failed = liveSessionFinish { true } else { false }
 
             if let url, let calendarEvent {
@@ -808,9 +829,11 @@ final class AudioRecorderViewModel: ObservableObject {
             let finalTranscriptionRequest: FinalTranscriptionRequest?
             if shouldTranscribe, let url {
                 reconcileSelectionWithAvailablePlugins()
-                let engine = startedEngine.flatMap { engine in
-                    engine.providerId.flatMap { PluginManager.shared?.transcriptionEngine(for: $0) } == nil ? nil : engine
-                } ?? currentRecordingEngine
+                let startedEngineIsLoaded = startedEngine.map(isLoaded) ?? false
+                let engine = startedEngineIsLoaded ? Self.validated(startedEngine!) : currentRecordingEngine
+                // A live result from an engine that is gone by now does not
+                // belong to this request; the full recording is transcribed.
+                let liveSessionResult = startedEngineIsLoaded || startedEngine == nil ? liveResultFromStart : nil
                 let providerId = engine.providerId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)

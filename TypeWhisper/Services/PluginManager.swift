@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
@@ -1102,6 +1103,10 @@ final class PluginManager: ObservableObject {
     /// Removes a plugin from the active runtime registry without unmapping its executable code.
     /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
     /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
+    /// Engine ids of an uninstalled plugin. Choices of these engines are
+    /// forgotten; an update or disabling the plugin keeps them.
+    let uninstalledTranscriptionEngines = PassthroughSubject<Set<String>, Never>()
+
     /// Engine ids of plugins unloaded for an update, kept until the update is
     /// gone or replaced, because the placeholder that stands in exposes none.
     private var providerIdsAwaitingRelaunch: [String: Set<String>] = [:]
@@ -1128,6 +1133,9 @@ final class PluginManager: ObservableObject {
         } else {
             providerIdsAwaitingRelaunch[pluginId] = nil
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+            if !disabledProviderIds.isEmpty {
+                uninstalledTranscriptionEngines.send(disabledProviderIds)
+            }
         }
 
         if plugin.isEnabled && plugin.isRuntimeLoaded {

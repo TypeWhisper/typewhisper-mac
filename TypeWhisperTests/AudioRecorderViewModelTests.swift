@@ -760,6 +760,24 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.effectiveProviderId, "assemblyai")
     }
 
+    func testRecorderForgetsAnUninstalledEngine() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        setupPluginManager()
+        UserDefaults.standard.set("groq", forKey: UserDefaultsKeys.selectedEngine)
+        let viewModel = makeViewModel(defaults: defaults)
+        viewModel.observePluginManager()
+        viewModel.selectedEngine = "assemblyai"
+        viewModel.selectedModel = "universal-3-5-pro"
+
+        try XCTUnwrap(PluginManager.shared).unloadPlugin("com.typewhisper.mock.assemblyai")
+        await drainMainQueue()
+
+        XCTAssertNil(viewModel.selectedEngine)
+        XCTAssertNil(viewModel.selectedModel)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine))
+    }
+
     func testRecorderLivePreviewDefaultsOffAndPersistsSeparately() throws {
         let defaults = try makeDefaults()
 

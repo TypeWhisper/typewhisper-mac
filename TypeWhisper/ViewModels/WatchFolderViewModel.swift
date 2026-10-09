@@ -157,6 +157,16 @@ final class WatchFolderViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+        PluginManager.shared.uninstalledTranscriptionEngines
+            .sink { [weak self] providerIds in self?.forgetUninstalledEngines(providerIds) }
+            .store(in: &cancellables)
+    }
+
+    /// An uninstalled engine's choice goes; one that is only gone for now stays.
+    private func forgetUninstalledEngines(_ providerIds: Set<String>) {
+        guard let selectedEngine, providerIds.contains(selectedEngine) else { return }
+        self.selectedEngine = nil
+        selectedModel = nil
     }
 
     func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
