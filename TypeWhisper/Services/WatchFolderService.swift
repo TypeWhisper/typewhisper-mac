@@ -375,13 +375,10 @@ final class WatchFolderService: ObservableObject {
 
             let outputName = url.deletingPathExtension().lastPathComponent
             let exportDate = Date()
-            let engineName: String
-            if let overrideId = overrides.engineId,
-               let engine = PluginManager.shared.transcriptionEngine(for: overrideId) {
-                engineName = engine.providerDisplayName
-            } else {
-                engineName = modelManagerService.activeEngineName ?? "Unknown"
-            }
+            // The engine that produced the result; the default engine can change
+            // while a file runs, for example when a plugin comes back from an update.
+            let engineId = result.engineUsed
+            let engineName = PluginManager.shared.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId
 
             let artifact = try WatchFolderExportBuilder.build(
                 format: format,
@@ -400,11 +397,11 @@ final class WatchFolderService: ObservableObject {
                 outputDirectoryPath: outputFolder.path,
                 outputFilePath: outputURL.path,
                 outputFormat: artifact.fileExtension,
-                engineId: overrides.engineId ?? modelManagerService.selectedProviderId,
+                engineId: engineId,
                 engineName: engineName,
                 modelId: modelManagerService.resolvedModelId(
-                    engineOverrideId: overrides.engineId,
-                    cloudModelOverride: overrides.modelId
+                    engineOverrideId: engineId,
+                    cloudModelOverride: engineId == overrides.engineId ? overrides.modelId : nil
                 ),
                 transcriptText: result.text,
                 detectedLanguage: result.detectedLanguage,

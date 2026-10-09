@@ -2903,7 +2903,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         )
     }
 
-    func testWatchFolderSelectionClearsMissingSavedEngine() throws {
+    func testWatchFolderKeepsMissingSavedEngineAndUsesDefaultEngine() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -2952,8 +2952,12 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         )
         viewModel.reconcileSelectionWithAvailablePlugins()
 
-        XCTAssertNil(viewModel.selectedEngine)
-        XCTAssertNil(viewModel.selectedModel)
+        XCTAssertEqual(viewModel.selectedEngine, "whisper")
+        XCTAssertEqual(viewModel.selectedModel, "openai_whisper-large-v3_turbo")
+        XCTAssertNil(viewModel.engineChoice)
+        XCTAssertNil(viewModel.modelChoice)
+        XCTAssertNil(viewModel.transcriptionOverrides.engineId)
+        XCTAssertNil(viewModel.transcriptionOverrides.modelId)
     }
 }
 

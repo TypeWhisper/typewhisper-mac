@@ -52,6 +52,85 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertFalse(didPresent)
     }
 
+    func testKeepsItsEngineWhileThePluginIsGone() async throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        let defaults = try makeDefaults()
+        defaults.set("updating-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
+        defaults.set("updating-model", forKey: UserDefaultsKeys.fileTranscriptionModel)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        var capturedEngineOverrideId: String?
+        var capturedModelOverrideId: String?
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, cloudModelOverride, _, _, _ in
+                capturedEngineOverrideId = engineOverrideId
+                capturedModelOverrideId = cloudModelOverride
+                return TranscriptionResult(
+                    text: "Default engine text",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+        viewModel.observePluginManager()
+        PluginManager.shared.loadedPlugins = []
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+        viewModel.addFiles([makeTemporaryFile(named: "plugin-update.wav")])
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(viewModel.selectedEngine, "updating-engine")
+        XCTAssertEqual(viewModel.selectedModel, "updating-model")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine), "updating-engine")
+        XCTAssertNil(viewModel.engineChoice)
+        XCTAssertNil(viewModel.modelChoice)
+        // Files go to the default engine without the missing engine's model.
+        XCTAssertEqual(viewModel.files.first?.result?.text, "Default engine text")
+        XCTAssertNil(capturedEngineOverrideId)
+        XCTAssertNil(capturedModelOverrideId)
+    }
+
+    func testModelDroppedByAnUpdateNoLongerApplies() async throws {
+        try registerEngines(["updated-engine"])
+        let defaults = try makeDefaults()
+        defaults.set("updated-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
+        defaults.set("dropped-model", forKey: UserDefaultsKeys.fileTranscriptionModel)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults
+        )
+        viewModel.observePluginManager()
+
+        PluginManager.shared.loadedPlugins = [loadedPlugin(
+            for: FileTranscriptionModelListPlugin(providerId: "updated-engine", modelIDs: ["new-model"]),
+            appSupportDirectory: FileManager.default.temporaryDirectory
+        )]
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        XCTAssertEqual(viewModel.selectedEngine, "updated-engine")
+        XCTAssertNil(viewModel.selectedModel)
+    }
+
     func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -321,6 +400,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     func testTranscribeAllUsesFileTranscriptionEngineAndModelOverrides() async throws {
+        try registerEngines(["parakeet"])
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "last-dictation-recovery.wav")
         var capturedLanguageSelection: LanguageSelection?
@@ -461,6 +541,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     func testTranscribeAllAppliesDictionaryCorrectionsToTextAndSegmentsPreservingMetadata() async throws {
+        try registerEngines(["whisper"])
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "corrected-transcript.wav")
         let dictionaryService = makeDictionaryService()
@@ -1400,6 +1481,23 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
+    /// Loads stand-in plugins, so the view model uses these engines.
+    private func registerEngines(_ providerIds: [String]) throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = providerIds.map {
+            loadedPlugin(
+                for: FileTranscriptionLanguageSelectionPlugin(providerId: $0, providerDisplayName: $0, supportedLanguages: []),
+                appSupportDirectory: appSupportDirectory
+            )
+        }
+    }
+
     private func makeDefaults() throws -> UserDefaults {
         let name = "FileTranscriptionViewModelTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
@@ -1495,7 +1593,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     private func loadedPlugin(
-        for plugin: FileTranscriptionLanguageSelectionPlugin,
+        for plugin: some TranscriptionEnginePlugin,
         appSupportDirectory: URL
     ) -> LoadedPlugin {
         LoadedPlugin(
@@ -1503,7 +1601,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 id: "com.typewhisper.mock.\(plugin.providerId)",
                 name: plugin.providerDisplayName,
                 version: "1.0.0",
-                principalClass: "FileTranscriptionLanguageSelectionPlugin"
+                principalClass: String(describing: type(of: plugin))
             ),
             instance: plugin,
             bundle: Bundle.main,
@@ -1757,5 +1855,41 @@ private final class RecoveryFallbackMockTranscriptionPlugin: NSObject, Transcrip
     ) async throws -> PluginTranscriptionResult {
         _ = onProgress("backup transcript")
         return PluginTranscriptionResult(text: "backup transcript", detectedLanguage: language)
+    }
+}
+
+private final class FileTranscriptionModelListPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.file-transcription-model-list"
+    static let pluginName = "File Transcription Model List"
+
+    private(set) var providerId = "file-transcription-model-list"
+    var providerDisplayName: String { providerId }
+    private(set) var transcriptionModels: [PluginModelInfo] = []
+    let isConfigured = true
+    let selectedModelId: String? = nil
+    let supportsTranslation = false
+    let supportedLanguages: [String] = []
+
+    required override init() {
+        super.init()
+    }
+
+    convenience init(providerId: String, modelIDs: [String]) {
+        self.init()
+        self.providerId = providerId
+        transcriptionModels = modelIDs.map { PluginModelInfo(id: $0, displayName: $0) }
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
     }
 }

@@ -203,7 +203,7 @@ struct AudioRecorderView: View {
                 .foregroundStyle(.secondary)
 
                 let engines = pluginManager.transcriptionEngines
-                Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+                Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
                     Text(String(localized: "recorder.useDictationDefaultEngine")).tag(nil as String?)
                     Divider()
                     ForEach(engines, id: \.providerId) { engine in
@@ -224,7 +224,7 @@ struct AudioRecorderView: View {
                    viewModel.canUseForTranscription(engine) {
                     let models = engine.transcriptionModels
                     if models.count > 1 {
-                        Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                        Picker(String(localized: "Model"), selection: $viewModel.modelChoice) {
                             Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
                             Divider()
                             ForEach(models, id: \.id) { model in

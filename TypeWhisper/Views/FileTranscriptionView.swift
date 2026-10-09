@@ -88,7 +88,7 @@ struct FileTranscriptionView: View {
                 }
 
                 Section(localizedAppText("Watch Folder Transcription", de: "Ordner-Transkription")) {
-                    Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.selectedEngine) {
+                    Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.engineChoice) {
                         Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
                         Divider()
                         ForEach(watchFolder.availableEngines, id: \.providerId) { engine in
@@ -105,7 +105,7 @@ struct FileTranscriptionView: View {
                     if let engine = watchFolder.resolvedEngine {
                         let models = engine.transcriptionModels
                         if models.count > 1 {
-                            Picker(String(localized: "Model"), selection: $watchFolder.selectedModel) {
+                            Picker(String(localized: "Model"), selection: $watchFolder.modelChoice) {
                                 Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
                                 Divider()
                                 ForEach(models, id: \.id) { model in
@@ -550,7 +550,7 @@ struct FileTranscriptionView: View {
     @ViewBuilder
     private var fileTranscriptionSettings: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+            Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
                 Text(String(localized: "Default Engine")).tag(nil as String?)
                 Divider()
                 ForEach(viewModel.availableEngines, id: \.providerId) { engine in
@@ -565,7 +565,7 @@ struct FileTranscriptionView: View {
             if let engine = viewModel.resolvedEngine {
                 let models = engine.transcriptionModels
                 if models.count > 1 {
-                    Picker(String(localized: "Model"), selection: $viewModel.selectedModel) {
+                    Picker(String(localized: "Model"), selection: $viewModel.modelChoice) {
                         Text(String(localized: "watchFolder.model.default")).tag(nil as String?)
                         Divider()
                         ForEach(models, id: \.id) { model in

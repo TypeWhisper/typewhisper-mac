@@ -2146,7 +2146,10 @@ extension AudioDeviceService {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
             return
         }
-        guard let data = try? JSONEncoder().encode(items) else { return }
+        // Sorted keys give the same bytes for the same list on every write.
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
+        guard let data = try? encoder.encode(items) else { return }
         UserDefaults.standard.set(data, forKey: UserDefaultsKeys.inputDevicePriorityList)
     }
 
