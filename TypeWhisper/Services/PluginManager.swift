@@ -982,6 +982,7 @@ final class PluginManager: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: "plugin.\(pluginId).enabled")
 
         if enabled {
+            UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
             if loadedPlugins[index].isRuntimeLoaded {
                 loadedPlugins[index].isEnabled = true
                 activatePlugin(loadedPlugins[index])
@@ -1130,9 +1131,10 @@ final class PluginManager: ObservableObject {
         var disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
         // An update can leave a restart-required placeholder that exposes no
         // engines; uninstalling it must still replace the engines it stands for.
+        // Disabling it can follow an update, so both may name engines.
         if disabledProviderIds.isEmpty {
-            disabledProviderIds = providerIdsAwaitingRelaunch[pluginId]
-                ?? Set(UserDefaults.standard.stringArray(forKey: Self.disabledEngineIdsKey(pluginId)) ?? [])
+            disabledProviderIds = (providerIdsAwaitingRelaunch[pluginId] ?? [])
+                .union(UserDefaults.standard.stringArray(forKey: Self.disabledEngineIdsKey(pluginId)) ?? [])
         }
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
