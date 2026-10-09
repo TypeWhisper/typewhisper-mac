@@ -61,7 +61,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         }
         guard !normalizedWords.isEmpty else { return text }
 
-        var result = removeLatinFillerWords(from: text, words: normalizedWords)
+        var result = removeLatinFillerWords(from: text, words: normalizedWords, language: language)
         result = removeJapaneseFillerWords(from: result, words: normalizedWords)
 
         return result
@@ -115,13 +115,14 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// repetitions and punctuated repeats ("no, no, no") are kept as
     /// deliberate emphasis.
     static func collapseStutters(in text: String) -> String {
-        let wordBoundary = #"[\p{L}\p{M}\p{N}_'’-]"#
-        let word = #"([\p{L}\p{M}]+(?:['’-][\p{L}\p{M}]+)*)"#
+        // Zero-width joiners belong to words in Persian and Indic scripts.
+        let wordBoundary = #"[\p{L}\p{M}\p{N}_'’\x{200C}\x{200D}-]"#
+        let word = #"([\p{L}\p{M}\x{200C}\x{200D}]+(?:['’-][\p{L}\p{M}\x{200C}\x{200D}]+)*)"#
         let pattern = #"(?i)(?<!"# + wordBoundary + #")"# + word + #"(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
 
-    private static func removeLatinFillerWords(from text: String, words: [String]) -> String {
+    private static func removeLatinFillerWords(from text: String, words: [String], language: String?) -> String {
         let latinWords = words.filter { !$0.containsJapaneseScript }
         guard !latinWords.isEmpty else { return text }
 
@@ -141,6 +142,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // A capitalized filler that opened a sentence hands its capital to
         // the next word, so "Um, so I think" becomes "So I think".
         // After an opening bracket or quote the next word joins it directly.
+        // The configured language picks the case mapping (Turkish i -> İ).
+        let locale = language.map(Locale.init(identifier:))
         var stripped = ""
         var resumeLocation = 0
         var capitalOwed = false
@@ -150,7 +153,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
                 ? String(segment.drop { $0 == " " || $0 == "\t" })
                 : segment
             if !segment.isEmpty { joinsOpeningDelimiter = false }
-            appendRestoringCapital(segment, to: &stripped, capitalOwed: &capitalOwed)
+            appendRestoringCapital(segment, to: &stripped, capitalOwed: &capitalOwed, locale: locale)
         }
         for match in matches {
             appendKept(nsText.substring(with: NSRange(location: resumeLocation, length: match.range.location - resumeLocation)))
@@ -183,15 +186,16 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         return true
     }
 
-    /// Whether `text` ends with an opening bracket or quote. A quote opens
-    /// after whitespace or another opening delimiter (`(“`); right after a
-    /// letter it closes (`„ja“ äh nein`) and does not count.
+    /// Whether `text` ends with an opening bracket or quote. Quote marks
+    /// open in some locales and close in others (`»ja«`, `«oui»`), so their
+    /// position decides: after whitespace or another opening delimiter
+    /// (`(“`) they open, right after a letter (`„ja“ äh nein`) they close.
     private static func endsWithOpeningDelimiter(_ text: String) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
         switch last.properties.generalCategory {
         case .openPunctuation:
             return true
-        case .initialPunctuation:
+        case .initialPunctuation, .finalPunctuation:
             break
         default:
             guard last == "\"" || last == "'" else { return false }
@@ -205,14 +209,19 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         }
     }
 
-    private static func appendRestoringCapital(_ segment: String, to text: inout String, capitalOwed: inout Bool) {
+    private static func appendRestoringCapital(
+        _ segment: String,
+        to text: inout String,
+        capitalOwed: inout Bool,
+        locale: Locale?
+    ) {
         guard capitalOwed, let index = segment.firstIndex(where: { $0.isLetter || $0.isNumber }) else {
             text += segment
             return
         }
         capitalOwed = false
         text += segment[..<index]
-        text += segment[index].uppercased()
+        text += String(segment[index]).uppercased(with: locale)
         text += segment[segment.index(after: index)...]
     }
 

@@ -102,6 +102,11 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "Heading\nUm, next item", language: "en"),
             "Heading\nNext item"
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Gut. »Äh, morgen.« Sagte er »ja« äh nein", language: "de"),
+            "Gut. »Morgen.« Sagte er »ja« nein"
+        )
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "Umm, izmir", language: "tr"), "İzmir")
     }
 
     func testCollapsesWordsRepeatedThreeOrMoreTimes() {
@@ -116,6 +121,10 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "check-in check-in check-in done"), "check-in done")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "I'm I'm I am"), "I'm I'm I am")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "नहीं नहीं नहीं पता"), "नहीं पता")
+        XCTAssertEqual(
+            FillerWordsPlugin.collapseStutters(in: "می\u{200C}روم می\u{200C}روم می\u{200C}روم خانه"),
+            "می\u{200C}روم خانه"
+        )
         XCTAssertEqual(
             FillerWordsPlugin.collapseStutters(in: "cafe\u{301} cafe\u{301} cafe\u{301} au lait"),
             "cafe\u{301} au lait"
