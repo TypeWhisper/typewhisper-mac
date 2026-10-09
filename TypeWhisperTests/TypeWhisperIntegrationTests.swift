@@ -6230,14 +6230,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testDetectMissedTextFieldIgnoresChromiumBrowserWithoutTextElement() async throws {
-        // Chromium reports no focused element until its accessibility tree is built.
+    func testDetectMissedTextFieldIgnoresAppThatHidesFocusedElement() async throws {
+        // Chromium and Electron apps name no focused element until their accessibility tree is
+        // built, although their window has focus.
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
-        service.captureActiveAppOverride = { ("Brave Browser", "com.brave.Browser", nil) }
+        service.captureActiveAppOverride = { ("Editor", "com.example.editor", nil) }
         service.focusedTextElementOverride = { nil }
+        service.focusedElementHiddenOverride = { true }
         service.pasteSimulatorOverride = {}
 
         let result = try await service.insertText("Hello", detectMissedTextField: true)
@@ -6247,15 +6249,32 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testAutoEnterDoesNotReportMissedTextFieldInElectronAppWithoutTextElement() async throws {
+    func testDetectMissedTextFieldReportsBrowserThatShowsNoTextElementFocused() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Brave Browser", "com.brave.Browser", nil) }
+        service.focusedTextElementOverride = { nil }
+        service.focusedElementHiddenOverride = { false }
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.noFocusedTextElement)))
+        XCTAssertTrue(result.missedTextField)
+    }
+
+    @MainActor
+    func testAutoEnterDoesNotReportMissedTextFieldWhenAppHidesFocusedElement() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.autoEnterDelay = .milliseconds(1)
-        service.captureActiveAppOverride = { ("Claude", "com.anthropic.claudefordesktop", nil) }
-        service.liveFieldElectronApplicationOverride = { $0 == "com.anthropic.claudefordesktop" }
+        service.captureActiveAppOverride = { ("Editor", "com.example.editor", nil) }
         service.focusedTextElementOverride = { nil }
+        service.focusedElementHiddenOverride = { true }
         service.pasteSimulatorOverride = {}
         var returnCount = 0
         service.returnSimulatorOverride = { returnCount += 1 }
