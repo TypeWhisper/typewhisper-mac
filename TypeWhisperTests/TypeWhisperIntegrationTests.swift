@@ -3761,6 +3761,66 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(usageCount, 1)
     }
 
+    @MainActor
+    func testTranscribeLocalFileEndpointAppliesDictionaryCorrectionsToVerboseJSONSegments() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let audioDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(audioDirectory)
+        }
+
+        context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+        let apiContext = try XCTUnwrap(context)
+        let plugin = StructuredTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins.append(
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.structured-transcription",
+                    name: "Structured Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterStructuredTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        )
+        apiContext.modelManager.selectProvider(plugin.providerId)
+        try apiContext.dictionaryService.upsertAPICorrection(
+            original: "Hello",
+            replacement: "Hallo",
+            caseSensitive: false
+        )
+
+        let fileURL = audioDirectory.appendingPathComponent("segments.wav")
+        try WavEncoder.encode(Array(repeating: Float(0), count: 1600)).write(to: fileURL)
+
+        let response = try Self.jsonObject(await apiContext.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe/local-file",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: [
+                    "path": fileURL.path,
+                    "response_format": "verbose_json",
+                ])
+            )
+        ))
+
+        XCTAssertEqual(response["text"] as? String, "Speaker A: Hallo\nSpeaker B: Hi")
+        let segments = try XCTUnwrap(response["segments"] as? [[String: Any]])
+        XCTAssertEqual(segments.map { $0["text"] as? String }, ["Hallo", "Hi"])
+        XCTAssertEqual(segments[0]["speaker"] as? String, "Speaker A")
+        XCTAssertEqual(segments[0]["start"] as? Double, 0.0)
+        XCTAssertEqual(segments[0]["end"] as? Double, 1.0)
+        XCTAssertEqual(apiContext.dictionaryService.corrections.first?.usageCount, 1)
+    }
+
     func testTranscribeLocalFileEndpointApplyCorrectionsFalsePreservesRawText() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let audioDirectory = try TestSupport.makeTemporaryDirectory()
