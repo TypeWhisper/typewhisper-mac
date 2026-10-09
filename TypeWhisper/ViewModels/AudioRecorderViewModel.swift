@@ -831,9 +831,10 @@ final class AudioRecorderViewModel: ObservableObject {
                 reconcileSelectionWithAvailablePlugins()
                 let startedEngineIsLoaded = startedEngine.map(isLoaded) ?? false
                 let engine = startedEngineIsLoaded ? Self.validated(startedEngine!) : currentRecordingEngine
-                // A live result from an engine that is gone by now does not
-                // belong to this request; the full recording is transcribed.
-                let liveSessionResult = startedEngineIsLoaded || startedEngine == nil ? liveResultFromStart : nil
+                // A live result or preview from an engine that is gone by now does
+                // not belong to this request; the full recording is transcribed.
+                let keepsLiveSession = startedEngineIsLoaded || startedEngine == nil
+                let liveSessionResult = keepsLiveSession ? liveResultFromStart : nil
                 let providerId = engine.providerId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
@@ -855,7 +856,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     prompt: dictionaryPrompt,
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult,
-                    liveSessionFailed: liveSessionFailed,
+                    liveSessionFailed: liveSessionFailed || !keepsLiveSession,
                     calendarEvent: calendarEvent,
                     ownSpeech: stoppedRecording.ownSpeech
                 )
@@ -883,7 +884,7 @@ final class AudioRecorderViewModel: ObservableObject {
             let partialTextIsFinal = if case .transcriptSaved = finalTranscriptionOutcome {
                 true
             } else {
-                !liveSessionFailed
+                !(finalTranscriptionRequest?.liveSessionFailed ?? liveSessionFailed)
             }
             if livePreviewEnabled && partialTextIsFinal && !partialText.isEmpty {
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
