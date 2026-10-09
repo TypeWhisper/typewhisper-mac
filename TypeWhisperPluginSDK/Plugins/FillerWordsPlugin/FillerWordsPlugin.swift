@@ -229,11 +229,14 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     }
 
     /// An opening bracket or quote (`He said “Um, yes”`) and a new line start
-    /// a sentence; closing quotes and brackets are skipped to find the end of
+    /// a sentence, as does a Markdown list marker from the app formatter
+    /// (`- Um`); closing quotes and brackets are skipped to find the end of
     /// the previous one (`(Okay.) Um`).
     private static func opensSentence(_ text: String, fillerIsAttached: Bool) -> Bool {
-        if endsWithOpeningDelimiter(text, fillerIsAttached: fillerIsAttached) { return true }
-        for character in text.reversed() {
+        let tail = htmlUnescapedQuotes(in: text.suffix(256))
+        if endsWithOpeningDelimiter(tail, fillerIsAttached: fillerIsAttached) { return true }
+        if tail.range(of: #"(?:^|\n)[ \t]*[-*+][ \t]*$"#, options: .regularExpression) != nil { return true }
+        for character in tail.reversed() {
             if character.isNewline { return true }
             if character.isWhitespace || character.isQuoteOrBracket { continue }
             return ".!?…".contains(character)
@@ -249,6 +252,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// the removed filler was attached: `:“Um` opens, `—” Um` closes.
     /// An opening HTML tag from the app formatter (`<p>`, `<li>`) opens too.
     private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
+        let text = htmlUnescapedQuotes(in: text.suffix(256))
         guard let last = text.unicodeScalars.last else { return false }
         if last == ">" {
             return text.range(of: #"<[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?>$"#, options: .regularExpression) != nil
@@ -262,14 +266,25 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         default:
             guard last == "\"" || last == "'" else { return false }
         }
-        guard let beforeQuote = text.unicodeScalars.dropLast().last else { return true }
-        if CharacterSet.whitespacesAndNewlines.contains(beforeQuote) { return true }
+        // A final quote mark after whitespace is a padded closing guillemet
+        // (`« oui » Euh`) unless the filler hangs on it (`Gut. »Äh`).
+        let opensAfterSpace = last.properties.generalCategory != .finalPunctuation || fillerIsAttached
+        guard let beforeQuote = text.unicodeScalars.dropLast().last else { return opensAfterSpace }
+        if CharacterSet.whitespacesAndNewlines.contains(beforeQuote) { return opensAfterSpace }
         switch beforeQuote.properties.generalCategory {
         case .openPunctuation, .initialPunctuation:
             return true
         default:
             return fillerIsAttached && !CharacterSet.alphanumerics.contains(beforeQuote)
         }
+    }
+
+    /// The HTML formatter escapes straight double quotes before this plugin
+    /// runs, so `&quot;` counts as a quote mark.
+    private static let htmlQuote = "&quot;"
+
+    private static func htmlUnescapedQuotes(in text: Substring) -> String {
+        text.replacingOccurrences(of: htmlQuote, with: "\"")
     }
 
     private static func appendRestoringCapital(
@@ -288,12 +303,22 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // quotes or brackets. Mixed-case spellings ("iPhone", "eBay"), URLs,
         // handles and other identifiers stay as they are.
         let token = segment[tokenStart...].prefix { !$0.isWhitespace && $0 != "<" }
-        guard let index = token.firstIndex(where: { !$0.isQuoteOrBracket }), token[index].isLetter else {
+        var index = token.startIndex
+        while index < token.endIndex {
+            if token[index...].hasPrefix(htmlQuote) {
+                index = token.index(index, offsetBy: htmlQuote.count)
+            } else if token[index].isQuoteOrBracket {
+                index = token.index(after: index)
+            } else {
+                break
+            }
+        }
+        guard index < token.endIndex, token[index].isLetter else {
             text += segment
             return
         }
         let word = token[index...].prefix { $0.isLetter || "'’-".contains($0) }
-        let trailing = token[word.endIndex...]
+        let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
         guard !word.dropFirst().contains(where: \.isUppercase),
               trailing.allSatisfy({ ".,!?;:…".contains($0) || $0.isQuoteOrBracket }) else {
             text += segment
