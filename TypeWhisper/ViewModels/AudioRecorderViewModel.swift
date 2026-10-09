@@ -340,7 +340,7 @@ final class AudioRecorderViewModel: ObservableObject {
     var activeEngineName: String? { resolvedEngine?.providerDisplayName }
     var activeModelName: String? {
         modelManager.resolvedModelDisplayName(
-            engineOverrideId: selectedEngine,
+            engineOverrideId: availableSelectedEngine,
             cloudModelOverride: effectiveModelId
         )
     }
@@ -350,13 +350,38 @@ final class AudioRecorderViewModel: ObservableObject {
         return engine.isConfigured
     }
     var supportsTranslation: Bool { resolvedEngine?.supportsTranslation ?? false }
+    /// The Recorder's own engine while its plugin is loaded. A plugin that is
+    /// gone for now, as during an update, keeps the choice saved; recordings
+    /// use the default engine until it is back.
+    var availableSelectedEngine: String? {
+        guard let selectedEngine,
+              PluginManager.shared?.transcriptionEngine(for: selectedEngine) != nil else { return nil }
+        return selectedEngine
+    }
+    /// The model choice, unless it belongs to an engine that is gone for now.
+    var availableSelectedModel: String? {
+        isSelectedEngineMissing ? nil : selectedModel
+    }
+    private var isSelectedEngineMissing: Bool {
+        selectedEngine != nil && availableSelectedEngine == nil
+    }
+    /// The engine picker's selection; it shows the default engine while the
+    /// chosen one is gone.
+    var engineChoice: String? {
+        get { availableSelectedEngine }
+        set { selectedEngine = newValue }
+    }
+    var modelChoice: String? {
+        get { availableSelectedModel }
+        set { selectedModel = newValue }
+    }
     var effectiveProviderId: String? {
-        selectedEngine ?? modelManager.selectedProviderId
+        availableSelectedEngine ?? modelManager.selectedProviderId
     }
     var effectiveModelId: String? {
         modelManager.resolvedModelId(
-            engineOverrideId: selectedEngine,
-            cloudModelOverride: selectedModel
+            engineOverrideId: availableSelectedEngine,
+            cloudModelOverride: availableSelectedModel
         )
     }
     var resolvedEngine: TranscriptionEnginePlugin? {
@@ -365,7 +390,7 @@ final class AudioRecorderViewModel: ObservableObject {
         return pluginManager.transcriptionEngine(for: providerId)
     }
     var selectedEngineSupportedLanguages: [String] {
-        resolvedEngine?.supportedLanguages(forModel: selectedModel).sorted() ?? []
+        resolvedEngine?.supportedLanguages(forModel: availableSelectedModel).sorted() ?? []
     }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
     var canToggleRecording: Bool {
@@ -558,18 +583,13 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func reconcileSelectionWithAvailablePlugins() {
-        guard let pluginManager = PluginManager.shared else { return }
-        if let selectedEngine,
-           pluginManager.transcriptionEngine(for: selectedEngine) == nil {
-            self.selectedEngine = nil
-            selectedModel = nil
-        }
+        guard PluginManager.shared != nil else { return }
         clearUnavailableSelectedModelForResolvedEngine()
         normalizeLanguageSelectionForResolvedEngine()
     }
 
     private func clearUnavailableSelectedModelForResolvedEngine() {
-        guard let selectedModel else { return }
+        guard let selectedModel, !isSelectedEngineMissing else { return }
         guard let engine = resolvedEngine else {
             self.selectedModel = nil
             return
@@ -582,7 +602,8 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func normalizeLanguageSelectionForResolvedEngine() {
-        guard let engine = resolvedEngine else { return }
+        // The language stays for the chosen engine while it is gone.
+        guard !isSelectedEngineMissing, let engine = resolvedEngine else { return }
         let normalized = languageSelection.normalizedForSupportedLanguages(
             engine.supportedLanguages(forModel: selectedModel)
         )
@@ -782,7 +803,7 @@ final class AudioRecorderViewModel: ObservableObject {
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,
-                    modelOverrideId: selectedModel,
+                    modelOverrideId: availableSelectedModel,
                     prompt: dictionaryPrompt,
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult,
@@ -1106,7 +1127,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 languageSelection: self.languageSelection,
                 task: self.selectedTask,
                 providerId: providerId,
-                modelOverrideId: self.selectedModel,
+                modelOverrideId: self.availableSelectedModel,
                 prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId),
                 dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
                 liveSessionResult: nil,
@@ -1274,7 +1295,7 @@ final class AudioRecorderViewModel: ObservableObject {
             selectedProviderId: modelManager.selectedProviderId,
             languageSelection: languageSelection,
             task: task,
-            cloudModelOverride: selectedModel,
+            cloudModelOverride: availableSelectedModel,
             allowLiveTranscription: true,
             stateCheck: { [weak self] in self?.state == .recording }
         )
@@ -1567,7 +1588,7 @@ final class AudioRecorderViewModel: ObservableObject {
             languageSelection: languageSelection,
             task: selectedTask,
             providerId: effectiveProviderId,
-            modelOverrideId: selectedModel,
+            modelOverrideId: availableSelectedModel,
             prompt: nil,
             dictionaryTermHints: [],
             liveSessionResult: nil,

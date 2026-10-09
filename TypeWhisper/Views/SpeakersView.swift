@@ -226,7 +226,7 @@ struct SpeakersView: View {
 
     private var engineMenu: some View {
         Menu {
-            Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
+            Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
                 Text(String(localized: "Default Engine")).tag(nil as String?)
                 Divider()
                 ForEach(viewModel.availableEngines, id: \.providerId) { engine in

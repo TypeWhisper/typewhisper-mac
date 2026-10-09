@@ -52,6 +52,37 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertFalse(didPresent)
     }
 
+    func testKeepsItsEngineWhileThePluginIsGone() async throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        let defaults = try makeDefaults()
+        defaults.set("updating-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
+        defaults.set("updating-model", forKey: UserDefaultsKeys.fileTranscriptionModel)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults
+        )
+        viewModel.observePluginManager()
+        PluginManager.shared.loadedPlugins = []
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        XCTAssertEqual(viewModel.selectedEngine, "updating-engine")
+        XCTAssertEqual(viewModel.selectedModel, "updating-model")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine), "updating-engine")
+        XCTAssertNil(viewModel.engineChoice)
+        XCTAssertNil(viewModel.modelChoice)
+    }
+
     func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -321,6 +352,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     func testTranscribeAllUsesFileTranscriptionEngineAndModelOverrides() async throws {
+        try registerEngines(["parakeet"])
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "last-dictation-recovery.wav")
         var capturedLanguageSelection: LanguageSelection?
@@ -461,6 +493,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     func testTranscribeAllAppliesDictionaryCorrectionsToTextAndSegmentsPreservingMetadata() async throws {
+        try registerEngines(["whisper"])
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "corrected-transcript.wav")
         let dictionaryService = makeDictionaryService()
@@ -1398,6 +1431,23 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),
             DictationRecoveryFallbackConfiguration(engineId: "backup", modelId: nil)
         )
+    }
+
+    /// Loads stand-in plugins, so the view model uses these engines.
+    private func registerEngines(_ providerIds: [String]) throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = providerIds.map {
+            loadedPlugin(
+                for: FileTranscriptionLanguageSelectionPlugin(providerId: $0, providerDisplayName: $0, supportedLanguages: []),
+                appSupportDirectory: appSupportDirectory
+            )
+        }
     }
 
     private func makeDefaults() throws -> UserDefaults {

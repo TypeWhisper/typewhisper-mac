@@ -218,7 +218,6 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionModel)
         self.isInitialized = true
-        reconcileSelectionWithAvailablePlugins()
     }
 
     var canTranscribe: Bool {
@@ -234,15 +233,38 @@ final class FileTranscriptionViewModel: ObservableObject {
         return pluginManager.transcriptionEngines
     }
 
+    /// The chosen engine while its plugin is loaded. A plugin that is gone for
+    /// now, as during an update, keeps the choice saved; files use the default
+    /// engine until it is back.
+    var availableSelectedEngine: String? {
+        guard let selectedEngine,
+              PluginManager.shared?.transcriptionEngine(for: selectedEngine) != nil else { return nil }
+        return selectedEngine
+    }
+    /// The model choice, unless it belongs to an engine that is gone for now.
+    var availableSelectedModel: String? {
+        selectedEngine != nil && availableSelectedEngine == nil ? nil : selectedModel
+    }
+    /// The engine picker's selection; it shows the default engine while the
+    /// chosen one is gone.
+    var engineChoice: String? {
+        get { availableSelectedEngine }
+        set { selectedEngine = newValue }
+    }
+    var modelChoice: String? {
+        get { availableSelectedModel }
+        set { selectedModel = newValue }
+    }
+
     var resolvedEngine: TranscriptionEnginePlugin? {
-        let engineId = selectedEngine ?? modelManager.selectedProviderId
+        let engineId = availableSelectedEngine ?? modelManager.selectedProviderId
         guard let engineId else { return nil }
         guard let pluginManager = PluginManager.shared else { return nil }
         return pluginManager.transcriptionEngine(for: engineId)
     }
 
     var selectedEngineSupportedLanguages: [String] {
-        resolvedEngine?.supportedLanguages(forModel: selectedModel).sorted() ?? []
+        resolvedEngine?.supportedLanguages(forModel: availableSelectedModel).sorted() ?? []
     }
 
     var hasResults: Bool {
@@ -264,7 +286,6 @@ final class FileTranscriptionViewModel: ObservableObject {
         pluginManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.reconcileSelectionWithAvailablePlugins()
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -444,8 +465,8 @@ final class FileTranscriptionViewModel: ObservableObject {
                 samples,
                 languageSelection,
                 selectedTask,
-                selectedEngine,
-                selectedModel,
+                availableSelectedEngine,
+                availableSelectedModel,
                 { [weak self] text in
                     guard let self,
                           !cancellationFlag.isCancelled,
@@ -502,7 +523,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                     samples: samples,
                     title: files[index].fileName,
                     source: .importedFile,
-                    modelUsed: selectedModel
+                    modelUsed: availableSelectedModel
                 ))
                 guard files.indices.contains(index), files[index].id == itemID else { return }
                 // A file cancelled while its record was added leaves no record behind.
@@ -609,7 +630,7 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     private var selectedEngineIsReady: Bool {
         if let engineReadinessChecker {
-            return engineReadinessChecker(selectedEngine)
+            return engineReadinessChecker(availableSelectedEngine)
         }
 
         guard let engine = resolvedEngine else { return false }
@@ -639,14 +660,6 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
     }
 
-    private func reconcileSelectionWithAvailablePlugins() {
-        guard let pluginManager = PluginManager.shared else { return }
-        if let selectedEngine,
-           pluginManager.transcriptionEngine(for: selectedEngine) == nil {
-            self.selectedEngine = nil
-            selectedModel = nil
-        }
-    }
 
     private static func loadingPhaseDescription(for progress: AudioFileLoadProgress) -> String {
         guard let fraction = progress.fraction else {

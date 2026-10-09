@@ -668,7 +668,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.languageSelection, .auto)
     }
 
-    func testRecorderSelectionClearsMissingSavedEngineAndModel() throws {
+    func testRecorderKeepsMissingSavedEngineAndUsesDefaultEngine() throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
         defaults.set("missing-engine", forKey: UserDefaultsKeys.recorderTranscriptionEngine)
@@ -679,11 +679,46 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let viewModel = makeViewModel(defaults: defaults)
         viewModel.reconcileSelectionWithAvailablePlugins()
 
-        XCTAssertNil(viewModel.selectedEngine)
-        XCTAssertNil(viewModel.selectedModel)
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine))
-        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel))
+        XCTAssertEqual(viewModel.selectedEngine, "missing-engine")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine), "missing-engine")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel), "old-model")
+        XCTAssertNil(viewModel.engineChoice)
         XCTAssertEqual(viewModel.effectiveProviderId, "groq")
+        XCTAssertEqual(viewModel.effectiveModelId, "whisper-large-v3")
+        XCTAssertEqual(viewModel.resolvedEngine?.providerId, "groq")
+    }
+
+    func testRecorderKeepsItsEngineWhilePluginIsUpdated() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        setupPluginManager()
+        UserDefaults.standard.set("groq", forKey: UserDefaultsKeys.selectedEngine)
+        let viewModel = makeViewModel(defaults: defaults)
+        viewModel.observePluginManager()
+        viewModel.selectedEngine = "assemblyai"
+        viewModel.selectedModel = "universal-3-5-pro"
+        let pluginManager = try XCTUnwrap(PluginManager.shared)
+        let assemblyAI = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.manifest.id == "com.typewhisper.mock.assemblyai" })
+
+        // An update unloads the plugin and loads the new version.
+        pluginManager.unloadPlugin("com.typewhisper.mock.assemblyai", keepsSavedEngine: true)
+        await drainMainQueue()
+
+        XCTAssertEqual(viewModel.selectedEngine, "assemblyai")
+        XCTAssertEqual(viewModel.selectedModel, "universal-3-5-pro")
+        XCTAssertNil(viewModel.engineChoice)
+        XCTAssertNil(viewModel.modelChoice)
+        XCTAssertEqual(viewModel.effectiveProviderId, "groq")
+        XCTAssertEqual(viewModel.effectiveModelId, "whisper-large-v3")
+
+        pluginManager.loadedPlugins.append(assemblyAI)
+        await drainMainQueue()
+
+        XCTAssertEqual(viewModel.engineChoice, "assemblyai")
+        XCTAssertEqual(viewModel.effectiveProviderId, "assemblyai")
+        XCTAssertEqual(viewModel.effectiveModelId, "universal-3-5-pro")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine), "assemblyai")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel), "universal-3-5-pro")
     }
 
     func testRecorderLivePreviewDefaultsOffAndPersistsSeparately() throws {
@@ -2487,6 +2522,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
                     UserDefaults.standard.removeObject(forKey: key)
                 }
             }
+        }
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
         }
     }
 

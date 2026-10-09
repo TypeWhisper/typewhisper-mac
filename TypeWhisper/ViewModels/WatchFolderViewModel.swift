@@ -52,7 +52,8 @@ final class WatchFolderViewModel: ObservableObject {
     @Published var selectedModel: String? {
         didSet {
             UserDefaults.standard.set(selectedModel, forKey: UserDefaultsKeys.watchFolderModel)
-            guard isInitialized, oldValue != selectedModel, let engine = resolvedEngine else { return }
+            guard isInitialized, oldValue != selectedModel, !isSelectedEngineMissing,
+                  let engine = resolvedEngine else { return }
             let normalized = languageSelection.normalizedForSupportedLanguages(
                 engine.supportedLanguages(forModel: selectedModel)
             )
@@ -74,8 +75,8 @@ final class WatchFolderViewModel: ObservableObject {
 
     var transcriptionOverrides: TranscriptionOverrides {
         TranscriptionOverrides(
-            engineId: selectedEngine,
-            modelId: selectedModel,
+            engineId: availableSelectedEngine,
+            modelId: availableSelectedModel,
             languageSelection: languageSelection,
             detectSpeakers: detectSpeakers
         )
@@ -85,15 +86,41 @@ final class WatchFolderViewModel: ObservableObject {
         PluginManager.shared.transcriptionEngines
     }
 
+    /// The chosen engine while its plugin is loaded. A plugin that is gone for
+    /// now, as during an update, keeps the choice saved; files use the default
+    /// engine until it is back.
+    var availableSelectedEngine: String? {
+        guard let selectedEngine,
+              PluginManager.shared?.transcriptionEngine(for: selectedEngine) != nil else { return nil }
+        return selectedEngine
+    }
+    /// The model choice, unless it belongs to an engine that is gone for now.
+    var availableSelectedModel: String? {
+        isSelectedEngineMissing ? nil : selectedModel
+    }
+    private var isSelectedEngineMissing: Bool {
+        selectedEngine != nil && availableSelectedEngine == nil
+    }
+    /// The engine picker's selection; it shows the default engine while the
+    /// chosen one is gone.
+    var engineChoice: String? {
+        get { availableSelectedEngine }
+        set { selectedEngine = newValue }
+    }
+    var modelChoice: String? {
+        get { availableSelectedModel }
+        set { selectedModel = newValue }
+    }
+
     var resolvedEngine: TranscriptionEnginePlugin? {
-        let engineId = selectedEngine ?? modelManager.selectedProviderId
+        let engineId = availableSelectedEngine ?? modelManager.selectedProviderId
         guard let engineId else { return nil }
         return PluginManager.shared.transcriptionEngine(for: engineId)
     }
 
     var selectedEngineSupportedLanguages: [String] {
         guard let engine = resolvedEngine else { return [] }
-        return engine.supportedLanguages(forModel: selectedModel).sorted()
+        return engine.supportedLanguages(forModel: availableSelectedModel).sorted()
     }
 
     let watchFolderService: WatchFolderService
@@ -209,11 +236,8 @@ final class WatchFolderViewModel: ObservableObject {
 
     func reconcileSelectionWithAvailablePlugins() {
         if let selectedEngine {
-            guard let engine = PluginManager.shared.transcriptionEngine(for: selectedEngine) else {
-                self.selectedEngine = nil
-                selectedModel = nil
-                return
-            }
+            // A plugin that is gone for now keeps the choice and its language.
+            guard let engine = PluginManager.shared.transcriptionEngine(for: selectedEngine) else { return }
             let normalized = languageSelection.normalizedForSupportedLanguages(
                 engine.supportedLanguages(forModel: selectedModel)
             )
