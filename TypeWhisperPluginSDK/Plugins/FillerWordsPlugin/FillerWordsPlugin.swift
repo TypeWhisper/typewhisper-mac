@@ -147,10 +147,14 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// repetitions and punctuated repeats ("no, no, no") are kept as
     /// deliberate emphasis.
     static func collapseStutters(in text: String) -> String {
-        // Zero-width joiners belong to words in Persian and Indic scripts.
-        let wordBoundary = #"[\p{L}\p{M}\p{N}_'’\x{200C}\x{200D}-]"#
-        let word = #"([\p{L}\p{M}\x{200C}\x{200D}]+(?:['’-][\p{L}\p{M}\x{200C}\x{200D}]+)*)"#
-        let pattern = #"(?i)(?<!"# + wordBoundary + #")"# + word + #"(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
+        // Zero-width joiners belong to words in Persian and Indic scripts. An
+        // apostrophe only extends a word between letters (`I'm`); around the
+        // repeats it is a quote mark (`'well well well'`).
+        let letter = #"[\p{L}\p{M}\x{200C}\x{200D}]"#
+        let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}-]"#
+        let word = "(" + letter + "+(?:['’-]" + letter + "+)*)"
+        let pattern = #"(?i)(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
+            + #"(?:[ \t]+\1){2,}(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
 
@@ -265,6 +269,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
             return
         }
         capitalOwed = false
+        // Mixed-case spellings such as "iPhone" or "eBay" stay as they are.
+        let restOfWord = segment[segment.index(after: index)...].prefix { $0.isLetter }
+        guard !restOfWord.contains(where: \.isUppercase) else {
+            text += segment
+            return
+        }
         text += segment[..<index]
         text += String(segment[index]).uppercased(with: locale)
         text += segment[segment.index(after: index)...]
