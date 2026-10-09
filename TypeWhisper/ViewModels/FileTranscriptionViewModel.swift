@@ -243,7 +243,10 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
     /// The model choice, unless it belongs to an engine that is gone for now.
     var availableSelectedModel: String? {
-        selectedEngine != nil && availableSelectedEngine == nil ? nil : selectedModel
+        isSelectedEngineMissing ? nil : selectedModel
+    }
+    private var isSelectedEngineMissing: Bool {
+        selectedEngine != nil && availableSelectedEngine == nil
     }
     /// The engine picker's selection; it shows the default engine while the
     /// chosen one is gone.

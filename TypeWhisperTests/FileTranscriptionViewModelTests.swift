@@ -63,24 +63,47 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         defaults.set("updating-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
         defaults.set("updating-model", forKey: UserDefaultsKeys.fileTranscriptionModel)
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        var capturedEngineOverrideId: String?
+        var capturedModelOverrideId: String?
 
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
             dictionaryService: makeDictionaryService(),
-            defaults: defaults
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, cloudModelOverride, _, _, _ in
+                capturedEngineOverrideId = engineOverrideId
+                capturedModelOverrideId = cloudModelOverride
+                return TranscriptionResult(
+                    text: "Default engine text",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
         )
         viewModel.observePluginManager()
         PluginManager.shared.loadedPlugins = []
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async { continuation.resume() }
         }
+        viewModel.addFiles([makeTemporaryFile(named: "plugin-update.wav")])
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
 
         XCTAssertEqual(viewModel.selectedEngine, "updating-engine")
         XCTAssertEqual(viewModel.selectedModel, "updating-model")
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine), "updating-engine")
         XCTAssertNil(viewModel.engineChoice)
         XCTAssertNil(viewModel.modelChoice)
+        // Files go to the default engine without the missing engine's model.
+        XCTAssertEqual(viewModel.files.first?.result?.text, "Default engine text")
+        XCTAssertNil(capturedEngineOverrideId)
+        XCTAssertNil(capturedModelOverrideId)
     }
 
     func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
