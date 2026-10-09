@@ -204,6 +204,10 @@ final class FillerWordsPluginTests: XCTestCase {
         )
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "Umm, hello！", language: "en"), "Hello！")
         XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Umm, hello—how are you? Umm, check-in works.", language: "en"),
+            "Hello—how are you? Check-in works."
+        )
+        XCTAssertEqual(
             FillerWordsPlugin.removeFillerWords(from: "Umm, ijs is lekker. Umm, in de zon.", language: "nl"),
             "IJs is lekker. In de zon."
         )

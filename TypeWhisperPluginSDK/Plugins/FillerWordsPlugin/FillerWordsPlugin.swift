@@ -364,7 +364,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
             text += segment
             return
         }
-        let token = segment[index...].prefix { !$0.isWhitespace && $0 != "<" }
+        // A dash other than a hyphen ends the word: `hello—how`.
+        let token = segment[index...].prefix { character in
+            !character.isWhitespace && character != "<"
+                && !(character.unicodeScalars.first?.properties.generalCategory == .dashPunctuation
+                    && character != "-" && character != "‐")
+        }
         let word = token.prefix { $0.isLetter || "'’-".contains($0) }
         let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
         guard !word.dropFirst().contains(where: \.isUppercase),
