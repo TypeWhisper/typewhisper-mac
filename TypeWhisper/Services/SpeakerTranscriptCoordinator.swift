@@ -164,6 +164,8 @@ struct SpeakerRecordingInput {
     /// When the microphone carried the user's own speech, from a Recorder
     /// recording with microphone and system audio.
     var ownSpeech: [ClosedRange<TimeInterval>] = []
+    /// The Recorder's `recording_id` for the audio file this record came from.
+    var recorderRecordingID: UUID?
 }
 
 /// Saves a recording to History and starts speaker detection. Returns the
@@ -360,6 +362,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             granularity: timedText.isEmpty ? .none : .segment,
             words: input.result.words,
             ownSpeech: input.ownSpeech,
+            recorderRecordingID: input.recorderRecordingID,
             transcript: providerTranscript,
             capturedInClearGeneration: clearGeneration
         ) else { return nil }

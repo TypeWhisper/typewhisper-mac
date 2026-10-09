@@ -2192,6 +2192,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
     func testHistoryAPIListsSpeakersAndSegmentsOnRequest() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recordingID = UUID()
         var context: APIContext?
         defer {
             context = nil
@@ -2207,21 +2208,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
             XCTAssertTrue(context.historyService.addSpeakerRecord(
                 id: id,
-                text: "Good morning. Morning.",
+                text: "Good morning. Morning. Hello.",
                 title: "Meeting",
                 source: .recorder,
-                durationSeconds: 2,
+                durationSeconds: 3,
                 language: "en",
                 engineUsed: "test",
                 timedText: [],
                 granularity: .segment,
+                recorderRecordingID: recordingID,
                 transcript: SpeakerTranscript(source: .localDiarizer, segments: [
                     SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 1, speakerID: "S1"),
                     SpeakerTranscriptSegment(text: "Morning.", start: 1, end: 2, speakerID: "S2"),
+                    SpeakerTranscriptSegment(text: "Hello.", start: 2, end: 3, speakerID: "S3"),
                 ])
             ))
             context.historyService.setSpeakerName("Anna", for: "S1", inRecordID: id)
-            // A name a voice profile only suggested is not returned as the speaker's name.
+            // A name a voice profile only suggested is returned apart from the speaker's name.
             context.historyService.setSpeakerName("Guess", for: "S2", profileID: UUID(), isSuggestion: true, inRecordID: id)
             context.historyService.addRecord(
                 rawText: "A dictation",
@@ -2253,20 +2256,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let meeting = try XCTUnwrap(plainEntries.first { $0["app_name"] as? String == "Meeting" })
         let dictation = try XCTUnwrap(plainEntries.first { $0["text"] as? String == "A dictation" })
         XCTAssertEqual(meeting["speaker_state"] as? String, "ready")
+        XCTAssertEqual(meeting["recording_id"] as? String, recordingID.uuidString)
         XCTAssertEqual(
             meeting["speakers"] as? [[String: String]],
-            [["id": "S1", "name": "Anna"], ["id": "S2", "name": SpeakerTranscriptBuilder.outputLabel(for: "S2")]]
+            [
+                ["id": "S1", "name": "Anna"],
+                ["id": "S2", "name": SpeakerTranscriptBuilder.outputLabel(for: "S2"), "suggested_name": "Guess"],
+                ["id": "S3", "name": SpeakerTranscriptBuilder.outputLabel(for: "S3")],
+            ]
         )
         XCTAssertNil(meeting["speaker_segments"])
         XCTAssertNil(dictation["speaker_state"])
         XCTAssertNil(dictation["speakers"])
+        XCTAssertNil(dictation["recording_id"])
 
         let detailedEntries = try XCTUnwrap(detailed["entries"] as? [[String: Any]])
         let segments = try XCTUnwrap(
             detailedEntries.first { $0["app_name"] as? String == "Meeting" }?["speaker_segments"] as? [[String: Any]]
         )
-        XCTAssertEqual(segments.map { $0["speaker"] as? String }, ["S1", "S2"])
-        XCTAssertEqual(segments.map { $0["text"] as? String }, ["Good morning.", "Morning."])
+        XCTAssertEqual(segments.map { $0["speaker"] as? String }, ["S1", "S2", "S3"])
+        XCTAssertEqual(segments.map { $0["text"] as? String }, ["Good morning.", "Morning.", "Hello."])
     }
 
     func testAPIHandlersExposeStatusHistoryAndRules() async throws {

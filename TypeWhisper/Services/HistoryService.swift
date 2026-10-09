@@ -454,6 +454,7 @@ final class HistoryService: ObservableObject {
         granularity: TimedTextGranularity,
         words: [TranscriptionWord] = [],
         ownSpeech: [ClosedRange<TimeInterval>] = [],
+        recorderRecordingID: UUID? = nil,
         transcript: SpeakerTranscript? = nil,
         capturedInClearGeneration: Int? = nil
     ) -> Bool {
@@ -489,6 +490,7 @@ final class HistoryService: ObservableObject {
         record.timedTextGranularity = granularity
         record.speakerWords = words
         record.speakerOwnSpeech = ownSpeech
+        record.recorderRecordingID = recorderRecordingID
         record.speakerTranscript = transcript
         record.speakerTranscriptState = transcript == nil ? .pending : .ready
         if transcript != nil { record.speakerTranscriptUpdatedAt = Date() }
