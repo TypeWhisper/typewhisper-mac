@@ -247,8 +247,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// (`(“`) they open; right after a letter (`„ja“ äh nein`) they close.
     /// After other punctuation such as a dash or colon they open only when
     /// the removed filler was attached: `:“Um` opens, `—” Um` closes.
+    /// An opening HTML tag from the app formatter (`<p>`, `<li>`) opens too.
     private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
+        if last == ">" {
+            return text.range(of: #"<[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?>$"#, options: .regularExpression) != nil
+        }
         if last == "¿" || last == "¡" { return true }
         switch last.properties.generalCategory {
         case .openPunctuation:
@@ -283,7 +287,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // Only an ordinary word takes the capital, optionally after opening
         // quotes or brackets. Mixed-case spellings ("iPhone", "eBay"), URLs,
         // handles and other identifiers stay as they are.
-        let token = segment[tokenStart...].prefix { !$0.isWhitespace }
+        let token = segment[tokenStart...].prefix { !$0.isWhitespace && $0 != "<" }
         guard let index = token.firstIndex(where: { !$0.isQuoteOrBracket }), token[index].isLetter else {
             text += segment
             return

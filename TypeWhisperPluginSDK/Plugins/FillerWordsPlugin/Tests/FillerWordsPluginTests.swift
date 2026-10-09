@@ -157,6 +157,13 @@ final class FillerWordsPluginTests: XCTestCase {
             "¿Vamos? ¡Vamos!"
         )
         XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(
+                from: "<p>Um, hello</p><ul><li>Uh, first</li></ul><p>a > b</p>",
+                language: "en"
+            ),
+            "<p>Hello</p><ul><li>First</li></ul><p>a > b</p>"
+        )
+        XCTAssertEqual(
             FillerWordsPlugin.removeFillerWords(from: "« Euh, bonjour »", words: ["euh"], language: "fr"),
             "« Bonjour »"
         )
