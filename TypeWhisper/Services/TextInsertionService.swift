@@ -85,6 +85,10 @@ final class ChromiumAccessibilityObservationController {
         }
     }
 
+    static func isChromiumBrowser(bundleIdentifier: String) -> Bool {
+        chromiumBrowserBundleIdentifiers.contains(bundleIdentifier)
+    }
+
     func isElectronApplication(bundleIdentifier: String) -> Bool {
         guard let target = resolveApplication(bundleIdentifier, nil) else { return false }
         return isElectronApplicationAtURL(target.bundleURL)
@@ -883,8 +887,8 @@ final class TextInsertionService {
         return defaultPasteFallbackRestoreDelay
     }
 
-    /// `acceptsPasteWithoutTextElement` is for apps such as terminals that take a paste even though
-    /// accessibility shows no text element.
+    /// `acceptsPasteWithoutTextElement` is for apps that take a paste even though accessibility
+    /// shows no text element, such as terminals, or Chromium and Electron apps that hide it.
     func capturePasteVerificationState(acceptsPasteWithoutTextElement: Bool = false) -> PasteVerificationState {
         let query = queryFocusedTextElement()
         return PasteVerificationState(
@@ -1270,6 +1274,8 @@ final class TextInsertionService {
             accessibilityInsertionExcludedBundleIdentifiers.contains($0)
         } ?? false
         let prefersSyntheticPaste = isTerminalApp || requiresSyntheticPaste
+        let acceptsPasteWithoutTextElement = isTerminalApp
+            || bundleId.map { mayHideFocusedTextElement($0) } ?? false
 
         logger.info(
             "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), prefersSyntheticPaste=\(prefersSyntheticPaste, privacy: .public)"
@@ -1305,7 +1311,7 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
+            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: acceptsPasteWithoutTextElement)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
@@ -2274,6 +2280,13 @@ final class TextInsertionService {
 
         return !accessibilityInsertionExcludedBundleIdentifiers.contains(bundleIdentifier)
             && !isElectronApplication(bundleIdentifier)
+    }
+
+    /// Chromium browsers and Electron apps build their accessibility tree on demand. Until then
+    /// they report no focused element, even while one of their text fields has focus.
+    private func mayHideFocusedTextElement(_ bundleIdentifier: String) -> Bool {
+        ChromiumAccessibilityObservationController.isChromiumBrowser(bundleIdentifier: bundleIdentifier)
+            || isElectronApplication(bundleIdentifier)
     }
 
     private func isElectronApplication(_ bundleIdentifier: String) -> Bool {
