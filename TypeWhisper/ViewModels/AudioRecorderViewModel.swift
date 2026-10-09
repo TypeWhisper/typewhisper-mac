@@ -635,7 +635,8 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         let modelIds = Set((engine.modelCatalog + engine.transcriptionModels).map(\.id))
-        if !modelIds.contains(selectedModel) {
+        // An engine that lists no models yet says nothing about this one.
+        if !modelIds.isEmpty, !modelIds.contains(selectedModel) {
             self.selectedModel = nil
         }
     }

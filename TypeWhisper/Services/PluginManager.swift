@@ -1001,7 +1001,11 @@ final class PluginManager: ObservableObject {
             }
         } else {
             // If the deactivated plugin was selected as default engine, fall back to first available
-            let disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
+            var disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
+            // An update that waits for a relaunch exposes no engines either.
+            if disabledProviderIds.isEmpty {
+                disabledProviderIds = providerIdsAwaitingRelaunch[pluginId] ?? []
+            }
             PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
             // The placeholder of a disabled plugin exposes no engines; uninstalling
