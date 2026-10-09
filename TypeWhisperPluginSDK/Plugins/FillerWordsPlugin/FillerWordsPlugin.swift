@@ -153,10 +153,39 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // Digits count when the word has a letter ("COVID-19", not "1 1 1").
         let letter = #"[\p{L}\p{M}\p{N}\x{200C}\x{200D}]"#
         let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}-]"#
-        let word = #"((?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’-]*\p{L})"# + letter + "+(?:['’-]" + letter + "+)*)"
-        let pattern = #"(?i)(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
-            + #"(?:[ \t]+\1){2,}(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
-        return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
+        let word = #"(?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’-]*\p{L})"# + letter + "+(?:['’-]" + letter + "+)*"
+        let pattern = #"(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
+            + #"(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+
+        // Repeats are compared with simple lowercasing rather than the
+        // regex's full case folding, which would equate "Maße" and "Masse".
+        let nsText = text as NSString
+        let words = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
+            (range: match.range, key: nsText.substring(with: match.range).lowercased())
+        }
+        func onlySpacesBetween(_ first: NSRange, _ second: NSRange) -> Bool {
+            let gap = nsText.substring(with: NSRange(location: NSMaxRange(first), length: second.location - NSMaxRange(first)))
+            return !gap.isEmpty && gap.allSatisfy { $0 == " " || $0 == "\t" }
+        }
+
+        var result = ""
+        var resumeLocation = 0
+        var index = 0
+        while index < words.count {
+            var last = index
+            while last + 1 < words.count,
+                  words[last + 1].key == words[index].key,
+                  onlySpacesBetween(words[last].range, words[last + 1].range) {
+                last += 1
+            }
+            if last - index >= 2 {
+                result += nsText.substring(with: NSRange(location: resumeLocation, length: NSMaxRange(words[index].range) - resumeLocation))
+                resumeLocation = NSMaxRange(words[last].range)
+            }
+            index = last + 1
+        }
+        return result + nsText.substring(from: resumeLocation)
     }
 
     private static func removeLatinFillerWords(
@@ -279,7 +308,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         case .openPunctuation, .initialPunctuation:
             return true
         case .dashPunctuation:
-            return fillerIsAttached
+            // `—“Um` opens, but a final quote mark closes: `“wait—”Um`.
+            return fillerIsAttached && last.properties.generalCategory != .finalPunctuation
         default:
             if beforeQuote == ">" {
                 // Right after an opening HTML tag: `<p>&quot;Uh`.

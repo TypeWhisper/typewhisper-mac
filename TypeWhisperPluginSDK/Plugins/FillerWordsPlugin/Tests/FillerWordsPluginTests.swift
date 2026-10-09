@@ -198,6 +198,10 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "He said “wait,”Um, okay", language: "en"),
             "He said “wait,” okay"
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "He said “wait—”Um, okay", language: "en"),
+            "He said “wait—” okay"
+        )
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "Umm, hello！", language: "en"), "Hello！")
         XCTAssertEqual(
             FillerWordsPlugin.removeFillerWords(from: "Umm, ijs is lekker. Umm, in de zon.", language: "nl"),
@@ -218,6 +222,8 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "1 1 1 go"), "1 1 1 go")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "COVID-19 COVID-19 COVID-19 cases"), "COVID-19 cases")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "B2B B2B B2B sales"), "B2B sales")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "Maße Masse Maße"), "Maße Masse Maße")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "So so SO so, fine"), "So, fine")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "a a a-ha"), "a a a-ha")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "I'm I'm I'm ready"), "I'm ready")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "check-in check-in check-in done"), "check-in done")
