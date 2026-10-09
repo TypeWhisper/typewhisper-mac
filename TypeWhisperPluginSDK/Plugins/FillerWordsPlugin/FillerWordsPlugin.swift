@@ -150,9 +150,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // Zero-width joiners belong to words in Persian and Indic scripts. An
         // apostrophe only extends a word between letters (`I'm`); around the
         // repeats it is a quote mark (`'well well well'`).
-        let letter = #"[\p{L}\p{M}\x{200C}\x{200D}]"#
+        // Digits count when the word has a letter ("COVID-19", not "1 1 1").
+        let letter = #"[\p{L}\p{M}\p{N}\x{200C}\x{200D}]"#
         let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}-]"#
-        let word = "(" + letter + "+(?:['’-]" + letter + "+)*)"
+        let word = #"((?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’-]*\p{L})"# + letter + "+(?:['’-]" + letter + "+)*)"
         let pattern = #"(?i)(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
             + #"(?:[ \t]+\1){2,}(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
@@ -190,7 +191,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
         // A capitalized filler that opened a sentence hands its capital to
         // the next word, so "Um, so I think" becomes "So I think".
-        // After an opening bracket or quote the next word joins it directly.
+        // A filler attached to an opening bracket or quote leaves the next
+        // word attached to it; padding such as `« Euh, bonjour »` stays.
         // The configured language picks the case mapping (Turkish i -> İ).
         let locale = language.map(Locale.init(identifier:))
         var stripped = ""
@@ -207,10 +209,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         for match in matches {
             appendKept(nsText.substring(with: NSRange(location: resumeLocation, length: match.range.location - resumeLocation)))
             let filler = nsText.substring(with: match.range)
-            if filler.first(where: \.isLetter)?.isUppercase == true, opensSentence(stripped) {
+            let fillerIsAttached = filler.first.map { !$0.isWhitespace } ?? false
+            if filler.first(where: \.isLetter)?.isUppercase == true,
+               opensSentence(stripped, fillerIsAttached: fillerIsAttached) {
                 capitalOwed = true
             }
-            if endsWithOpeningDelimiter(stripped) {
+            if fillerIsAttached, endsWithOpeningDelimiter(stripped, fillerIsAttached: true) {
                 joinsOpeningDelimiter = true
             } else {
                 stripped += " "
@@ -225,8 +229,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// An opening bracket or quote (`He said “Um, yes”`) and a new line start
     /// a sentence; closing quotes and brackets are skipped to find the end of
     /// the previous one (`(Okay.) Um`).
-    private static func opensSentence(_ text: String) -> Bool {
-        if endsWithOpeningDelimiter(text) { return true }
+    private static func opensSentence(_ text: String, fillerIsAttached: Bool) -> Bool {
+        if endsWithOpeningDelimiter(text, fillerIsAttached: fillerIsAttached) { return true }
         for character in text.reversed() {
             if character.isNewline { return true }
             if character.isWhitespace || character.isQuoteOrBracket { continue }
@@ -237,10 +241,11 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
     /// Whether `text` ends with an opening bracket or quote. Quote marks
     /// open in some locales and close in others (`»ja«`, `«oui»`), so their
-    /// position decides: after whitespace, another opening delimiter, a dash
-    /// or a colon (`(“`, `—“`, `:“`) they open; elsewhere, such as right after
-    /// a letter (`„ja“ äh nein`), they close.
-    private static func endsWithOpeningDelimiter(_ text: String) -> Bool {
+    /// position decides. After whitespace or another opening delimiter
+    /// (`(“`) they open; right after a letter (`„ja“ äh nein`) they close.
+    /// After other punctuation such as a dash or colon they open only when
+    /// the removed filler was attached: `:“Um` opens, `—” Um` closes.
+    private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
         switch last.properties.generalCategory {
         case .openPunctuation:
@@ -251,11 +256,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
             guard last == "\"" || last == "'" else { return false }
         }
         guard let beforeQuote = text.unicodeScalars.dropLast().last else { return true }
+        if CharacterSet.whitespacesAndNewlines.contains(beforeQuote) { return true }
         switch beforeQuote.properties.generalCategory {
-        case .openPunctuation, .initialPunctuation, .dashPunctuation:
+        case .openPunctuation, .initialPunctuation:
             return true
         default:
-            return beforeQuote == ":" || CharacterSet.whitespacesAndNewlines.contains(beforeQuote)
+            return fillerIsAttached && !CharacterSet.alphanumerics.contains(beforeQuote)
         }
     }
 

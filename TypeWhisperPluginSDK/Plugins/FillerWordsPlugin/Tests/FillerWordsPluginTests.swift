@@ -144,6 +144,14 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "He said:“Um, hello” —“Uh, bye”", language: "en"),
             "He said:“Hello” —“Bye”"
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "He said “wait—” Um, okay", language: "en"),
+            "He said “wait—” okay"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "« Euh, bonjour »", words: ["euh"], language: "fr"),
+            "« Bonjour »"
+        )
     }
 
     func testCollapsesWordsRepeatedThreeOrMoreTimes() {
@@ -153,6 +161,8 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "the the cat"), "the the cat")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "No, no, no."), "No, no, no.")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "1 1 1 go"), "1 1 1 go")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "COVID-19 COVID-19 COVID-19 cases"), "COVID-19 cases")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "B2B B2B B2B sales"), "B2B sales")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "a a a-ha"), "a a a-ha")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "I'm I'm I'm ready"), "I'm ready")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "check-in check-in check-in done"), "check-in done")
