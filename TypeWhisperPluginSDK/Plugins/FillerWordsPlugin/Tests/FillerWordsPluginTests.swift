@@ -54,8 +54,25 @@ final class FillerWordsPluginTests: XCTestCase {
         )
     }
 
+    func testDecidesLanguageBoundFillersPerSentence() {
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(
+                from: "So I was thinking about the project. Um, we should ship it next week. "
+                    + "Wir treffen uns um 10 Uhr. Okay, um, let me check."
+            ),
+            "So I was thinking about the project. We should ship it next week. "
+                + "Wir treffen uns um 10 Uhr. Okay, let me check."
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(
+                from: "Wir haben heute viel geschafft und das Team ist zufrieden. Deploy um 5. Danach machen wir Feierabend."
+            ),
+            "Wir haben heute viel geschafft und das Team ist zufrieden. Deploy um 5. Danach machen wir Feierabend."
+        )
+    }
+
     func testKeepsLanguageBoundFillersWhenLanguageIsUncertain() {
-        XCTAssertNil(FillerWordsPlugin.outputLanguage(of: "um ok", configuredLanguage: nil))
+        XCTAssertNil(FillerWordsPlugin.recognizedLanguage(of: "um ok"))
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "um ok"), "um ok")
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "uhm ok"), "uhm ok")
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "hmm ok"), "ok")
@@ -107,6 +124,10 @@ final class FillerWordsPluginTests: XCTestCase {
             "Gut. »Morgen.« Sagte er »ja« nein"
         )
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "Umm, izmir", language: "tr"), "İzmir")
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "(Okay.) Um, next", language: "en"),
+            "(Okay.) Next"
+        )
     }
 
     func testCollapsesWordsRepeatedThreeOrMoreTimes() {

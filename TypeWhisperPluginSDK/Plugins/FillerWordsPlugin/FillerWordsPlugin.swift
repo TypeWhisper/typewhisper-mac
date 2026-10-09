@@ -48,20 +48,23 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     static func removeFillerWords(from text: String, words: [String], language: String? = nil) -> String {
         guard !text.isEmpty else { return text }
 
-        var normalizedWords = normalizedWords(from: words)
-        // Language recognition only runs when a language-bound filler is in
-        // the text; otherwise there is nothing for it to decide.
-        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }),
-           text.range(of: languageBoundFillerPattern, options: .regularExpression) != nil {
-            let outputLanguage = outputLanguage(of: text, configuredLanguage: language)
-            normalizedWords.removeAll { word in
-                guard let fillerLanguage = languageBoundFillerWords[word] else { return false }
-                return fillerLanguage != outputLanguage
-            }
-        }
+        let normalizedWords = normalizedWords(from: words)
         guard !normalizedWords.isEmpty else { return text }
 
-        var result = removeLatinFillerWords(from: text, words: normalizedWords, language: language)
+        // Language recognition only runs when a language-bound filler is in
+        // the text; otherwise there is nothing for it to decide.
+        var languageSpans: [LanguageSpan] = []
+        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }),
+           text.range(of: languageBoundFillerPattern, options: .regularExpression) != nil {
+            languageSpans = Self.languageSpans(of: text, configuredLanguage: language)
+        }
+
+        var result = removeLatinFillerWords(
+            from: text,
+            words: normalizedWords,
+            language: language,
+            languageSpans: languageSpans
+        )
         result = removeJapaneseFillerWords(from: result, words: normalizedWords)
 
         return result
@@ -84,13 +87,42 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// keeps every language-bound filler in the text.
     private static let minimumLanguageConfidence = 0.85
 
-    /// The base language code of the transcript: the configured dictation
-    /// language if there is one, otherwise a confident text recognition.
-    static func outputLanguage(of text: String, configuredLanguage: String?) -> String? {
+    private struct LanguageSpan {
+        let range: NSRange
+        let language: String?
+    }
+
+    /// The base language code of each sentence that contains a
+    /// language-bound filler. A configured dictation language covers the
+    /// whole text. Otherwise a sentence takes its own confident recognition
+    /// or the whole text's; if both are known and disagree, its language is
+    /// unknown. So a German sentence in an English transcript keeps its "um",
+    /// and so does an English-looking sentence in a German one.
+    private static func languageSpans(of text: String, configuredLanguage: String?) -> [LanguageSpan] {
         if let configuredLanguage = baseLanguageCode(configuredLanguage) {
-            return configuredLanguage
+            return [LanguageSpan(range: NSRange(location: 0, length: (text as NSString).length), language: configuredLanguage)]
         }
 
+        let textLanguage = recognizedLanguage(of: text)
+        var spans: [LanguageSpan] = []
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let sentence = String(text[range])
+            guard sentence.range(of: languageBoundFillerPattern, options: .regularExpression) != nil else { return true }
+            let sentenceLanguage = recognizedLanguage(of: sentence)
+            let language: String? = switch (sentenceLanguage, textLanguage) {
+            case let (own?, overall?) where own != overall: nil
+            default: sentenceLanguage ?? textLanguage
+            }
+            spans.append(LanguageSpan(range: NSRange(range, in: text), language: language))
+            return true
+        }
+        return spans
+    }
+
+    /// The base language code of `text` if the recognizer is confident.
+    static func recognizedLanguage(of text: String) -> String? {
         // The ambiguous fillers themselves would skew the recognizer
         // ("Um, can you…" reads as Portuguese), so they are masked first.
         let maskedText = text.replacingOccurrences(of: languageBoundFillerPattern, with: "", options: .regularExpression)
@@ -122,21 +154,34 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
 
-    private static func removeLatinFillerWords(from text: String, words: [String], language: String?) -> String {
+    private static func removeLatinFillerWords(
+        from text: String,
+        words: [String],
+        language: String?,
+        languageSpans: [LanguageSpan]
+    ) -> String {
         let latinWords = words.filter { !$0.containsJapaneseScript }
         guard !latinWords.isEmpty else { return text }
 
         let escapedWords = latinWords
             .map(NSRegularExpression.escapedPattern(for:))
             .joined(separator: "|")
-        let pattern = #"(?i)(?<![\p{L}\p{N}_])[,.!?]?[ \t]*(?:"# + escapedWords + #")(?![\p{L}\p{N}_])[ \t]*[,.!?]?"#
+        let pattern = #"(?i)(?<![\p{L}\p{N}_])[,.!?]?[ \t]*("# + escapedWords + #")(?![\p{L}\p{N}_])[ \t]*[,.!?]?"#
 
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return text
         }
 
+        // A language-bound filler only goes in a sentence of its language.
         let nsText = text as NSString
-        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).filter { match in
+            let wordRange = match.range(at: 1)
+            guard let fillerLanguage = languageBoundFillerWords[nsText.substring(with: wordRange).lowercased()] else {
+                return true
+            }
+            let span = languageSpans.first { NSLocationInRange(wordRange.location, $0.range) }
+            return span?.language == fillerLanguage
+        }
         guard !matches.isEmpty else { return text }
 
         // A capitalized filler that opened a sentence hands its capital to
@@ -174,13 +219,13 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     }
 
     /// An opening bracket or quote (`He said “Um, yes”`) and a new line start
-    /// a sentence; closing quotes are skipped to find the end of the previous
-    /// one.
+    /// a sentence; closing quotes and brackets are skipped to find the end of
+    /// the previous one (`(Okay.) Um`).
     private static func opensSentence(_ text: String) -> Bool {
         if endsWithOpeningDelimiter(text) { return true }
         for character in text.reversed() {
             if character.isNewline { return true }
-            if character.isWhitespace || character.isQuoteOrOpeningBracket { continue }
+            if character.isWhitespace || character.isQuoteOrBracket { continue }
             return ".!?…".contains(character)
         }
         return true
@@ -418,10 +463,10 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
 }
 
 private extension Character {
-    var isQuoteOrOpeningBracket: Bool {
+    var isQuoteOrBracket: Bool {
         unicodeScalars.allSatisfy { scalar in
             switch scalar.properties.generalCategory {
-            case .initialPunctuation, .finalPunctuation, .openPunctuation:
+            case .initialPunctuation, .finalPunctuation, .openPunctuation, .closePunctuation:
                 return true
             default:
                 return scalar == "\"" || scalar == "'" || scalar == "¿" || scalar == "¡"
