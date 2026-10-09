@@ -85,10 +85,6 @@ final class ChromiumAccessibilityObservationController {
         }
     }
 
-    static func isChromiumBrowser(bundleIdentifier: String) -> Bool {
-        chromiumBrowserBundleIdentifiers.contains(bundleIdentifier)
-    }
-
     func isElectronApplication(bundleIdentifier: String) -> Bool {
         guard let target = resolveApplication(bundleIdentifier, nil) else { return false }
         return isElectronApplicationAtURL(target.bundleURL)
@@ -205,6 +201,8 @@ final class TextInsertionService {
     var accessibilityGrantedOverride: Bool?
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var focusedTextElementOverride: (() -> AXUIElement?)?
+    /// Whether the app behind a nil `focusedTextElementOverride` hides its focused element.
+    var focusedElementHiddenOverride: (() -> Bool)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
@@ -469,8 +467,9 @@ final class TextInsertionService {
 
     struct PasteVerificationState {
         fileprivate let focusedTextState: FocusedTextState?
-        /// Accessibility answered the focus query and no text element was focused. False when the
-        /// query failed or could not run, for example without access to other apps.
+        /// Accessibility showed where the focus is, and no text element was focused. False when the
+        /// query failed, could not run (for example without access to other apps), or the app
+        /// hid its focused element.
         fileprivate let noTextElementFocused: Bool
 
         /// Whether verification can show that the paste missed. Unreadable fields never can.
@@ -586,13 +585,15 @@ final class TextInsertionService {
         queryFocusedTextElement(messagingTimeout: messagingTimeout).element
     }
 
-    /// The focused text element, and whether accessibility answered the focus query. Without an
-    /// answer, a missing element does not mean that no text element was focused.
+    /// The focused text element, and whether accessibility showed where the focus is. Without
+    /// that, a missing element does not mean that no text element was focused.
     private func queryFocusedTextElement(
         messagingTimeout: Float? = nil
-    ) -> (element: AXUIElement?, focusQuerySucceeded: Bool) {
+    ) -> (element: AXUIElement?, focusIsKnown: Bool) {
         if let focusedTextElementOverride {
-            guard let element = focusedTextElementOverride() else { return (nil, true) }
+            guard let element = focusedTextElementOverride() else {
+                return (nil, focusedElementHiddenOverride?() != true)
+            }
             applyMessagingTimeout(messagingTimeout, to: element)
             return (element, true)
         }
@@ -605,7 +606,10 @@ final class TextInsertionService {
         case .success:
             break
         case .noValue:
-            return (nil, true)
+            return (nil, focusedApplicationHasNoFocusedWindow(
+                systemWide: systemWide,
+                messagingTimeout: messagingTimeout
+            ))
         default:
             return (nil, false)
         }
@@ -616,6 +620,32 @@ final class TextInsertionService {
             return (element, true)
         }
         return (findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout), true)
+    }
+
+    /// Apps that build their accessibility tree on demand, such as Chromium browsers and Electron
+    /// apps, name no focused element until it is built, even while one of their text fields has
+    /// focus. They still name their focused window, so only an app without a focused window shows
+    /// that nothing can take a paste.
+    private func focusedApplicationHasNoFocusedWindow(
+        systemWide: AXUIElement,
+        messagingTimeout: Float?
+    ) -> Bool {
+        var focusedApplication: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedApplicationAttribute as CFString,
+            &focusedApplication
+        ) == .success,
+        let application = axElement(from: focusedApplication) else {
+            return false
+        }
+        applyMessagingTimeout(messagingTimeout, to: application)
+        var focusedWindow: AnyObject?
+        return AXUIElementCopyAttributeValue(
+            application,
+            kAXFocusedWindowAttribute as CFString,
+            &focusedWindow
+        ) == .noValue
     }
 
     /// Replaces the selected text on a previously captured AXUIElement.
@@ -887,14 +917,14 @@ final class TextInsertionService {
         return defaultPasteFallbackRestoreDelay
     }
 
-    /// `acceptsPasteWithoutTextElement` is for apps that take a paste even though accessibility
-    /// shows no text element, such as terminals, or Chromium and Electron apps that hide it.
+    /// `acceptsPasteWithoutTextElement` is for apps such as terminals that take a paste even though
+    /// accessibility shows no text element.
     func capturePasteVerificationState(acceptsPasteWithoutTextElement: Bool = false) -> PasteVerificationState {
         let query = queryFocusedTextElement()
         return PasteVerificationState(
             focusedTextState: query.element.flatMap { captureFocusedTextState(for: $0) },
             // A found element whose state could not be captured is not proof of a missing field.
-            noTextElementFocused: query.focusQuerySucceeded && query.element == nil
+            noTextElementFocused: query.focusIsKnown && query.element == nil
                 && !acceptsPasteWithoutTextElement
         )
     }
@@ -1274,8 +1304,6 @@ final class TextInsertionService {
             accessibilityInsertionExcludedBundleIdentifiers.contains($0)
         } ?? false
         let prefersSyntheticPaste = isTerminalApp || requiresSyntheticPaste
-        let acceptsPasteWithoutTextElement = isTerminalApp
-            || bundleId.map { mayHideFocusedTextElement($0) } ?? false
 
         logger.info(
             "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), prefersSyntheticPaste=\(prefersSyntheticPaste, privacy: .public)"
@@ -1311,7 +1339,7 @@ final class TextInsertionService {
             : []
         let pasteVerificationState = autoEnter || awaitPasteVerification || preserveClipboard
             || detectMissedTextField
-            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: acceptsPasteWithoutTextElement)
+            ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
             || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
@@ -2280,13 +2308,6 @@ final class TextInsertionService {
 
         return !accessibilityInsertionExcludedBundleIdentifiers.contains(bundleIdentifier)
             && !isElectronApplication(bundleIdentifier)
-    }
-
-    /// Chromium browsers and Electron apps build their accessibility tree on demand. Until then
-    /// they report no focused element, even while one of their text fields has focus.
-    private func mayHideFocusedTextElement(_ bundleIdentifier: String) -> Bool {
-        ChromiumAccessibilityObservationController.isChromiumBrowser(bundleIdentifier: bundleIdentifier)
-            || isElectronApplication(bundleIdentifier)
     }
 
     private func isElectronApplication(_ bundleIdentifier: String) -> Bool {
