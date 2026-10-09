@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The transcript of a History record by speaker: the speakers in a row at
@@ -283,7 +284,9 @@ struct SpeakerWorkspaceView: View {
     // MARK: - Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        guard editedParagraph == nil else { return .ignored }
+        // Key presses in a text field, such as a speaker's name, reach this
+        // handler first; they belong to the text.
+        guard editedParagraph == nil, !Self.isEditingText else { return .ignored }
         let playback = model.playback
         switch press.key {
         case .space:
@@ -314,6 +317,10 @@ struct SpeakerWorkspaceView: View {
             )
         }
         return .handled
+    }
+
+    private static var isEditingText: Bool {
+        NSApp.keyWindow?.firstResponder is NSText
     }
 }
 
