@@ -8573,7 +8573,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.10;
+				MARKETING_VERSION = 1.2.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
@@ -8597,7 +8597,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = SonioxPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.2.10;
+				MARKETING_VERSION = 1.2.11;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.soniox;
 				PRODUCT_NAME = SonioxPlugin;
 				SDKROOT = macosx;
