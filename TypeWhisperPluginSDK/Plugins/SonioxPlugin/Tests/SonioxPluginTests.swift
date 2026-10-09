@@ -196,9 +196,50 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "stt-async-v6")
     }
 
+    func testRealtimeWebSocketRequestSendsAPIKeyInAuthorizationHeader() throws {
+        let url = try XCTUnwrap(URL(string: SonioxRegion.europeanUnion.sttRealtimeWebSocketURL))
+        let request = SonioxPlugin.makeRealtimeWebSocketRequest(url: url, apiKey: "soniox-key")
+
+        XCTAssertEqual(request.url, url)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertNil(request.value(forHTTPHeaderField: "Sec-WebSocket-Protocol"))
+    }
+
+    func testLiveSessionAuthenticatesWithHeaderInsteadOfStartMessage() async throws {
+        let receivedTexts = OSAllocatedUnfairLock<[String]>(initialState: [])
+        let server = try LocalWebSocketServer { text, server in
+            receivedTexts.withLock { $0.append(text) }
+            if text.contains("finalize") {
+                server.sendText(#"{"tokens":[{"text":"ok","is_final":true}],"finished":true}"#)
+            }
+        }
+        defer { server.stop() }
+        let port = try await server.start()
+
+        let session = try await SonioxLiveTranscriptionSession.connect(
+            apiKey: "test-key",
+            region: .unitedStates,
+            modelId: "stt-rt-v5",
+            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
+        )
+        let result = try await session.finish()
+
+        XCTAssertEqual(result.text, "ok")
+        XCTAssertEqual(server.handshakeHeaderValue("Authorization"), "Bearer test-key")
+        let startMessage = try XCTUnwrap(receivedTexts.withLock { $0.first })
+        let startPayload = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(startMessage.utf8)) as? [String: Any]
+        )
+        XCTAssertEqual(startPayload["model"] as? String, "stt-rt-v5")
+        XCTAssertNil(startPayload["api_key"])
+    }
+
     func testRealtimeConfigUsesRealtimeV5AndLanguageHints() throws {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             modelID: "stt-rt-v5",
             language: "de",
             languageHints: ["en", "de"],
@@ -206,7 +247,7 @@ final class SonioxPluginTests: XCTestCase {
             prompt: "TypeWhisper, Soniox"
         )
 
-        XCTAssertEqual(payload["api_key"] as? String, "soniox-key")
+        XCTAssertNil(payload["api_key"])
         XCTAssertEqual(payload["model"] as? String, "stt-rt-v5")
         XCTAssertEqual(payload["audio_format"] as? String, "s16le")
         XCTAssertEqual(payload["sample_rate"] as? Int, 16_000)
@@ -225,7 +266,6 @@ final class SonioxPluginTests: XCTestCase {
 
     func testRealtimeConfigFallsBackToRequestedLanguageHint() {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             language: "de",
             translate: false,
             prompt: nil
@@ -239,7 +279,6 @@ final class SonioxPluginTests: XCTestCase {
 
     func testRealtimeConfigSendsCustomContextTextAlongsideDictionaryTerms() throws {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             language: "en",
             translate: false,
             prompt: "TypeWhisper",
@@ -253,7 +292,6 @@ final class SonioxPluginTests: XCTestCase {
 
     func testRealtimeConfigSendsCustomContextTextWithoutDictionaryTerms() throws {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             language: "en",
             translate: false,
             prompt: nil,
@@ -267,7 +305,6 @@ final class SonioxPluginTests: XCTestCase {
 
     func testRealtimeConfigOmitsBlankCustomContextText() {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             language: "en",
             translate: false,
             prompt: nil,
@@ -310,7 +347,6 @@ final class SonioxPluginTests: XCTestCase {
 
     func testRealtimeConfigAcceptsNonEnglishLanguageHints() {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
-            apiKey: "soniox-key",
             language: nil,
             languageHints: ["uk", "ja"],
             translate: false,
@@ -1460,7 +1496,7 @@ final class SonioxPluginTests: XCTestCase {
 
     func testLiveSessionContinuesReceivingAfterEndpointToken() async throws {
         let server = try LocalWebSocketServer { text, server in
-            if text.contains("\"api_key\"") {
+            if text.contains("\"model\"") {
                 server.sendText(#"{"tokens":[{"text":"First phrase","is_final":true},{"text":"<end>","is_final":true}]}"#)
                 DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
                     server.sendText(#"{"tokens":[{"text":" after pause","is_final":true}]}"#)
@@ -1816,12 +1852,19 @@ private final class LocalWebSocketServer: @unchecked Sendable {
     private let lock = NSLock()
     private var connection: NWConnection?
     private let onText: (String, LocalWebSocketServer) -> Void
+    private let handshakeHeaders: OSAllocatedUnfairLock<[(name: String, value: String)]>
 
     init(onText: @escaping (String, LocalWebSocketServer) -> Void) throws {
         self.onText = onText
+        let handshakeHeaders = OSAllocatedUnfairLock<[(name: String, value: String)]>(initialState: [])
+        self.handshakeHeaders = handshakeHeaders
         let parameters = NWParameters.tcp
         let webSocketOptions = NWProtocolWebSocket.Options()
         webSocketOptions.autoReplyPing = true
+        webSocketOptions.setClientRequestHandler(DispatchQueue(label: "LocalWebSocketServer.handshake")) { _, headers in
+            handshakeHeaders.withLock { $0 = headers }
+            return NWProtocolWebSocket.Response(status: .accept, subprotocol: nil)
+        }
         parameters.defaultProtocolStack.applicationProtocols.insert(webSocketOptions, at: 0)
         listener = try NWListener(using: parameters)
     }
@@ -1856,6 +1899,12 @@ private final class LocalWebSocketServer: @unchecked Sendable {
                 continuation.resume(with: result)
             }
             listener.start(queue: queue)
+        }
+    }
+
+    func handshakeHeaderValue(_ name: String) -> String? {
+        handshakeHeaders.withLock { headers in
+            headers.first { $0.name.caseInsensitiveCompare(name) == .orderedSame }?.value
         }
     }
 
