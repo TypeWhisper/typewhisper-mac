@@ -470,12 +470,14 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].progressFraction = nil
             files[index].sourceProgress = nil
 
+            // The chosen engine can come back while this file runs on the default.
+            let modelOverride = availableSelectedModel
             let result = try await transcriptionRunner(
                 samples,
                 languageSelection,
                 selectedTask,
                 availableSelectedEngine,
-                availableSelectedModel,
+                modelOverride,
                 { [weak self] text in
                     guard let self,
                           !cancellationFlag.isCancelled,
@@ -532,7 +534,7 @@ final class FileTranscriptionViewModel: ObservableObject {
                     samples: samples,
                     title: files[index].fileName,
                     source: .importedFile,
-                    modelUsed: availableSelectedModel
+                    modelUsed: modelOverride
                 ))
                 guard files.indices.contains(index), files[index].id == itemID else { return }
                 // A file cancelled while its record was added leaves no record behind.
