@@ -638,9 +638,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
             throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
         }
 
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 30
-
+        let request = SonioxPlugin.makeRealtimeWebSocketRequest(url: url, apiKey: apiKey)
         let webSocketTask = URLSession.shared.webSocketTask(with: request)
         let collector = SonioxTranscriptCollector()
         let receiveTask = Task { [webSocketTask, collector, onProgress] in
@@ -676,7 +674,6 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
 
         do {
             try await webSocketTask.send(.string(try SonioxPlugin.makeRealtimeConfigMessage(
-                apiKey: apiKey,
                 modelID: modelId,
                 language: languageSelection.requestedLanguage,
                 languageHints: languageSelection.languageHints,
@@ -1855,8 +1852,16 @@ final class SonioxPlugin: NSObject,
         return request
     }
 
+    // Soniox stops accepting `api_key` in the start message on 2027-01-15;
+    // the key travels in the upgrade request's Authorization header instead.
+    static func makeRealtimeWebSocketRequest(url: URL, apiKey: String) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 30
+        return request
+    }
+
     static func makeRealtimeConfigPayload(
-        apiKey: String,
         modelID: String = SonioxPlugin.defaultRealtimeModelId,
         language: String?,
         languageHints: [String] = [],
@@ -1865,7 +1870,6 @@ final class SonioxPlugin: NSObject,
         contextText: String? = nil
     ) -> [String: Any] {
         var config: [String: Any] = [
-            "api_key": apiKey,
             "model": modelID,
             "audio_format": "s16le",
             "sample_rate": 16_000,
@@ -1896,7 +1900,6 @@ final class SonioxPlugin: NSObject,
     }
 
     static func makeRealtimeConfigMessage(
-        apiKey: String,
         modelID: String = SonioxPlugin.defaultRealtimeModelId,
         language: String?,
         languageHints: [String] = [],
@@ -1905,7 +1908,6 @@ final class SonioxPlugin: NSObject,
         contextText: String? = nil
     ) throws -> String {
         let data = try JSONSerialization.data(withJSONObject: makeRealtimeConfigPayload(
-            apiKey: apiKey,
             modelID: modelID,
             language: language,
             languageHints: languageHints,
