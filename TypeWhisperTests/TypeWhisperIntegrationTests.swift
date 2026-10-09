@@ -6170,6 +6170,44 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testDetectMissedTextFieldIgnoresChromiumBrowserWithoutTextElement() async throws {
+        // Chromium reports no focused element until its accessibility tree is built.
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Brave Browser", "com.brave.Browser", nil) }
+        service.focusedTextElementOverride = { nil }
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertFalse(result.missedTextField)
+    }
+
+    @MainActor
+    func testAutoEnterDoesNotReportMissedTextFieldInElectronAppWithoutTextElement() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.autoEnterDelay = .milliseconds(1)
+        service.captureActiveAppOverride = { ("Claude", "com.anthropic.claudefordesktop", nil) }
+        service.liveFieldElectronApplicationOverride = { $0 == "com.anthropic.claudefordesktop" }
+        service.focusedTextElementOverride = { nil }
+        service.pasteSimulatorOverride = {}
+        var returnCount = 0
+        service.returnSimulatorOverride = { returnCount += 1 }
+
+        let result = try await service.insertText("Hello", autoEnter: true, detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertFalse(result.missedTextField)
+        XCTAssertEqual(returnCount, 1)
+    }
+
+    @MainActor
     func testDetectMissedTextFieldReportsReadableFieldThatStayedUnchanged() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
