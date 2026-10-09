@@ -228,6 +228,7 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "B2B B2B B2B sales"), "B2B sales")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "Maße Masse Maße"), "Maße Masse Maße")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "ΛΟΓΟΣ λογος λογος"), "ΛΟΓΟΣ")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "Işık ışık ışık yandı", language: "tr"), "Işık yandı")
         XCTAssertEqual(
             FillerWordsPlugin.collapseStutters(in: "state\u{2011}of\u{2011}the\u{2011}art state\u{2011}of\u{2011}the\u{2011}art state\u{2011}of\u{2011}the\u{2011}art tools"),
             "state\u{2011}of\u{2011}the\u{2011}art tools"

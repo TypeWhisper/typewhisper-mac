@@ -38,7 +38,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
             language: context.language
         )
         guard settingsStore?.collapseStutters ?? true else { return result }
-        return Self.collapseStutters(in: result)
+        return Self.collapseStutters(in: result, language: context.language)
     }
 
     static func removeFillerWords(from text: String, language: String? = nil) -> String {
@@ -146,7 +146,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// occurrence ("I I I think" -> "I think", "I'm I'm I'm" -> "I'm"). Two
     /// repetitions and punctuated repeats ("no, no, no") are kept as
     /// deliberate emphasis.
-    static func collapseStutters(in text: String) -> String {
+    static func collapseStutters(in text: String, language: String? = nil) -> String {
         // Zero-width joiners belong to words in Persian and Indic scripts. An
         // apostrophe only extends a word between letters (`I'm`); around the
         // repeats it is a quote mark (`'well well well'`).
@@ -162,10 +162,12 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
         // Repeats are compared with simple lowercasing rather than the
         // regex's full case folding, which would equate "Maße" and "Masse".
+        // The configured language picks the mapping (Turkish "Işık" -> "ışık").
+        let locale = language.map(Locale.init(identifier:))
         let nsText = text as NSString
         let words = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
             // Greek final sigma: "ΛΟΓΟΣ" lowercases to "λογοσ", not "λογος".
-            (range: match.range, key: nsText.substring(with: match.range).lowercased().replacingOccurrences(of: "ς", with: "σ"))
+            (range: match.range, key: nsText.substring(with: match.range).lowercased(with: locale).replacingOccurrences(of: "ς", with: "σ"))
         }
         func onlySpacesBetween(_ first: NSRange, _ second: NSRange) -> Bool {
             let gap = nsText.substring(with: NSRange(location: NSMaxRange(first), length: second.location - NSMaxRange(first)))
