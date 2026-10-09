@@ -848,6 +848,9 @@ final class PluginManager: ObservableObject {
         guard let bundle = Bundle(url: sourceURL) else {
             throw PluginLoadError.failedToCreateBundle(bundleName: sourceURL.lastPathComponent)
         }
+        // An unread bundle whose folder is removed later stays in Bundle.allBundles
+        // without a resource URL, and MLX aborts on it while looking for its metallib.
+        _ = bundle.resourceURL
 
         return LoadedPlugin(
             manifest: manifest,

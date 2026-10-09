@@ -894,6 +894,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             sourceURL: bundleURL,
             isEnabled: false
         )
+        let bundle = try XCTUnwrap(pluginManager.loadedPlugins.first?.bundle)
 
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
@@ -905,6 +906,8 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
         XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
+        // The bundle stays in Bundle.allBundles, which MLX walks on its first use.
+        XCTAssertNotNil(bundle.resourceURL)
     }
 
     @MainActor
