@@ -250,9 +250,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// Whether `text` ends with an opening bracket or quote. Quote marks
     /// open in some locales and close in others (`»ja«`, `«oui»`), so their
     /// position decides. After whitespace or another opening delimiter
-    /// (`(“`) they open; right after a letter (`„ja“ äh nein`) they close.
-    /// After other punctuation such as a dash or colon they open only when
-    /// the removed filler was attached: `:“Um` opens, `—” Um` closes.
+    /// (`(“`) they open; right after a letter (`„ja“ äh nein`) or other
+    /// punctuation (`“wait,”Um`) they close. After a dash or colon they open
+    /// only when the removed filler was attached: `:“Um` opens, `—” Um`
+    /// closes.
     /// An opening HTML tag from the app formatter (`<p>`, `<li>`) opens too.
     private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
         let text = htmlUnescapedQuotes(in: text.suffix(256))
@@ -277,12 +278,16 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         switch beforeQuote.properties.generalCategory {
         case .openPunctuation, .initialPunctuation:
             return true
-        default:
-            // After sentence punctuation the quote closes even when the
-            // filler hangs on it: `“wait.”Um`.
+        case .dashPunctuation:
             return fillerIsAttached
-                && !CharacterSet.alphanumerics.contains(beforeQuote)
-                && !Character(beforeQuote).endsSentence
+        default:
+            if beforeQuote == ">" {
+                // Right after an opening HTML tag: `<p>&quot;Uh`.
+                return endsWithOpeningDelimiter(String(text.dropLast()), fillerIsAttached: false)
+            }
+            // Only a colon opens a quote this way; after other punctuation
+            // it closes even when the filler hangs on it: `“wait,”Um`.
+            return fillerIsAttached && beforeQuote == ":"
         }
     }
 
@@ -333,13 +338,16 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         let word = token.prefix { $0.isLetter || "'’-".contains($0) }
         let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
         guard !word.dropFirst().contains(where: \.isUppercase),
-              trailing.allSatisfy({ ".,!?;:…".contains($0) || $0.isQuoteOrBracket }) else {
+              trailing.allSatisfy({ $0.endsSentence || ",;:".contains($0) || $0.isQuoteOrBracket }) else {
             text += segment
             return
         }
+        // Dutch capitalizes the digraph ij as a unit: ijs -> IJs.
+        let capitalLength = locale?.language.languageCode == "nl" && word.lowercased().hasPrefix("ij") ? 2 : 1
+        let capitalEnd = segment.index(index, offsetBy: capitalLength)
         text += segment[..<index]
-        text += String(segment[index]).uppercased(with: locale)
-        text += segment[segment.index(after: index)...]
+        text += String(segment[index..<capitalEnd]).uppercased(with: locale)
+        text += segment[capitalEnd...]
     }
 
     private static func removeJapaneseFillerWords(from text: String, words: [String]) -> String {
