@@ -49,7 +49,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         guard !text.isEmpty else { return text }
 
         var normalizedWords = normalizedWords(from: words)
-        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }) {
+        // Language recognition only runs when a language-bound filler is in
+        // the text; otherwise there is nothing for it to decide.
+        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }),
+           text.range(of: languageBoundFillerPattern, options: .regularExpression) != nil {
             let outputLanguage = outputLanguage(of: text, configuredLanguage: language)
             normalizedWords.removeAll { word in
                 guard let fillerLanguage = languageBoundFillerWords[word] else { return false }
@@ -73,6 +76,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         "um": "en"
     ]
 
+    private static let languageBoundFillerPattern = #"(?i)(?<![\p{L}\p{N}_])(?:"# + languageBoundFillerWords.keys
+        .map(NSRegularExpression.escapedPattern(for:))
+        .joined(separator: "|") + #")(?![\p{L}\p{N}_])"#
+
     /// Recognized languages below this confidence count as unknown, which
     /// keeps every language-bound filler in the text.
     private static let minimumLanguageConfidence = 0.85
@@ -86,10 +93,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
         // The ambiguous fillers themselves would skew the recognizer
         // ("Um, can you…" reads as Portuguese), so they are masked first.
-        let pattern = #"(?i)(?<![\p{L}\p{N}_])(?:"# + languageBoundFillerWords.keys
-            .map(NSRegularExpression.escapedPattern(for:))
-            .joined(separator: "|") + #")(?![\p{L}\p{N}_])"#
-        let maskedText = text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+        let maskedText = text.replacingOccurrences(of: languageBoundFillerPattern, with: "", options: .regularExpression)
 
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(maskedText)
@@ -166,12 +170,17 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
     }
 
-    /// An opening bracket or quote starts a sentence (`He said “Um, yes”`);
-    /// closing quotes are skipped to find the end of the previous one.
+    /// An opening bracket or quote (`He said “Um, yes”`) and a new line start
+    /// a sentence; closing quotes are skipped to find the end of the previous
+    /// one.
     private static func opensSentence(_ text: String) -> Bool {
         if endsWithOpeningDelimiter(text) { return true }
-        guard let last = text.last(where: { !$0.isWhitespace && !$0.isQuoteOrOpeningBracket }) else { return true }
-        return ".!?…".contains(last)
+        for character in text.reversed() {
+            if character.isNewline { return true }
+            if character.isWhitespace || character.isQuoteOrOpeningBracket { continue }
+            return ".!?…".contains(character)
+        }
+        return true
     }
 
     /// Whether `text` ends with an opening bracket or quote. A quote opens

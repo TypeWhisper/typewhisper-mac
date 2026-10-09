@@ -98,6 +98,10 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "(“Um, hello”) and (\"Uh, hi\")", language: "en"),
             "(“Hello”) and (\"Hi\")"
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Heading\nUm, next item", language: "en"),
+            "Heading\nNext item"
+        )
     }
 
     func testCollapsesWordsRepeatedThreeOrMoreTimes() {
