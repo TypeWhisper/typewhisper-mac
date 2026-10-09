@@ -106,6 +106,31 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(capturedModelOverrideId)
     }
 
+    func testModelDroppedByAnUpdateNoLongerApplies() async throws {
+        try registerEngines(["updated-engine"])
+        let defaults = try makeDefaults()
+        defaults.set("updated-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
+        defaults.set("dropped-model", forKey: UserDefaultsKeys.fileTranscriptionModel)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults
+        )
+        viewModel.observePluginManager()
+
+        PluginManager.shared.loadedPlugins = [loadedPlugin(
+            for: FileTranscriptionModelListPlugin(providerId: "updated-engine", modelIDs: ["new-model"]),
+            appSupportDirectory: FileManager.default.temporaryDirectory
+        )]
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        XCTAssertEqual(viewModel.selectedEngine, "updated-engine")
+        XCTAssertNil(viewModel.selectedModel)
+    }
+
     func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -1568,7 +1593,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     private func loadedPlugin(
-        for plugin: FileTranscriptionLanguageSelectionPlugin,
+        for plugin: some TranscriptionEnginePlugin,
         appSupportDirectory: URL
     ) -> LoadedPlugin {
         LoadedPlugin(
@@ -1576,7 +1601,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 id: "com.typewhisper.mock.\(plugin.providerId)",
                 name: plugin.providerDisplayName,
                 version: "1.0.0",
-                principalClass: "FileTranscriptionLanguageSelectionPlugin"
+                principalClass: String(describing: type(of: plugin))
             ),
             instance: plugin,
             bundle: Bundle.main,
@@ -1830,5 +1855,41 @@ private final class RecoveryFallbackMockTranscriptionPlugin: NSObject, Transcrip
     ) async throws -> PluginTranscriptionResult {
         _ = onProgress("backup transcript")
         return PluginTranscriptionResult(text: "backup transcript", detectedLanguage: language)
+    }
+}
+
+private final class FileTranscriptionModelListPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.file-transcription-model-list"
+    static let pluginName = "File Transcription Model List"
+
+    private(set) var providerId = "file-transcription-model-list"
+    var providerDisplayName: String { providerId }
+    private(set) var transcriptionModels: [PluginModelInfo] = []
+    let isConfigured = true
+    let selectedModelId: String? = nil
+    let supportsTranslation = false
+    let supportedLanguages: [String] = []
+
+    required override init() {
+        super.init()
+    }
+
+    convenience init(providerId: String, modelIDs: [String]) {
+        self.init()
+        self.providerId = providerId
+        transcriptionModels = modelIDs.map { PluginModelInfo(id: $0, displayName: $0) }
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
     }
 }

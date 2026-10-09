@@ -108,7 +108,7 @@ struct SpeakersView: View {
                 break
             }
         }
-        .onChange(of: viewModel.selectedEngine) { _, _ in
+        .onChange(of: viewModel.engineChoice) { _, _ in
             startPending()
         }
     }

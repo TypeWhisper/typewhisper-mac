@@ -256,7 +256,12 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
     var modelChoice: String? {
         get { availableSelectedModel }
-        set { selectedModel = newValue }
+        set {
+            // The picker shows the default engine in place of a missing one,
+            // so a model chosen there is for the default engine.
+            if isSelectedEngineMissing { selectedEngine = nil }
+            selectedModel = newValue
+        }
     }
 
     var resolvedEngine: TranscriptionEnginePlugin? {
@@ -289,6 +294,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         pluginManager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.clearModelMissingFromReloadedEngine()
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
@@ -629,6 +635,17 @@ final class FileTranscriptionViewModel: ObservableObject {
         guard let startedAt = item.startedAt else { return nil }
         let end = item.finishedAt ?? elapsedRefreshDate
         return end.timeIntervalSince(startedAt)
+    }
+
+    /// An update can drop the chosen model; it then no longer applies.
+    private func clearModelMissingFromReloadedEngine() {
+        guard let selectedModel, let engineId = availableSelectedEngine,
+              let engine = PluginManager.shared?.transcriptionEngine(for: engineId) else { return }
+        let modelIds = Set((engine.modelCatalog + engine.transcriptionModels).map(\.id))
+        // An engine that lists no models yet says nothing about this one.
+        if !modelIds.isEmpty, !modelIds.contains(selectedModel) {
+            self.selectedModel = nil
+        }
     }
 
     private var selectedEngineIsReady: Bool {

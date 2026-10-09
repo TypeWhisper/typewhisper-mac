@@ -721,6 +721,45 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel), "universal-3-5-pro")
     }
 
+    func testModelChosenForTheDefaultEngineInPlaceOfAMissingOneSwitchesToIt() throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        defaults.set("missing-engine", forKey: UserDefaultsKeys.recorderTranscriptionEngine)
+        defaults.set("old-model", forKey: UserDefaultsKeys.recorderTranscriptionModel)
+        setupPluginManager()
+        UserDefaults.standard.set("groq", forKey: UserDefaultsKeys.selectedEngine)
+        let viewModel = makeViewModel(defaults: defaults)
+
+        viewModel.modelChoice = "whisper-small"
+
+        XCTAssertNil(viewModel.selectedEngine)
+        XCTAssertEqual(viewModel.selectedModel, "whisper-small")
+        XCTAssertEqual(viewModel.effectiveProviderId, "groq")
+        XCTAssertEqual(viewModel.effectiveModelId, "whisper-small")
+    }
+
+    func testRecordingStartedOnTheDefaultEngineFinishesOnIt() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        setupPluginManager(groqBehavior: .success("default engine"), assemblyAIBehavior: .success("own engine"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+        viewModel.selectedEngine = "assemblyai"
+        let pluginManager = try XCTUnwrap(PluginManager.shared)
+        let assemblyAI = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.manifest.id == "com.typewhisper.mock.assemblyai" })
+        pluginManager.unloadPlugin("com.typewhisper.mock.assemblyai", keepsSavedEngine: true)
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        // The plugin comes back during the recording.
+        pluginManager.loadedPlugins.append(assemblyAI)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "default engine")
+        XCTAssertEqual(viewModel.effectiveProviderId, "assemblyai")
+    }
+
     func testRecorderLivePreviewDefaultsOffAndPersistsSeparately() throws {
         let defaults = try makeDefaults()
 
