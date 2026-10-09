@@ -132,6 +132,18 @@ final class FillerWordsPluginTests: XCTestCase {
             FillerWordsPlugin.removeFillerWords(from: "Um, iPhone is ready. Uh, eBay too.", language: "en"),
             "iPhone is ready. eBay too."
         )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Um, https://example.com. Uh, @openai. Um, --verbose", language: "en"),
+            "https://example.com. @openai. --verbose"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Um, \"hello,\" she said. Uh, we're done.", language: "en"),
+            "\"Hello,\" she said. We're done."
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "He said:“Um, hello” —“Uh, bye”", language: "en"),
+            "He said:“Hello” —“Bye”"
+        )
     }
 
     func testCollapsesWordsRepeatedThreeOrMoreTimes() {

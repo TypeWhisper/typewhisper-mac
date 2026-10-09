@@ -237,8 +237,9 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
     /// Whether `text` ends with an opening bracket or quote. Quote marks
     /// open in some locales and close in others (`»ja«`, `«oui»`), so their
-    /// position decides: after whitespace or another opening delimiter
-    /// (`(“`) they open, right after a letter (`„ja“ äh nein`) they close.
+    /// position decides: after whitespace, another opening delimiter, a dash
+    /// or a colon (`(“`, `—“`, `:“`) they open; elsewhere, such as right after
+    /// a letter (`„ja“ äh nein`), they close.
     private static func endsWithOpeningDelimiter(_ text: String) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
         switch last.properties.generalCategory {
@@ -251,10 +252,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         }
         guard let beforeQuote = text.unicodeScalars.dropLast().last else { return true }
         switch beforeQuote.properties.generalCategory {
-        case .openPunctuation, .initialPunctuation:
+        case .openPunctuation, .initialPunctuation, .dashPunctuation:
             return true
         default:
-            return CharacterSet.whitespacesAndNewlines.contains(beforeQuote)
+            return beforeQuote == ":" || CharacterSet.whitespacesAndNewlines.contains(beforeQuote)
         }
     }
 
@@ -264,14 +265,24 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         capitalOwed: inout Bool,
         locale: Locale?
     ) {
-        guard capitalOwed, let index = segment.firstIndex(where: { $0.isLetter || $0.isNumber }) else {
+        guard capitalOwed, let tokenStart = segment.firstIndex(where: { !$0.isWhitespace }) else {
             text += segment
             return
         }
         capitalOwed = false
-        // Mixed-case spellings such as "iPhone" or "eBay" stay as they are.
-        let restOfWord = segment[segment.index(after: index)...].prefix { $0.isLetter }
-        guard !restOfWord.contains(where: \.isUppercase) else {
+
+        // Only an ordinary word takes the capital, optionally after opening
+        // quotes or brackets. Mixed-case spellings ("iPhone", "eBay"), URLs,
+        // handles and other identifiers stay as they are.
+        let token = segment[tokenStart...].prefix { !$0.isWhitespace }
+        guard let index = token.firstIndex(where: { !$0.isQuoteOrBracket }), token[index].isLetter else {
+            text += segment
+            return
+        }
+        let word = token[index...].prefix { $0.isLetter || "'’-".contains($0) }
+        let trailing = token[word.endIndex...]
+        guard !word.dropFirst().contains(where: \.isUppercase),
+              trailing.allSatisfy({ ".,!?;:…".contains($0) || $0.isQuoteOrBracket }) else {
             text += segment
             return
         }
