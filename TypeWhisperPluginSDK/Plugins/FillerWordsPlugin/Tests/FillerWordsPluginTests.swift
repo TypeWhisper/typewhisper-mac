@@ -18,10 +18,95 @@ final class FillerWordsPluginTests: XCTestCase {
 
         let result = try await plugin.process(
             text: "Ähm, um uh hello?",
-            context: PostProcessingContext()
+            context: PostProcessingContext(language: "en")
         )
 
-        XCTAssertEqual(result, "hello?")
+        XCTAssertEqual(result, "Hello?")
+    }
+
+    func testKeepsLanguageBoundFillersThatAreRealWordsInTheConfiguredLanguage() async throws {
+        let plugin = FillerWordsPlugin()
+
+        let result = try await plugin.process(
+            text: "Wir treffen uns um 10 Uhr, äh, das ist eh klar.",
+            context: PostProcessingContext(language: "de")
+        )
+
+        XCTAssertEqual(result, "Wir treffen uns um 10 Uhr, das ist eh klar.")
+    }
+
+    func testRemovesLanguageBoundFillersForRegionalEnglish() {
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "So um I think, ah, we should go", language: "en-US"),
+            "So I think, we should go"
+        )
+    }
+
+    func testRecognizesLanguageWhenNoneIsConfigured() {
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Um, can you send me the file?"),
+            "Can you send me the file?"
+        )
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "um 10 Uhr"), "um 10 Uhr")
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Eu vi um carro na rua ontem."),
+            "Eu vi um carro na rua ontem."
+        )
+    }
+
+    func testKeepsLanguageBoundFillersWhenLanguageIsUncertain() {
+        XCTAssertNil(FillerWordsPlugin.outputLanguage(of: "um ok", configuredLanguage: nil))
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "um ok"), "um ok")
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "uhm ok"), "uhm ok")
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "hmm ok"), "ok")
+    }
+
+    func testRestoresCapitalOnlyWhenRemovedFillerOpenedSentence() {
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Okay. Um, so I think. Uh, yes!", language: "en"),
+            "Okay. So I think. Yes!"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "um so I think", language: "en"),
+            "so I think"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "I said Um yes", language: "en"),
+            "I said yes"
+        )
+        XCTAssertEqual(
+            FillerWordsPlugin.removeFillerWords(from: "Äh, über den Plan", language: "de"),
+            "Über den Plan"
+        )
+    }
+
+    func testCollapsesWordsRepeatedThreeOrMoreTimes() {
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "I I I think so"), "I think so")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "wh wh wh wh what"), "wh what")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "Ich ich ich\nweiß"), "Ich\nweiß")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "the the cat"), "the the cat")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "No, no, no."), "No, no, no.")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "1 1 1 go"), "1 1 1 go")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "a a a-ha"), "a a a-ha")
+    }
+
+    func testProcessCollapsesStuttersUnlessDisabled() async throws {
+        let plugin = FillerWordsPlugin()
+        let result = try await plugin.process(
+            text: "I I I um think so",
+            context: PostProcessingContext(language: "en")
+        )
+        XCTAssertEqual(result, "I think so")
+
+        let host = try PluginTestHostServices(defaults: ["collapseStutters": false])
+        let configuredPlugin = FillerWordsPlugin()
+        configuredPlugin.activate(host: host)
+
+        let preserved = try await configuredPlugin.process(
+            text: "I I I um think so",
+            context: PostProcessingContext(language: "en")
+        )
+        XCTAssertEqual(preserved, "I I I think so")
     }
 
     func testRemovesBuiltInJapaneseFillerWordsAtPhraseBoundaries() async throws {
@@ -115,6 +200,6 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "umbrella"), "umbrella")
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "summer humor"), "summer humor")
         XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "hello  world"), "hello  world")
-        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "\n\num hello"), "\n\nhello")
+        XCTAssertEqual(FillerWordsPlugin.removeFillerWords(from: "\n\num hello", language: "en"), "\n\nhello")
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import SwiftUI
 import TypeWhisperPluginSDK
 
@@ -31,23 +32,87 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
     @MainActor
     func process(text: String, context: PostProcessingContext) async throws -> String {
-        Self.removeFillerWords(from: text, words: settingsStore?.words ?? Self.defaultFillerWords)
+        let result = Self.removeFillerWords(
+            from: text,
+            words: settingsStore?.words ?? Self.defaultFillerWords,
+            language: context.language
+        )
+        guard settingsStore?.collapseStutters ?? true else { return result }
+        return Self.collapseStutters(in: result)
     }
 
-    static func removeFillerWords(from text: String) -> String {
-        removeFillerWords(from: text, words: defaultFillerWords)
+    static func removeFillerWords(from text: String, language: String? = nil) -> String {
+        removeFillerWords(from: text, words: defaultFillerWords, language: language)
     }
 
-    static func removeFillerWords(from text: String, words: [String]) -> String {
+    static func removeFillerWords(from text: String, words: [String], language: String? = nil) -> String {
         guard !text.isEmpty else { return text }
 
-        let normalizedWords = normalizedWords(from: words)
+        var normalizedWords = normalizedWords(from: words)
+        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }) {
+            let outputLanguage = outputLanguage(of: text, configuredLanguage: language)
+            normalizedWords.removeAll { word in
+                guard let fillerLanguage = languageBoundFillerWords[word] else { return false }
+                return fillerLanguage != outputLanguage
+            }
+        }
         guard !normalizedWords.isEmpty else { return text }
 
         var result = removeLatinFillerWords(from: text, words: normalizedWords)
         result = removeJapaneseFillerWords(from: result, words: normalizedWords)
 
         return result
+    }
+
+    /// Fillers that are real words in other languages, such as German "um"
+    /// ("at") or "eh" ("anyway") and Portuguese "um" ("a"). They are only
+    /// removed when the text is known to be in the mapped language.
+    static let languageBoundFillerWords: [String: String] = [
+        "ah": "en",
+        "eh": "en",
+        "um": "en"
+    ]
+
+    /// Recognized languages below this confidence count as unknown, which
+    /// keeps every language-bound filler in the text.
+    private static let minimumLanguageConfidence = 0.85
+
+    /// The base language code of the transcript: the configured dictation
+    /// language if there is one, otherwise a confident text recognition.
+    static func outputLanguage(of text: String, configuredLanguage: String?) -> String? {
+        if let configuredLanguage = baseLanguageCode(configuredLanguage) {
+            return configuredLanguage
+        }
+
+        // The ambiguous fillers themselves would skew the recognizer
+        // ("Um, can you…" reads as Portuguese), so they are masked first.
+        let pattern = #"(?i)(?<![\p{L}\p{N}_])(?:"# + languageBoundFillerWords.keys
+            .map(NSRegularExpression.escapedPattern(for:))
+            .joined(separator: "|") + #")(?![\p{L}\p{N}_])"#
+        let maskedText = text.replacingOccurrences(of: pattern, with: "", options: .regularExpression)
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(maskedText)
+        guard let hypothesis = recognizer.languageHypotheses(withMaximum: 1).first,
+              hypothesis.value >= minimumLanguageConfidence else {
+            return nil
+        }
+        return baseLanguageCode(hypothesis.key.rawValue)
+    }
+
+    private static func baseLanguageCode(_ code: String?) -> String? {
+        guard let base = code?.split(whereSeparator: { $0 == "-" || $0 == "_" }).first else { return nil }
+        let normalized = base.trimmingCharacters(in: .whitespaces).lowercased()
+        return normalized.isEmpty || normalized == "auto" ? nil : normalized
+    }
+
+    /// Shortens a word repeated three or more times in a row to a single
+    /// occurrence ("I I I think" -> "I think"). Two repetitions and
+    /// punctuated repeats ("no, no, no") are kept as deliberate emphasis.
+    static func collapseStutters(in text: String) -> String {
+        let wordBoundary = #"[\p{L}\p{N}_'’-]"#
+        let pattern = #"(?i)(?<!"# + wordBoundary + #")(\p{L}+)(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
+        return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
 
     private static func removeLatinFillerWords(from text: String, words: [String]) -> String {
@@ -63,11 +128,44 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
             return text
         }
 
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
-        guard stripped != text else { return text }
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+        guard !matches.isEmpty else { return text }
+
+        // A capitalized filler that opened a sentence hands its capital to
+        // the next word, so "Um, so I think" becomes "So I think".
+        var stripped = ""
+        var resumeLocation = 0
+        var capitalOwed = false
+        for match in matches {
+            let keptRange = NSRange(location: resumeLocation, length: match.range.location - resumeLocation)
+            appendRestoringCapital(nsText.substring(with: keptRange), to: &stripped, capitalOwed: &capitalOwed)
+            let filler = nsText.substring(with: match.range)
+            if filler.first(where: \.isLetter)?.isUppercase == true, opensSentence(stripped) {
+                capitalOwed = true
+            }
+            stripped += " "
+            resumeLocation = NSMaxRange(match.range)
+        }
+        appendRestoringCapital(nsText.substring(from: resumeLocation), to: &stripped, capitalOwed: &capitalOwed)
 
         return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
+    }
+
+    private static func opensSentence(_ text: String) -> Bool {
+        guard let last = text.last(where: { !$0.isWhitespace }) else { return true }
+        return ".!?…".contains(last)
+    }
+
+    private static func appendRestoringCapital(_ segment: String, to text: inout String, capitalOwed: inout Bool) {
+        guard capitalOwed, let index = segment.firstIndex(where: { $0.isLetter || $0.isNumber }) else {
+            text += segment
+            return
+        }
+        capitalOwed = false
+        text += segment[..<index]
+        text += segment[index].uppercased()
+        text += segment[segment.index(after: index)...]
     }
 
     private static func removeJapaneseFillerWords(from text: String, words: [String]) -> String {
@@ -174,6 +272,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
 private final class FillerWordsSettingsStore: ObservableObject, @unchecked Sendable {
     private static let wordsKey = "words"
+    private static let collapseStuttersKey = "collapseStutters"
     private static let defaultsVersionKey = "wordsDefaultsVersion"
     private static let currentDefaultsVersion = 3
     private static let legacyDefaultFillerWords = [
@@ -195,8 +294,15 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
         }
     }
 
+    @Published var collapseStutters: Bool {
+        didSet {
+            host.setUserDefault(collapseStutters, forKey: Self.collapseStuttersKey)
+        }
+    }
+
     init(host: HostServices) {
         self.host = host
+        collapseStutters = host.userDefault(forKey: Self.collapseStuttersKey) as? Bool ?? true
 
         if let storedWords = host.userDefault(forKey: Self.wordsKey) as? String {
             wordsText = Self.migratedWordsTextIfNeeded(storedWords, host: host)
@@ -279,6 +385,10 @@ private struct FillerWordsSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Text("“um”, “ah” and “eh” are only removed from English text because they are real words in other languages.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             TextEditor(text: $store.wordsText)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 150)
@@ -298,6 +408,12 @@ private struct FillerWordsSettingsView: View {
                     store.resetToDefaults()
                 }
             }
+
+            Toggle("Collapse stuttered words", isOn: $store.collapseStutters)
+
+            Text("Shortens a word repeated three or more times in a row, like “I I I”, to a single word.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .frame(minWidth: 360, minHeight: 260)
