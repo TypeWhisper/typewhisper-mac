@@ -209,7 +209,9 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         for match in matches {
             appendKept(nsText.substring(with: NSRange(location: resumeLocation, length: match.range.location - resumeLocation)))
             let filler = nsText.substring(with: match.range)
-            let fillerIsAttached = filler.first.map { !$0.isWhitespace } ?? false
+            // Attached means nothing, not even leading punctuation, was
+            // matched before the filler word itself.
+            let fillerIsAttached = match.range(at: 1).location == match.range.location
             if filler.first(where: \.isLetter)?.isUppercase == true,
                opensSentence(stripped, fillerIsAttached: fillerIsAttached) {
                 capitalOwed = true
@@ -247,6 +249,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     /// the removed filler was attached: `:“Um` opens, `—” Um` closes.
     private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
         guard let last = text.unicodeScalars.last else { return false }
+        if last == "¿" || last == "¡" { return true }
         switch last.properties.generalCategory {
         case .openPunctuation:
             return true
