@@ -982,16 +982,18 @@ final class PluginManager: ObservableObject {
         UserDefaults.standard.set(enabled, forKey: "plugin.\(pluginId).enabled")
 
         if enabled {
-            UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
             if loadedPlugins[index].isRuntimeLoaded {
                 loadedPlugins[index].isEnabled = true
                 activatePlugin(loadedPlugins[index])
+                UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
                 return
             }
 
             let unloaded = loadedPlugins.remove(at: index)
             do {
                 try loadPlugin(at: unloaded.sourceURL)
+                // Kept until the plugin is back, so a failed enable can still be uninstalled cleanly.
+                UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
             } catch {
                 logger.error("Failed to enable plugin \(pluginId, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 UserDefaults.standard.set(false, forKey: "plugin.\(pluginId).enabled")
