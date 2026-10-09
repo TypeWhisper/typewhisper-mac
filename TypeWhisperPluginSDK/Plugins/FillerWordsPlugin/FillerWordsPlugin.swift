@@ -107,11 +107,13 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
     }
 
     /// Shortens a word repeated three or more times in a row to a single
-    /// occurrence ("I I I think" -> "I think"). Two repetitions and
-    /// punctuated repeats ("no, no, no") are kept as deliberate emphasis.
+    /// occurrence ("I I I think" -> "I think", "I'm I'm I'm" -> "I'm"). Two
+    /// repetitions and punctuated repeats ("no, no, no") are kept as
+    /// deliberate emphasis.
     static func collapseStutters(in text: String) -> String {
         let wordBoundary = #"[\p{L}\p{N}_'’-]"#
-        let pattern = #"(?i)(?<!"# + wordBoundary + #")(\p{L}+)(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
+        let word = #"(\p{L}+(?:['’-]\p{L}+)*)"#
+        let pattern = #"(?i)(?<!"# + wordBoundary + #")"# + word + #"(?:[ \t]+\1){2,}(?!"# + wordBoundary + #")"#
         return text.replacingOccurrences(of: pattern, with: "$1", options: .regularExpression)
     }
 
@@ -134,27 +136,58 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
         // A capitalized filler that opened a sentence hands its capital to
         // the next word, so "Um, so I think" becomes "So I think".
+        // After an opening bracket or quote the next word joins it directly.
         var stripped = ""
         var resumeLocation = 0
         var capitalOwed = false
+        var joinsOpeningDelimiter = false
+        func appendKept(_ segment: String) {
+            let segment = joinsOpeningDelimiter
+                ? String(segment.drop { $0 == " " || $0 == "\t" })
+                : segment
+            if !segment.isEmpty { joinsOpeningDelimiter = false }
+            appendRestoringCapital(segment, to: &stripped, capitalOwed: &capitalOwed)
+        }
         for match in matches {
-            let keptRange = NSRange(location: resumeLocation, length: match.range.location - resumeLocation)
-            appendRestoringCapital(nsText.substring(with: keptRange), to: &stripped, capitalOwed: &capitalOwed)
+            appendKept(nsText.substring(with: NSRange(location: resumeLocation, length: match.range.location - resumeLocation)))
             let filler = nsText.substring(with: match.range)
             if filler.first(where: \.isLetter)?.isUppercase == true, opensSentence(stripped) {
                 capitalOwed = true
             }
-            stripped += " "
+            if endsWithOpeningDelimiter(stripped) {
+                joinsOpeningDelimiter = true
+            } else {
+                stripped += " "
+            }
             resumeLocation = NSMaxRange(match.range)
         }
-        appendRestoringCapital(nsText.substring(from: resumeLocation), to: &stripped, capitalOwed: &capitalOwed)
+        appendKept(nsText.substring(from: resumeLocation))
 
         return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
     }
 
+    /// An opening bracket or quote starts a sentence (`He said “Um, yes”`);
+    /// closing quotes are skipped to find the end of the previous one.
     private static func opensSentence(_ text: String) -> Bool {
-        guard let last = text.last(where: { !$0.isWhitespace }) else { return true }
+        if endsWithOpeningDelimiter(text) { return true }
+        guard let last = text.last(where: { !$0.isWhitespace && !$0.isQuoteOrOpeningBracket }) else { return true }
         return ".!?…".contains(last)
+    }
+
+    /// Whether `text` ends with an opening bracket or quote. A quote right
+    /// after a letter closes (`„ja“ äh nein`) and does not count.
+    private static func endsWithOpeningDelimiter(_ text: String) -> Bool {
+        guard let last = text.unicodeScalars.last else { return false }
+        switch last.properties.generalCategory {
+        case .openPunctuation:
+            return true
+        case .initialPunctuation:
+            break
+        default:
+            guard last == "\"" || last == "'" else { return false }
+        }
+        let beforeQuote = text.unicodeScalars.dropLast().last
+        return beforeQuote.map { CharacterSet.whitespacesAndNewlines.contains($0) } ?? true
     }
 
     private static func appendRestoringCapital(_ segment: String, to text: inout String, capitalOwed: inout Bool) {
@@ -357,6 +390,19 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
         host.setUserDefault(migratedWords, forKey: wordsKey)
         host.setUserDefault(currentDefaultsVersion, forKey: defaultsVersionKey)
         return migratedWords
+    }
+}
+
+private extension Character {
+    var isQuoteOrOpeningBracket: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            switch scalar.properties.generalCategory {
+            case .initialPunctuation, .finalPunctuation, .openPunctuation:
+                return true
+            default:
+                return scalar == "\"" || scalar == "'" || scalar == "¿" || scalar == "¡"
+            }
+        }
     }
 }
 
