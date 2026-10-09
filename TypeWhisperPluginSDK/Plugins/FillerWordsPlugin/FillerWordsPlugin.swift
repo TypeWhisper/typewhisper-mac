@@ -152,8 +152,10 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // repeats it is a quote mark (`'well well well'`).
         // Digits count when the word has a letter ("COVID-19", not "1 1 1").
         let letter = #"[\p{L}\p{M}\p{N}\x{200C}\x{200D}]"#
-        let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}-]"#
-        let word = #"(?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’-]*\p{L})"# + letter + "+(?:['’-]" + letter + "+)*"
+        // Hyphens include the typographic U+2010 and non-breaking U+2011.
+        let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}\x{2010}\x{2011}-]"#
+        let joiner = #"['’\x{2010}\x{2011}-]"#
+        let word = #"(?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’\x{2010}\x{2011}-]*\p{L})"# + letter + "+(?:" + joiner + letter + "+)*"
         let pattern = #"(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
             + #"(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
@@ -162,7 +164,8 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         // regex's full case folding, which would equate "Maße" and "Masse".
         let nsText = text as NSString
         let words = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
-            (range: match.range, key: nsText.substring(with: match.range).lowercased())
+            // Greek final sigma: "ΛΟΓΟΣ" lowercases to "λογοσ", not "λογος".
+            (range: match.range, key: nsText.substring(with: match.range).lowercased().replacingOccurrences(of: "ς", with: "σ"))
         }
         func onlySpacesBetween(_ first: NSRange, _ second: NSRange) -> Bool {
             let gap = nsText.substring(with: NSRange(location: NSMaxRange(first), length: second.location - NSMaxRange(first)))
@@ -368,9 +371,9 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         let token = segment[index...].prefix { character in
             !character.isWhitespace && character != "<"
                 && !(character.unicodeScalars.first?.properties.generalCategory == .dashPunctuation
-                    && character != "-" && character != "‐")
+                    && !"-‐‑".contains(character))
         }
-        let word = token.prefix { $0.isLetter || "'’-".contains($0) }
+        let word = token.prefix { $0.isLetter || "'’-‐‑".contains($0) }
         let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
         guard !word.dropFirst().contains(where: \.isUppercase),
               trailing.allSatisfy({ $0.endsSentence || ",;:".contains($0) || $0.isQuoteOrBracket }) else {

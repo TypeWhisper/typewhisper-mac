@@ -227,6 +227,11 @@ final class FillerWordsPluginTests: XCTestCase {
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "COVID-19 COVID-19 COVID-19 cases"), "COVID-19 cases")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "B2B B2B B2B sales"), "B2B sales")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "Maße Masse Maße"), "Maße Masse Maße")
+        XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "ΛΟΓΟΣ λογος λογος"), "ΛΟΓΟΣ")
+        XCTAssertEqual(
+            FillerWordsPlugin.collapseStutters(in: "state\u{2011}of\u{2011}the\u{2011}art state\u{2011}of\u{2011}the\u{2011}art state\u{2011}of\u{2011}the\u{2011}art tools"),
+            "state\u{2011}of\u{2011}the\u{2011}art tools"
+        )
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "So so SO so, fine"), "So, fine")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "a a a-ha"), "a a a-ha")
         XCTAssertEqual(FillerWordsPlugin.collapseStutters(in: "I'm I'm I'm ready"), "I'm ready")
