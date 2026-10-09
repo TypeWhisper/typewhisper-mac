@@ -837,6 +837,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 let keepsLiveSession = startedEngine == nil
                     || (startedEngineIsLoaded && engine.modelId == startedEngine?.modelId)
                 let liveSessionResult = keepsLiveSession ? liveResultFromStart : nil
+                if !keepsLiveSession { partialText = "" }
                 let providerId = engine.providerId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)

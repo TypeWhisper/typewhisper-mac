@@ -1134,14 +1134,12 @@ final class PluginManager: ObservableObject {
     func unloadPlugin(_ pluginId: String, keepsSavedEngine: Bool = false) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
-        var disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
         // An update can leave a restart-required placeholder that exposes no
-        // engines; uninstalling it must still replace the engines it stands for.
-        // Disabling it can follow an update, so both may name engines.
-        if disabledProviderIds.isEmpty {
-            disabledProviderIds = (providerIdsAwaitingRelaunch[pluginId] ?? [])
-                .union(UserDefaults.standard.stringArray(forKey: Self.disabledEngineIdsKey(pluginId)) ?? [])
-        }
+        // engines, a disabled plugin exposes none either, and an earlier version
+        // can name engines the current one dropped; uninstalling covers them all.
+        let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+            .union(providerIdsAwaitingRelaunch[pluginId] ?? [])
+            .union(UserDefaults.standard.stringArray(forKey: Self.disabledEngineIdsKey(pluginId)) ?? [])
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
         if keepsSavedEngine {

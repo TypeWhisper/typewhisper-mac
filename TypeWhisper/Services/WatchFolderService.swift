@@ -378,8 +378,7 @@ final class WatchFolderService: ObservableObject {
             // The engine that produced the result; the default engine can change
             // while a file runs, for example when a plugin comes back from an update.
             let engineId = result.engineUsed
-            let engineName = PluginManager.shared.transcriptionEngine(for: engineId)?.providerDisplayName
-                ?? modelManagerService.activeEngineName ?? "Unknown"
+            let engineName = PluginManager.shared.transcriptionEngine(for: engineId)?.providerDisplayName ?? engineId
 
             let artifact = try WatchFolderExportBuilder.build(
                 format: format,
