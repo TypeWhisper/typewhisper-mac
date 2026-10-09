@@ -1001,6 +1001,11 @@ final class PluginManager: ObservableObject {
             let disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
             PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+            // The placeholder of a disabled plugin exposes no engines; uninstalling
+            // it must still know them.
+            if !disabledProviderIds.isEmpty {
+                UserDefaults.standard.set(disabledProviderIds.sorted(), forKey: Self.disabledEngineIdsKey(pluginId))
+            }
 
             let plugin = loadedPlugins[index]
             if plugin.isRuntimeLoaded {
@@ -1018,6 +1023,10 @@ final class PluginManager: ObservableObject {
                 loadedPlugins[index].isEnabled = false
             }
         }
+    }
+
+    static func disabledEngineIdsKey(_ pluginId: String) -> String {
+        "plugin.\(pluginId).disabledTranscriptionEngineIds"
     }
 
     func transcriptionProviderIds(exposedBy pluginInstance: TypeWhisperPlugin) -> Set<String> {
@@ -1122,7 +1131,8 @@ final class PluginManager: ObservableObject {
         // An update can leave a restart-required placeholder that exposes no
         // engines; uninstalling it must still replace the engines it stands for.
         if disabledProviderIds.isEmpty {
-            disabledProviderIds = providerIdsAwaitingRelaunch[pluginId] ?? []
+            disabledProviderIds = providerIdsAwaitingRelaunch[pluginId]
+                ?? Set(UserDefaults.standard.stringArray(forKey: Self.disabledEngineIdsKey(pluginId)) ?? [])
         }
 
         PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
@@ -1132,6 +1142,7 @@ final class PluginManager: ObservableObject {
             }
         } else {
             providerIdsAwaitingRelaunch[pluginId] = nil
+            UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
             if !disabledProviderIds.isEmpty {
                 uninstalledTranscriptionEngines.send(disabledProviderIds)

@@ -778,6 +778,31 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine))
     }
 
+    func testRecorderForgetsAnEngineUninstalledWhileDisabled() async throws {
+        let pluginId = "com.typewhisper.mock.assemblyai"
+        try preserveStandardDefaults(additionalKeys: [
+            "plugin.\(pluginId).enabled",
+            PluginManager.disabledEngineIdsKey(pluginId)
+        ])
+        let defaults = try makeDefaults()
+        setupPluginManager()
+        UserDefaults.standard.set("groq", forKey: UserDefaultsKeys.selectedEngine)
+        let viewModel = makeViewModel(defaults: defaults)
+        viewModel.observePluginManager()
+        viewModel.selectedEngine = "assemblyai"
+        let pluginManager = try XCTUnwrap(PluginManager.shared)
+
+        pluginManager.setPluginEnabled(pluginId, enabled: false)
+        await drainMainQueue()
+        XCTAssertEqual(viewModel.selectedEngine, "assemblyai")
+
+        pluginManager.unloadPlugin(pluginId)
+        await drainMainQueue()
+
+        XCTAssertNil(viewModel.selectedEngine)
+        XCTAssertNil(UserDefaults.standard.object(forKey: PluginManager.disabledEngineIdsKey(pluginId)))
+    }
+
     func testRecorderLivePreviewDefaultsOffAndPersistsSeparately() throws {
         let defaults = try makeDefaults()
 
