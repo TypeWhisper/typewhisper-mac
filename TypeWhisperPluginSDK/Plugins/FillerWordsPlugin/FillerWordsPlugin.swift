@@ -242,7 +242,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         for character in tail.reversed() {
             if character.isNewline { return true }
             if character.isWhitespace || character.isQuoteOrBracket { continue }
-            return ".!?…".contains(character)
+            return character.endsSentence
         }
         return true
     }
@@ -278,7 +278,11 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
         case .openPunctuation, .initialPunctuation:
             return true
         default:
-            return fillerIsAttached && !CharacterSet.alphanumerics.contains(beforeQuote)
+            // After sentence punctuation the quote closes even when the
+            // filler hangs on it: `“wait.”Um`.
+            return fillerIsAttached
+                && !CharacterSet.alphanumerics.contains(beforeQuote)
+                && !Character(beforeQuote).endsSentence
         }
     }
 
@@ -531,6 +535,11 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
 }
 
 private extension Character {
+    /// Sentence-ending punctuation in any script (`.`, `。`, `؟`, `।`, `！`).
+    var endsSentence: Bool {
+        self == "…" || unicodeScalars.contains { $0.properties.isSentenceTerminal }
+    }
+
     var isQuoteOrBracket: Bool {
         unicodeScalars.allSatisfy { scalar in
             switch scalar.properties.generalCategory {
