@@ -103,6 +103,9 @@ final class TranscriptionRecord {
     var speakerWordsAreFromSecondPass: Bool?
     /// When the microphone carried the user's own speech: `[[start, end]]` as JSON.
     var speakerOwnSpeechData: Data?
+    /// The `recording_id` of the Recorder file this record was made from.
+    /// It names a file on this Mac and does not sync.
+    var recorderRecordingID: UUID?
     /// When the speaker transcript and the speaker names last changed, for
     /// syncing them as separate components. Epoch 0 means never.
     var speakerTranscriptUpdatedAt: Date = Date(timeIntervalSince1970: 0)

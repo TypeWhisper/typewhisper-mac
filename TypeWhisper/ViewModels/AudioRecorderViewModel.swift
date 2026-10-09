@@ -228,8 +228,15 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private enum FinalTranscriptionOutcome {
         case skipped
-        case transcriptSaved
+        case transcriptSaved(recordingID: UUID)
         case failed(RecordingTranscriptionFailure)
+
+        var savedRecordingID: UUID? {
+            if case .transcriptSaved(let recordingID) = self {
+                return recordingID
+            }
+            return nil
+        }
 
         var failure: RecordingTranscriptionFailure? {
             if case .failed(let failure) = self {
@@ -1390,7 +1397,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 partialText = text
                 // The transcript is saved first; adding the speaker record can take seconds.
                 let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
-                await addSpeakerRecordIfWanted(result, request: request)
+                await addSpeakerRecordIfWanted(result, request: request, recordingID: outcome.savedRecordingID)
                 return outcome
             } else if previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
@@ -1445,7 +1452,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
             let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
             if addsSpeakerRecord {
-                await addSpeakerRecordIfWanted(result, request: request)
+                await addSpeakerRecordIfWanted(result, request: request, recordingID: outcome.savedRecordingID)
             }
             return outcome
         } catch is CancellationError {
@@ -1468,7 +1475,11 @@ final class AudioRecorderViewModel: ObservableObject {
 
     /// Calendar-meeting recordings detect speakers unless that was turned off;
     /// other recordings follow the Recorder's switch. The intake checks Premium.
-    private func addSpeakerRecordIfWanted(_ result: TranscriptionResult, request: FinalTranscriptionRequest) async {
+    private func addSpeakerRecordIfWanted(
+        _ result: TranscriptionResult,
+        request: FinalTranscriptionRequest,
+        recordingID: UUID?
+    ) async {
         let wanted = request.calendarEvent != nil
             ? defaults.object(forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) as? Bool ?? true
             : detectSpeakers
@@ -1479,7 +1490,8 @@ final class AudioRecorderViewModel: ObservableObject {
             title: request.outputURL.deletingPathExtension().lastPathComponent,
             source: .recorder,
             modelUsed: request.modelOverrideId,
-            ownSpeech: request.ownSpeech
+            ownSpeech: request.ownSpeech,
+            recorderRecordingID: recordingID
         ))
     }
 
@@ -1876,7 +1888,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 calendarEvent: request.calendarEvent
             )
             EventBus.shared.emit(.recorderTranscriptReady(payload))
-            return .transcriptSaved
+            return .transcriptSaved(recordingID: payload.recordingID)
         } catch {
             logger.error("Failed to save transcript: \(error.localizedDescription)")
             let failure = makeTranscriptionFailure(

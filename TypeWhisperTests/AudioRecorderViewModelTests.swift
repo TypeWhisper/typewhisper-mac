@@ -203,6 +203,33 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(dictationEvents, 0, "Recorder must not invoke dictation subscribers such as Memory")
     }
 
+    func testRecorderSpeakerRecordCarriesTheRecordingID() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Meeting notes"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: try makeDefaults(), modelManager: modelManager)
+        viewModel.detectSpeakers = true
+        var inputs: [SpeakerRecordingInput] = []
+        viewModel.speakerRecordIntake = { input in
+            inputs.append(input)
+            return UUID()
+        }
+        var events: [RecorderTranscriptReadyPayload] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            guard case .recorderTranscriptReady(let payload) = event else { return }
+            events.append(payload)
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        _ = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+
+        XCTAssertEqual(inputs.count, 1)
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(inputs.first?.recorderRecordingID, events.first?.recordingID)
+    }
+
     func testRecorderReadyCoversManualCalendarAndAPIRecordingsAfterReload() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .success("saved transcript"))

@@ -441,6 +441,8 @@ curl "http://localhost:8978/v1/history?q=meeting&limit=10&offset=0"
 curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
+Entries with speaker detection carry `speaker_state`. Once a speaker transcript exists, they also carry `speakers`. Each speaker has an `id` and a `name`: the confirmed name, or `Speaker N`. When a voice profile suggested a name that nobody has confirmed yet, it is returned as `suggested_name`, and `name` stays `Speaker N`. Add `include=speaker_segments` to get the speaker segments. Entries that came from the Recorder carry the `recording_id` used by `GET /v1/recorder/recordings` and the `.transcript-ready.json` sidecar.
+
 ### Dictionary
 
 ```bash

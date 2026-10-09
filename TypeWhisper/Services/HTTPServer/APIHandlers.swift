@@ -997,6 +997,8 @@ final class APIHandlers: @unchecked Sendable {
             struct SpeakerEntry: Encodable {
                 let id: String
                 let name: String
+                /// A name a voice profile suggested and nobody confirmed yet.
+                let suggested_name: String?
             }
 
             struct SpeakerSegmentEntry: Encodable {
@@ -1019,6 +1021,8 @@ final class APIHandlers: @unchecked Sendable {
                 let engine: String
                 let model: String?
                 let words_count: Int
+                /// The Recorder's `recording_id`, for records the Recorder made.
+                let recording_id: String?
                 /// `pending`, `ready`, or `failed`; absent without speaker detection.
                 let speaker_state: String?
                 let speakers: [SpeakerEntry]?
@@ -1050,14 +1054,19 @@ final class APIHandlers: @unchecked Sendable {
                     engine: record.engineUsed,
                     model: record.modelUsed,
                     words_count: record.wordsCount,
+                    recording_id: record.recorderRecordingID?.uuidString,
                     speaker_state: record.speakerTranscriptState?.rawValue,
                     speakers: transcript?.speakerIDs.map { speakerID in
                         // Unnamed speakers get the fixed `Speaker N`, not the localized default name.
-                        // A name only suggested by a voice profile is a guess and is not returned.
-                        SpeakerEntry(
+                        // A name only suggested by a voice profile is a guess: it is returned
+                        // separately and never as the speaker's name.
+                        let entry = names?.entries.first { $0.speakerID == speakerID }
+                        let isSuggestion = entry?.isSuggestion == true
+                        return SpeakerEntry(
                             id: speakerID,
-                            name: names?.confirmedEntries.first { $0.speakerID == speakerID }?.displayName
-                                ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID)
+                            name: (isSuggestion ? nil : entry?.displayName)
+                                ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
+                            suggested_name: isSuggestion ? entry?.displayName : nil
                         )
                     },
                     speaker_segments: includesSpeakerSegments
