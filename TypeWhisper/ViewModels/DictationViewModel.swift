@@ -2702,8 +2702,8 @@ final class DictationViewModel: ObservableObject {
         let hasPreviewText = !previewText.isEmpty
 
         // A failed live session's preview stopped early; the completion event carries
-        // the final text instead.
-        if !liveSessionFailed, !partialText.isEmpty {
+        // the final text instead. Preview text for digital silence is a hallucination.
+        if !liveSessionFailed, !recordingIsDigitalSilence, !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: partialText,
@@ -2748,6 +2748,11 @@ final class DictationViewModel: ObservableObject {
         logger.info(
             "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), hasConfirmedText=\(hasConfirmedText, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
         )
+
+        if decision != .transcribe {
+            // The recording did stop; plugins such as Live Transcript close their panel on this event.
+            EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: rawDuration)))
+        }
 
         switch decision {
         case .discardTooShort:

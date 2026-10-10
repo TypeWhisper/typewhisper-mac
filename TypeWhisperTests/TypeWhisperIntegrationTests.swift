@@ -8735,8 +8735,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     private func finishDictation(
         stoppingWith samples: [Float],
-        inputTransport: UInt32 = kAudioDeviceTransportTypeBuiltIn
-    ) async throws -> (status: DictationSessionSnapshot.Status?, error: String?, feedback: String?, engineCalls: Int) {
+        inputTransport: UInt32 = kAudioDeviceTransportTypeBuiltIn,
+        previewText: String? = nil
+    ) async throws -> (
+        status: DictationSessionSnapshot.Status?,
+        error: String?,
+        feedback: String?,
+        engineCalls: Int,
+        stopEvents: Int,
+        finalPreviews: [String]
+    ) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -8759,6 +8767,18 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioDeviceService.inputDevices = [
             AudioInputDevice(deviceID: inputDeviceID, name: "Test Microphone", uid: "digital-silence-test-microphone")
         ]
+        var stopEvents = 0
+        var finalPreviews: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            switch event {
+            case .recordingStopped:
+                stopEvents += 1
+            case .partialTranscriptionUpdate(let payload) where payload.isFinal:
+                finalPreviews.append(payload.text)
+            default:
+                break
+            }
+        }
         context.textInsertionService.captureActiveAppOverride = {
             ("Notes", "com.apple.Notes", nil)
         }
@@ -8773,6 +8793,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
         XCTAssertEqual(context.dictationViewModel.state, .recording)
+        if let previewText {
+            context.dictationViewModel.partialText = previewText
+        }
 
         _ = context.dictationViewModel.apiStopRecording()
         await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
@@ -8782,7 +8805,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             session?.status,
             session?.error,
             context.dictationViewModel.actionFeedbackMessage,
-            MockTranscriptionPlugin.transcribeCallCount
+            MockTranscriptionPlugin.transcribeCallCount,
+            stopEvents,
+            finalPreviews
         )
     }
 
@@ -8791,12 +8816,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let zeros = [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
         let expectedMessage = DictationViewModel.digitalSilenceMessage(usedBluetoothInput: false)
 
-        let outcome = try await finishDictation(stoppingWith: zeros)
+        let outcome = try await finishDictation(stoppingWith: zeros, previewText: "Thank you.")
 
         XCTAssertEqual(outcome.status, .failed)
         XCTAssertEqual(outcome.error, expectedMessage)
         XCTAssertEqual(outcome.feedback, expectedMessage)
         XCTAssertEqual(outcome.engineCalls, 0)
+        XCTAssertEqual(outcome.stopEvents, 1)
+        XCTAssertEqual(outcome.finalPreviews, [])
     }
 
     @MainActor
@@ -8885,6 +8912,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(outcome.status, .failed)
         XCTAssertEqual(outcome.error, String(localized: "No speech detected"))
         XCTAssertEqual(outcome.engineCalls, 0)
+        XCTAssertEqual(outcome.stopEvents, 1)
     }
 
     @MainActor
