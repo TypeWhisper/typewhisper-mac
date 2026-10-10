@@ -1380,6 +1380,13 @@ final class DictationViewModel: ObservableObject {
         usesBluetoothInput && restoresSystemAudio ? .release : .keepPrepared
     }
 
+    static func digitalSilenceMessage(usedBluetoothInput: Bool) -> String {
+        if usedBluetoothInput {
+            return String(localized: "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it.")
+        }
+        return String(localized: "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access.")
+    }
+
     private func prepareRecordingStartCue(playsSound: Bool) {
         isRecordingInputReady = false
         recordingStartCuePending = true
@@ -2657,14 +2664,21 @@ final class DictationViewModel: ObservableObject {
             policy: stopPolicy,
             bluetoothBehavior: bluetoothStopBehavior
         )
+        let recordingUsedBluetoothInput = recordingUsesBluetoothInput
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
+        let recordingIsDigitalSilence = !samples.isEmpty && isDigitalSilence(samples)
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
         // A live session that lost audio or failed to finalize leaves a preview that may
         // miss part of the recording, so the full recording is transcribed instead.
         var liveSessionFailed = false
-        if hiddenLiveSessionWasDeferred,
+        if recordingIsDigitalSilence {
+            // Exact zeros carry no speech: don't replay them through a deferred live
+            // session or wait for an active one to finalize.
+            streamingHandler.stop()
+            liveSessionResultBeforePreviewFallback = nil
+        } else if hiddenLiveSessionWasDeferred,
            let replayedResult = await transcribeRecordingThroughDeferredLiveSession(samples) {
             liveSessionResultBeforePreviewFallback = replayedResult
         } else if previewFollowedDictationEngine {
@@ -2688,8 +2702,8 @@ final class DictationViewModel: ObservableObject {
         let hasPreviewText = !previewText.isEmpty
 
         // A failed live session's preview stopped early; the completion event carries
-        // the final text instead.
-        if !liveSessionFailed, !partialText.isEmpty {
+        // the final text instead. Preview text for digital silence is a hallucination.
+        if !liveSessionFailed, !recordingIsDigitalSilence, !partialText.isEmpty {
             let elapsed = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: partialText,
@@ -2726,6 +2740,7 @@ final class DictationViewModel: ObservableObject {
             rawDuration: rawDuration,
             peakLevel: peakLevel,
             hasConfirmedText: hasConfirmedText,
+            isDigitalSilence: recordingIsDigitalSilence,
             transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
@@ -2733,6 +2748,11 @@ final class DictationViewModel: ObservableObject {
         logger.info(
             "Stop finalized: rawDuration=\(String(format: "%.3f", rawDuration), privacy: .public)s, bufferedSamples=\(samples.count), peakLevel=\(String(format: "%.4f", peakLevel), privacy: .public), hasPreviewText=\(hasPreviewText, privacy: .public), previewTextLength=\(previewText.count, privacy: .public), hasConfirmedText=\(hasConfirmedText, privacy: .public), stopPolicy=\(stopPolicy.logDescription, privacy: .public), graceApplied=\(graceApplied, privacy: .public), decision=\(decision.logDescription, privacy: .public)"
         )
+
+        if decision != .transcribe {
+            // The recording did stop; plugins such as Live Transcript close their panel on this event.
+            EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: rawDuration)))
+        }
 
         switch decision {
         case .discardTooShort:
@@ -2760,6 +2780,22 @@ final class DictationViewModel: ObservableObject {
                 message: errorMessage,
                 icon: "mic.slash",
                 duration: 2.0
+            )
+            return
+        case .discardDigitalSilence:
+            cancelLiveFieldTranscriptSession()
+            audioRecordingService.discardActiveRecoveryRecording()
+            logger.warning("Recording contained only digital silence - input delivered no signal, bluetooth=\(recordingUsedBluetoothInput, privacy: .public)")
+            let errorMessage = Self.digitalSilenceMessage(usedBluetoothInput: recordingUsedBluetoothInput)
+            if let sessionID {
+                failDictationSession(id: sessionID, error: errorMessage)
+            }
+            showNotchFeedback(
+                message: errorMessage,
+                icon: "mic.slash",
+                duration: 4.0,
+                isError: true,
+                errorCategory: "recording"
             )
             return
         case .transcribe:
@@ -5186,6 +5222,7 @@ final class DictationViewModel: ObservableObject {
 enum ShortSpeechDecision: Equatable {
     case discardTooShort
     case discardNoSpeech
+    case discardDigitalSilence
     case transcribe
 
     var logDescription: String {
@@ -5194,6 +5231,8 @@ enum ShortSpeechDecision: Equatable {
             "discardTooShort"
         case .discardNoSpeech:
             "discardNoSpeech"
+        case .discardDigitalSilence:
+            "discardDigitalSilence"
         case .transcribe:
             "transcribe"
         }
@@ -5604,13 +5643,28 @@ private let aggressiveShortDictationMaxDuration: TimeInterval = 8.0
 // make speech at this level transcribable, but anything quieter is noise.
 private let aggressiveQuietClipPeakFloor: Float = 0.003
 
+// A microphone always has some noise floor, so a recording made only of exact
+// zeros means the input delivered no signal at all: a muted device, a Bluetooth
+// route that never opened, or revoked microphone access. Shorter clips can be
+// all zeros while a Bluetooth input warms up, so they only count as no speech.
+private let digitalSilenceMinimumDuration: TimeInterval = 1.0
+
+func isDigitalSilence(_ samples: [Float]) -> Bool {
+    !samples.contains { $0 != 0 }
+}
+
 func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
     hasConfirmedText: Bool,
+    isDigitalSilence: Bool = false,
     transcribeShortQuietClipsAggressively: Bool = true
 ) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
+    // Exact zeros cannot contain speech, so any text for them is a hallucination.
+    if isDigitalSilence {
+        return rawDuration >= digitalSilenceMinimumDuration ? .discardDigitalSilence : .discardNoSpeech
+    }
     if hasConfirmedText { return .transcribe }
 
     if rawDuration < 1.0 {

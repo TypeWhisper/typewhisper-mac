@@ -8733,6 +8733,201 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    private func finishDictation(
+        stoppingWith samples: [Float],
+        inputTransport: UInt32 = kAudioDeviceTransportTypeBuiltIn,
+        previewText: String? = nil
+    ) async throws -> (
+        status: DictationSessionSnapshot.Status?,
+        error: String?,
+        feedback: String?,
+        engineCalls: Int,
+        stopEvents: Int,
+        finalPreviews: [String]
+    ) {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        // A fake default input pins the route, so the Mac's real default input cannot pick the hint.
+        let inputDeviceID: AudioDeviceID = 70_901
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(transports: [inputDeviceID: inputTransport]),
+            audioDeviceBluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true },
+            audioDeviceDefaultInputController: APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: inputDeviceID),
+            audioRecordingBluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true }
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: inputDeviceID, name: "Test Microphone", uid: "digital-silence-test-microphone")
+        ]
+        var stopEvents = 0
+        var finalPreviews: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            switch event {
+            case .recordingStopped:
+                stopEvents += 1
+            case .partialTranscriptionUpdate(let payload) where payload.isFinal:
+                finalPreviews.append(payload.text)
+            default:
+                break
+            }
+        }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        if let previewText {
+            context.dictationViewModel.partialText = previewText
+        }
+
+        _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+
+        let session = context.dictationViewModel.apiDictationSession(id: sessionID)
+        return (
+            session?.status,
+            session?.error,
+            context.dictationViewModel.actionFeedbackMessage,
+            MockTranscriptionPlugin.transcribeCallCount,
+            stopEvents,
+            finalPreviews
+        )
+    }
+
+    @MainActor
+    func testDictationOfOnlyZeroSamplesShowsDigitalSilenceHintWithoutCallingEngine() async throws {
+        let zeros = [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
+        let expectedMessage = DictationViewModel.digitalSilenceMessage(usedBluetoothInput: false)
+
+        let outcome = try await finishDictation(stoppingWith: zeros, previewText: "Thank you.")
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, expectedMessage)
+        XCTAssertEqual(outcome.feedback, expectedMessage)
+        XCTAssertEqual(outcome.engineCalls, 0)
+        XCTAssertEqual(outcome.stopEvents, 1)
+        XCTAssertEqual(outcome.finalPreviews, [])
+    }
+
+    @MainActor
+    func testBluetoothDictationOfOnlyZeroSamplesShowsBluetoothHint() async throws {
+        let zeros = [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
+        let expectedMessage = DictationViewModel.digitalSilenceMessage(usedBluetoothInput: true)
+
+        let outcome = try await finishDictation(
+            stoppingWith: zeros,
+            inputTransport: kAudioDeviceTransportTypeBluetooth
+        )
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, expectedMessage)
+        XCTAssertEqual(outcome.engineCalls, 0)
+    }
+
+    @MainActor
+    func testDictationOfOnlyZeroSamplesCancelsLiveSessionInsteadOfFinalizingIt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let livePlugin = MockLiveDictationPlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.live-dictation",
+                name: "Mock Live Dictation",
+                version: "1.0.0",
+                principalClass: "APIRouterMockLiveDictationPlugin",
+                capabilities: [PluginCapability.liveDictation.rawValue]
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        context.modelManager.selectProvider(livePlugin.providerId)
+        let originalPreviewEnabled = context.dictationViewModel.indicatorTranscriptPreviewEnabled
+        defer { context.dictationViewModel.indicatorTranscriptPreviewEnabled = originalPreviewEnabled }
+        context.dictationViewModel.indicatorTranscriptPreviewEnabled = false
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        for _ in 0..<20 where livePlugin.liveSessionCreateCount == 0 {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+        for _ in 0..<20 where livePlugin.liveSessionCancelCount == 0 {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertEqual(session.error, context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(livePlugin.liveSessionCancelCount, 1)
+        XCTAssertTrue(livePlugin.lastBatchTranscriptionSamples.isEmpty)
+    }
+
+    @MainActor
+    func testSubSecondDictationOfOnlyZeroSamplesIsNoSpeechWithoutCallingEngine() async throws {
+        let zeros = [Float](repeating: 0, count: Int(0.5 * AudioRecordingService.targetSampleRate))
+
+        let outcome = try await finishDictation(stoppingWith: zeros)
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, String(localized: "No speech detected"))
+        XCTAssertEqual(outcome.engineCalls, 0)
+        XCTAssertEqual(outcome.stopEvents, 1)
+    }
+
+    @MainActor
+    func testDictationWithSingleNonZeroSampleAmongZerosStillReachesEngine() async throws {
+        // One spike keeps the clip above the quiet-clip floor whatever the aggressive setting is.
+        var samples = [Float](repeating: 0, count: Int(0.5 * AudioRecordingService.targetSampleRate))
+        samples[4_000] = 0.5
+
+        let outcome = try await finishDictation(stoppingWith: samples)
+
+        XCTAssertEqual(outcome.status, .completed)
+        XCTAssertEqual(outcome.engineCalls, 1)
+    }
+
+    @MainActor
     func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

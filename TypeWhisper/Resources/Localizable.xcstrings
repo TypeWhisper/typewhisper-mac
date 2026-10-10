@@ -24726,6 +24726,52 @@
         }
       }
     },
+    "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it." : {
+      "comment" : "Feedback shown when a dictation over a Bluetooth microphone contained only digital silence.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Bluetooth-Mikrofon hat nur Stille geliefert. Prüfe, ob es stummgeschaltet ist, oder verbinde es neu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bluetoothマイクから無音しか届きませんでした。ミュートされていないか確認するか、再接続してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "蓝牙麦克风只传来了静音。请检查它是否被静音，或重新连接。"
+          }
+        }
+      }
+    },
+    "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access." : {
+      "comment" : "Feedback shown when a dictation contained only digital silence.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Mikrofon hat nur Stille geliefert. Prüfe, ob es stummgeschaltet ist und TypeWhisper Mikrofonzugriff hat."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクから無音しか届きませんでした。ミュートされていないか、TypeWhisperにマイクへのアクセスが許可されているか確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风只传来了静音。请检查麦克风是否被静音，以及 TypeWhisper 是否有麦克风访问权限。"
+          }
+        }
+      }
+    },
     "No speech detected" : {
       "localizations" : {
         "de" : {
