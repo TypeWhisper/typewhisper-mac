@@ -1,4 +1,5 @@
 import Foundation
+import NaturalLanguage
 import SwiftUI
 import TypeWhisperPluginSDK
 
@@ -31,43 +32,362 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
     @MainActor
     func process(text: String, context: PostProcessingContext) async throws -> String {
-        Self.removeFillerWords(from: text, words: settingsStore?.words ?? Self.defaultFillerWords)
+        let result = Self.removeFillerWords(
+            from: text,
+            words: settingsStore?.words ?? Self.defaultFillerWords,
+            language: context.language
+        )
+        guard settingsStore?.collapseStutters ?? true else { return result }
+        return Self.collapseStutters(in: result, language: context.language)
     }
 
-    static func removeFillerWords(from text: String) -> String {
-        removeFillerWords(from: text, words: defaultFillerWords)
+    static func removeFillerWords(from text: String, language: String? = nil) -> String {
+        removeFillerWords(from: text, words: defaultFillerWords, language: language)
     }
 
-    static func removeFillerWords(from text: String, words: [String]) -> String {
+    static func removeFillerWords(from text: String, words: [String], language: String? = nil) -> String {
         guard !text.isEmpty else { return text }
 
         let normalizedWords = normalizedWords(from: words)
         guard !normalizedWords.isEmpty else { return text }
 
-        var result = removeLatinFillerWords(from: text, words: normalizedWords)
+        // Language recognition only runs when a language-bound filler is in
+        // the text; otherwise there is nothing for it to decide.
+        var languageSpans: [LanguageSpan] = []
+        if normalizedWords.contains(where: { languageBoundFillerWords[$0] != nil }),
+           text.range(of: languageBoundFillerPattern, options: .regularExpression) != nil {
+            languageSpans = Self.languageSpans(of: text, configuredLanguage: language)
+        }
+
+        var result = removeLatinFillerWords(
+            from: text,
+            words: normalizedWords,
+            language: language,
+            languageSpans: languageSpans
+        )
         result = removeJapaneseFillerWords(from: result, words: normalizedWords)
 
         return result
     }
 
-    private static func removeLatinFillerWords(from text: String, words: [String]) -> String {
+    /// Fillers that are real words in other languages, such as German "um"
+    /// ("at") or "eh" ("anyway") and Portuguese "um" ("a"). They are only
+    /// removed when the text is known to be in the mapped language.
+    static let languageBoundFillerWords: [String: String] = [
+        "ah": "en",
+        "eh": "en",
+        "um": "en"
+    ]
+
+    private static let languageBoundFillerPattern = #"(?i)(?<![\p{L}\p{N}_])(?:"# + languageBoundFillerWords.keys
+        .map(NSRegularExpression.escapedPattern(for:))
+        .joined(separator: "|") + #")(?![\p{L}\p{N}_])"#
+
+    /// Recognized languages below this confidence count as unknown, which
+    /// keeps every language-bound filler in the text.
+    private static let minimumLanguageConfidence = 0.85
+
+    private struct LanguageSpan {
+        let range: NSRange
+        let language: String?
+    }
+
+    /// The base language code of each sentence that contains a
+    /// language-bound filler. A configured dictation language covers the
+    /// whole text. Otherwise a sentence takes its own confident recognition
+    /// or the whole text's; if both are known and disagree, its language is
+    /// unknown. So a German sentence in an English transcript keeps its "um",
+    /// and so does an English-looking sentence in a German one.
+    private static func languageSpans(of text: String, configuredLanguage: String?) -> [LanguageSpan] {
+        if let configuredLanguage = baseLanguageCode(configuredLanguage) {
+            return [LanguageSpan(range: NSRange(location: 0, length: (text as NSString).length), language: configuredLanguage)]
+        }
+
+        let textLanguage = recognizedLanguage(of: text)
+        var spans: [LanguageSpan] = []
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let sentence = String(text[range])
+            guard sentence.range(of: languageBoundFillerPattern, options: .regularExpression) != nil else { return true }
+            let sentenceLanguage = recognizedLanguage(of: sentence)
+            let language: String? = switch (sentenceLanguage, textLanguage) {
+            case let (own?, overall?) where own != overall: nil
+            default: sentenceLanguage ?? textLanguage
+            }
+            spans.append(LanguageSpan(range: NSRange(range, in: text), language: language))
+            return true
+        }
+        return spans
+    }
+
+    /// The base language code of `text` if the recognizer is confident.
+    static func recognizedLanguage(of text: String) -> String? {
+        // The ambiguous fillers themselves would skew the recognizer
+        // ("Um, can you…" reads as Portuguese), so they are masked first.
+        let maskedText = text.replacingOccurrences(of: languageBoundFillerPattern, with: "", options: .regularExpression)
+
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(maskedText)
+        guard let hypothesis = recognizer.languageHypotheses(withMaximum: 1).first,
+              hypothesis.value >= minimumLanguageConfidence else {
+            return nil
+        }
+        return baseLanguageCode(hypothesis.key.rawValue)
+    }
+
+    private static func baseLanguageCode(_ code: String?) -> String? {
+        guard let base = code?.split(whereSeparator: { $0 == "-" || $0 == "_" }).first else { return nil }
+        let normalized = base.trimmingCharacters(in: .whitespaces).lowercased()
+        return normalized.isEmpty || normalized == "auto" ? nil : normalized
+    }
+
+    /// Shortens a word repeated three or more times in a row to a single
+    /// occurrence ("I I I think" -> "I think", "I'm I'm I'm" -> "I'm"). Two
+    /// repetitions and punctuated repeats ("no, no, no") are kept as
+    /// deliberate emphasis.
+    static func collapseStutters(in text: String, language: String? = nil) -> String {
+        // Zero-width joiners belong to words in Persian and Indic scripts. An
+        // apostrophe only extends a word between letters (`I'm`); around the
+        // repeats it is a quote mark (`'well well well'`).
+        // Digits count when the word has a letter ("COVID-19", not "1 1 1").
+        let letter = #"[\p{L}\p{M}\p{N}\x{200C}\x{200D}]"#
+        // Hyphens include the typographic U+2010 and non-breaking U+2011.
+        let wordCharacter = #"[\p{L}\p{M}\p{N}_\x{200C}\x{200D}\x{2010}\x{2011}-]"#
+        let joiner = #"['’\x{2010}\x{2011}-]"#
+        let word = #"(?=[\p{L}\p{M}\p{N}\x{200C}\x{200D}'’\x{2010}\x{2011}-]*\p{L})"# + letter + "+(?:" + joiner + letter + "+)*"
+        let pattern = #"(?<!"# + wordCharacter + #"|"# + wordCharacter + #"['’])"# + word
+            + #"(?!"# + wordCharacter + #"|['’]"# + wordCharacter + #")"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return text }
+
+        // Repeats are compared with simple lowercasing rather than the
+        // regex's full case folding, which would equate "Maße" and "Masse".
+        // The configured language picks the mapping (Turkish "Işık" -> "ışık").
+        let locale = language.map(Locale.init(identifier:))
+        let nsText = text as NSString
+        let words = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).map { match in
+            // Greek final sigma: "ΛΟΓΟΣ" lowercases to "λογοσ", not "λογος".
+            (range: match.range, key: nsText.substring(with: match.range).lowercased(with: locale).replacingOccurrences(of: "ς", with: "σ"))
+        }
+        func onlySpacesBetween(_ first: NSRange, _ second: NSRange) -> Bool {
+            let gap = nsText.substring(with: NSRange(location: NSMaxRange(first), length: second.location - NSMaxRange(first)))
+            return !gap.isEmpty && gap.allSatisfy { $0 == " " || $0 == "\t" }
+        }
+
+        var result = ""
+        var resumeLocation = 0
+        var index = 0
+        while index < words.count {
+            var last = index
+            while last + 1 < words.count,
+                  words[last + 1].key == words[index].key,
+                  onlySpacesBetween(words[last].range, words[last + 1].range) {
+                last += 1
+            }
+            if last - index >= 2 {
+                result += nsText.substring(with: NSRange(location: resumeLocation, length: NSMaxRange(words[index].range) - resumeLocation))
+                resumeLocation = NSMaxRange(words[last].range)
+            }
+            index = last + 1
+        }
+        return result + nsText.substring(from: resumeLocation)
+    }
+
+    private static func removeLatinFillerWords(
+        from text: String,
+        words: [String],
+        language: String?,
+        languageSpans: [LanguageSpan]
+    ) -> String {
         let latinWords = words.filter { !$0.containsJapaneseScript }
         guard !latinWords.isEmpty else { return text }
 
         let escapedWords = latinWords
             .map(NSRegularExpression.escapedPattern(for:))
             .joined(separator: "|")
-        let pattern = #"(?i)(?<![\p{L}\p{N}_])[,.!?]?[ \t]*(?:"# + escapedWords + #")(?![\p{L}\p{N}_])[ \t]*[,.!?]?"#
+        let pattern = #"(?i)(?<![\p{L}\p{N}_])[,.!?]?[ \t]*("# + escapedWords + #")(?![\p{L}\p{N}_])[ \t]*[,.!?]?"#
 
         guard let regex = try? NSRegularExpression(pattern: pattern) else {
             return text
         }
 
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        let stripped = regex.stringByReplacingMatches(in: text, range: range, withTemplate: " ")
-        guard stripped != text else { return text }
+        // A language-bound filler only goes in a sentence of its language.
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).filter { match in
+            let wordRange = match.range(at: 1)
+            guard let fillerLanguage = languageBoundFillerWords[nsText.substring(with: wordRange).lowercased()] else {
+                return true
+            }
+            let span = languageSpans.first { NSLocationInRange(wordRange.location, $0.range) }
+            return span?.language == fillerLanguage
+        }
+        guard !matches.isEmpty else { return text }
+
+        // A capitalized filler that opened a sentence hands its capital to
+        // the next word, so "Um, so I think" becomes "So I think".
+        // A filler attached to an opening bracket or quote leaves the next
+        // word attached to it; padding such as `« Euh, bonjour »` stays.
+        // The configured language picks the case mapping (Turkish i -> İ).
+        let locale = language.map(Locale.init(identifier:))
+        var stripped = ""
+        var resumeLocation = 0
+        var capitalOwed = false
+        var joinsOpeningDelimiter = false
+        func appendKept(_ segment: String) {
+            let segment = joinsOpeningDelimiter
+                ? String(segment.drop { $0 == " " || $0 == "\t" })
+                : segment
+            if !segment.isEmpty { joinsOpeningDelimiter = false }
+            appendRestoringCapital(segment, to: &stripped, capitalOwed: &capitalOwed, locale: locale)
+        }
+        for match in matches {
+            appendKept(nsText.substring(with: NSRange(location: resumeLocation, length: match.range.location - resumeLocation)))
+            let filler = nsText.substring(with: match.range)
+            // Attached means nothing, not even leading punctuation, was
+            // matched before the filler word itself.
+            let fillerIsAttached = match.range(at: 1).location == match.range.location
+            if filler.first(where: \.isLetter)?.isUppercase == true,
+               opensSentence(stripped, fillerIsAttached: fillerIsAttached) {
+                capitalOwed = true
+            }
+            if joinsOpeningDelimiter {
+                // An earlier filler already left the next word to join the
+                // delimiter: `“Um, uh, hello”` -> `“Hello”`.
+            } else if fillerIsAttached, endsWithOpeningDelimiter(stripped, fillerIsAttached: true) {
+                joinsOpeningDelimiter = true
+            } else {
+                stripped += " "
+            }
+            resumeLocation = NSMaxRange(match.range)
+        }
+        appendKept(nsText.substring(from: resumeLocation))
 
         return normalizeWhitespaceAfterRemoval(stripped, preservingPrefixFrom: text)
+    }
+
+    /// An opening bracket or quote (`He said “Um, yes”`) and a new line start
+    /// a sentence, as does a Markdown list marker from the app formatter
+    /// (`- Um`); closing quotes and brackets are skipped to find the end of
+    /// the previous one (`(Okay.) Um`).
+    private static func opensSentence(_ text: String, fillerIsAttached: Bool) -> Bool {
+        let tail = htmlUnescapedQuotes(in: text.suffix(256))
+        if endsWithOpeningDelimiter(tail, fillerIsAttached: fillerIsAttached) { return true }
+        if tail.range(of: #"(?:^|\n)[ \t]*[-*+][ \t]*$"#, options: .regularExpression) != nil { return true }
+        for character in tail.reversed() {
+            if character.isNewline { return true }
+            if character.isWhitespace || character.isQuoteOrBracket { continue }
+            return character.endsSentence
+        }
+        return true
+    }
+
+    /// Whether `text` ends with an opening bracket or quote. Quote marks
+    /// open in some locales and close in others (`»ja«`, `«oui»`), so their
+    /// position decides. After whitespace or another opening delimiter
+    /// (`(“`) they open; right after a letter (`„ja“ äh nein`) or other
+    /// punctuation (`“wait,”Um`) they close. After a dash or colon they open
+    /// only when the removed filler was attached: `:“Um` opens, `—” Um`
+    /// closes.
+    /// An opening HTML tag from the app formatter (`<p>`, `<li>`) opens too.
+    private static func endsWithOpeningDelimiter(_ text: String, fillerIsAttached: Bool) -> Bool {
+        let text = htmlUnescapedQuotes(in: text.suffix(256))
+        guard let last = text.unicodeScalars.last else { return false }
+        if last == ">" {
+            return text.range(of: #"<[A-Za-z][A-Za-z0-9]*(?:\s[^<>]*)?>$"#, options: .regularExpression) != nil
+        }
+        if last == "¿" || last == "¡" { return true }
+        switch last.properties.generalCategory {
+        case .openPunctuation:
+            return true
+        case .initialPunctuation, .finalPunctuation:
+            break
+        default:
+            guard last == "\"" || last == "'" else { return false }
+        }
+        // A final quote mark after whitespace is a padded closing guillemet
+        // (`« oui » Euh`) unless the filler hangs on it (`Gut. »Äh`).
+        let opensAfterSpace = last.properties.generalCategory != .finalPunctuation || fillerIsAttached
+        guard let beforeQuote = text.unicodeScalars.dropLast().last else { return opensAfterSpace }
+        if CharacterSet.whitespacesAndNewlines.contains(beforeQuote) { return opensAfterSpace }
+        switch beforeQuote.properties.generalCategory {
+        case .openPunctuation, .initialPunctuation:
+            return true
+        case .dashPunctuation:
+            // `—“Um` opens, but a final quote mark closes: `“wait—”Um`.
+            return fillerIsAttached && last.properties.generalCategory != .finalPunctuation
+        default:
+            if beforeQuote == ">" {
+                // Right after an opening HTML tag: `<p>&quot;Uh`.
+                return endsWithOpeningDelimiter(String(text.dropLast()), fillerIsAttached: false)
+            }
+            // Only a colon opens a quote this way; after other punctuation
+            // it closes even when the filler hangs on it: `“wait,”Um`.
+            return fillerIsAttached && beforeQuote == ":"
+        }
+    }
+
+    /// The HTML formatter escapes straight double quotes before this plugin
+    /// runs, so `&quot;` counts as a quote mark.
+    private static let htmlQuote = "&quot;"
+
+    private static func htmlUnescapedQuotes(in text: Substring) -> String {
+        text.replacingOccurrences(of: htmlQuote, with: "\"")
+    }
+
+    private static func appendRestoringCapital(
+        _ segment: String,
+        to text: inout String,
+        capitalOwed: inout Bool,
+        locale: Locale?
+    ) {
+        guard capitalOwed, let tokenStart = segment.firstIndex(where: { !$0.isWhitespace }) else {
+            text += segment
+            return
+        }
+        capitalOwed = false
+
+        // Only an ordinary word takes the capital, optionally after opening
+        // quotes or brackets and their padding (`« hello »`). Mixed-case
+        // spellings ("iPhone", "eBay"), URLs, handles and other identifiers
+        // stay as they are.
+        var index = tokenStart
+        var skippedDelimiter = false
+        while index < segment.endIndex {
+            if segment[index...].hasPrefix(htmlQuote) {
+                index = segment.index(index, offsetBy: htmlQuote.count)
+                skippedDelimiter = true
+            } else if segment[index].isQuoteOrBracket {
+                index = segment.index(after: index)
+                skippedDelimiter = true
+            } else if skippedDelimiter, segment[index] == " " || segment[index] == "\t" {
+                index = segment.index(after: index)
+            } else {
+                break
+            }
+        }
+        guard index < segment.endIndex, segment[index].isLetter else {
+            text += segment
+            return
+        }
+        // A dash other than a hyphen ends the word: `hello—how`.
+        let token = segment[index...].prefix { character in
+            !character.isWhitespace && character != "<"
+                && !(character.unicodeScalars.first?.properties.generalCategory == .dashPunctuation
+                    && !"-‐‑".contains(character))
+        }
+        let word = token.prefix { $0.isLetter || "'’-‐‑".contains($0) }
+        let trailing = htmlUnescapedQuotes(in: token[word.endIndex...])
+        guard !word.dropFirst().contains(where: \.isUppercase),
+              trailing.allSatisfy({ $0.endsSentence || ",;:".contains($0) || $0.isQuoteOrBracket }) else {
+            text += segment
+            return
+        }
+        // Dutch capitalizes the digraph ij as a unit: ijs -> IJs.
+        let capitalLength = locale?.language.languageCode == "nl" && word.lowercased().hasPrefix("ij") ? 2 : 1
+        let capitalEnd = segment.index(index, offsetBy: capitalLength)
+        text += segment[..<index]
+        text += String(segment[index..<capitalEnd]).uppercased(with: locale)
+        text += segment[capitalEnd...]
     }
 
     private static func removeJapaneseFillerWords(from text: String, words: [String]) -> String {
@@ -174,6 +494,7 @@ final class FillerWordsPlugin: NSObject, PostProcessorPlugin, @unchecked Sendabl
 
 private final class FillerWordsSettingsStore: ObservableObject, @unchecked Sendable {
     private static let wordsKey = "words"
+    private static let collapseStuttersKey = "collapseStutters"
     private static let defaultsVersionKey = "wordsDefaultsVersion"
     private static let currentDefaultsVersion = 3
     private static let legacyDefaultFillerWords = [
@@ -195,8 +516,15 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
         }
     }
 
+    @Published var collapseStutters: Bool {
+        didSet {
+            host.setUserDefault(collapseStutters, forKey: Self.collapseStuttersKey)
+        }
+    }
+
     init(host: HostServices) {
         self.host = host
+        collapseStutters = host.userDefault(forKey: Self.collapseStuttersKey) as? Bool ?? true
 
         if let storedWords = host.userDefault(forKey: Self.wordsKey) as? String {
             wordsText = Self.migratedWordsTextIfNeeded(storedWords, host: host)
@@ -254,6 +582,24 @@ private final class FillerWordsSettingsStore: ObservableObject, @unchecked Senda
     }
 }
 
+private extension Character {
+    /// Sentence-ending punctuation in any script (`.`, `。`, `؟`, `।`, `！`).
+    var endsSentence: Bool {
+        self == "…" || unicodeScalars.contains { $0.properties.isSentenceTerminal }
+    }
+
+    var isQuoteOrBracket: Bool {
+        unicodeScalars.allSatisfy { scalar in
+            switch scalar.properties.generalCategory {
+            case .initialPunctuation, .finalPunctuation, .openPunctuation, .closePunctuation:
+                return true
+            default:
+                return scalar == "\"" || scalar == "'" || scalar == "¿" || scalar == "¡"
+            }
+        }
+    }
+}
+
 private extension String {
     var containsJapaneseScript: Bool {
         unicodeScalars.contains { scalar in
@@ -279,6 +625,10 @@ private struct FillerWordsSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            Text("“um”, “ah” and “eh” are only removed from English text because they are real words in other languages.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             TextEditor(text: $store.wordsText)
                 .font(.system(.body, design: .monospaced))
                 .frame(minHeight: 150)
@@ -298,6 +648,12 @@ private struct FillerWordsSettingsView: View {
                     store.resetToDefaults()
                 }
             }
+
+            Toggle("Collapse stuttered words", isOn: $store.collapseStutters)
+
+            Text("Shortens a word repeated three or more times in a row, like “I I I”, to a single word.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .frame(minWidth: 360, minHeight: 260)

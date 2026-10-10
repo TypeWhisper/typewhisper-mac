@@ -4522,6 +4522,72 @@
         }
       }
     },
+    "“um”, “ah” and “eh” are only removed from English text because they are real words in other languages." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„um“, „ah“ und „eh“ werden nur aus englischem Text entfernt, weil sie in anderen Sprachen echte Wörter sind."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「um」「ah」「eh」は他の言語では普通の単語なので、英語のテキストからのみ削除されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“um”、“ah” 和 “eh” 只会从英文文本中删除，因为它们在其他语言中是真实的词。"
+          }
+        }
+      }
+    },
+    "Collapse stuttered words" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gestotterte Wörter zusammenfassen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "どもりで繰り返された単語をまとめる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合并口吃重复的词"
+          }
+        }
+      }
+    },
+    "Shortens a word repeated three or more times in a row, like “I I I”, to a single word." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzt ein Wort, das drei- oder mehrmals hintereinander vorkommt, etwa „ich ich ich“, auf ein einzelnes Wort."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「I I I」のように3回以上続けて繰り返された単語を1つにまとめます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将连续重复三次或以上的词（例如 “I I I”）缩减为一个。"
+          }
+        }
+      }
+    },
     "Filler words" : {
       "localizations": {
         "de": {
