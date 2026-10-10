@@ -8733,6 +8733,82 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    private func finishDictation(stoppingWith samples: [Float]) async throws -> (status: DictationSessionSnapshot.Status?, error: String?, feedback: String?, engineCalls: Int) {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+
+        let session = context.dictationViewModel.apiDictationSession(id: sessionID)
+        return (
+            session?.status,
+            session?.error,
+            context.dictationViewModel.actionFeedbackMessage,
+            MockTranscriptionPlugin.transcribeCallCount
+        )
+    }
+
+    @MainActor
+    func testDictationOfOnlyZeroSamplesShowsDigitalSilenceHintWithoutCallingEngine() async throws {
+        let zeros = [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
+        let expectedMessage = DictationViewModel.digitalSilenceMessage(usedBluetoothInput: false)
+
+        let outcome = try await finishDictation(stoppingWith: zeros)
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, expectedMessage)
+        XCTAssertEqual(outcome.feedback, expectedMessage)
+        XCTAssertEqual(outcome.engineCalls, 0)
+    }
+
+    @MainActor
+    func testSubSecondDictationOfOnlyZeroSamplesIsNoSpeechWithoutCallingEngine() async throws {
+        let zeros = [Float](repeating: 0, count: Int(0.5 * AudioRecordingService.targetSampleRate))
+
+        let outcome = try await finishDictation(stoppingWith: zeros)
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, String(localized: "No speech detected"))
+        XCTAssertEqual(outcome.engineCalls, 0)
+    }
+
+    @MainActor
+    func testDictationWithSingleNonZeroSampleAmongZerosStillReachesEngine() async throws {
+        // One spike keeps the clip above the quiet-clip floor whatever the aggressive setting is.
+        var samples = [Float](repeating: 0, count: Int(0.5 * AudioRecordingService.targetSampleRate))
+        samples[4_000] = 0.5
+
+        let outcome = try await finishDictation(stoppingWith: samples)
+
+        XCTAssertEqual(outcome.status, .completed)
+        XCTAssertEqual(outcome.engineCalls, 1)
+    }
+
+    @MainActor
     func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

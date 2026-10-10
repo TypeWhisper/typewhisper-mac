@@ -1380,6 +1380,13 @@ final class DictationViewModel: ObservableObject {
         usesBluetoothInput && restoresSystemAudio ? .release : .keepPrepared
     }
 
+    static func digitalSilenceMessage(usedBluetoothInput: Bool) -> String {
+        if usedBluetoothInput {
+            return String(localized: "The Bluetooth microphone sent only silence. Reconnect it or choose another input.")
+        }
+        return String(localized: "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access.")
+    }
+
     private func prepareRecordingStartCue(playsSound: Bool) {
         isRecordingInputReady = false
         recordingStartCuePending = true
@@ -2657,6 +2664,7 @@ final class DictationViewModel: ObservableObject {
             policy: stopPolicy,
             bluetoothBehavior: bluetoothStopBehavior
         )
+        let recordingUsedBluetoothInput = recordingUsesBluetoothInput
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
@@ -2726,6 +2734,7 @@ final class DictationViewModel: ObservableObject {
             rawDuration: rawDuration,
             peakLevel: peakLevel,
             hasConfirmedText: hasConfirmedText,
+            isDigitalSilence: isDigitalSilence(samples),
             transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
@@ -2760,6 +2769,22 @@ final class DictationViewModel: ObservableObject {
                 message: errorMessage,
                 icon: "mic.slash",
                 duration: 2.0
+            )
+            return
+        case .discardDigitalSilence:
+            cancelLiveFieldTranscriptSession()
+            audioRecordingService.discardActiveRecoveryRecording()
+            logger.warning("Recording contained only digital silence - input delivered no signal, bluetooth=\(recordingUsedBluetoothInput, privacy: .public)")
+            let errorMessage = Self.digitalSilenceMessage(usedBluetoothInput: recordingUsedBluetoothInput)
+            if let sessionID {
+                failDictationSession(id: sessionID, error: errorMessage)
+            }
+            showNotchFeedback(
+                message: errorMessage,
+                icon: "mic.slash",
+                duration: 4.0,
+                isError: true,
+                errorCategory: "recording"
             )
             return
         case .transcribe:
@@ -5186,6 +5211,7 @@ final class DictationViewModel: ObservableObject {
 enum ShortSpeechDecision: Equatable {
     case discardTooShort
     case discardNoSpeech
+    case discardDigitalSilence
     case transcribe
 
     var logDescription: String {
@@ -5194,6 +5220,8 @@ enum ShortSpeechDecision: Equatable {
             "discardTooShort"
         case .discardNoSpeech:
             "discardNoSpeech"
+        case .discardDigitalSilence:
+            "discardDigitalSilence"
         case .transcribe:
             "transcribe"
         }
@@ -5604,13 +5632,28 @@ private let aggressiveShortDictationMaxDuration: TimeInterval = 8.0
 // make speech at this level transcribable, but anything quieter is noise.
 private let aggressiveQuietClipPeakFloor: Float = 0.003
 
+// A microphone always has some noise floor, so a recording made only of exact
+// zeros means the input delivered no signal at all: a muted device, a Bluetooth
+// route that never opened, or revoked microphone access. Shorter clips can be
+// all zeros while a Bluetooth input warms up, so they only count as no speech.
+private let digitalSilenceMinimumDuration: TimeInterval = 1.0
+
+func isDigitalSilence(_ samples: [Float]) -> Bool {
+    !samples.contains { $0 != 0 }
+}
+
 func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
     hasConfirmedText: Bool,
+    isDigitalSilence: Bool = false,
     transcribeShortQuietClipsAggressively: Bool = true
 ) -> ShortSpeechDecision {
     guard rawDuration >= 0.04 else { return .discardTooShort }
+    // Exact zeros cannot contain speech, so any text for them is a hallucination.
+    if isDigitalSilence {
+        return rawDuration >= digitalSilenceMinimumDuration ? .discardDigitalSilence : .discardNoSpeech
+    }
     if hasConfirmedText { return .transcribe }
 
     if rawDuration < 1.0 {

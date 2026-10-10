@@ -209,6 +209,65 @@ final class DictationShortSpeechTests: XCTestCase {
         )
     }
 
+    func testZeroBuffersAreDigitalSilence() {
+        XCTAssertTrue(isDigitalSilence([]))
+        XCTAssertTrue(isDigitalSilence([Float](repeating: 0, count: 16_000)))
+        XCTAssertTrue(isDigitalSilence([0, -0.0, 0]))
+        XCTAssertFalse(isDigitalSilence([0, 0.0001, 0]))
+        XCTAssertFalse(isDigitalSilence([Float](repeating: 0.000_001, count: 16_000)))
+
+        var lastSampleOnly = [Float](repeating: 0, count: 16_000)
+        lastSampleOnly[15_999] = -0.00003
+        XCTAssertFalse(isDigitalSilence(lastSampleOnly))
+    }
+
+    func testOneSecondOfZeros_isDigitalSilenceRegardlessOfPolicy() {
+        for aggressive in [true, false] {
+            XCTAssertEqual(
+                classifyShortSpeech(
+                    rawDuration: 1.0,
+                    peakLevel: 0,
+                    hasConfirmedText: false,
+                    isDigitalSilence: true,
+                    transcribeShortQuietClipsAggressively: aggressive
+                ),
+                .discardDigitalSilence
+            )
+        }
+        XCTAssertEqual(
+            classifyShortSpeech(rawDuration: 12.0, peakLevel: 0, hasConfirmedText: false, isDigitalSilence: true),
+            .discardDigitalSilence
+        )
+    }
+
+    func testDigitalSilence_winsOverConfirmedText() {
+        XCTAssertEqual(
+            classifyShortSpeech(rawDuration: 2.0, peakLevel: 0, hasConfirmedText: true, isDigitalSilence: true),
+            .discardDigitalSilence
+        )
+    }
+
+    func testSubSecondZeros_areNoSpeechInsteadOfTranscribed() {
+        // Aggressive mode would send a quiet sub-second clip to the engine; exact zeros
+        // cannot be speech, and a Bluetooth input can deliver them while warming up.
+        XCTAssertEqual(
+            classifyShortSpeech(rawDuration: 0.6, peakLevel: 0, hasConfirmedText: false, isDigitalSilence: true),
+            .discardNoSpeech
+        )
+        XCTAssertEqual(
+            classifyShortSpeech(rawDuration: 0.03, peakLevel: 0, hasConfirmedText: false, isDigitalSilence: true),
+            .discardTooShort
+        )
+    }
+
+    @MainActor
+    func testDigitalSilenceMessageDependsOnBluetoothRoute() {
+        XCTAssertNotEqual(
+            DictationViewModel.digitalSilenceMessage(usedBluetoothInput: true),
+            DictationViewModel.digitalSilenceMessage(usedBluetoothInput: false)
+        )
+    }
+
     func testConfirmedTranscriptionResultText_requiresNonEmptyResult() {
         XCTAssertFalse(hasConfirmedTranscriptionResultText(nil))
         XCTAssertFalse(hasConfirmedTranscriptionResultText(TranscriptionResult(
