@@ -2668,11 +2668,17 @@ final class DictationViewModel: ObservableObject {
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
+        let recordingIsDigitalSilence = !samples.isEmpty && isDigitalSilence(samples)
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
         // A live session that lost audio or failed to finalize leaves a preview that may
         // miss part of the recording, so the full recording is transcribed instead.
         var liveSessionFailed = false
-        if hiddenLiveSessionWasDeferred,
+        if recordingIsDigitalSilence {
+            // Exact zeros carry no speech: don't replay them through a deferred live
+            // session or wait for an active one to finalize.
+            streamingHandler.stop()
+            liveSessionResultBeforePreviewFallback = nil
+        } else if hiddenLiveSessionWasDeferred,
            let replayedResult = await transcribeRecordingThroughDeferredLiveSession(samples) {
             liveSessionResultBeforePreviewFallback = replayedResult
         } else if previewFollowedDictationEngine {
@@ -2734,7 +2740,7 @@ final class DictationViewModel: ObservableObject {
             rawDuration: rawDuration,
             peakLevel: peakLevel,
             hasConfirmedText: hasConfirmedText,
-            isDigitalSilence: isDigitalSilence(samples),
+            isDigitalSilence: recordingIsDigitalSilence,
             transcribeShortQuietClipsAggressively: transcribeShortQuietClipsAggressively
         )
         let graceApplied = audioRecordingService.lastStopGraceCaptureApplied
