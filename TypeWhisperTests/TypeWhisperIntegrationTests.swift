@@ -8733,7 +8733,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    private func finishDictation(stoppingWith samples: [Float]) async throws -> (status: DictationSessionSnapshot.Status?, error: String?, feedback: String?, engineCalls: Int) {
+    private func finishDictation(
+        stoppingWith samples: [Float],
+        inputTransport: UInt32 = kAudioDeviceTransportTypeBuiltIn
+    ) async throws -> (status: DictationSessionSnapshot.Status?, error: String?, feedback: String?, engineCalls: Int) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -8743,8 +8746,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         MockTranscriptionPlugin.reset()
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        // A fake default input pins the route, so the Mac's real default input cannot pick the hint.
+        let inputDeviceID: AudioDeviceID = 70_901
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(transports: [inputDeviceID: inputTransport]),
+            audioDeviceBluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true },
+            audioDeviceDefaultInputController: APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: inputDeviceID),
+            audioRecordingBluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true }
+        )
         let context = try XCTUnwrap(dictationContext)
+        context.audioDeviceService.inputDevices = [
+            AudioInputDevice(deviceID: inputDeviceID, name: "Test Microphone", uid: "digital-silence-test-microphone")
+        ]
         context.textInsertionService.captureActiveAppOverride = {
             ("Notes", "com.apple.Notes", nil)
         }
@@ -8782,6 +8796,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(outcome.status, .failed)
         XCTAssertEqual(outcome.error, expectedMessage)
         XCTAssertEqual(outcome.feedback, expectedMessage)
+        XCTAssertEqual(outcome.engineCalls, 0)
+    }
+
+    @MainActor
+    func testBluetoothDictationOfOnlyZeroSamplesShowsBluetoothHint() async throws {
+        let zeros = [Float](repeating: 0, count: Int(1.5 * AudioRecordingService.targetSampleRate))
+        let expectedMessage = DictationViewModel.digitalSilenceMessage(usedBluetoothInput: true)
+
+        let outcome = try await finishDictation(
+            stoppingWith: zeros,
+            inputTransport: kAudioDeviceTransportTypeBluetooth
+        )
+
+        XCTAssertEqual(outcome.status, .failed)
+        XCTAssertEqual(outcome.error, expectedMessage)
         XCTAssertEqual(outcome.engineCalls, 0)
     }
 

@@ -1382,7 +1382,7 @@ final class DictationViewModel: ObservableObject {
 
     static func digitalSilenceMessage(usedBluetoothInput: Bool) -> String {
         if usedBluetoothInput {
-            return String(localized: "The Bluetooth microphone sent only silence. Reconnect it or choose another input.")
+            return String(localized: "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it.")
         }
         return String(localized: "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access.")
     }

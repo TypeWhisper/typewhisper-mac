@@ -24660,25 +24660,25 @@
         }
       }
     },
-    "The Bluetooth microphone sent only silence. Reconnect it or choose another input." : {
+    "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it." : {
       "comment" : "Feedback shown when a dictation over a Bluetooth microphone contained only digital silence.",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das Bluetooth-Mikrofon hat nur Stille geliefert. Verbinde es neu oder wähle einen anderen Eingang."
+            "value" : "Das Bluetooth-Mikrofon hat nur Stille geliefert. Prüfe, ob es stummgeschaltet ist, oder verbinde es neu."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bluetoothマイクから無音しか届きませんでした。再接続するか、別の入力を選択してください。"
+            "value" : "Bluetoothマイクから無音しか届きませんでした。ミュートされていないか確認するか、再接続してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "蓝牙麦克风只传来了静音。请重新连接或选择其他输入设备。"
+            "value" : "蓝牙麦克风只传来了静音。请检查它是否被静音，或重新连接。"
           }
         }
       }
