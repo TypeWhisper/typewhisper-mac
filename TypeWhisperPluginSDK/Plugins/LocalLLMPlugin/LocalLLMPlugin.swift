@@ -688,12 +688,13 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
                     extraEOSTokens: modelDef.extraEOSTokens
                 )
             }
-            Self.runtimeUsage.withLock { $0 = true }
             let loadTask = Task<ModelContainer, Error> {
-                try await LLMModelFactory.shared.loadContainer(
+                // Download before entering MLX, so a load cancelled or failed
+                // during the download leaves runtime cleanup cold.
+                let resolved = try await MLXLMCommon.resolve(
+                    configuration: configuration,
                     from: downloader,
-                    using: LocalLLMTokenizerLoader(),
-                    configuration: configuration
+                    useLatest: false
                 ) { progress in
                     guard !Task.isCancelled else { return }
                     let rawFraction = progress.fractionCompleted
@@ -711,6 +712,16 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
                         )
                     }
                 }
+                try Task.checkCancellation()
+                Self.runtimeUsage.withLock { $0 = true }
+                return try await LLMModelFactory.shared.loadContainer(
+                    from: downloader,
+                    using: LocalLLMTokenizerLoader(),
+                    configuration: ModelConfiguration(
+                        directory: resolved.modelDirectory,
+                        extraEOSTokens: modelDef.extraEOSTokens
+                    )
+                )
             }
             activeModelLoadTask = (generation: loadGeneration, task: loadTask)
             defer {

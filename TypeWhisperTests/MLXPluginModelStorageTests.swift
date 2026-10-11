@@ -506,6 +506,30 @@ final class MLXPluginModelStorageTests: XCTestCase {
             })
     }
 
+    @MainActor
+    func testLocalLLMLoadThatStopsBeforeMLXKeepsCleanupCold() async throws {
+        let previousUsage = LocalLLMPlugin.runtimeUsage.withLock { $0 }
+        LocalLLMPlugin.runtimeUsage.withLock { $0 = false }
+        defer { LocalLLMPlugin.runtimeUsage.withLock { $0 = previousUsage } }
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let gemma = LocalLLMPlugin()
+        gemma.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        // The downloader rejects this repository ID offline, before any MLX work.
+        let undownloadable = LocalLLMModelDef(
+            id: "fixture-undownloadable", displayName: "Fixture", repoId: "not-a-repository",
+            sizeDescription: "", ramRequirement: "", availability: .supported)
+
+        do {
+            try await gemma.loadModel(undownloadable)
+            XCTFail("An invalid repository must not load")
+        } catch {}
+        XCTAssertFalse(LocalLLMPlugin.runtimeUsage.withLock { $0 }, "A failed download must not count as MLX use")
+        gemma.unloadModel()
+        gemma.deactivate()
+        XCTAssertNil(gemma.runtimeCacheClearTask, "Cleanup must stay cold when the load stopped before MLX")
+    }
+
     /// Unloading, deactivating and reactivating a never-loaded plugin must not
     /// schedule MLX cleanup. A load that fails after entering MLX must.
     @MainActor
