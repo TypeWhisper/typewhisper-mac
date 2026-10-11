@@ -23,14 +23,15 @@ A plugin directory without that target fails the build instead of being skipped.
 
 On pull requests, [`scripts/codeql_swift_targets.py`](../scripts/codeql_swift_targets.py)
 selects targets from the files the pull request changes (merge commit against its
-first parent):
+first parent). Sources are Swift files plus C and Objective-C files and headers, which
+Swift sees through the bridging header:
 
 | Changed files | Targets |
 | --- | --- |
 | `.github/workflows/codeql.yml`, the CodeQL scripts, `TypeWhisper.xcodeproj/`, any `Package.swift` or `Package.resolved` | all |
-| Swift files in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
-| Swift files in `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/` | `WebhookPlugin`, which depends only on the SDK (`xcodebuild -target` cannot name the SDK package target) |
-| Swift files in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
+| Sources in `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/` | all, because the app and every plugin call into the SDK |
+| Sources in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
+| Sources in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
 | anything else: tests, docs, resources, `AppStore/` | none |
 
 Without selected targets the job skips the build and analysis and still succeeds, so
@@ -82,6 +83,13 @@ files are shown as warnings; they do not fail the job.
   `-disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
   -skipPackageUpdates -scmProvider xcode`, so it does not resolve or fetch packages
   under tracing. The Metal toolchain check also runs before initialization.
+- SwiftPM keys its manifest cache on the full process environment. GitHub sets
+  run-specific variables, so the traced build used to re-evaluate all 25 package
+  manifests under tracing, which took 16 to 28 minutes per run. The build script runs
+  `xcodebuild` with a fixed environment (basic shell variables plus the CodeQL tracer
+  variables, without `CODEQL_ACTION_*`), and the workflow restores and saves
+  `~/Library/Caches/org.swift.swiftpm/manifests` under a per-run key with a
+  runner-image and Xcode prefix. The first run on a new runner image pays the full cost.
 
 ## Runtime
 

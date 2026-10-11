@@ -6,11 +6,14 @@ request builds only what its Swift changes touch, so a plugin-only change does
 not compile the app and 52 other plugins:
 
 - changes to the CodeQL workflow, its scripts, the Xcode project, a package
-  manifest or lock file: every target
-- app, extension or CLI Swift files: the app targets
-- Plugin SDK Swift files: the SDK through `SDK_CARRIER_TARGET`
-- Swift files in `TypeWhisperPluginSDK/Plugins/<Name>/`: that plugin's target
+  manifest or lock file, or Plugin SDK sources (the app and every plugin call
+  into the SDK): every target
+- app, extension or CLI sources: the app targets
+- sources in `TypeWhisperPluginSDK/Plugins/<Name>/`: that plugin's target
 - anything else (tests, docs, resources, the App Store edition): nothing
+
+Sources are Swift files plus the C and Objective-C files and headers that
+Swift imports through bridging headers or module maps.
 
 Usage:
   codeql_swift_targets.py all
@@ -42,9 +45,7 @@ APP_SOURCE_DIRS = (
 )
 SDK_SOURCE_DIR = "TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/"
 PLUGINS_DIR = "TypeWhisperPluginSDK/Plugins/"
-# The SDK package target cannot be built with `xcodebuild -target`; this plugin
-# depends on nothing but the SDK, so building it compiles the SDK sources.
-SDK_CARRIER_TARGET = "WebhookPlugin"
+SOURCE_SUFFIXES = (".swift", ".h", ".c", ".m", ".mm", ".cpp", ".modulemap")
 FULL_BUILD_PATHS = (
     ".github/workflows/codeql.yml",
     "scripts/codeql-build-swift.sh",
@@ -73,12 +74,12 @@ def select_targets(changed_paths: list[str], plugins: list[str]) -> list[str]:
     for path in changed_paths:
         if path.startswith(FULL_BUILD_PATHS) or Path(path).name in FULL_BUILD_FILE_NAMES:
             return all_targets(plugins)
-        if not path.endswith(".swift") or is_test_source(path):
+        if not path.endswith(SOURCE_SUFFIXES) or is_test_source(path):
             continue
+        if path.startswith(SDK_SOURCE_DIR):
+            return all_targets(plugins)
         if path.startswith(APP_SOURCE_DIRS):
             selected.update(APP_TARGETS)
-        elif path.startswith(SDK_SOURCE_DIR):
-            selected.add(SDK_CARRIER_TARGET)
         elif path.startswith(PLUGINS_DIR):
             plugin = path[len(PLUGINS_DIR):].split("/", 1)[0]
             if plugin in plugins:

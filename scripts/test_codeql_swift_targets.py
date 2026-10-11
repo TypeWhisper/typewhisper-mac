@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from codeql_swift_coverage import expected_areas
-from codeql_swift_targets import APP_TARGETS, SDK_CARRIER_TARGET, all_targets, select_targets
+from codeql_swift_targets import APP_TARGETS, all_targets, select_targets
 
 PLUGINS = ["GroqPlugin", "Qwen3Plugin", "WebhookPlugin"]
 
@@ -30,10 +30,19 @@ class SelectTargetsTests(unittest.TestCase):
             "TypeWhisperPluginSDK/Plugins/GroqPlugin/GroqPlugin.swift",
         ], PLUGINS), list(APP_TARGETS) + ["GroqPlugin"])
 
-    def test_sdk_change_builds_the_sdk_through_a_small_plugin(self) -> None:
+    def test_sdk_change_builds_every_consumer(self) -> None:
         self.assertEqual(select_targets([
             "TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/TypeWhisperPlugin.swift",
-        ], PLUGINS), [SDK_CARRIER_TARGET])
+        ], PLUGINS), all_targets(PLUGINS))
+
+    def test_bridged_c_and_objc_sources_build_app_targets(self) -> None:
+        for path in [
+            "TypeWhisper/TypeWhisper-Bridging-Header.h",
+            "TypeWhisper/Services/ObjCExceptionCatcher.m",
+            "TypeWhisper/Services/CoreAudioHALCallbackContext.c",
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(select_targets([path], PLUGINS), list(APP_TARGETS))
 
     def test_build_inputs_force_a_full_build(self) -> None:
         for path in [

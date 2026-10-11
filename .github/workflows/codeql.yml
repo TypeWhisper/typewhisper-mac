@@ -85,6 +85,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
+          set -o pipefail
           if [ "$EVENT_NAME" = "pull_request" ]; then
             git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed-files.txt"
             python3 scripts/codeql_swift_targets.py changed "$RUNNER_TEMP/changed-files.txt" | tee -a "$GITHUB_OUTPUT"
