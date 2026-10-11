@@ -406,6 +406,7 @@ private final class BrowserExtensionTestEnvironment: @unchecked Sendable {
     func makeStore() -> BrowserExtensionContextStore {
         BrowserExtensionContextStore(
             frontmostBundleIdentifier: { [self] in frontmostBundleIdentifier },
+            isBrowser: { $0 != "com.apple.Notes" },
             defaults: defaults,
             now: { [self] in now }
         )
@@ -464,6 +465,22 @@ final class BrowserExtensionContextStoreTests: XCTestCase {
 
         environment.advance(by: 1)
         XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.chrome))
+    }
+
+    func testReportIsIgnoredWhenAnotherAppCameToTheFront() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: "com.apple.Notes")
+        let store = environment.makeStore()
+
+        let report = await store.report(clientID: "chrome", focused: true, url: document, title: nil)
+
+        XCTAssertNil(report)
+        XCTAssertNil(store.resolution(for: "com.apple.Notes"))
+    }
+
+    func testAppsThatOpenWebPagesCountAsBrowsers() {
+        XCTAssertTrue(BrowserExtensionContextStore.opensWebPages("com.apple.Safari"))
+        XCTAssertFalse(BrowserExtensionContextStore.opensWebPages("com.apple.TextEdit"))
+        XCTAssertFalse(BrowserExtensionContextStore.opensWebPages("com.example.not-installed"))
     }
 
     func testReportIsIgnoredWithoutAFrontmostBrowser() async {

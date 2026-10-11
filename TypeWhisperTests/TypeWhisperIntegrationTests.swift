@@ -2197,6 +2197,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         let store = BrowserExtensionContextStore(
             frontmostBundleIdentifier: { SupportedMeetingBrowser.chrome },
+            isBrowser: { _ in true },
             defaults: defaults
         )
         var context: APIContext?
