@@ -8,7 +8,8 @@ It is not a required status check.
 ## What gets built
 
 [`scripts/codeql-build-swift.sh`](../scripts/codeql-build-swift.sh) runs one traced
-`xcodebuild build` with explicit `-target` arguments:
+`xcodebuild build` with explicit `-target` arguments. On pushes, tags, the weekly
+schedule and manual runs it builds every target:
 
 - app targets: `TypeWhisper`, `typewhisper-cli`, `TypeWhisperICloudBridge`,
   `TypeWhisperWidgetExtension`, `TypeWhisperTranscribeAction` (and through them the
@@ -20,15 +21,30 @@ Every maintained plugin has a target of the same name in `TypeWhisper.xcodeproj`
 as `WhisperKitPlugin`, `LocalLLMPlugin`, `DeepgramPlugin` or `GoogleCloudSTTPlugin`).
 A plugin directory without that target fails the build instead of being skipped.
 
-To print the target list: `bash scripts/codeql-build-swift.sh --print-targets`.
+On pull requests, [`scripts/codeql_swift_targets.py`](../scripts/codeql_swift_targets.py)
+selects targets from the files the pull request changes (merge commit against its
+first parent):
+
+| Changed files | Targets |
+| --- | --- |
+| `.github/workflows/codeql.yml`, the CodeQL scripts, `TypeWhisper.xcodeproj/`, any `Package.swift` or `Package.resolved` | all |
+| Swift files in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
+| Swift files in `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/` | `WebhookPlugin`, which depends only on the SDK (`xcodebuild -target` cannot name the SDK package target) |
+| Swift files in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
+| anything else: tests, docs, resources, `AppStore/` | none |
+
+Without selected targets the job skips the build and analysis and still succeeds, so
+the check name stays stable. Such a pull request has no Swift analysis.
+
+To print the full target list: `bash scripts/codeql-build-swift.sh --print-targets`.
 
 ## Coverage check
 
 After the analysis, [`scripts/codeql_swift_coverage.py`](../scripts/codeql_swift_coverage.py)
 reads the SARIF file and lists, per area, how many tracked Swift files CodeQL reports as
-successfully extracted. The job fails when any tracked Swift file of the app, its
-extensions, the SDK sources or a plugin directory was not extracted, and prints the
-missing files. A green build alone is not proof of coverage: before this check, the
+successfully extracted. The job fails when any tracked Swift file in an area the built
+targets cover (the app and its extensions, the SDK sources, each built plugin) was not
+extracted, and prints the missing files. A green build alone is not proof of coverage: before this check, the
 tag-only Swift job reported "CodeQL scanned 32 out of 451 Swift files" for `v1.7.0`.
 
 The analysis runs with `upload: never`; the SARIF is uploaded only after the check
@@ -62,6 +78,10 @@ files are shown as warnings; they do not fail the job.
 - Only package checkouts are restored from the `spm-*` cache that the build workflow
   saves. Compiled artifacts are never cached: a file that is not compiled under tracing
   is not extracted.
+- Packages are resolved before CodeQL initialization. The traced build runs with
+  `-disableAutomaticPackageResolution -onlyUsePackageVersionsFromResolvedFile
+  -skipPackageUpdates -scmProvider xcode`, so it does not resolve or fetch packages
+  under tracing. The Metal toolchain check also runs before initialization.
 
 ## Runtime
 

@@ -3,10 +3,10 @@
 
 Reads the SARIF written by github/codeql-action/analyze and compares the files
 CodeQL reports as successfully extracted with the tracked Swift sources of the
-app, its extensions, the Plugin SDK and every plugin that has a manifest.json.
-Prints a per-area table and fails when any of those files was not extracted,
-so a build that silently skips the app, a plugin or part of a target is not
-reported as a success.
+built targets: the app and its extensions, the Plugin SDK and each built plugin
+(by default every plugin that has a manifest.json). Prints a per-area table and
+fails when any of those files was not extracted, so a build that silently skips
+the app, a plugin or part of a target is not reported as a success.
 See docs/codeql-swift.md.
 """
 
@@ -19,28 +19,41 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from codeql_swift_targets import (  # noqa: E402
+    APP_SOURCE_DIRS,
+    APP_TARGETS,
+    PLUGINS_DIR,
+    SDK_SOURCE_DIR,
+    all_targets,
+    is_test_source,
+    plugin_names,
+)
+
 EXTRACTED_FILES_RULE = "swift/diagnostics/successfully-extracted-files"
 EXTRACTION_ERRORS_RULE = "swift/diagnostics/extraction-errors"
 
-# Areas outside TypeWhisperPluginSDK/Plugins that the Swift build must cover.
-APP_AREAS = (
-    "TypeWhisper/",
-    "typewhisper-cli/",
-    "TypeWhisperICloudBridge/",
-    "TypeWhisperTranscribeAction/",
-    "TypeWhisperWidgetExtension/",
-    "TypeWhisperWidgetShared/",
-    "TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/",
-)
-PLUGINS_DIR = "TypeWhisperPluginSDK/Plugins/"
 
 
-def expected_areas(tracked_swift_files: list[str], plugin_names: list[str]) -> dict[str, list[str]]:
-    areas = list(APP_AREAS) + [f"{PLUGINS_DIR}{name}/" for name in sorted(plugin_names)]
+def expected_areas(
+    tracked_swift_files: list[str],
+    plugin_names: list[str],
+    targets: list[str] | None = None,
+) -> dict[str, list[str]]:
+    """Maps each source area the built targets cover to its tracked Swift files."""
+    if targets is None:
+        targets = all_targets(plugin_names)
+    areas = []
+    if any(target in APP_TARGETS for target in targets):
+        areas.extend(APP_SOURCE_DIRS)
+    if targets:
+        # Every app and plugin target depends on the Plugin SDK.
+        areas.append(SDK_SOURCE_DIR)
+    areas.extend(f"{PLUGINS_DIR}{name}/" for name in sorted(plugin_names) if name in targets)
     result: dict[str, list[str]] = {area: [] for area in areas}
     for path in tracked_swift_files:
         # Test sources belong to test targets, which the CodeQL build does not compile.
-        if "/Tests/" in path or path.endswith("Tests.swift"):
+        if is_test_source(path):
             continue
         for area in areas:
             if path.startswith(area):
@@ -97,20 +110,18 @@ def tracked_swift_files(repo_root: Path) -> list[str]:
     return [line for line in output.splitlines() if line]
 
 
-def plugin_names(repo_root: Path) -> list[str]:
-    return sorted(path.parent.name for path in (repo_root / PLUGINS_DIR).glob("*/manifest.json"))
-
-
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("sarif", type=Path, help="SARIF file written by codeql-action/analyze")
     parser.add_argument("--repo-root", type=Path, default=Path(__file__).resolve().parent.parent)
+    parser.add_argument("--targets", help="space-separated built targets (default: all)")
     args = parser.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
     sarif = json.loads(args.sarif.read_text())
     extracted = extracted_files(sarif, str(repo_root))
-    areas = expected_areas(tracked_swift_files(repo_root), plugin_names(repo_root))
+    targets = args.targets.split() if args.targets is not None else None
+    areas = expected_areas(tracked_swift_files(repo_root), plugin_names(repo_root), targets)
     lines, missing = coverage_report(areas, extracted)
 
     print("\n".join(lines))
