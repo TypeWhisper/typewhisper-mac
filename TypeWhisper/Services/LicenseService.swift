@@ -1010,12 +1010,21 @@ final class LicenseService: ObservableObject {
         isLifetime: Bool,
         retiring previous: (key: String, activationId: String)? = nil
     ) throws {
-        // Queue the old credentials before overwriting them. If saving the replacement then fails,
-        // the queued entry still matches the active record and is dropped without a Polar request.
+        // Queue the old credentials before overwriting them.
+        var queuedPrevious = false
         if let previous {
-            try enqueuePendingRetirement(key: previous.key, activationId: previous.activationId)
+            queuedPrevious = try enqueuePendingRetirement(key: previous.key, activationId: previous.activationId)
         }
-        try saveLicenseToKeychain(key: key, activationId: activationId)
+        do {
+            try saveLicenseToKeychain(key: key, activationId: activationId)
+        } catch {
+            // The old activation stays active, so withdraw the entry this attempt added. If that
+            // also fails, the retirement pass drops it while it still matches the active record.
+            if queuedPrevious, let previous {
+                withdrawPendingRetirement(key: previous.key, activationId: previous.activationId)
+            }
+            throw error
+        }
         licenseStatus = .active
         licenseTier = tier
         licenseIsLifetime = isLifetime
@@ -1141,11 +1150,22 @@ final class LicenseService: ObservableObject {
         return (400 ... 499).contains(statusCode) && ![401, 403, 404, 408, 429].contains(statusCode)
     }
 
-    private func enqueuePendingRetirement(key: String, activationId: String) throws {
+    /// Returns false when the entry was already queued.
+    private func enqueuePendingRetirement(key: String, activationId: String) throws -> Bool {
         var entries = try readPendingRetirements()
-        guard !entries.contains(where: { $0.key == key && $0.activationId == activationId }) else { return }
+        guard !entries.contains(where: { $0.key == key && $0.activationId == activationId }) else { return false }
         entries.append(PendingActivationRetirement(key: key, activationId: activationId))
         try savePendingRetirements(entries)
+        return true
+    }
+
+    private func withdrawPendingRetirement(key: String, activationId: String) {
+        guard var entries = try? readPendingRetirements(),
+              let index = entries.firstIndex(where: { $0.key == key && $0.activationId == activationId }) else {
+            return
+        }
+        entries.remove(at: index)
+        try? savePendingRetirements(entries)
     }
 
     /// Throws for an unreadable or undecodable queue, so its credentials are never overwritten.

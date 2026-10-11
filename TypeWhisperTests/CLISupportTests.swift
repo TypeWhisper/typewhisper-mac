@@ -1333,6 +1333,9 @@ final class CLISupportTests: XCTestCase {
         func restartedService(
             keychainUpdate: @escaping (CFDictionary, CFDictionary) -> OSStatus = { SecItemUpdate($0, $1) },
             keychainAdd: @escaping (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) },
+            keychainCopyMatching: @escaping (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus = {
+                SecItemCopyMatching($0, $1)
+            },
             keychainDelete: @escaping (CFDictionary) -> OSStatus = { SecItemDelete($0) }
         ) -> LicenseService {
             let server = server
@@ -1342,6 +1345,7 @@ final class CLISupportTests: XCTestCase {
                 keychainServiceName: suite,
                 keychainUpdate: keychainUpdate,
                 keychainAdd: keychainAdd,
+                keychainCopyMatching: keychainCopyMatching,
                 keychainDelete: keychainDelete,
                 now: { clock.now },
                 dataTransport: { try await server.respond(to: $0) }
@@ -1381,6 +1385,10 @@ final class CLISupportTests: XCTestCase {
     /// Lets tests fail Keychain writes for the retirement queue only.
     private static func isRetirementQueueQuery(_ query: CFDictionary) -> Bool {
         (query as NSDictionary)[kSecAttrAccount as String] as? String == ManagedLicenseFixture.retirementsAccount
+    }
+
+    private static func isLicenseQuery(_ query: CFDictionary) -> Bool {
+        (query as NSDictionary)[kSecAttrAccount as String] as? String == "polar-license"
     }
 
     @MainActor
@@ -1646,6 +1654,40 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), original)
         XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
         // Only the unsaved replacement is rolled back; the active activation is untouched.
+        let attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts, ["activation-2"])
+    }
+
+    @MainActor
+    func testManagedLicenseFailedReplacementSaveWithdrawsQueuedRetirement() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let original = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+
+        // Saving the replacement fails, and afterwards the active record cannot be read, so the
+        // retirement pass cannot drop the entry because it matches the active record.
+        final class LicenseReadSwitch { var failing = false }
+        let licenseReads = LicenseReadSwitch()
+        let failing = fixture.restartedService(
+            keychainUpdate: { query, attributes in
+                guard Self.isLicenseQuery(query) else { return SecItemUpdate(query, attributes) }
+                licenseReads.failing = true
+                return errSecInteractionNotAllowed
+            },
+            keychainCopyMatching: { query, result in
+                licenseReads.failing && Self.isLicenseQuery(query)
+                    ? errSecInteractionNotAllowed
+                    : SecItemCopyMatching(query, result)
+            }
+        )
+
+        await fixture.rotate(to: "replacement-key", using: failing)
+
+        XCTAssertNotNil(failing.managedLicenseError)
+        XCTAssertTrue(failing.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), original)
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
         let attempts = await fixture.server.deactivationAttempts
         XCTAssertEqual(attempts, ["activation-2"])
     }
