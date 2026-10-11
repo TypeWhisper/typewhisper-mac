@@ -489,6 +489,14 @@ final class TextInsertionService {
             value != nil || selectedText != nil || selectedRange != nil
         }
 
+        /// Whether this read still exposes every text attribute `earlier` exposed. Only then can
+        /// comparing the two show that the text stayed unchanged.
+        func keepsReadableText(of earlier: FocusedTextState) -> Bool {
+            (earlier.value == nil || value != nil) &&
+            (earlier.selectedText == nil || selectedText != nil) &&
+            (earlier.selectedRange == nil || selectedRange != nil)
+        }
+
         static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
             lhs.element == rhs.element &&
             lhs.value == rhs.value &&
@@ -1463,7 +1471,8 @@ final class TextInsertionService {
         }
         // Only a field readable before and after the paste proves that the paste missed it.
         guard let initialState = state.focusedTextState, initialState.hasReadableText,
-              captureFocusedTextState(for: initialState.element)?.hasReadableText == true else {
+              let currentState = captureFocusedTextState(for: initialState.element),
+              currentState.keepsReadableText(of: initialState) else {
             return .unverified(.focusedTextStateUnavailable)
         }
         return .unverified(.focusedTextUnchanged)
@@ -1773,9 +1782,13 @@ final class TextInsertionService {
         from initialState: (value: String?, selectedText: String?, selectedRange: NSRange?),
         to currentState: (value: String?, selectedText: String?, selectedRange: NSRange?)
     ) -> Bool {
-        initialState.value != currentState.value ||
-        initialState.selectedText != currentState.selectedText ||
-        initialState.selectedRange != currentState.selectedRange
+        // An attribute that became unreadable is no evidence of a paste: the read may have failed.
+        func changed<T: Equatable>(_ initial: T?, _ current: T?) -> Bool {
+            current != nil && current != initial
+        }
+        return changed(initialState.value, currentState.value) ||
+            changed(initialState.selectedText, currentState.selectedText) ||
+            changed(initialState.selectedRange, currentState.selectedRange)
     }
 
     private func selectionOwnedByElement(_ element: AXUIElement) -> TextSelection? {

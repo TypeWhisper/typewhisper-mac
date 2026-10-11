@@ -5042,6 +5042,42 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testFocusedTextChangeDetectionIgnoresAttributesThatBecameUnreadable() {
+        let initial = (value: Optional("Hello"), selectedText: Optional(""), selectedRange: Optional(NSRange(location: 5, length: 0)))
+
+        XCTAssertFalse(
+            TextInsertionService.focusedTextDidChange(
+                from: initial,
+                to: (value: nil, selectedText: nil, selectedRange: nil)
+            )
+        )
+        XCTAssertFalse(
+            TextInsertionService.focusedTextDidChange(
+                from: initial,
+                to: (value: nil, selectedText: "", selectedRange: NSRange(location: 5, length: 0))
+            )
+        )
+        XCTAssertFalse(
+            TextInsertionService.focusedTextDidChange(
+                from: initial,
+                to: (value: "Hello", selectedText: nil, selectedRange: nil)
+            )
+        )
+        XCTAssertTrue(
+            TextInsertionService.focusedTextDidChange(
+                from: initial,
+                to: (value: nil, selectedText: nil, selectedRange: NSRange(location: 11, length: 0))
+            )
+        )
+        XCTAssertTrue(
+            TextInsertionService.focusedTextDidChange(
+                from: (value: nil, selectedText: nil, selectedRange: nil),
+                to: (value: "Hello", selectedText: nil, selectedRange: nil)
+            )
+        )
+    }
+
+    @MainActor
     func testCaptureInsertionContextIncludesCharactersAroundSelectionRange() throws {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
@@ -6337,6 +6373,132 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(result, .pasted(verification: .verified))
         XCTAssertFalse(result.missedTextField)
+    }
+
+    @MainActor
+    func testSyntheticPasteIsUnverifiedWhenFocusedTextBecomesUnreadable() async throws {
+        let afterPasteStates: [(label: String, state: TextInsertionService.FocusedTextSnapshot)] = [
+            ("all attributes unreadable", (value: nil, selectedText: nil, selectedRange: nil)),
+            ("selection range kept", (value: nil, selectedText: nil, selectedRange: NSRange(location: 6, length: 0))),
+            ("selected text kept", (value: nil, selectedText: "", selectedRange: nil)),
+        ]
+
+        for (label, afterPasteState) in afterPasteStates {
+            let service = TextInsertionService()
+            let pasteboard = NSPasteboard.withUniqueName()
+            let element = AXUIElementCreateSystemWide()
+            var pasteCount = 0
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.pasteVerificationAttempts = 2
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.focusedTextElementOverride = { element }
+            service.focusedTextStateOverride = { _ in
+                pasteCount == 0
+                    ? (value: "Before", selectedText: "", selectedRange: NSRange(location: 6, length: 0))
+                    : afterPasteState
+            }
+            service.pasteSimulatorOverride = { pasteCount += 1 }
+
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+            XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)), label)
+            XCTAssertFalse(result.missedTextField, label)
+        }
+    }
+
+    @MainActor
+    func testSyntheticPasteIsNotVerifiedWhenOnlySelectionBecomesUnreadable() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        var pasteCount = 0
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteVerificationAttempts = 2
+        service.pasteVerificationPollingDelay = .milliseconds(1)
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            pasteCount == 0
+                ? (value: "Before", selectedText: "", selectedRange: NSRange(location: 6, length: 0))
+                : (value: "Before", selectedText: nil, selectedRange: nil)
+        }
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        // The text did not change, but the field no longer exposes what it exposed before,
+        // so the comparison cannot prove a miss either.
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertFalse(result.missedTextField)
+    }
+
+    @MainActor
+    func testSyntheticPasteVerifiesTextChangeAfterTemporarilyUnreadableField() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        var pasteCount = 0
+        var readsAfterPaste = 0
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.pasteVerificationPollingDelay = .milliseconds(1)
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            guard pasteCount > 0 else {
+                return (value: "Before", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+            }
+            readsAfterPaste += 1
+            return readsAfterPaste <= 2
+                ? (value: nil, selectedText: nil, selectedRange: nil)
+                : (value: "BeforeHello", selectedText: nil, selectedRange: NSRange(location: 11, length: 0))
+        }
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertFalse(result.missedTextField)
+        XCTAssertEqual(readsAfterPaste, 3)
+    }
+
+    @MainActor
+    func testPreserveClipboardUsesFallbackRestoreWhenFocusedTextBecomesUnreadable() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        var pasteCount = 0
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.pasteVerificationAttempts = 1
+        service.pasteVerificationPollingDelay = .milliseconds(1)
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(400)
+        service.focusedTextElementOverride = { element }
+        service.insertTextAtOverride = { _, _ in false }
+        service.focusedTextStateOverride = { _ in
+            pasteCount == 0
+                ? (value: "Before", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+                : (value: nil, selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        let result = try await service.insertText("Hello", preserveClipboard: true)
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+
+        let verification = await service.waitForPendingPasteVerification()
+        XCTAssertEqual(verification, .unverified(.focusedTextStateUnavailable))
+        // Well past the verified grace delay, the generated text must still be on the clipboard.
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(restoreVerification, .unverified(.focusedTextStateUnavailable))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
     @MainActor
