@@ -2220,6 +2220,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             ))
         }
 
+        let status = try Self.jsonObject(await router.route(
+            HTTPRequest(method: "GET", path: "/v1/status", queryParams: [:], headers: [:], body: Data())
+        ))
+        XCTAssertEqual(status["supports_browser_context"] as? Bool, true)
+
         let active = await put(#"{"client_id":"chrome-1","focused":true,"url":"https://docs.github.com/en","title":"  GitHub Docs  "}"#)
         XCTAssertEqual(active.status, 200)
         let activeJSON = try Self.jsonObject(active)

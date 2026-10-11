@@ -824,6 +824,7 @@ final class APIHandlers: @unchecked Sendable {
             let supports_workflow_dictation: Bool
             let supports_streaming: Bool
             let supports_translation: Bool
+            let supports_browser_context: Bool
         }
 
         let response = StatusResponse(
@@ -833,7 +834,8 @@ final class APIHandlers: @unchecked Sendable {
             api_version: "1.2",
             supports_workflow_dictation: true,
             supports_streaming: supportsStreaming,
-            supports_translation: supportsTranslation
+            supports_translation: supportsTranslation,
+            supports_browser_context: true
         )
         return .json(response)
     }
