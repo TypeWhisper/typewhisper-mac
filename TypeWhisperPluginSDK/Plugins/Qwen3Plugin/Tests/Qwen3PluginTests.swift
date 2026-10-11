@@ -337,6 +337,22 @@ final class Qwen3PluginTests: XCTestCase {
         XCTAssertTrue(plugin.restoreCandidateModelIds(allowDownloads: false).isEmpty)
     }
 
+    func testColdUnloadAndDeactivationDoNotTouchMLX() throws {
+        let previousUsage = Qwen3Plugin.runtimeUsage.withLock { $0 }
+        Qwen3Plugin.runtimeUsage.withLock { $0 = false }
+        defer { Qwen3Plugin.runtimeUsage.withLock { $0 = previousUsage } }
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = Qwen3Plugin()
+
+        plugin.activate(host: host)
+        plugin.unloadModel()
+        plugin.triggerAutoUnload()
+        plugin.deactivate()
+
+        XCTAssertNil(plugin.runtimeCacheClearTask, "Cleanup must not initialize Metal before any model load")
+        XCTAssertFalse(Qwen3Plugin.runtimeUsage.withLock { $0 })
+    }
+
     func testDeleteDownloadedModelRemovesCacheAndClearsSelection() async throws {
         let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
         let host = try PluginTestHostServices(

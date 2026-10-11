@@ -15,6 +15,10 @@ final class CanaryPluginTests: XCTestCase {
     @MainActor
     func testUnloadAndDeactivationClearCacheOnlyAfterInferenceIsIdle() async throws {
         let plugin = CanaryPlugin()
+        // The allocation below enters MLX on the plugin's behalf, as a model load would.
+        let previousUsage = CanaryPlugin.runtimeUsage.withLock { $0 }
+        CanaryPlugin.runtimeUsage.withLock { $0 = true }
+        defer { CanaryPlugin.runtimeUsage.withLock { $0 = previousUsage } }
         let previousLimit = Memory.cacheLimit
         Memory.cacheLimit = 64 * 1024 * 1024
         defer { Memory.cacheLimit = previousLimit }
@@ -78,6 +82,17 @@ final class CanaryPluginTests: XCTestCase {
         }
     }
     #endif
+
+    func testColdUnloadAndDeactivationDoNotTouchMLX() {
+        let previousUsage = CanaryPlugin.runtimeUsage.withLock { $0 }
+        CanaryPlugin.runtimeUsage.withLock { $0 = false }
+        defer { CanaryPlugin.runtimeUsage.withLock { $0 = previousUsage } }
+        let plugin = CanaryPlugin()
+        plugin.unloadModel()
+        plugin.triggerAutoUnload()
+        plugin.deactivate()
+        XCTAssertNil(plugin.runtimeCacheClearTask, "Cleanup must not initialize Metal before any model load")
+    }
 
     func testOnlyKnownDerivedPreprocessingBuffersAreExcluded() {
         XCTAssertTrue(CanaryPlugin.isDerivedPreprocessingBuffer("preprocessor.featurizer.fb"))

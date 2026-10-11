@@ -3,6 +3,7 @@ import SwiftUI
 import HuggingFace
 import MLX
 import MLXAudioSTT
+import os
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
@@ -50,6 +51,12 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         weightFileExtensions: ["safetensors"]
     )
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
+
+    /// MLX creates its Metal device lazily, so clearing the cache can be the
+    /// first MLX call in this process. Set before this plugin first enters MLX
+    /// and never reset: the runtime outlives deactivation.
+    static let runtimeUsage = OSAllocatedUnfairLock(initialState: false)
+    private(set) var runtimeCacheClearTask: Task<Void, Never>?
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -103,7 +110,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
-            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
             host = nil
         }
     }
@@ -449,6 +456,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             }
             try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
+                Self.runtimeUsage.withLock { $0 = true }
                 Stream.gpu.synchronize()
                 Memory.clearCache()
             }
@@ -538,7 +546,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
-            if clearRuntimeCache { Self.scheduleRuntimeCacheClearWhenInferenceIsIdle() }
+            if clearRuntimeCache { scheduleRuntimeCacheClearWhenInferenceIsIdle() }
             if clearPersistence {
                 host?.setUserDefault(nil, forKey: "loadedModel")
             }
@@ -709,19 +717,24 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         )
     }
 
+    private static var hasUsedRuntime: Bool { runtimeUsage.withLock { $0 } }
+
     private static func clearRuntimeCache() {
+        guard hasUsedRuntime else { return }
         Memory.clearCache()
     }
 
     private static func clearRuntimeCacheWhenInferenceIsIdle() async {
+        guard hasUsedRuntime else { return }
         try? await PluginLocalInferenceGate.shared.withLock {
             Memory.clearCache()
         }
     }
 
-    private static func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
-        Task {
-            await clearRuntimeCacheWhenInferenceIsIdle()
+    private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        guard Self.hasUsedRuntime else { return }
+        runtimeCacheClearTask = Task {
+            await Self.clearRuntimeCacheWhenInferenceIsIdle()
         }
     }
 

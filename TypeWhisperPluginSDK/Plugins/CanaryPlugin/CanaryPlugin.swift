@@ -5,6 +5,7 @@ import MLX
 import MLXNN
 import MLXAudioCore
 import MLXAudioSTT
+import os
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
@@ -35,6 +36,11 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         weightFileExtensions: ["safetensors"]
     )
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.model"]
+
+    /// MLX creates its Metal device lazily, so clearing the cache can be the
+    /// first MLX call in this process. Set before this plugin first enters MLX
+    /// and never reset: the runtime outlives deactivation.
+    static let runtimeUsage = OSAllocatedUnfairLock(initialState: false)
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -428,6 +434,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             }
             try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
+                Self.runtimeUsage.withLock { $0 = true }
                 Stream.gpu.synchronize()
                 Memory.clearCache()
             }
@@ -601,7 +608,10 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
 
     private(set) var runtimeCacheClearTask: Task<Void, Never>?
 
+    private static var hasUsedRuntime: Bool { runtimeUsage.withLock { $0 } }
+
     private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        guard Self.hasUsedRuntime else { return }
         runtimeCacheClearTask = Task {
             try? await PluginLocalInferenceGate.shared.withLock {
                 Stream.gpu.synchronize()

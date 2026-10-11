@@ -1,5 +1,6 @@
 import Foundation
 import MLXLLM
+import os
 import XCTest
 @testable import TypeWhisper
 import TypeWhisperPluginSDK
@@ -457,15 +458,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
     ) async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let id = "custom-" + UUID().uuidString.lowercased()
-        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
-        try fixture.writeModel(at: folder, requiredFiles: [
-            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
-        ])
-        try fixture.write("invalid native config", to: folder.appendingPathComponent("config.json"))
-        try JSONSerialization.data(withJSONObject: [
-            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
-        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        let id = try fixture.writeInvalidImportedModel()
         let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": id])
         plugin.activate(host: host)
         await restore()
@@ -474,6 +467,76 @@ final class MLXPluginModelStorageTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
         plugin.deactivate()
         XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
+    }
+
+    @MainActor
+    func testMLXCleanupStaysColdUntilAModelLoadEntersTheRuntime() async throws {
+        let usages = [Qwen3Plugin.runtimeUsage, CanaryPlugin.runtimeUsage, LocalLLMPlugin.runtimeUsage]
+        let previousUsages = usages.map { usage in usage.withLock { $0 } }
+        defer {
+            for (usage, previous) in zip(usages, previousUsages) { usage.withLock { $0 = previous } }
+        }
+
+        let qwen = Qwen3Plugin()
+        try await assertCleanupStaysColdUntilRuntimeEntry(
+            qwen, usage: Qwen3Plugin.runtimeUsage, cleanupTask: { qwen.runtimeCacheClearTask },
+            unload: { qwen.unloadModel() }, load: { _ in await qwen.restoreLoadedModel() })
+        let canary = CanaryPlugin()
+        try await assertCleanupStaysColdUntilRuntimeEntry(
+            canary, usage: CanaryPlugin.runtimeUsage, cleanupTask: { canary.runtimeCacheClearTask },
+            unload: { canary.unloadModel() }, load: { _ in await canary.restoreLoadedModel() })
+
+        let gemma = LocalLLMPlugin()
+        let gemmaModel = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        try await assertCleanupStaysColdUntilRuntimeEntry(
+            gemma, usage: LocalLLMPlugin.runtimeUsage, cleanupTask: { gemma.runtimeCacheClearTask },
+            unload: {
+                gemma.unloadModel()
+                gemma.resetCachedModel(gemmaModel)
+            },
+            load: { fixture in
+                try fixture.writeModel(
+                    at: fixture.legacyDirectory(repositoryID: gemmaModel.repoId, usesMLXAudio: false),
+                    requiredFiles: ["config.json", "tokenizer.json"]
+                )
+                do {
+                    try await gemma.loadModel(gemmaModel)
+                    XCTFail("Fixture weights must not load")
+                } catch {}
+            })
+    }
+
+    /// Unloading, deactivating and reactivating a never-loaded plugin must not
+    /// schedule MLX cleanup. A load that fails after entering MLX must.
+    @MainActor
+    private func assertCleanupStaysColdUntilRuntimeEntry<P: TypeWhisperPlugin>(
+        _ plugin: P,
+        usage: OSAllocatedUnfairLock<Bool>,
+        cleanupTask: () -> Task<Void, Never>?,
+        unload: () -> Void,
+        load: (Fixture) async throws -> Void
+    ) async throws {
+        usage.withLock { $0 = false }
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = try fixture.writeInvalidImportedModel()
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": id])
+
+        plugin.activate(host: host)
+        unload()
+        plugin.deactivate()
+        plugin.activate(host: host)
+        plugin.deactivate()
+        XCTAssertNil(cleanupTask(), "\(P.self) must not initialize Metal before any model load")
+        XCTAssertFalse(usage.withLock { $0 })
+
+        host.setUserDefault(id, forKey: "loadedModel")
+        plugin.activate(host: host)
+        try await load(fixture)
+        XCTAssertTrue(usage.withLock { $0 }, "\(P.self) must record MLX use before the native loader runs")
+        plugin.deactivate()
+        let task = try XCTUnwrap(cleanupTask(), "\(P.self) must clear the cache after a failed load")
+        await task.value
     }
 
     @MainActor
@@ -943,6 +1006,20 @@ private final class Fixture {
             try write(file == "merges.txt" ? "#version: 0.2\na b" : "{}", to: directory.appendingPathComponent(file))
         }
         try write("weights", to: directory.appendingPathComponent("model.safetensors"))
+    }
+
+    /// An imported model whose files pass the catalog checks but fail in the native loader.
+    func writeInvalidImportedModel() throws -> String {
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = root.appendingPathComponent("custom-models/" + id)
+        try writeModel(at: folder, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        try write("invalid native config", to: folder.appendingPathComponent("config.json"))
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        return id
     }
 
     func write(_ contents: String, to url: URL) throws {
