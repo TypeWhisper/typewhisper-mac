@@ -69,6 +69,11 @@ enum UserDefaultsKeys {
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
     static let updateChannel = "updateChannel"
 
+    // MARK: - Remote Link
+    static let remoteLinkEnabled = "remoteLinkEnabled"
+    static let remoteLinkServerID = "remoteLinkServerID"
+    static let remoteLinkDevices = "remoteLinkDevices"
+
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
     static let inputDevicePriorityList = "inputDevicePriorityList"

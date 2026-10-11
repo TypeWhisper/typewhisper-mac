@@ -39,6 +39,12 @@
 	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_typewhisper._tcp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>TypeWhisper lets your paired iPhone and iPad use this Mac for transcription over the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
 	<key>NSServices</key>

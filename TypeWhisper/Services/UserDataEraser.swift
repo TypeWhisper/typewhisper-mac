@@ -34,6 +34,8 @@ enum UserDataEraser {
         container: ServiceContainer
     ) async -> [Failure] {
         apiServer.stopServerAndCancelActiveRequests()
+        container.remoteLinkViewModel.endPairing()
+        container.remoteLinkViewModel.stop()
         let failures = await discardActiveRecording(container.audioRecorderService)
 
         // The iCloud bridge copies the remote package into the local mirror

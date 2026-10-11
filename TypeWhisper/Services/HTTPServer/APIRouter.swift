@@ -52,6 +52,17 @@ final class APIRouter: Sendable {
         return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
     }
 
+    /// Routes a request from a paired device whose Remote Link channel is
+    /// already authenticated. The loopback browser checks and the local API
+    /// token do not apply; `RemoteLinkServer` restricts the reachable routes.
+    func routeTrusted(_ request: HTTPRequest) async -> HTTPResponse {
+        let registeredRoutes = routes.withLock { $0 }
+        guard let route = registeredRoutes.first(where: { $0.method == request.method && $0.path == request.path }) else {
+            return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
+        }
+        return await route.handler(request)
+    }
+
     private func isAuthorized(_ request: HTTPRequest) -> Bool {
         guard !isPublicRoute(request),
               case .required(let expectedToken) = authenticationProvider() else {

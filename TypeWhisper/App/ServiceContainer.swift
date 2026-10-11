@@ -106,6 +106,8 @@ final class ServiceContainer: ObservableObject {
     // HTTP API
     let httpServer: HTTPServer
     let apiServerViewModel: APIServerViewModel
+    let remoteLinkServer: RemoteLinkServer
+    let remoteLinkViewModel: RemoteLinkViewModel
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
@@ -438,6 +440,8 @@ final class ServiceContainer: ObservableObject {
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
+        remoteLinkServer = RemoteLinkServer(router: router)
+        remoteLinkViewModel = RemoteLinkViewModel(server: remoteLinkServer)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
@@ -484,6 +488,7 @@ final class ServiceContainer: ObservableObject {
         SettingsViewModel._shared = settingsViewModel
         DictationViewModel._shared = dictationViewModel
         APIServerViewModel._shared = apiServerViewModel
+        RemoteLinkViewModel._shared = remoteLinkViewModel
         HistoryViewModel._shared = historyViewModel
         ProfilesViewModel._shared = profilesViewModel
         DictionaryViewModel._shared = dictionaryViewModel
@@ -541,6 +546,7 @@ final class ServiceContainer: ObservableObject {
         if apiServerViewModel.isEnabled {
             apiServerViewModel.startServer()
         }
+        remoteLinkViewModel.startIfEnabled()
 
         pluginManager.setRuleNamesProvider { [weak self] in
             self?.workflowService.availableRuleNames ?? []
