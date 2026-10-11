@@ -14,6 +14,7 @@ struct AdvancedSettingsView: View {
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
+    @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
     @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
@@ -29,6 +30,26 @@ struct AdvancedSettingsView: View {
     @State private var isExportingAllData = false
     @State private var isDeletingAllData = false
     @State private var showDeleteAllDataConfirmation = false
+
+    private var browserExtensionInfoText: String {
+        if browserExtensionConnected {
+            return localizedAppText(
+                "A browser extension has connected to TypeWhisper. It reports the active website, so website workflows match the page you are on.",
+                de: "Eine Browser-Erweiterung hat sich mit TypeWhisper verbunden. Sie meldet die aktive Website, damit Website-Workflows zur geöffneten Seite passen."
+            )
+        }
+#if APPSTORE
+        return localizedAppText(
+            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because TypeWhisper cannot read browser addresses itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil TypeWhisper Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
+        )
+#else
+        return localizedAppText(
+            "Dictate into text fields in Chrome and Firefox, and let website workflows match the page you are on. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome und Firefox und lass Website-Workflows zur geöffneten Seite passen. Der API-Server muss laufen."
+        )
+#endif
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -554,6 +575,26 @@ struct AdvancedSettingsView: View {
 
                                 SettingsInfoButton(text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."))
                             }
+                        }
+                    }
+                }
+
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "globe")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("Browser Extension", de: "Browser-Erweiterung"))
+                            .font(.headline)
+
+                        HStack {
+                            Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
+                                NSWorkspace.shared.open(URL(string: "https://typewhisper.com/extensions#browser")!)
+                            }
+
+                            SettingsInfoButton(text: browserExtensionInfoText)
                         }
                     }
                 }
