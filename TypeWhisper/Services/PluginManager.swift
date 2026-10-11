@@ -1110,11 +1110,18 @@ final class PluginManager: ObservableObject {
 
         try await modelManager.deleteDownloadedModel(modelId)
 
-        if modelManager.downloadedModels.isEmpty {
+        if modelManager.downloadedModels.isEmpty, disablesWithoutDownloadedModels(plugin) {
             setPluginEnabled(pluginId, enabled: false)
         } else {
             notifyPluginStateChanged()
         }
+    }
+
+    /// Whether deleting a plugin's last downloaded model also disables it.
+    /// A transcription plugin stays enabled and keeps the saved dictation
+    /// engine; it is only not ready until a model is downloaded again (#1559).
+    func disablesWithoutDownloadedModels(_ plugin: LoadedPlugin) -> Bool {
+        transcriptionProviderIds(exposedBy: plugin.instance).isEmpty
     }
 
     // MARK: - Dynamic Plugin Management

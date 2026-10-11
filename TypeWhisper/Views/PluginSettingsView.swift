@@ -2105,7 +2105,7 @@ private struct InstalledPluginRow: View {
     }
 
     private func deleteConfirmationMessage(for model: PluginModelInfo, downloadedCount: Int) -> String {
-        if downloadedCount <= 1 {
+        if downloadedCount <= 1, PluginManager.shared.disablesWithoutDownloadedModels(plugin) {
             return String(localized: "Remove \(model.displayName)? This will delete the downloaded model files and disable \(plugin.manifest.name).")
         }
         return String(localized: "Remove \(model.displayName)? This will delete the downloaded model files. \(plugin.manifest.name) will stay installed and enabled.")

@@ -431,6 +431,66 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         }
     }
 
+    /// A local dictation engine whose model files the plugin manages.
+    private final class MockLocalEnginePlugin: NSObject, TranscriptionEnginePlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.downloaded.local-engine"
+        static let pluginName = "Local Engine Test Plugin"
+        static let catalog = [
+            PluginModelInfo(id: "small", displayName: "Small"),
+            PluginModelInfo(id: "large", displayName: "Large"),
+        ]
+
+        var downloadedModels: [PluginModelInfo] = []
+        var loadedModelId: String?
+        private(set) var didDeactivate = false
+
+        func activate(host: HostServices) {}
+        func deactivate() { didDeactivate = true }
+
+        var providerId: String { "mock-local-engine" }
+        var providerDisplayName: String { "Mock Local Engine" }
+        var isConfigured: Bool { loadedModelId != nil }
+        var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var transcriptionModels: [PluginModelInfo] { Self.catalog }
+        var selectedModelId: String? { loadedModelId }
+        func selectModel(_ modelId: String) {}
+
+        func download(_ modelId: String) {
+            downloadedModels.append(PluginModelInfo(id: modelId, displayName: modelId, downloaded: true))
+        }
+
+        func deleteDownloadedModel(_ modelId: String) async throws {
+            if loadedModelId == modelId { loadedModelId = nil }
+            downloadedModels.removeAll { $0.id == modelId }
+        }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "local", detectedLanguage: language)
+        }
+    }
+
+    private final class MockCloudEnginePlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.downloaded.cloud-engine"
+        static let pluginName = "Cloud Engine Test Plugin"
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "mock-cloud-engine" }
+        var providerDisplayName: String { "Mock Cloud Engine" }
+        var isConfigured: Bool { true }
+        var supportsTranslation: Bool { false }
+        var supportedLanguages: [String] { ["en"] }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "cloud", detectedLanguage: language)
+        }
+    }
+
     func testDeletingOneOfMultipleDownloadedModelsKeepsPluginEnabled() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
         defer { TestSupport.remove(appSupportDirectory) }
@@ -462,7 +522,7 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         XCTAssertEqual(manager.readinessRevision, initialRevision + 1)
     }
 
-    func testDeletingLastDownloadedModelDisablesPlugin() async throws {
+    func testDeletingLastDownloadedModelDisablesNonTranscriptionPlugin() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -589,8 +649,188 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         XCTAssertFalse(plugin.didDeactivate)
     }
 
+    // MARK: - Last model of a dictation engine (#1559)
+
+    func testDeletingLastModelOfDefaultEngineKeepsPluginAndSavedEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-local-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        local.loadedModelId = "small"
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: MockCloudEnginePlugin(), pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-local-engine")
+
+        let revision = manager.readinessRevision
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+
+        XCTAssertTrue(local.downloadedModels.isEmpty)
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(local.didDeactivate)
+        XCTAssertNil(UserDefaults.standard.object(forKey: "plugin.\(MockLocalEnginePlugin.pluginId).enabled"))
+        XCTAssertEqual(manager.readinessRevision, revision + 1)
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-local-engine")
+
+        // Without a model, dictation uses another engine for now.
+        XCTAssertTrue(modelManager.lacksDownloadedModel(local))
+        XCTAssertFalse(modelManager.canPrepareForTranscription(local))
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-cloud-engine")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-local-engine")
+
+        // A new download makes the saved engine the one in use again.
+        local.download("large")
+        XCTAssertFalse(modelManager.lacksDownloadedModel(local))
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-local-engine")
+
+        // So does a relaunch.
+        let relaunched = ModelManagerService()
+        relaunched.restoreProviderSelection()
+        XCTAssertEqual(relaunched.selectedProviderId, "mock-local-engine")
+    }
+
+    func testEngineChosenWhileModelIsMissingStaysAfterDownload() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-local-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: MockCloudEnginePlugin(), pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-cloud-engine")
+
+        modelManager.selectProvider("mock-cloud-engine")
+        local.download("small")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-cloud-engine")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-cloud-engine")
+    }
+
+    func testDeletingLastModelWithoutAlternativeReportsMissingModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-local-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+        XCTAssertTrue(modelManager.canTranscribe)
+
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-local-engine")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-local-engine")
+        XCTAssertFalse(modelManager.canTranscribe)
+        guard case .engineUnavailable(let engineName, let reason)? =
+                modelManager.transcriptionReadinessError(providerId: "mock-local-engine") else {
+            return XCTFail("Expected the engine to be reported as unavailable")
+        }
+        XCTAssertEqual(engineName, "Mock Local Engine")
+        XCTAssertEqual(reason, "It has no downloaded model.")
+    }
+
+    func testWatchFolderKeepsItsEngineWhileTheModelIsMissing() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.watchFolderEngine: "mock-local-engine",
+            UserDefaultsKeys.watchFolderModel: "small",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: MockCloudEnginePlugin(), pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        let viewModel = WatchFolderViewModel(
+            watchFolderService: WatchFolderService(
+                audioFileService: AudioFileService(),
+                modelManagerService: modelManager
+            ),
+            modelManager: modelManager
+        )
+
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+        viewModel.reconcileSelectionWithAvailablePlugins()
+
+        XCTAssertEqual(viewModel.engineChoice, "mock-local-engine")
+        XCTAssertEqual(viewModel.modelChoice, "small")
+        XCTAssertEqual(viewModel.resolvedEngine?.providerId, "mock-local-engine")
+        XCTAssertFalse(viewModel.canPrepareForTranscription(local))
+    }
+
+    /// Sets defaults for one test and returns a closure that puts the previous values back.
+    private func overrideDefaults(_ values: [String: String?]) -> () -> Void {
+        let originals = values.keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        for (key, value) in values {
+            if let value {
+                UserDefaults.standard.set(value, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+        return {
+            for (key, value) in originals {
+                self.restoreDefault(key: key, value: value)
+            }
+        }
+    }
+
     private func makeLoadedPlugin(
-        plugin: MockDownloadedModelPlugin,
+        plugin: any TypeWhisperPlugin,
         pluginId: String,
         directory: URL
     ) throws -> LoadedPlugin {
