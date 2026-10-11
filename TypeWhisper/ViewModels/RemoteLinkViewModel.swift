@@ -21,6 +21,9 @@ final class RemoteLinkViewModel: ObservableObject {
     }
 
     @Published private(set) var isEnabled: Bool
+    @Published var isWritingAllowed: Bool {
+        didSet { defaults.set(isWritingAllowed, forKey: UserDefaultsKeys.remoteLinkWritingAllowed) }
+    }
     @Published private(set) var isRunning = false
     @Published private(set) var isAdvertised = false
     @Published private(set) var errorMessage: String?
@@ -37,6 +40,7 @@ final class RemoteLinkViewModel: ObservableObject {
         self.server = server
         self.defaults = defaults
         isEnabled = defaults.bool(forKey: UserDefaultsKeys.remoteLinkEnabled)
+        isWritingAllowed = defaults.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed)
         devices = server.store.devices()
 
         server.onStateChange = { [weak self] state in

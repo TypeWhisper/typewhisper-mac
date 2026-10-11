@@ -74,6 +74,7 @@ enum UserDefaultsKeys {
     static let remoteLinkEnabled = "remoteLinkEnabled"
     static let remoteLinkServerID = "remoteLinkServerID"
     static let remoteLinkDevices = "remoteLinkDevices"
+    static let remoteLinkWritingAllowed = "remoteLinkWritingAllowed"
 
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"

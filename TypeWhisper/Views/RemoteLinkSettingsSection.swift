@@ -63,6 +63,23 @@ struct RemoteLinkSettingsSection: View {
                         .font(.callout)
                 }
 
+                Toggle(isOn: $viewModel.isWritingAllowed) {
+                    SettingsInfoLabel(
+                        title: localizedAppText(
+                            "Allow Writing with This Mac",
+                            de: "Schreiben mit diesem Mac erlauben",
+                            ja: "この Mac での文章作成を許可",
+                            zh: "允许使用这台 Mac 写作"
+                        ),
+                        info: localizedAppText(
+                            "Paired devices can run text through this Mac's language models and workflows. Requests may use cloud providers from your language model list, including their API costs.",
+                            de: "Gekoppelte Geräte können Text mit den Sprachmodellen und Workflows dieses Macs verarbeiten. Dabei können Cloud-Anbieter aus deiner Sprachmodell-Liste samt ihrer API-Kosten genutzt werden.",
+                            ja: "ペアリング済みのデバイスは、この Mac の言語モデルとワークフローでテキストを処理できます。言語モデルの一覧にあるクラウドプロバイダが使われ、その API 料金が発生する場合があります。",
+                            zh: "已配对的设备可以使用这台 Mac 的语言模型和工作流处理文本。请求可能会使用你语言模型列表中的云服务提供商，并产生相应的 API 费用。"
+                        )
+                    )
+                }
+
                 Button(localizedAppText("Pair Device…", de: "Gerät koppeln …", ja: "デバイスをペアリング…", zh: "配对设备…")) {
                     viewModel.beginPairing()
                 }

@@ -125,7 +125,14 @@ final class RemoteLinkServer: @unchecked Sendable {
         "GET /v1/status",
         "GET /v1/models",
         "POST /v1/transcribe",
+        "GET /v1/llm/models",
+        "POST /v1/llm/process",
+        "GET /v1/workflows",
+        "POST /v1/workflows/run",
     ]
+    /// Set by the server on every routed request, so handlers can tell paired
+    /// devices apart from local tools. A client-supplied value is overwritten.
+    static let remoteDeviceHeader = "x-typewhisper-remote-device"
     static let maxConnections = 8
     static let maxConnectionsPerHost = 3
     static let pairingTimeout: TimeInterval = 120
@@ -253,29 +260,43 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     /// Forgets the device and closes its open sessions right away.
+    /// Forgets the device, closes its open sessions and cancels the work they
+    /// started, for example a running language model request.
     func removeDevice(id: String) {
         store.removeDevice(id: id)
-        let connections = lock.withLock {
-            sessionDevices.filter { $0.value == id }.compactMap { activeConnections[$0.key]?.connection }
+        let sessions = lock.withLock {
+            sessionDevices.filter { $0.value == id }.compactMap { activeConnections[$0.key] }
         }
-        connections.forEach { $0.close() }
+        for session in sessions {
+            session.task.cancel()
+            session.connection.close()
+        }
         onDevicesChange?()
     }
 
     /// Turns one decrypted request message into the response message body.
-    static func response(for message: Data, router: APIRouter) async -> HTTPResponse {
-        let request: HTTPRequest
+    static func response(for message: Data, router: APIRouter, deviceID: String) async -> HTTPResponse {
+        let parsed: HTTPRequest
         do {
-            request = try HTTPRequestParser.parse(message)
+            parsed = try HTTPRequestParser.parse(message)
         } catch HTTPParseError.bodyTooLarge {
             return .error(status: 413, message: "Payload too large. Maximum request body size is 256 MiB.")
         } catch {
             return .error(status: 400, message: "Malformed request")
         }
 
-        guard allowedRoutes.contains("\(request.method) \(request.path)") else {
+        guard allowedRoutes.contains("\(parsed.method) \(parsed.path)") else {
             return .error(status: 403, message: "This endpoint is not available to paired devices")
         }
+        var headers = parsed.headers
+        headers[remoteDeviceHeader] = deviceID
+        let request = HTTPRequest(
+            method: parsed.method,
+            path: parsed.path,
+            queryParams: parsed.queryParams,
+            headers: headers,
+            body: parsed.body
+        )
         return await router.routeTrusted(request)
     }
 
@@ -403,7 +424,22 @@ final class RemoteLinkServer: @unchecked Sendable {
         store.markSeen(id: deviceID)
         onDevicesChange?()
 
-        let response = await Self.response(for: message, router: router)
+        // Routing can take long, for example a language model request. A
+        // receive stays pending meanwhile, so a client that disconnects
+        // cancels the work instead of letting it run to the end.
+        let router = self.router
+        let work = Task { await Self.response(for: message, router: router, deviceID: deviceID) }
+        let disconnectWatch = Task {
+            _ = try? await connection.receiveFrame(timeout: nil)
+            work.cancel()
+        }
+        let response = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
+        disconnectWatch.cancel()
+        try Task.checkCancellation()
         try await connection.withDeadline(Self.responseTimeout) {
             try await channel.send(message: response.serialized())
         }

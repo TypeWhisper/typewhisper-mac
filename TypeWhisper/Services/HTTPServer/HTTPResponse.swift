@@ -24,7 +24,7 @@ struct HTTPResponse {
         return HTTPResponse(status: status, contentType: "application/json", body: data, headers: headers)
     }
 
-    static func error(status: Int, message: String, headers: [String: String] = [:]) -> HTTPResponse {
+    static func error(status: Int, message: String, code explicitCode: String? = nil, headers: [String: String] = [:]) -> HTTPResponse {
         struct ErrorBody: Encodable {
             let error: ErrorDetail
             struct ErrorDetail: Encodable {
@@ -32,18 +32,21 @@ struct HTTPResponse {
                 let message: String
             }
         }
-        let code: String
-        switch status {
-        case 400: code = "bad_request"
-        case 401: code = "unauthorized"
-        case 403: code = "forbidden"
-        case 404: code = "not_found"
-        case 405: code = "method_not_allowed"
-        case 413: code = "payload_too_large"
-        case 503: code = "service_unavailable"
-        default: code = "error"
-        }
+        let code = explicitCode ?? Self.defaultErrorCode(for: status)
         return .json(ErrorBody(error: .init(code: code, message: message)), status: status, headers: headers)
+    }
+
+    private static func defaultErrorCode(for status: Int) -> String {
+        switch status {
+        case 400: "bad_request"
+        case 401: "unauthorized"
+        case 403: "forbidden"
+        case 404: "not_found"
+        case 405: "method_not_allowed"
+        case 413: "payload_too_large"
+        case 503: "service_unavailable"
+        default: "error"
+        }
     }
 
     func serialized() -> Data {
@@ -56,8 +59,12 @@ struct HTTPResponse {
         case 403: statusText = "Forbidden"
         case 404: statusText = "Not Found"
         case 405: statusText = "Method Not Allowed"
+        case 409: statusText = "Conflict"
         case 413: statusText = "Payload Too Large"
+        case 429: statusText = "Too Many Requests"
+        case 502: statusText = "Bad Gateway"
         case 503: statusText = "Service Unavailable"
+        case 504: statusText = "Gateway Timeout"
         default: statusText = "Error"
         }
 

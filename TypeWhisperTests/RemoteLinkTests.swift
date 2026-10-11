@@ -140,13 +140,15 @@ final class RemoteLinkTests: XCTestCase {
 
         let allowed = await RemoteLinkServer.response(
             for: Data("GET /v1/models HTTP/1.1\r\nHost: 192.168.1.20\r\n\r\n".utf8),
-            router: router
+            router: router,
+            deviceID: "device"
         )
         let blocked = await RemoteLinkServer.response(
             for: Data("GET /v1/history HTTP/1.1\r\n\r\n".utf8),
-            router: router
+            router: router,
+            deviceID: "device"
         )
-        let malformed = await RemoteLinkServer.response(for: Data("nonsense\r\n\r\n".utf8), router: router)
+        let malformed = await RemoteLinkServer.response(for: Data("nonsense\r\n\r\n".utf8), router: router, deviceID: "device")
         let viaLoopbackAPI = await router.route(
             HTTPRequest(method: "GET", path: "/v1/models", queryParams: [:], headers: [:], body: Data())
         )
@@ -329,6 +331,40 @@ final class RemoteLinkTests: XCTestCase {
         let result = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString)
         XCTAssertNil(result.key)
         XCTAssertTrue(store.devices().isEmpty)
+    }
+
+    func testDisconnectingCancelsTheWorkOnTheMac() async throws {
+        let (store, _) = Self.makeStore()
+        let router = APIRouter()
+        let cancelled = RemoteLinkLockedValue(false)
+        router.register("POST", "/v1/llm/process") { _ in
+            do {
+                try await Task.sleep(for: .seconds(30))
+            } catch {
+                cancelled.set(true)
+            }
+            return .json(["text": "late"])
+        }
+        let server = RemoteLinkServer(router: router, store: store, serverName: { "Test Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+        let deviceID = UUID().uuidString
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: deviceID)
+        let pairingKey = try XCTUnwrap(paired.key)
+        server.closePairing()
+
+        let (connection, channel) = try await Self.openSession(endpoint: endpoint, deviceID: deviceID, key: pairingKey)
+        let body = #"{"system_prompt":"x","text":"hello"}"#
+        try await channel.send(message: Data("POST /v1/llm/process HTTP/1.1\r\nContent-Length: \(body.utf8.count)\r\n\r\n\(body)".utf8))
+        try await Task.sleep(for: .milliseconds(200))
+        connection.close()
+
+        for _ in 0..<50 where !cancelled.get() {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(cancelled.get(), "Closing the connection must cancel the running request")
     }
 
     func testDeadlineAndCancellationCloseAWaitingConnection() async throws {

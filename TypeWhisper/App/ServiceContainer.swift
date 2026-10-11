@@ -438,6 +438,18 @@ final class ServiceContainer: ObservableObject {
             speakerCoordinator: speakerTranscriptCoordinator
         )
         handlers.register(on: router)
+        TextProcessingAPI.live(
+            promptProcessingService: promptProcessingService,
+            workflowService: workflowService,
+            workflowTextProcessor: WorkflowTextProcessingService(
+                promptProcessingService: promptProcessingService,
+                translationService: translationService,
+                workflowService: workflowService,
+                vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
+            ),
+            isAppleTranslateAvailable: translationService != nil,
+            isRemoteWritingAllowed: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed) }
+        ).register(on: router)
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         remoteLinkServer = RemoteLinkServer(router: router)

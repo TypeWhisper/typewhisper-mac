@@ -825,6 +825,8 @@ final class APIHandlers: @unchecked Sendable {
             let supports_streaming: Bool
             let supports_translation: Bool
             let supports_browser_context: Bool
+            let capabilities: [String]
+            let remote_writing_allowed: Bool
         }
 
         let response = StatusResponse(
@@ -835,7 +837,9 @@ final class APIHandlers: @unchecked Sendable {
             supports_workflow_dictation: true,
             supports_streaming: supportsStreaming,
             supports_translation: supportsTranslation,
-            supports_browser_context: true
+            supports_browser_context: true,
+            capabilities: ["transcribe", "llm", "workflows"],
+            remote_writing_allowed: UserDefaults.standard.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed)
         )
         return .json(response)
     }
