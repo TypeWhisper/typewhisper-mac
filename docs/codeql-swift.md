@@ -65,10 +65,22 @@ files are shown as warnings; they do not fail the job.
 
 ## Runtime
 
-Measured on GitHub-hosted `macos-26` runners (2026-10-11):
+Measured on GitHub-hosted `macos-26` runners on 2026-10-11 (PR #1572, run
+[38134266612](https://github.com/TypeWhisper/typewhisper-mac/actions/runs/38134266612)):
 
-| Run | Package cache | Traced build | Job total |
-| --- | --- | --- | --- |
-| Experiment, explicit modules off, MLX plugins failing on Metal | restored | 47 min (until failure) | 51 min |
+| Step | Duration |
+| --- | --- |
+| Package cache restore (hit, about 1.2 GB) and resolution | 1 min |
+| CodeQL init and Metal toolchain check | 3 min |
+| Traced build (5 app targets, 53 plugin targets) | 74 min |
+| Analysis and upload | 4 min |
+| Job total | 83 min |
 
-The job timeout is 120 minutes. Concurrent runs for the same pull request are cancelled.
+Result: "CodeQL scanned 340 out of 503 Swift files"; the coverage check found all 339
+tracked first-party files extracted. The 503 include test files and other Swift files
+outside the analyzed areas.
+
+All measured runs restored the package cache; a run without it adds the package
+download. The job also waits for a free macOS runner when the build workflow's macOS
+jobs for the same push are queued (about 20 minutes in one run). The job timeout is
+120 minutes. Concurrent runs for the same pull request are cancelled.
