@@ -94,6 +94,33 @@ final class RemoteLinkConnection: @unchecked Sendable {
         connection.cancel()
     }
 
+    /// Runs `operation` and closes the connection when the deadline passes or
+    /// the calling task is cancelled, so pending sends and receives fail at
+    /// once instead of waiting for their own timeouts.
+    func withDeadline<T: Sendable>(
+        _ timeout: TimeInterval,
+        _ operation: () async throws -> T
+    ) async throws -> T {
+        let expired = RemoteLinkLockedValue(false)
+        let timer = DispatchWorkItem { [weak self] in
+            expired.set(true)
+            self?.close()
+        }
+        queue.asyncAfter(deadline: .now() + timeout, execute: timer)
+        defer { timer.cancel() }
+        do {
+            return try await withTaskCancellationHandler {
+                try await operation()
+            } onCancel: { [weak self] in
+                self?.close()
+            }
+        } catch {
+            if expired.get() { throw RemoteLinkError.timedOut }
+            if Task.isCancelled { throw CancellationError() }
+            throw error
+        }
+    }
+
     private func pump(_ once: RemoteLinkResumeOnce<RemoteLinkFrame>) {
         if deliverBufferedFrame(to: once) { return }
         connection.receive(minimumIncompleteLength: 1, maximumLength: 1 << 20) { [weak self] data, _, isComplete, error in

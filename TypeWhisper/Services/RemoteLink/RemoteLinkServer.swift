@@ -129,6 +129,8 @@ final class RemoteLinkServer: @unchecked Sendable {
     static let maxConnections = 8
     static let maxConnectionsPerHost = 3
     static let pairingTimeout: TimeInterval = 120
+    static let requestTimeout: TimeInterval = 120
+    static let responseTimeout: TimeInterval = 60
 
     let store: RemoteLinkDeviceStore
     var onStateChange: (@Sendable (State) -> Void)?
@@ -146,8 +148,14 @@ final class RemoteLinkServer: @unchecked Sendable {
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "RemoteLink")
     private var listener: NWListener?
     private var activeConnections: [UUID: (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)] = [:]
+    /// Device behind each authenticated session, so removing a device closes it.
+    private var sessionDevices: [UUID: String] = [:]
     private var pairingApprover: PairingApprover?
     private var isPairingInProgress = false
+    /// Changes whenever pairing opens or closes; a pairing that started under
+    /// an older generation must not store its device.
+    private var pairingGeneration = 0
+    private var pairingConnection: RemoteLinkConnection?
 
     init(
         router: APIRouter,
@@ -224,21 +232,33 @@ final class RemoteLinkServer: @unchecked Sendable {
     func openPairing(approver: @escaping PairingApprover) {
         let listener = lock.withLock {
             pairingApprover = approver
+            pairingGeneration += 1
             return self.listener
         }
         listener?.service = makeService(pairing: true)
     }
 
+    /// Stops accepting pairing requests and aborts one that is in progress,
+    /// even if the user already approved it.
     func closePairing() {
-        let listener = lock.withLock {
+        let (listener, connection) = lock.withLock {
             pairingApprover = nil
-            return self.listener
+            pairingGeneration += 1
+            let current = (self.listener, pairingConnection)
+            pairingConnection = nil
+            return current
         }
+        connection?.close()
         listener?.service = makeService(pairing: false)
     }
 
+    /// Forgets the device and closes its open sessions right away.
     func removeDevice(id: String) {
         store.removeDevice(id: id)
+        let connections = lock.withLock {
+            sessionDevices.filter { $0.value == id }.compactMap { activeConnections[$0.key]?.connection }
+        }
+        connections.forEach { $0.close() }
         onDevicesChange?()
     }
 
@@ -286,7 +306,7 @@ final class RemoteLinkServer: @unchecked Sendable {
                 return
             }
             let task = Task { [weak self] in
-                await self?.serve(connection)
+                await self?.serve(connection, id: id)
                 connection.close()
                 self?.finishConnection(id)
             }
@@ -302,10 +322,13 @@ final class RemoteLinkServer: @unchecked Sendable {
     }
 
     private func finishConnection(_ id: UUID) {
-        _ = lock.withLock { activeConnections.removeValue(forKey: id) }
+        lock.withLock {
+            activeConnections[id] = nil
+            sessionDevices[id] = nil
+        }
     }
 
-    private func serve(_ connection: RemoteLinkConnection) async {
+    private func serve(_ connection: RemoteLinkConnection, id: UUID) async {
         do {
             try await connection.start(timeout: 10)
             let first = try await connection.receiveHandshake(timeout: 10)
@@ -315,7 +338,7 @@ final class RemoteLinkServer: @unchecked Sendable {
             }
             switch first.type {
             case .hello:
-                try await serveSession(hello: first, connection: connection)
+                try await serveSession(hello: first, connection: connection, id: id)
             case .pairRequest:
                 try await servePairing(request: first, connection: connection)
             default:
@@ -326,7 +349,7 @@ final class RemoteLinkServer: @unchecked Sendable {
         }
     }
 
-    private func serveSession(hello: RemoteLinkHandshake, connection: RemoteLinkConnection) async throws {
+    private func serveSession(hello: RemoteLinkHandshake, connection: RemoteLinkConnection, id: UUID) async throws {
         guard let deviceID = hello.deviceID,
               let clientNonce = hello.nonce,
               clientNonce.count == RemoteLink.nonceSize,
@@ -337,6 +360,8 @@ final class RemoteLinkServer: @unchecked Sendable {
             try await connection.send(.error(.unknownDevice))
             return
         }
+
+        lock.withLock { sessionDevices[id] = deviceID }
 
         let serverID = store.serverID
         let serverNonce = RemoteLinkCrypto.randomNonce()
@@ -361,16 +386,27 @@ final class RemoteLinkServer: @unchecked Sendable {
         let channel = RemoteLinkChannel(connection: connection, keys: keys)
         let message: Data
         do {
-            message = try await channel.receiveMessage(timeout: 60)
+            // The deadline covers the whole request, so empty chunks cannot
+            // keep a session open.
+            message = try await connection.withDeadline(Self.requestTimeout) {
+                try await channel.receiveMessage(timeout: Self.requestTimeout)
+            }
         } catch RemoteLinkError.authenticationFailed {
             try? await connection.send(.error(.authenticationFailed))
             throw RemoteLinkError.authenticationFailed
+        }
+
+        // The device may have been removed while its request was arriving.
+        guard store.pairingKey(for: deviceID) != nil else {
+            throw RemoteLinkError.remoteError(RemoteLinkHandshake.ErrorCode.unknownDevice.rawValue)
         }
         store.markSeen(id: deviceID)
         onDevicesChange?()
 
         let response = await Self.response(for: message, router: router)
-        try await channel.send(message: response.serialized())
+        try await connection.withDeadline(Self.responseTimeout) {
+            try await channel.send(message: response.serialized())
+        }
     }
 
     // MARK: - Pairing
@@ -388,20 +424,27 @@ final class RemoteLinkServer: @unchecked Sendable {
             throw RemoteLinkError.malformedHandshake
         }
 
-        let approver: PairingApprover? = lock.withLock {
+        let claimed: (approver: PairingApprover, generation: Int)? = lock.withLock {
             guard let pairingApprover, !isPairingInProgress else { return nil }
             isPairingInProgress = true
-            return pairingApprover
+            pairingConnection = connection
+            return (pairingApprover, pairingGeneration)
         }
-        guard let approver else {
+        guard let claimed else {
             let isOpen = lock.withLock { pairingApprover != nil }
             try await connection.send(.error(isOpen ? .pairingBusy : .pairingClosed))
             return
         }
+        let (approver, generation) = claimed
 
         var pairedDevice: RemoteLinkDevice?
         defer {
-            lock.withLock { isPairingInProgress = false }
+            lock.withLock {
+                isPairingInProgress = false
+                if pairingConnection === connection {
+                    pairingConnection = nil
+                }
+            }
             onPairingFinished?(pairedDevice)
         }
 
@@ -481,13 +524,24 @@ final class RemoteLinkServer: @unchecked Sendable {
             return false
         }
         guard approved else { return }
+        // The user may have closed the pairing sheet after approving.
+        guard lock.withLock({ pairingApprover != nil && pairingGeneration == generation }) else {
+            try? await connection.send(RemoteLinkHandshake(type: .pairDenied))
+            return
+        }
 
         let device = RemoteLinkDevice(id: deviceID, name: deviceName, pairedAt: Date(), lastSeenAt: nil)
         try store.addDevice(device, key: pairingKey)
-        try await connection.send(RemoteLinkHandshake(
-            type: .pairApproved,
-            proof: transcript.proof(.serverApproved, key: pairingKey)
-        ))
+        do {
+            try await connection.send(RemoteLinkHandshake(
+                type: .pairApproved,
+                proof: transcript.proof(.serverApproved, key: pairingKey)
+            ))
+        } catch {
+            // The iPhone never learns that pairing succeeded, so it keeps no key either.
+            store.removeDevice(id: deviceID)
+            throw error
+        }
         pairedDevice = device
         onDevicesChange?()
     }

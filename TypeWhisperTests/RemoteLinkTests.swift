@@ -287,7 +287,114 @@ final class RemoteLinkTests: XCTestCase {
         }
     }
 
+    func testRemovingADeviceClosesItsOpenSession() async throws {
+        let (store, _) = Self.makeStore()
+        let router = APIRouter()
+        router.register("GET", "/v1/status") { _ in .json(["status": "ready"]) }
+        let server = RemoteLinkServer(router: router, store: store, serverName: { "Test Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in true }
+        let deviceID = UUID().uuidString
+        let paired = try await Self.pair(endpoint: endpoint, deviceID: deviceID)
+        let pairingKey = try XCTUnwrap(paired.key)
+        server.closePairing()
+
+        let (connection, channel) = try await Self.openSession(endpoint: endpoint, deviceID: deviceID, key: pairingKey)
+        defer { connection.close() }
+        try await Task.sleep(for: .milliseconds(100))
+        server.removeDevice(id: deviceID)
+
+        do {
+            try await channel.send(message: Data("GET /v1/status HTTP/1.1\r\n\r\n".utf8))
+            _ = try await channel.receiveMessage(timeout: 5)
+            XCTFail("A removed device must not get a response on an open session")
+        } catch {
+            XCTAssertNotEqual(error as? RemoteLinkError, .timedOut)
+        }
+    }
+
+    func testClosingThePairingSheetAfterApprovalStoresNothing() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+        server.openPairing { _ in
+            server.closePairing()
+            return true
+        }
+
+        let result = try await Self.pair(endpoint: endpoint, deviceID: UUID().uuidString)
+        XCTAssertNil(result.key)
+        XCTAssertTrue(store.devices().isEmpty)
+    }
+
+    func testDeadlineAndCancellationCloseAWaitingConnection() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+
+        let expiring = RemoteLinkConnection(endpoint: endpoint)
+        defer { expiring.close() }
+        try await expiring.start(timeout: 5)
+        let started = Date()
+        do {
+            _ = try await expiring.withDeadline(0.3) { try await expiring.receiveFrame(timeout: nil) }
+            XCTFail("The deadline must end the wait")
+        } catch {
+            XCTAssertEqual(error as? RemoteLinkError, .timedOut)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 3)
+
+        let cancelled = RemoteLinkConnection(endpoint: endpoint)
+        defer { cancelled.close() }
+        try await cancelled.start(timeout: 5)
+        let waiting = Task {
+            try await cancelled.withDeadline(30) { try await cancelled.receiveFrame(timeout: nil) }
+        }
+        try await Task.sleep(for: .milliseconds(100))
+        waiting.cancel()
+        do {
+            _ = try await waiting.value
+            XCTFail("Cancellation must end the wait")
+        } catch {
+            XCTAssertTrue(error is CancellationError, String(describing: error))
+        }
+    }
+
     // MARK: - Helpers
+
+    private static func openSession(
+        endpoint: NWEndpoint,
+        deviceID: String,
+        key: SymmetricKey
+    ) async throws -> (RemoteLinkConnection, RemoteLinkChannel) {
+        let connection = RemoteLinkConnection(endpoint: endpoint)
+        try await connection.start(timeout: 5)
+        let clientNonce = RemoteLinkCrypto.randomNonce()
+        let ephemeralKey = Curve25519.KeyAgreement.PrivateKey()
+        try await connection.send(RemoteLinkHandshake(
+            type: .hello,
+            deviceID: deviceID,
+            nonce: clientNonce,
+            key: ephemeralKey.publicKey.rawRepresentation
+        ))
+        let welcome = try await connection.receiveHandshake(timeout: 5).expecting(.welcome)
+        let keys = RemoteLinkSessionKeys(
+            pairingKey: key,
+            ephemeralSecret: try RemoteLinkSessionKeys.ephemeralSecret(privateKey: ephemeralKey, peerKey: try XCTUnwrap(welcome.key)),
+            deviceID: deviceID,
+            serverID: try XCTUnwrap(welcome.serverID),
+            clientNonce: clientNonce,
+            serverNonce: try XCTUnwrap(welcome.nonce),
+            role: .client
+        )
+        return (connection, RemoteLinkChannel(connection: connection, keys: keys))
+    }
 
     private static func makeStore() -> (RemoteLinkDeviceStore, RemoteLinkLockedValue<[String: String]>) {
         let keychain = RemoteLinkLockedValue<[String: String]>([:])
