@@ -51,7 +51,7 @@ final class BrowserExtensionContextStore: @unchecked Sendable {
     /// without AppleScript support, such as Firefox.
     static func opensWebPages(_ bundleIdentifier: String) -> Bool {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier),
-              let page = URL(string: "https://typewhisper.com") else {
+              let page = URL(string: "https://www.typewhisper.com") else {
             return false
         }
         let candidate = appURL.resolvingSymlinksInPath().standardizedFileURL

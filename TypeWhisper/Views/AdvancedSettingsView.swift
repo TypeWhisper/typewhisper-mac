@@ -594,7 +594,7 @@ struct AdvancedSettingsView: View {
 
                         HStack {
                             Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
-                                NSWorkspace.shared.open(URL(string: "https://typewhisper.com/extensions#browser")!)
+                                NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
                             }
 
                             SettingsInfoButton(text: browserExtensionInfoText)
