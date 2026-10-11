@@ -465,8 +465,83 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
             downloadedModels.removeAll { $0.id == modelId }
         }
 
+        private(set) var restoreRequests = 0
+        private(set) var transcribeCalls = 0
+
+        @objc func triggerRestoreModel() {
+            restoreRequests += 1
+        }
+
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            PluginTranscriptionResult(text: "local", detectedLanguage: language)
+            transcribeCalls += 1
+            return PluginTranscriptionResult(text: "local", detectedLanguage: language)
+        }
+    }
+
+    /// A bundle that exposes its engine as an additional engine and manages
+    /// the downloaded models itself.
+    private final class MockEngineBundlePlugin: NSObject, AdditionalTranscriptionEnginesProviding, PluginDownloadedModelManaging, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.downloaded.engine-bundle"
+        static let pluginName = "Engine Bundle Test Plugin"
+
+        final class Engine: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+            static let pluginId = "com.typewhisper.tests.downloaded.engine-bundle.engine"
+            static let pluginName = "Bundled Engine"
+
+            func activate(host: HostServices) {}
+            func deactivate() {}
+
+            var providerId: String { "mock-bundled-engine" }
+            var providerDisplayName: String { "Mock Bundled Engine" }
+            var isConfigured: Bool { false }
+            var supportsTranslation: Bool { false }
+            var supportedLanguages: [String] { ["en"] }
+            var transcriptionModels: [PluginModelInfo] { [] }
+            var selectedModelId: String? { nil }
+            func selectModel(_ modelId: String) {}
+
+            func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+                PluginTranscriptionResult(text: "bundled", detectedLanguage: language)
+            }
+        }
+
+        /// An engine that manages its own models, next to a bundle that has none.
+        final class SelfManagedEngine: NSObject, TranscriptionEnginePlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+            static let pluginId = "com.typewhisper.tests.downloaded.engine-bundle.self-managed"
+            static let pluginName = "Self-Managed Engine"
+
+            var downloadedModels = [PluginModelInfo(id: "own", displayName: "Own", downloaded: true)]
+
+            func activate(host: HostServices) {}
+            func deactivate() {}
+            func deleteDownloadedModel(_ modelId: String) async throws {}
+
+            var providerId: String { "mock-self-managed-engine" }
+            var providerDisplayName: String { "Mock Self-Managed Engine" }
+            var isConfigured: Bool { false }
+            var supportsTranslation: Bool { false }
+            var supportedLanguages: [String] { ["en"] }
+            var transcriptionModels: [PluginModelInfo] { [] }
+            var selectedModelId: String? { nil }
+            func selectModel(_ modelId: String) {}
+
+            func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+                PluginTranscriptionResult(text: "self-managed", detectedLanguage: language)
+            }
+        }
+
+        let engine = Engine()
+        let selfManagedEngine = SelfManagedEngine()
+        var downloadedModels = [PluginModelInfo(id: "only", displayName: "Only", downloaded: true)]
+        private(set) var didDeactivate = false
+
+        func activate(host: HostServices) {}
+        func deactivate() { didDeactivate = true }
+
+        var additionalTranscriptionEngines: [any TranscriptionEnginePlugin] { [engine, selfManagedEngine] }
+
+        func deleteDownloadedModel(_ modelId: String) async throws {
+            downloadedModels.removeAll { $0.id == modelId }
         }
     }
 
@@ -772,6 +847,93 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         }
         XCTAssertEqual(engineName, "Mock Local Engine")
         XCTAssertEqual(reason, "It has no downloaded model.")
+    }
+
+    func testTranscriptionWithModellessEngineFailsBeforePreparation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-cloud-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: MockCloudEnginePlugin(), pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                languageSelection: .auto,
+                task: .transcribe,
+                engineOverrideId: "mock-local-engine"
+            )
+            XCTFail("Expected the missing model to stop the transcription")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Mock Local Engine is not available. It has no downloaded model. "
+                    + "Check its setup in Integrations or choose another engine in Settings > Dictation."
+            )
+        }
+
+        do {
+            _ = try await modelManager.createLiveTranscriptionSession(
+                languageSelection: .auto,
+                task: .transcribe,
+                engineOverrideId: "mock-local-engine",
+                onProgress: { _ in true }
+            )
+            XCTFail("Expected the missing model to stop the live session")
+        } catch let TranscriptionEngineError.engineUnavailable(_, reason) {
+            XCTAssertEqual(reason, "It has no downloaded model.")
+        }
+
+        XCTAssertEqual(local.restoreRequests, 0)
+        XCTAssertEqual(local.transcribeCalls, 0)
+    }
+
+    func testDeletingLastModelOfBundleKeepsItsAdditionalEngineNotReady() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-bundled-engine",
+            "plugin.\(MockEngineBundlePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let bundle = MockEngineBundlePlugin()
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: bundle, pluginId: MockEngineBundlePlugin.pluginId, directory: appSupportDirectory),
+            try makeLoadedPlugin(plugin: MockCloudEnginePlugin(), pluginId: MockCloudEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        XCTAssertFalse(modelManager.lacksDownloadedModel(bundle.engine))
+
+        try await manager.deleteDownloadedModel(pluginId: MockEngineBundlePlugin.pluginId, modelId: "only")
+
+        XCTAssertEqual(manager.loadedPlugins.first?.isEnabled, true)
+        XCTAssertFalse(bundle.didDeactivate)
+        XCTAssertTrue(modelManager.lacksDownloadedModel(bundle.engine))
+        XCTAssertFalse(modelManager.canPrepareForTranscription(bundle.engine))
+        // An engine that manages its own models is judged by those.
+        XCTAssertFalse(modelManager.lacksDownloadedModel(bundle.selfManagedEngine))
+
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-cloud-engine")
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "mock-bundled-engine")
     }
 
     func testWatchFolderKeepsItsEngineWhileTheModelIsMissing() async throws {

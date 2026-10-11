@@ -568,10 +568,14 @@ final class ModelManagerService: ObservableObject {
     /// A local engine whose plugin has no downloaded model left, and none
     /// loaded, cannot transcribe until a model is downloaded again (#1559).
     /// Its plugin stays enabled, so authentication alone still reports it
-    /// as available.
+    /// as available. An engine a bundle exposes next to its main one has its
+    /// models managed by that bundle, unless it manages them itself.
     func lacksDownloadedModel(_ engine: TranscriptionEnginePlugin) -> Bool {
         guard !engine.isConfigured,
-              let modelManager = engine as? any PluginDownloadedModelManaging else { return false }
+              let modelManager = (engine as? any PluginDownloadedModelManaging)
+                  ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
+                      as? any PluginDownloadedModelManaging)
+        else { return false }
         return modelManager.downloadedModels.isEmpty
     }
 
@@ -774,7 +778,7 @@ final class ModelManagerService: ObservableObject {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              canUseForTranscription(plugin) else {
+              canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
@@ -944,7 +948,7 @@ final class ModelManagerService: ObservableObject {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              canUseForTranscription(plugin) else {
+              canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
@@ -1106,7 +1110,7 @@ final class ModelManagerService: ObservableObject {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
-              canUseForTranscription(plugin) else {
+              canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
