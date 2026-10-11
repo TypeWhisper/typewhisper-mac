@@ -277,8 +277,18 @@ final class TextProcessingAPITests: XCTestCase {
         )
         let plainDictation = Workflow(name: "Dictation", template: .dictation, trigger: .global())
 
-        XCTAssertTrue(prompt.processesTextHeadlessly(appleTranslateAvailable: false))
-        XCTAssertFalse(plainDictation.processesTextHeadlessly(appleTranslateAvailable: true))
+        var appleTranslateBehavior = WorkflowBehavior()
+        appleTranslateBehavior.settings = [
+            WorkflowBehavior.translationProcessorSettingKey: WorkflowTranslationProcessor.appleTranslate.rawValue,
+        ]
+        let appleTranslate = Workflow(
+            name: "Translate", template: .translation, trigger: .manual(), behavior: appleTranslateBehavior
+        )
+
+        XCTAssertTrue(prompt.processesTextHeadlessly)
+        XCTAssertFalse(plainDictation.processesTextHeadlessly)
+        XCTAssertTrue(appleTranslate.usesAppleTranslate)
+        XCTAssertFalse(appleTranslate.processesTextHeadlessly)
     }
 
     func testPairedDevicesReachTheTextProcessingRoutesTaggedWithTheirDevice() async throws {
@@ -295,5 +305,27 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertEqual(models.status, 200)
         XCTAssertEqual(process.status, 200)
         XCTAssertEqual(captured.get().text, "hello")
+    }
+
+    func testLocalClientsCannotClaimToBeAPairedDevice() async {
+        let router = APIRouter(authenticationProvider: { .disabled })
+        makeAPI(writingAllowed: false).register(on: router)
+        let spoofed = HTTPRequest(
+            method: "POST",
+            path: "/v1/llm/process",
+            queryParams: [:],
+            headers: [
+                "content-type": "application/json",
+                RemoteLinkServer.remoteDeviceHeader: "phone",
+            ],
+            body: Data(promptBody.utf8)
+        )
+
+        // The header is dropped, so the request is handled as a local one and
+        // the paired-device permission does not apply.
+        let response = await router.route(spoofed)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertNil(APIRouter.withoutRemoteDeviceHeader(spoofed).headers[RemoteLinkServer.remoteDeviceHeader])
     }
 }

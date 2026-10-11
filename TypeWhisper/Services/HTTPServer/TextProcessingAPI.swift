@@ -258,7 +258,7 @@ struct TextProcessingAPI: Sendable {
             break
         }
 
-        logger.error("Text processing failed: \(error.localizedDescription, privacy: .public)")
+        logger.error("Text processing failed: \(error.localizedDescription, privacy: .private(mask: .hash))")
         let exceededContext = LLMContextLimit.isExceeded(error)
             || (error as? LLMFallbackExhaustedError)?.failures.contains(where: \.exceededContext) == true
         if exceededContext {
@@ -383,7 +383,6 @@ extension TextProcessingAPI {
         promptProcessingService: PromptProcessingService,
         workflowService: WorkflowService,
         workflowTextProcessor: WorkflowTextProcessingService,
-        isAppleTranslateAvailable: Bool,
         isRemoteWritingAllowed: @escaping @Sendable () -> Bool
     ) -> TextProcessingAPI {
         TextProcessingAPI(
@@ -410,13 +409,13 @@ extension TextProcessingAPI {
             },
             listWorkflows: {
                 workflowService.workflows
-                    .filter { $0.isEnabled && $0.processesTextHeadlessly(appleTranslateAvailable: isAppleTranslateAvailable) }
+                    .filter { $0.isEnabled && $0.processesTextHeadlessly }
                     .map { WorkflowSummary(id: $0.id, name: $0.name, template: $0.template.rawValue) }
             },
             runWorkflow: { id, text, language in
                 guard let workflow = workflowService.workflow(id: id) else { throw WorkflowRunError.notFound }
                 guard workflow.isEnabled else { throw WorkflowRunError.disabled }
-                guard workflow.processesTextHeadlessly(appleTranslateAvailable: isAppleTranslateAvailable) else {
+                guard workflow.processesTextHeadlessly else {
                     throw WorkflowRunError.notRunnable
                 }
                 // No frontmost app here, so an "auto" output format resolves
@@ -435,13 +434,12 @@ extension TextProcessingAPI {
 }
 
 extension Workflow {
-    /// Runnable without this Mac's text field: inline commands, a prompt, or
-    /// Apple Translate when it can actually translate. Action plugins and
-    /// auto-enter only act on this Mac.
-    func processesTextHeadlessly(appleTranslateAvailable: Bool) -> Bool {
-        if usesAppleTranslate {
-            return appleTranslateAvailable && translationTargetLanguage != nil
-        }
+    /// Runnable without this Mac's text field: inline commands or a prompt.
+    /// Action plugins and auto-enter only act on this Mac. Apple Translate
+    /// stays local: its shared session falls back to the source text and
+    /// skips output formats, and paired devices translate on their own.
+    var processesTextHeadlessly: Bool {
+        guard !usesAppleTranslate else { return false }
         return usesInlineCommands || systemPrompt() != nil
     }
 }

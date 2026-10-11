@@ -447,7 +447,6 @@ final class ServiceContainer: ObservableObject {
                 workflowService: workflowService,
                 vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
             ),
-            isAppleTranslateAvailable: translationService != nil,
             isRemoteWritingAllowed: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed) }
         ).register(on: router)
         httpServer = HTTPServer(router: router)

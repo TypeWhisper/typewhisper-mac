@@ -80,7 +80,9 @@ final class RemoteLinkViewModel: ObservableObject {
     func premiumAccessChanged() {
         if premiumAccess() {
             if isEnabled && !isRunning { start() }
-        } else if isRunning {
+        } else {
+            // A listener that is still starting or waiting for Local Network
+            // permission has not reported `isRunning` yet; stop it anyway.
             endPairing()
             stop()
         }

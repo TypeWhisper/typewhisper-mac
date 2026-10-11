@@ -23,6 +23,7 @@ struct PremiumSettingsWindowDefinition {
     let minimumSize: CGSize
     let accessibilityIdentifier: String
     let content: AnyView
+    var onClose: (@MainActor () -> Void)? = nil
 }
 
 @MainActor
@@ -159,7 +160,12 @@ struct PremiumSettingsWindowFactories {
                                 PremiumSettingsWindowManager.shared.present(.access)
                             }
                         )
-                    )
+                    ),
+                    // The window is kept after closing, so its view does not
+                    // disappear; an open pairing must not outlive it.
+                    onClose: {
+                        ServiceContainer.shared.remoteLinkViewModel.endPairing()
+                    }
                 )
             }
         )
@@ -230,6 +236,7 @@ final class PremiumSettingsWindowManager: PremiumSettingsWindowPresenting {
         window.setFrameAutosaveName(autosaveName)
 
         let delegate = PremiumSettingsWindowDelegate(destination: destination) { [weak self] destination in
+            definition.onClose?()
             self?.windows[destination] = nil
             self?.delegates[destination] = nil
         }
