@@ -160,7 +160,10 @@ struct TextProcessingAPI: Sendable {
         )
     }
 
-    /// Runs `operation` under the in-flight and rate limits and the processing deadline.
+    /// Runs `operation` under the in-flight and rate limits and the processing
+    /// deadline. The client gets its answer at the deadline or on cancellation
+    /// even if the work ignores cancellation, while the work keeps its slot
+    /// until it really ends.
     private func limited(
         _ request: HTTPRequest,
         _ operation: @escaping @Sendable () async throws -> HTTPResponse
@@ -174,13 +177,34 @@ struct TextProcessingAPI: Sendable {
         case nil:
             break
         }
-        do {
-            let response = try await Self.withDeadline(deadline, operation)
+        let limiter = self.limiter
+        let work = Task { () -> HTTPResponse in
+            let response: HTTPResponse
+            do {
+                response = try await operation()
+            } catch {
+                response = Self.errorResponse(for: error)
+            }
             await limiter.release(client: client)
             return response
+        }
+        do {
+            return try await Self.awaitWithDeadline(work, seconds: deadline)
         } catch {
-            await limiter.release(client: client)
             return Self.errorResponse(for: error)
+        }
+    }
+
+    /// Waits for `work` until it finishes, the deadline passes or the caller is
+    /// cancelled, whichever comes first, and cancels the work in the latter two cases.
+    static func awaitWithDeadline<T: Sendable>(_ work: Task<T, Never>, seconds: TimeInterval) async throws -> T {
+        let waiter = DeadlineWaiter<T>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<T, Error>) in
+                waiter.start(continuation, work: work, seconds: seconds)
+            }
+        } onCancel: {
+            waiter.finish(.failure(CancellationError()))
         }
     }
 
@@ -207,27 +231,11 @@ struct TextProcessingAPI: Sendable {
     }
 
     private struct ResponseTooLarge: Error {}
-    private struct ProcessingTimedOut: Error {}
+    struct ProcessingTimedOut: Error {}
 
     private static func cappedResponse(_ value: Encodable, text: String) throws -> HTTPResponse {
         guard text.utf8.count <= maxResponseBytes else { throw ResponseTooLarge() }
         return .json(value)
-    }
-
-    static func withDeadline<T: Sendable>(
-        _ seconds: TimeInterval,
-        _ operation: @escaping @Sendable () async throws -> T
-    ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw ProcessingTimedOut()
-            }
-            defer { group.cancelAll() }
-            guard let result = try await group.next() else { throw CancellationError() }
-            return result
-        }
     }
 
     /// Maps failures to stable codes with short messages; provider details
@@ -251,6 +259,11 @@ struct TextProcessingAPI: Sendable {
         }
 
         logger.error("Text processing failed: \(error.localizedDescription, privacy: .public)")
+        let exceededContext = LLMContextLimit.isExceeded(error)
+            || (error as? LLMFallbackExhaustedError)?.failures.contains(where: \.exceededContext) == true
+        if exceededContext {
+            return .error(status: 413, message: "The text is too long for the language model", code: "context_length_exceeded")
+        }
         if let error = error as? LLMError {
             switch error {
             case .inputTooLong:
@@ -270,6 +283,55 @@ struct TextProcessingAPI: Sendable {
     private static func nonEmpty(_ value: String) -> String? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// Resolves one waiting request with the first of: the work's result, the
+/// deadline or a cancellation. Later outcomes are ignored.
+final class DeadlineWaiter<T: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<T, Error>?
+    private var isFinished = false
+    private var work: Task<T, Never>?
+    private var timer: Task<Void, Never>?
+
+    func start(_ continuation: CheckedContinuation<T, Error>, work: Task<T, Never>, seconds: TimeInterval) {
+        let alreadyFinished = lock.withLock {
+            self.work = work
+            guard !isFinished else { return true }
+            self.continuation = continuation
+            return false
+        }
+        if alreadyFinished {
+            work.cancel()
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        let timer = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds))
+            guard !Task.isCancelled else { return }
+            self?.finish(.failure(TextProcessingAPI.ProcessingTimedOut()))
+        }
+        lock.withLock { self.timer = timer }
+        Task { [weak self] in
+            let value = await work.value
+            self?.finish(.success(value))
+        }
+    }
+
+    func finish(_ result: Result<T, Error>) {
+        let (continuation, work, timer) = lock.withLock { () -> (CheckedContinuation<T, Error>?, Task<T, Never>?, Task<Void, Never>?) in
+            guard !isFinished else { return (nil, nil, nil) }
+            isFinished = true
+            let pending = (self.continuation, self.work, self.timer)
+            self.continuation = nil
+            return pending
+        }
+        timer?.cancel()
+        if case .failure = result {
+            work?.cancel()
+        }
+        continuation?.resume(with: result)
     }
 }
 

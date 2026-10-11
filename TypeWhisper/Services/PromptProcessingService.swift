@@ -62,6 +62,8 @@ struct LLMFallbackAttemptFailure: Equatable, Sendable {
     let modelId: String?
     let effortId: String?
     let reason: String
+    /// The provider rejected the input as longer than its context window.
+    var exceededContext = false
 }
 
 struct LLMFallbackExhaustedError: LocalizedError, Equatable {
@@ -653,7 +655,8 @@ class PromptProcessingService: ObservableObject {
                     providerId: providerId,
                     modelId: candidate.modelId,
                     effortId: candidate.effortId,
-                    reason: Self.failureReason(for: error)
+                    reason: Self.failureReason(for: error),
+                    exceededContext: LLMContextLimit.isExceeded(error)
                 )
                 failures.append(failure)
                 logger.warning("LLM fallback \(index + 1, privacy: .public) failed for \(providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
@@ -722,7 +725,8 @@ class PromptProcessingService: ObservableObject {
                     providerId: retryProviderId,
                     modelId: candidate.modelId,
                     effortId: candidate.effortId,
-                    reason: Self.failureReason(for: error)
+                    reason: Self.failureReason(for: error),
+                    exceededContext: LLMContextLimit.isExceeded(error)
                 )
                 failures.append(failure)
                 logger.warning("Empty-confirmation retry failed for \(retryProviderId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")

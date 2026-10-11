@@ -3,6 +3,24 @@ import Foundation
 import FoundationModels
 #endif
 
+/// Recognizes a provider's report that the input exceeded the model's
+/// context window, whichever framework raised it.
+enum LLMContextLimit {
+    static func isExceeded(_ error: any Error) -> Bool {
+        if case LLMError.inputTooLong = error {
+            return true
+        }
+        #if canImport(FoundationModels)
+        if #available(macOS 26.0, *),
+           let generationError = error as? LanguageModelSession.GenerationError,
+           case .exceededContextWindowSize = generationError {
+            return true
+        }
+        #endif
+        return false
+    }
+}
+
 enum TypeWhisperDictatedTextBoundary {
     static func wrap(_ userText: String) -> String {
         if isWrapped(userText) {

@@ -190,7 +190,48 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertEqual(response.status, 504)
         XCTAssertEqual(errorCode(response), "timeout")
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
+        for _ in 0..<40 where !cancelled.get() {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
         XCTAssertTrue(cancelled.get())
+    }
+
+    func testDeadlineAnswersEvenIfTheWorkIgnoresCancellationAndKeepsItsSlot() async {
+        var api = TextProcessingAPI(
+            listModels: { [] },
+            processPrompt: { _, _, _, _ in
+                // Work that cannot be cancelled, like a translation waiting on
+                // a continuation without a cancellation handler.
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) { continuation.resume() }
+                }
+                return "late"
+            },
+            listWorkflows: { [] },
+            runWorkflow: { id, text, _ in .init(text: text, workflowID: id, workflowName: "x") },
+            isRemoteWritingAllowed: { true }
+        )
+        api.deadline = 0.2
+        let started = Date()
+        let first = await api.handleProcess(request("POST", "/v1/llm/process", json: promptBody))
+        XCTAssertEqual(first.status, 504)
+        XCTAssertLessThan(Date().timeIntervalSince(started), 1)
+
+        let whileStillRunning = await api.handleProcess(request("POST", "/v1/llm/process", json: promptBody))
+        XCTAssertEqual(errorCode(whileStillRunning), "busy")
+
+        try? await Task.sleep(for: .seconds(2))
+        let afterItEnded = await api.handleProcess(request("POST", "/v1/llm/process", json: promptBody))
+        XCTAssertNotEqual(errorCode(afterItEnded), "busy")
+    }
+
+    func testContextErrorsSurviveTheFallbackList() {
+        let viaFallback = TextProcessingAPI.errorResponse(for: LLMFallbackExhaustedError(failures: [
+            LLMFallbackAttemptFailure(providerId: "appleIntelligence", modelId: nil, effortId: nil, reason: "too long", exceededContext: true),
+            LLMFallbackAttemptFailure(providerId: "groq", modelId: nil, effortId: nil, reason: "no key"),
+        ]))
+        XCTAssertEqual(viaFallback.status, 413)
+        XCTAssertEqual(errorCode(viaFallback), "context_length_exceeded")
     }
 
     func testWorkflowsListAndRun() async throws {
