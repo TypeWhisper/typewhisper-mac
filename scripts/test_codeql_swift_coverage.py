@@ -10,9 +10,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from codeql_swift_coverage import (
     EXTRACTED_FILES_RULE,
+    EXTRACTION_ERRORS_RULE,
     coverage_report,
     expected_areas,
     extracted_files,
+    notified_files,
 )
 
 REPO_ROOT = "/Users/runner/work/typewhisper-mac/typewhisper-mac"
@@ -42,9 +44,19 @@ class ExtractedFilesTests(unittest.TestCase):
 
     def test_other_diagnostics_are_ignored(self) -> None:
         files = extracted_files(sarif(
-            notification("TypeWhisper/App/main.swift", rule="swift/diagnostics/extraction-errors"),
+            notification("TypeWhisper/App/main.swift", rule=EXTRACTION_ERRORS_RULE),
         ), REPO_ROOT)
         self.assertEqual(files, set())
+
+    def test_extraction_errors_are_collected_separately(self) -> None:
+        report = sarif(
+            notification("TypeWhisper/App/main.swift"),
+            notification("TypeWhisper/App/main.swift", rule=EXTRACTION_ERRORS_RULE),
+        )
+        self.assertEqual(
+            notified_files(report, REPO_ROOT, EXTRACTION_ERRORS_RULE),
+            {"TypeWhisper/App/main.swift"},
+        )
 
 
 class CoverageReportTests(unittest.TestCase):

@@ -20,6 +20,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 EXTRACTED_FILES_RULE = "swift/diagnostics/successfully-extracted-files"
+EXTRACTION_ERRORS_RULE = "swift/diagnostics/extraction-errors"
 
 # Areas outside TypeWhisperPluginSDK/Plugins that the Swift build must cover.
 APP_AREAS = (
@@ -57,18 +58,22 @@ def normalize_uri(uri: str, repo_root: str) -> str:
     return uri.lstrip("/")
 
 
-def extracted_files(sarif: dict, repo_root: str) -> set[str]:
+def notified_files(sarif: dict, repo_root: str, rule: str) -> set[str]:
     files: set[str] = set()
     for run in sarif.get("runs", []):
         for invocation in run.get("invocations", []):
             for notification in invocation.get("toolExecutionNotifications", []):
-                if notification.get("descriptor", {}).get("id") != EXTRACTED_FILES_RULE:
+                if notification.get("descriptor", {}).get("id") != rule:
                     continue
                 for location in notification.get("locations", []):
                     uri = location.get("physicalLocation", {}).get("artifactLocation", {}).get("uri")
                     if uri:
                         files.add(normalize_uri(uri, repo_root))
     return files
+
+
+def extracted_files(sarif: dict, repo_root: str) -> set[str]:
+    return notified_files(sarif, repo_root, EXTRACTED_FILES_RULE)
 
 
 def coverage_report(areas: dict[str, list[str]], extracted: set[str]) -> tuple[list[str], list[str]]:
@@ -113,6 +118,12 @@ def main(argv: list[str]) -> int:
     total_hits = sum(1 for files in areas.values() for path in files if path in extracted)
     print(f"\nExtracted {total_hits} of {total_tracked} first-party Swift files in {len(areas)} areas "
           f"({len(extracted)} Swift files reported by CodeQL in total).")
+
+    # The extractor's own Swift frontend can report compiler errors for files that
+    # Xcode built and CodeQL still extracted; list them without failing the job.
+    tracked = {path for files in areas.values() for path in files}
+    for path in sorted(notified_files(sarif, str(repo_root), EXTRACTION_ERRORS_RULE) & tracked):
+        print(f"::warning file={path}::CodeQL reported Swift extraction errors in this file")
 
     if not extracted:
         print(f"error: SARIF contains no '{EXTRACTED_FILES_RULE}' notifications", file=sys.stderr)

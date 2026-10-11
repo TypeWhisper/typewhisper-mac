@@ -67,6 +67,9 @@ jobs:
     timeout-minutes: 120
     env:
       XCODE_VERSION: "26.6"
+      # The coverage check below reads per-file extraction diagnostics, which the
+      # CodeQL Action skips on pull requests by default since v4.33.0.
+      CODEQL_ACTION_FILE_COVERAGE_ON_PRS: "true"
 
     steps:
       - name: Checkout
@@ -158,16 +161,25 @@ jobs:
           set -o pipefail
           bash scripts/codeql-build-swift.sh "$RUNNER_TEMP/codeql-build" | tee "$RUNNER_TEMP/codeql-swift-build.log"
 
+      # Upload only after the coverage check, so a partial extraction cannot make
+      # alerts in skipped files look fixed.
       - name: Perform CodeQL Analysis
         id: analyze
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: "/language:swift"
+          upload: never
 
       - name: Check Swift extraction coverage
         env:
           SARIF_DIR: ${{ steps.analyze.outputs.sarif-output }}
         run: python3 scripts/codeql_swift_coverage.py "$SARIF_DIR/swift.sarif"
+
+      - name: Upload CodeQL Swift results
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
+        with:
+          sarif_file: ${{ steps.analyze.outputs.sarif-output }}/swift.sarif
+          category: "/language:swift"
 
       - name: Upload CodeQL Swift diagnostics
         if: failure()

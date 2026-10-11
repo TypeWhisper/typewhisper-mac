@@ -31,6 +31,12 @@ extensions, the SDK sources or a plugin directory was not extracted, and prints 
 missing files. A green build alone is not proof of coverage: before this check, the
 tag-only Swift job reported "CodeQL scanned 32 out of 451 Swift files" for `v1.7.0`.
 
+The analysis runs with `upload: never`; the SARIF is uploaded only after the check
+passes, so a partial extraction cannot close alerts in files it skipped. The job sets
+`CODEQL_ACTION_FILE_COVERAGE_ON_PRS=true` because the CodeQL Action omits the per-file
+extraction diagnostics on pull requests by default. CodeQL extraction errors in tracked
+files are shown as warnings; they do not fail the job.
+
 ## Not analyzed
 
 | Sources | Reason |
