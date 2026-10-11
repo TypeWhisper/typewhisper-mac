@@ -44,6 +44,25 @@ done
 
 echo "Building ${#targets[@]} targets for CodeQL: ${targets[*]}"
 
+# SwiftPM keys its manifest cache on the whole process environment. GitHub sets
+# run-specific variables, so every traced build re-evaluated all package
+# manifests under tracing (16-28 minutes). xcodebuild therefore runs with a
+# fixed environment: basic shell variables plus the CodeQL tracer variables,
+# without the run-specific CODEQL_ACTION_* and CODEQL_WORKFLOW_STARTED_AT. The
+# workflow caches ~/Library/Caches/org.swift.swiftpm/manifests between runs.
+stable_env=()
+for name in HOME USER LOGNAME SHELL PATH LANG DEVELOPER_DIR TOOLCHAINS; do
+  if [[ -n "${!name:-}" ]]; then
+    stable_env+=("$name=${!name}")
+  fi
+done
+while IFS= read -r name; do
+  case "$name" in
+    CODEQL_ACTION_* | CODEQL_WORKFLOW_STARTED_AT) ;;
+    CODEQL_* | SEMMLE_* | DYLD_*) stable_env+=("$name=${!name}") ;;
+  esac
+done < <(compgen -e | sort)
+
 cd "$repo_root"
 # One xcodebuild invocation keeps shared Swift packages (MLX, FluidAudio,
 # WhisperKit, ...) in a single build graph instead of compiling them per plugin.
@@ -53,7 +72,7 @@ cd "$repo_root"
 # Explicit module builds (the Xcode 26 default) leave the CodeQL Swift extractor
 # with almost no app files: 1 of 226 in a traced build, against 226 of 226 with
 # SWIFT_ENABLE_EXPLICIT_MODULES=NO.
-xcodebuild build \
+env -i "${stable_env[@]}" xcodebuild build \
   -skipPackagePluginValidation \
   -skipMacroValidation \
   -disableAutomaticPackageResolution \

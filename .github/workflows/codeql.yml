@@ -91,6 +91,7 @@ jobs:
           else
             python3 scripts/codeql_swift_targets.py all | tee -a "$GITHUB_OUTPUT"
           fi
+          echo "image-version=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: No Swift changes to analyze
         if: steps.targets.outputs.build != 'true'
@@ -171,6 +172,20 @@ jobs:
           cat "$toolchain/usr/bin/metal"
           echo "identifier=$identifier" >> "$GITHUB_OUTPUT"
 
+      # SwiftPM manifest evaluations made under CodeQL tracing, keyed on the build
+      # script's fixed environment. Without them the traced build re-evaluates
+      # every package manifest under tracing. Each run saves its own copy, so a
+      # changed package, CodeQL version or runner image refreshes the entries.
+      - name: Restore Swift manifest cache
+        if: steps.targets.outputs.build == 'true'
+        id: manifest-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm/manifests
+          key: codeql-swift-manifests-${{ runner.os }}-${{ steps.targets.outputs.image-version }}-xcode${{ env.XCODE_VERSION }}-${{ github.run_id }}
+          restore-keys: |
+            codeql-swift-manifests-${{ runner.os }}-${{ steps.targets.outputs.image-version }}-xcode${{ env.XCODE_VERSION }}-
+
       - name: Initialize CodeQL
         if: steps.targets.outputs.build == 'true'
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
@@ -188,6 +203,13 @@ jobs:
         run: |
           set -o pipefail
           bash scripts/codeql-build-swift.sh "$RUNNER_TEMP/codeql-build" | tee "$RUNNER_TEMP/codeql-swift-build.log"
+
+      - name: Save Swift manifest cache
+        if: steps.targets.outputs.build == 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/org.swift.swiftpm/manifests
+          key: ${{ steps.manifest-cache.outputs.cache-primary-key }}
 
       # Upload only after the coverage check, so a partial extraction cannot make
       # alerts in skipped files look fixed.
