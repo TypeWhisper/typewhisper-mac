@@ -162,6 +162,16 @@ final class LicenseService: ObservableObject {
     private let keychainUpdate: (CFDictionary, CFDictionary) -> OSStatus
     private let keychainAdd: (CFDictionary) -> OSStatus
     private let keychainCopyMatching: (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
+    private let keychainDelete: (CFDictionary) -> OSStatus
+    private let now: () -> Date
+    private var isRetiringActivations = false
+
+    /// Old activations are only retried during validation passes (launch, Settings retry), so
+    /// these bound how often a long-unreachable or rejecting activation is requested.
+    nonisolated static let activationRetirementRetryBaseInterval: TimeInterval = 60 * 60 // 1 hour
+    nonisolated static let activationRetirementRetryMaxInterval: TimeInterval = 24 * 60 * 60 // 1 day
+    nonisolated static let maxActivationRetirementsPerPass = 3
+    nonisolated static let maxRejectedActivationRetirementAttempts = 3
 
     // MARK: - Published state (Business)
 
@@ -271,6 +281,8 @@ final class LicenseService: ObservableObject {
         keychainCopyMatching: @escaping (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus = {
             SecItemCopyMatching($0, $1)
         },
+        keychainDelete: @escaping (CFDictionary) -> OSStatus = { SecItemDelete($0) },
+        now: @escaping () -> Date = { Date() },
         dataTransport: @escaping LicenseDataTransport = { request in
             try await URLSession.shared.data(for: request)
         }
@@ -280,6 +292,8 @@ final class LicenseService: ObservableObject {
         self.keychainUpdate = keychainUpdate
         self.keychainAdd = keychainAdd
         self.keychainCopyMatching = keychainCopyMatching
+        self.keychainDelete = keychainDelete
+        self.now = now
         self.dataTransport = dataTransport
         self.isLicenseManaged = Self.configuredLicenseKey(defaults: defaults) != nil
 
@@ -417,8 +431,11 @@ final class LicenseService: ObservableObject {
 
     func validateIfNeeded() async {
         // Provision in the app's user context, so MDM scripts never need to write Keychain items.
-        if await reconcileManagedLicense() { return }
-        await validateStoredLicenseIfNeeded()
+        if await !reconcileManagedLicense() {
+            await validateStoredLicenseIfNeeded()
+        }
+        // Also runs without a managed key, so removing the profile still retires replaced activations.
+        await retirePendingActivations()
     }
 
     private static func configuredLicenseKey(defaults: UserDefaults) -> String? {
@@ -446,17 +463,12 @@ final class LicenseService: ObservableObject {
                 if try readLicenseFromKeychain() != nil { return true }
             }
 
-            _ = try await activateKey(key, expecting: .commercial)
+            // The same key only gets here after Polar confirmed its activation is gone.
+            let retiring = previous?.key == key ? nil : previous
+            // The old activation is queued together with saving the validated replacement and
+            // retired by `retirePendingActivations()` after this pass.
+            _ = try await activateKey(key, expecting: .commercial, retiring: retiring)
             markWelcomeSheetShown()
-
-            // Only retire the old activation after the replacement is validated and saved.
-            if let previous {
-                do {
-                    try await polarDeactivate(key: previous.key, activationId: previous.activationId)
-                } catch {
-                    logger.warning("Previous license activation could not be retired after managed key rotation")
-                }
-            }
         } catch {
             // Server error bodies can contain submitted data. Never expose them for a managed key.
             managedLicenseError = localizedAppText(
@@ -622,7 +634,11 @@ final class LicenseService: ObservableObject {
         }
     }
 
-    private func activateKey(_ key: String, expecting expectedEntitlement: ExpectedEntitlementKind) async throws -> ActivatedEntitlement {
+    private func activateKey(
+        _ key: String,
+        expecting expectedEntitlement: ExpectedEntitlementKind,
+        retiring previous: (key: String, activationId: String)? = nil
+    ) async throws -> ActivatedEntitlement {
         let response = try await polarActivate(key: key)
 
         do {
@@ -672,7 +688,8 @@ final class LicenseService: ObservableObject {
                     key: key,
                     activationId: response.id,
                     tier: licenseTier,
-                    isLifetime: isLifetime
+                    isLifetime: isLifetime,
+                    retiring: previous
                 )
                 return .commercial(tier: licenseTier, isLifetime: isLifetime)
             }
@@ -913,8 +930,10 @@ final class LicenseService: ObservableObject {
 
     private func saveKeychainPayload(key: String, activationId: String, account: String) throws {
         let payload = LicenseKeychainPayload(key: key, activationId: activationId)
-        let data = try JSONEncoder().encode(payload)
+        try saveKeychainData(JSONEncoder().encode(payload), account: account)
+    }
 
+    private func saveKeychainData(_ data: Data, account: String) throws {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -941,19 +960,7 @@ final class LicenseService: ObservableObject {
 
     /// Returns nil only when no item exists; unreadable items throw so callers keep cached state.
     private func readKeychainPayload(account: String) throws -> (key: String, activationId: String)? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-        ]
-
-        var result: CFTypeRef?
-        let status = keychainCopyMatching(query as CFDictionary, &result)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess, let data = result as? Data else {
-            throw LicenseError.keychainUnavailable
-        }
+        guard let data = try readKeychainData(account: account) else { return nil }
 
         if let payload = try? JSONDecoder().decode(LicenseKeychainPayload.self, from: data) {
             return (key: payload.key, activationId: payload.activationId)
@@ -970,6 +977,23 @@ final class LicenseService: ObservableObject {
         throw LicenseError.keychainUnavailable
     }
 
+    private func readKeychainData(account: String) throws -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+        ]
+
+        var result: CFTypeRef?
+        let status = keychainCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = result as? Data else {
+            throw LicenseError.keychainUnavailable
+        }
+        return data
+    }
+
     private func removeLicenseFromKeychain() {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -983,14 +1007,172 @@ final class LicenseService: ObservableObject {
         key: String,
         activationId: String,
         tier: LicenseTier,
-        isLifetime: Bool
+        isLifetime: Bool,
+        retiring previous: (key: String, activationId: String)? = nil
     ) throws {
+        // Queue the old credentials before overwriting them. If saving the replacement then fails,
+        // the queued entry still matches the active record and is dropped without a Polar request.
+        if let previous {
+            try enqueuePendingRetirement(key: previous.key, activationId: previous.activationId)
+        }
         try saveLicenseToKeychain(key: key, activationId: activationId)
         licenseStatus = .active
         licenseTier = tier
         licenseIsLifetime = isLifetime
         usageIntent = Self.usageIntent(for: tier)
         defaults.set(Date(), forKey: UserDefaultsKeys.lastLicenseValidation)
+    }
+
+    // MARK: - Pending Activation Retirement
+
+    /// An activation replaced by a managed key rotation. Its credentials stay in Keychain until
+    /// Polar confirms the deactivation or reports the activation as missing.
+    private struct PendingActivationRetirement: Codable {
+        let key: String
+        let activationId: String
+        var failedAttempts = 0
+        var rejectedAttempts = 0
+        var nextAttemptAt: Date?
+    }
+
+    private struct PendingActivationRetirementQueue: Codable {
+        var version = 1
+        var entries: [PendingActivationRetirement]
+    }
+
+    private static let pendingRetirementsAccount = "polar-license-retirements"
+
+    /// Retries deactivating replaced activations with a per-pass budget and capped backoff.
+    private func retirePendingActivations() async {
+        guard !isRetiringActivations else { return }
+        isRetiringActivations = true
+        defer { isRetiringActivations = false }
+
+        var attempted = Set<String>()
+        while attempted.count < Self.maxActivationRetirementsPerPass {
+            let entry: PendingActivationRetirement
+            do {
+                guard let next = try nextDuePendingRetirement(excluding: attempted) else { return }
+                entry = next
+            } catch {
+                logger.warning("Previous license activation cleanup deferred because Keychain is unavailable")
+                return
+            }
+            attempted.insert(entry.activationId)
+
+            var failure: Error?
+            do {
+                try await polarDeactivate(key: entry.key, activationId: entry.activationId)
+            } catch {
+                failure = error
+            }
+
+            do {
+                try recordRetirementAttempt(for: entry, failure: failure)
+            } catch {
+                // The entry stays queued. A repeated deactivation is safe: Polar then reports it missing.
+                logger.warning("Previous license activation cleanup state could not be saved")
+                return
+            }
+        }
+    }
+
+    private func nextDuePendingRetirement(excluding attempted: Set<String>) throws -> PendingActivationRetirement? {
+        var entries = try readPendingRetirements()
+        guard !entries.isEmpty else { return nil }
+
+        // The active record still holds these credentials. Never deactivate the current activation.
+        if let active = try readLicenseFromKeychain(),
+           entries.contains(where: { $0.activationId == active.activationId }) {
+            entries.removeAll { $0.activationId == active.activationId }
+            try savePendingRetirements(entries)
+        }
+
+        let now = now()
+        return entries.first {
+            !attempted.contains($0.activationId) && ($0.nextAttemptAt ?? .distantPast) <= now
+        }
+    }
+
+    /// Re-reads the queue so a rotation that finished during the request keeps its new entry.
+    private func recordRetirementAttempt(for entry: PendingActivationRetirement, failure: Error?) throws {
+        var entries = try readPendingRetirements()
+        guard let index = entries.firstIndex(where: { $0.activationId == entry.activationId }) else { return }
+
+        guard let failure else {
+            entries.remove(at: index)
+            try savePendingRetirements(entries)
+            logger.info("Retired a previous license activation (\(entries.count) pending)")
+            return
+        }
+        if Self.isPolarResourceMissing(failure) {
+            entries.remove(at: index)
+            try savePendingRetirements(entries)
+            logger.info("Previous license activation was already removed on Polar (\(entries.count) pending)")
+            return
+        }
+
+        entries[index].failedAttempts += 1
+        if Self.isDefinitiveRetirementRejection(failure) {
+            entries[index].rejectedAttempts += 1
+            if entries[index].rejectedAttempts >= Self.maxRejectedActivationRetirementAttempts {
+                entries.remove(at: index)
+                try savePendingRetirements(entries)
+                logger.error("Stopped retiring a previous license activation that Polar keeps rejecting; remove it in Polar")
+                return
+            }
+        }
+        entries[index].nextAttemptAt = now().addingTimeInterval(
+            Self.activationRetirementRetryDelay(afterFailures: entries[index].failedAttempts)
+        )
+        try savePendingRetirements(entries)
+        logger.warning("Previous license activation could not be retired yet; will retry later")
+    }
+
+    nonisolated static func activationRetirementRetryDelay(afterFailures failures: Int) -> TimeInterval {
+        let exponent = Double(min(max(failures - 1, 0), 16))
+        return min(activationRetirementRetryBaseInterval * pow(2, exponent), activationRetirementRetryMaxInterval)
+    }
+
+    /// A 4xx that retrying cannot fix. A bare 404 (removed API version), 401/403, 408 and 429
+    /// are treated as temporary so the only cleanup credentials are not dropped early.
+    private static func isDefinitiveRetirementRejection(_ error: Error) -> Bool {
+        guard case .deactivationFailed(let statusCode, _, _) = error as? LicenseError else { return false }
+        return (400 ... 499).contains(statusCode) && ![401, 403, 404, 408, 429].contains(statusCode)
+    }
+
+    private func enqueuePendingRetirement(key: String, activationId: String) throws {
+        var entries = try readPendingRetirements()
+        guard !entries.contains(where: { $0.key == key && $0.activationId == activationId }) else { return }
+        entries.append(PendingActivationRetirement(key: key, activationId: activationId))
+        try savePendingRetirements(entries)
+    }
+
+    /// Throws for an unreadable or undecodable queue, so its credentials are never overwritten.
+    private func readPendingRetirements() throws -> [PendingActivationRetirement] {
+        guard let data = try readKeychainData(account: Self.pendingRetirementsAccount) else { return [] }
+        guard let queue = try? JSONDecoder().decode(PendingActivationRetirementQueue.self, from: data),
+              queue.version == 1 else {
+            throw LicenseError.keychainUnavailable
+        }
+        return queue.entries
+    }
+
+    private func savePendingRetirements(_ entries: [PendingActivationRetirement]) throws {
+        guard entries.isEmpty else {
+            let data = try JSONEncoder().encode(PendingActivationRetirementQueue(entries: entries))
+            try saveKeychainData(data, account: Self.pendingRetirementsAccount)
+            return
+        }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: keychainService,
+            kSecAttrAccount as String: Self.pendingRetirementsAccount,
+        ]
+        let status = keychainDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw LicenseError.keychainUnavailable
+        }
     }
 
     // MARK: - Supporter Keychain

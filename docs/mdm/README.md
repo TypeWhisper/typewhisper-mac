@@ -46,9 +46,18 @@ keys. Avoid putting real keys in interactive shell history or command-line logs.
   or on the next launch. No background retry loop is installed.
 - Changing the key validates and stores the replacement before attempting to
   deactivate the old activation. A failed replacement leaves the old record intact.
-  If old-activation cleanup fails, the administrator can remove it in Polar.
+- If deactivating the old activation fails, its key and activation ID stay queued in
+  the user's Keychain and the app retries on later launches and Settings retries,
+  never more than three per pass, waiting 1 hour after the first failure and
+  doubling up to once a day. Further rotations add to the queue. An entry is removed
+  once Polar confirms the deactivation or reports the activation as missing.
+  Network errors, server errors and an unrecognized 404 keep it queued; after three
+  requests Polar rejects outright (for example HTTP 422) the app stops retrying that
+  entry and logs it. The current activation is never deactivated by this cleanup.
+  Activations that are still listed in Polar afterwards can be removed there.
 - Removing the setting restores manual license controls on the next launch. It does
-  not revoke or delete an existing activation. Deactivate it manually or revoke it
+  not revoke or delete an existing activation. Queued cleanup of replaced
+  activations continues. Deactivate the current activation manually or revoke it
   centrally through Polar; central changes are noticed on the normal validation
   schedule (up to seven days for an already-active license).
 - A revoked license is not repeatedly reactivated. An activation deleted in Polar

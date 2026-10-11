@@ -1228,6 +1228,13 @@ final class CLISupportTests: XCTestCase {
         var missingActivation = false
         var unsupportedAPIVersion = false
         var supporter = false
+        var deactivation: ManagedDeactivationResponse = .success
+        var deactivatedActivationIDs: [String] = []
+        var deactivationAttempts: [String] = []
+
+        func configureDeactivation(_ response: ManagedDeactivationResponse) {
+            deactivation = response
+        }
 
         func configure(failValidation: Bool = false, failActivation: Bool = false, revoked: Bool = false, missingActivation: Bool = false, unsupportedAPIVersion: Bool = false, supporter: Bool = false) {
             self.failActivation = failActivation
@@ -1264,7 +1271,20 @@ final class CLISupportTests: XCTestCase {
                     body = "{\"id\":\"license\",\"status\":\"\(revoked ? "revoked" : "granted")\",\"benefit_id\":\"\(benefit)\"}"
                 }
             case "deactivate":
-                body = "{}"
+                let requestBody = try JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: Any]
+                let activationID = requestBody?["activation_id"] as? String ?? ""
+                deactivationAttempts.append(activationID)
+                switch deactivation {
+                case .success:
+                    deactivatedActivationIDs.append(activationID)
+                    status = 204
+                    body = ""
+                case .offline:
+                    throw URLError(.notConnectedToInternet)
+                case .http(let statusCode, let errorBody):
+                    status = statusCode
+                    body = errorBody
+                }
             default:
                 XCTFail("Unexpected managed license request")
                 body = "{}"
@@ -1274,27 +1294,93 @@ final class CLISupportTests: XCTestCase {
         }
     }
 
+    private enum ManagedDeactivationResponse: Sendable {
+        case success
+        case offline
+        case http(Int, String)
+    }
+
+    @MainActor
+    private final class ManagedLicenseClock {
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+
+        func advance(by interval: TimeInterval) {
+            now = now.addingTimeInterval(interval)
+        }
+    }
+
     @MainActor
     private struct ManagedLicenseFixture {
+        nonisolated static let retirementsAccount = "polar-license-retirements"
+
         let suite = "TypeWhisperTests.Managed.\(UUID().uuidString)"
         let defaults: UserDefaults
         let server = ManagedLicenseServer()
+        let clock = ManagedLicenseClock()
         let service: LicenseService
 
         init(key: String? = "managed-key") throws {
             defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
             if let key { defaults.set(key, forKey: UserDefaultsKeys.managedLicenseKey) }
             let server = server
-            service = LicenseService(defaults: defaults, keychainServiceName: suite, dataTransport: { request in
+            let clock = clock
+            service = LicenseService(defaults: defaults, keychainServiceName: suite, now: { clock.now }, dataTransport: { request in
                 try await server.respond(to: request)
             })
+        }
+
+        /// A new service on the same defaults and Keychain, as after an app restart.
+        func restartedService(
+            keychainUpdate: @escaping (CFDictionary, CFDictionary) -> OSStatus = { SecItemUpdate($0, $1) },
+            keychainAdd: @escaping (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) },
+            keychainDelete: @escaping (CFDictionary) -> OSStatus = { SecItemDelete($0) }
+        ) -> LicenseService {
+            let server = server
+            let clock = clock
+            return LicenseService(
+                defaults: defaults,
+                keychainServiceName: suite,
+                keychainUpdate: keychainUpdate,
+                keychainAdd: keychainAdd,
+                keychainDelete: keychainDelete,
+                now: { clock.now },
+                dataTransport: { try await server.respond(to: $0) }
+            )
+        }
+
+        func rotate(to key: String, using service: LicenseService? = nil) async {
+            defaults.set(key, forKey: UserDefaultsKeys.managedLicenseKey)
+            await (service ?? self.service).validateIfNeeded()
+        }
+
+        var activeActivationID: String? {
+            guard let stored = CLISupportTests.loadKeychainValue(service: suite, account: "polar-license"),
+                  let object = try? JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any] else {
+                return nil
+            }
+            return object["activationId"] as? String
+        }
+
+        var pendingRetirementIDs: [String] {
+            guard let stored = CLISupportTests.loadKeychainValue(service: suite, account: Self.retirementsAccount),
+                  let object = try? JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any],
+                  let entries = object["entries"] as? [[String: Any]] else {
+                return []
+            }
+            return entries.compactMap { $0["activationId"] as? String }
         }
 
         func cleanup() {
             defaults.removePersistentDomain(forName: suite)
             CLISupportTests.deleteKeychainValue(service: suite, account: "polar-license")
             CLISupportTests.deleteKeychainValue(service: suite, account: "polar-supporter")
+            CLISupportTests.deleteKeychainValue(service: suite, account: Self.retirementsAccount)
         }
+    }
+
+    /// Lets tests fail Keychain writes for the retirement queue only.
+    private static func isRetirementQueueQuery(_ query: CFDictionary) -> Bool {
+        (query as NSDictionary)[kSecAttrAccount as String] as? String == ManagedLicenseFixture.retirementsAccount
     }
 
     @MainActor
@@ -1377,6 +1463,280 @@ final class CLISupportTests: XCTestCase {
         XCTAssertTrue(stored.contains("activation-2"))
         let paths = await fixture.server.paths
         XCTAssertEqual(paths, ["activate", "validate", "activate", "validate", "deactivate"])
+        let deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["activation-1"])
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        XCTAssertNil(Self.loadKeychainValue(service: fixture.suite, account: ManagedLicenseFixture.retirementsAccount))
+    }
+
+    @MainActor
+    func testManagedLicenseFailedRetirementSurvivesRestartAndRetriesWithoutNewActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.server.configureDeactivation(.offline)
+        await fixture.rotate(to: "replacement-key")
+
+        XCTAssertNil(fixture.service.managedLicenseError)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(fixture.activeActivationID, "activation-2")
+        XCTAssertEqual(fixture.pendingRetirementIDs, ["activation-1"])
+
+        await fixture.server.configureDeactivation(.success)
+        let restarted = fixture.restartedService()
+        await restarted.validateIfNeeded()
+        var attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts, ["activation-1"], "The retry must wait for its backoff")
+
+        fixture.clock.advance(by: LicenseService.activationRetirementRetryBaseInterval)
+        await restarted.validateIfNeeded()
+        attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts, ["activation-1", "activation-1"])
+        let deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["activation-1"])
+        XCTAssertNil(Self.loadKeychainValue(service: fixture.suite, account: ManagedLicenseFixture.retirementsAccount))
+        let activations = await fixture.server.activationCount
+        XCTAssertEqual(activations, 2)
+        XCTAssertEqual(fixture.activeActivationID, "activation-2")
+        XCTAssertTrue(restarted.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseRepeatedRotationsKeepEveryPendingRetirement() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.server.configureDeactivation(.http(503, #"{"detail":"Service Unavailable"}"#))
+        await fixture.rotate(to: "key-b")
+        await fixture.rotate(to: "key-c")
+
+        XCTAssertEqual(fixture.activeActivationID, "activation-3")
+        XCTAssertEqual(fixture.pendingRetirementIDs, ["activation-1", "activation-2"])
+
+        await fixture.server.configureDeactivation(.success)
+        fixture.clock.advance(by: LicenseService.activationRetirementRetryMaxInterval)
+        await fixture.service.validateIfNeeded()
+
+        let deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["activation-1", "activation-2"])
+        let attempts = await fixture.server.deactivationAttempts
+        XCTAssertFalse(attempts.contains("activation-3"))
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        XCTAssertEqual(fixture.activeActivationID, "activation-3")
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicensePendingRetirementKeepsEntryUnlessDeactivationIsConfirmed() async throws {
+        let notFound = #"{"error":"ResourceNotFound","detail":"Not found"}"#
+        let cases: [(name: String, response: ManagedDeactivationResponse, kept: Bool)] = [
+            ("offline", .offline, true),
+            ("bare 404", .http(404, #"{"detail":"Not Found"}"#), true),
+            ("401", .http(401, #"{"detail":"Unauthorized"}"#), true),
+            ("403", .http(403, #"{"detail":"Forbidden"}"#), true),
+            ("429", .http(429, #"{"detail":"Too Many Requests"}"#), true),
+            ("500", .http(500, #"{"detail":"Internal Server Error"}"#), true),
+            ("first 422", .http(422, #"{"detail":"Invalid"}"#), true),
+            ("ResourceNotFound", .http(404, notFound), false),
+            ("success", .success, false),
+        ]
+
+        for testCase in cases {
+            let fixture = try ManagedLicenseFixture()
+            await fixture.service.validateIfNeeded()
+            await fixture.server.configureDeactivation(testCase.response)
+            await fixture.rotate(to: "replacement-key")
+
+            XCTAssertEqual(fixture.pendingRetirementIDs, testCase.kept ? ["activation-1"] : [], testCase.name)
+            XCTAssertEqual(fixture.activeActivationID, "activation-2", testCase.name)
+            XCTAssertTrue(fixture.service.hasCommercialLicense, testCase.name)
+            XCTAssertNil(fixture.service.managedLicenseError, testCase.name)
+            fixture.cleanup()
+        }
+    }
+
+    @MainActor
+    func testManagedLicensePendingRetirementBacksOffAndStopsAfterRepeatedRejections() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.server.configureDeactivation(.http(422, #"{"detail":"Invalid"}"#))
+        await fixture.rotate(to: "replacement-key")
+
+        let base = LicenseService.activationRetirementRetryBaseInterval
+        fixture.clock.advance(by: base - 1)
+        await fixture.service.validateIfNeeded()
+        var attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts.count, 1)
+
+        fixture.clock.advance(by: 1)
+        await fixture.service.validateIfNeeded()
+        attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts.count, 2)
+        XCTAssertEqual(fixture.pendingRetirementIDs, ["activation-1"])
+
+        fixture.clock.advance(by: 2 * base)
+        await fixture.service.validateIfNeeded()
+        attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts.count, LicenseService.maxRejectedActivationRetirementAttempts)
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+
+        fixture.clock.advance(by: LicenseService.activationRetirementRetryMaxInterval)
+        await fixture.service.validateIfNeeded()
+        attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts.count, LicenseService.maxRejectedActivationRetirementAttempts)
+        XCTAssertEqual(fixture.activeActivationID, "activation-2")
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    func testActivationRetirementRetryDelayDoublesUpToCap() {
+        let hour: TimeInterval = 60 * 60
+        let delays = (1 ... 7).map { LicenseService.activationRetirementRetryDelay(afterFailures: $0) }
+        XCTAssertEqual(delays, [hour, 2 * hour, 4 * hour, 8 * hour, 16 * hour, 24 * hour, 24 * hour])
+        XCTAssertEqual(LicenseService.activationRetirementRetryDelay(afterFailures: 10_000), 24 * hour)
+    }
+
+    @MainActor
+    func testManagedLicenseRetirementServerSuccessWithFailedQueueRemovalRetriesSafely() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.server.configureDeactivation(.offline)
+        await fixture.rotate(to: "replacement-key")
+
+        await fixture.server.configureDeactivation(.success)
+        fixture.clock.advance(by: LicenseService.activationRetirementRetryBaseInterval)
+        let failing = fixture.restartedService(keychainDelete: { query in
+            Self.isRetirementQueueQuery(query) ? errSecInteractionNotAllowed : SecItemDelete(query)
+        })
+        await failing.validateIfNeeded()
+        let deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["activation-1"])
+        XCTAssertEqual(fixture.pendingRetirementIDs, ["activation-1"])
+
+        await fixture.server.configureDeactivation(.http(404, #"{"error":"ResourceNotFound","detail":"Not found"}"#))
+        let restarted = fixture.restartedService()
+        await restarted.validateIfNeeded()
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        XCTAssertEqual(fixture.activeActivationID, "activation-2")
+        XCTAssertTrue(restarted.hasCommercialLicense)
+        let activations = await fixture.server.activationCount
+        XCTAssertEqual(activations, 2)
+    }
+
+    @MainActor
+    func testManagedLicenseRotationKeepsOldLicenseWhenRetirementCannotBeQueued() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let original = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        let failing = fixture.restartedService(
+            keychainUpdate: { query, attributes in
+                Self.isRetirementQueueQuery(query) ? errSecInteractionNotAllowed : SecItemUpdate(query, attributes)
+            },
+            keychainAdd: { query in
+                Self.isRetirementQueueQuery(query) ? errSecInteractionNotAllowed : SecItemAdd(query, nil)
+            }
+        )
+
+        await fixture.rotate(to: "replacement-key", using: failing)
+
+        XCTAssertNotNil(failing.managedLicenseError)
+        XCTAssertTrue(failing.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), original)
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        // Only the unsaved replacement is rolled back; the active activation is untouched.
+        let attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts, ["activation-2"])
+    }
+
+    @MainActor
+    func testManagedLicensePendingRetirementNeverDeactivatesActiveActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        // State after a crash between queueing the old activation and saving its replacement.
+        Self.storeKeychainValue(
+            #"{"version":1,"entries":[{"key":"managed-key","activationId":"activation-1","failedAttempts":0,"rejectedAttempts":0}]}"#,
+            service: fixture.suite,
+            account: ManagedLicenseFixture.retirementsAccount
+        )
+
+        let restarted = fixture.restartedService()
+        await restarted.validateIfNeeded()
+
+        let attempts = await fixture.server.deactivationAttempts
+        XCTAssertTrue(attempts.isEmpty)
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        XCTAssertEqual(fixture.activeActivationID, "activation-1")
+        XCTAssertTrue(restarted.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseUnreadableRetirementQueueKeepsCredentialsAndCurrentLicense() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let original = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        Self.storeKeychainValue("invalid payload", service: fixture.suite, account: ManagedLicenseFixture.retirementsAccount)
+
+        await fixture.rotate(to: "replacement-key")
+
+        XCTAssertNotNil(fixture.service.managedLicenseError)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), original)
+        XCTAssertEqual(
+            Self.loadKeychainValue(service: fixture.suite, account: ManagedLicenseFixture.retirementsAccount),
+            "invalid payload"
+        )
+        let attempts = await fixture.server.deactivationAttempts
+        XCTAssertEqual(attempts, ["activation-2"])
+    }
+
+    @MainActor
+    func testManagedLicenseRemovalKeepsRetiringPendingActivations() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.server.configureDeactivation(.offline)
+        await fixture.rotate(to: "replacement-key")
+
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.managedLicenseKey)
+        await fixture.server.configureDeactivation(.success)
+        fixture.clock.advance(by: LicenseService.activationRetirementRetryBaseInterval)
+        await fixture.service.validateIfNeeded()
+
+        XCTAssertFalse(fixture.service.isLicenseManaged)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(fixture.activeActivationID, "activation-2")
+        XCTAssertTrue(fixture.pendingRetirementIDs.isEmpty)
+        let deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["activation-1"])
+    }
+
+    @MainActor
+    func testManagedLicenseRetirementPassIsBudgeted() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let entries = (1 ... 5).map {
+            #"{"key":"old-key-\#($0)","activationId":"old-\#($0)","failedAttempts":0,"rejectedAttempts":0}"#
+        }
+        Self.storeKeychainValue(
+            #"{"version":1,"entries":[\#(entries.joined(separator: ","))]}"#,
+            service: fixture.suite,
+            account: ManagedLicenseFixture.retirementsAccount
+        )
+
+        await fixture.service.validateIfNeeded()
+        var deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["old-1", "old-2", "old-3"])
+        XCTAssertEqual(fixture.pendingRetirementIDs, ["old-4", "old-5"])
+
+        await fixture.service.validateIfNeeded()
+        deactivated = await fixture.server.deactivatedActivationIDs
+        XCTAssertEqual(deactivated, ["old-1", "old-2", "old-3", "old-4", "old-5"])
+        XCTAssertNil(Self.loadKeychainValue(service: fixture.suite, account: ManagedLicenseFixture.retirementsAccount))
     }
 
     @MainActor
