@@ -46,19 +46,6 @@ for target in "${app_targets[@]}" "${plugin_targets[@]}"; do
   target_args+=(-target "$target")
 done
 
-# Under CodeQL tracing, the Xcode `metal` stub reports a missing Metal Toolchain
-# even when `xcrun metal` works, which fails the MLX plugin builds. Putting the
-# downloadable Metal toolchain first in TOOLCHAINS makes Xcode call its `metal`
-# directly; Swift and Clang still come from the default toolchain.
-if [[ -z "${TOOLCHAINS:-}" ]] && metal_path="$(xcrun --find metal 2>/dev/null)"; then
-  metal_toolchain_info="${metal_path%/usr/bin/metal}/ToolchainInfo.plist"
-  if [[ -f "$metal_toolchain_info" ]]; then
-    TOOLCHAINS="$(plutil -extract Identifier raw "$metal_toolchain_info")"
-    export TOOLCHAINS
-    echo "Using Metal toolchain $TOOLCHAINS"
-  fi
-fi
-
 echo "Building ${#app_targets[@]} app targets and ${#plugin_targets[@]} plugin targets for CodeQL"
 
 cd "$repo_root"

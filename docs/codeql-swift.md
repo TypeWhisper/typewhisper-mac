@@ -46,9 +46,13 @@ tag-only Swift job reported "CodeQL scanned 32 out of 451 Swift files" for `v1.7
 - Debug configuration, arm64 only, no code signing, index store off.
 - `SWIFT_ENABLE_EXPLICIT_MODULES=NO`. With the Xcode 26 default (explicit modules) the
   extractor processed 1 of 226 app files in a traced build; without it, all 226.
-- The script puts the downloadable Metal toolchain first in `TOOLCHAINS`. Under CodeQL
-  tracing, the `metal` stub in the default toolchain reports a missing Metal Toolchain
-  and the MLX plugins (Qwen3, Canary, Granite, Voxtral, LocalLLM) fail to build.
+- Under CodeQL tracing, the `metal` stub in Xcode's default toolchain reports a missing
+  Metal Toolchain, so the MLX plugins (Qwen3, Canary, Granite, Voxtral, LocalLLM) fail
+  to build. Setting `TOOLCHAINS` to the downloaded Metal toolchain's identifier did not
+  change this with Xcode 26.6. The workflow therefore installs a one-tool toolchain in
+  `~/Library/Developer/Toolchains` whose `metal` forwards to `xcrun --find metal`, and
+  selects it with `TOOLCHAINS` for the build. Swift and Clang still come from the
+  default toolchain. A local run of the build script outside CI does not need this.
 - Only package checkouts are restored from the `spm-*` cache that the build workflow
   saves. Compiled artifacts are never cached: a file that is not compiled under tracing
   is not extracted.

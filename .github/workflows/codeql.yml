@@ -120,9 +120,40 @@ jobs:
           xcrun --find metal
           xcrun metal -v
 
+      # Under CodeQL tracing, the `metal` stub in Xcode's default toolchain reports a
+      # missing Metal Toolchain, while the downloaded toolchain's `metal` works. A
+      # one-tool toolchain that forwards to it lets the MLX plugins build.
+      - name: Route Metal compiles to the downloaded Metal toolchain
+        id: metal-toolchain
+        run: |
+          metal="$(xcrun --find metal)"
+          toolchain="$HOME/Library/Developer/Toolchains/CodeQLMetal.xctoolchain"
+          identifier="com.typewhisper.codeql-metal"
+          mkdir -p "$toolchain/usr/bin"
+          cat > "$toolchain/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleIdentifier</key>
+            <string>$identifier</string>
+            <key>DisplayName</key>
+            <string>CodeQL Metal</string>
+            <key>CompatibilityVersion</key>
+            <integer>2</integer>
+          </dict>
+          </plist>
+          PLIST
+          printf '#!/bin/sh\nexec "%s" "$@"\n' "$metal" > "$toolchain/usr/bin/metal"
+          chmod +x "$toolchain/usr/bin/metal"
+          plutil -lint "$toolchain/Info.plist"
+          cat "$toolchain/usr/bin/metal"
+          echo "identifier=$identifier" >> "$GITHUB_OUTPUT"
+
       - name: Build Swift for CodeQL
         env:
           SOURCE_PACKAGES_DIR: ${{ runner.temp }}/SourcePackages
+          TOOLCHAINS: ${{ steps.metal-toolchain.outputs.identifier }}
         run: |
           set -o pipefail
           bash scripts/codeql-build-swift.sh "$RUNNER_TEMP/codeql-build" | tee "$RUNNER_TEMP/codeql-swift-build.log"
@@ -145,6 +176,7 @@ jobs:
           name: codeql-swift-diagnostics
           path: |
             ${{ runner.temp }}/codeql-swift-build.log
+            ${{ runner.temp }}/codeql_databases/log
             ${{ runner.temp }}/codeql_databases/swift/log
             ${{ runner.temp }}/codeql_databases/swift/diagnostic
             ${{ steps.analyze.outputs.sarif-output }}
