@@ -22,6 +22,7 @@ final class RemoteLinkViewModel: ObservableObject {
 
     @Published private(set) var isEnabled: Bool
     @Published private(set) var isRunning = false
+    @Published private(set) var isAdvertised = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var devices: [RemoteLinkDevice] = []
     @Published private(set) var pairingState: PairingState = .closed
@@ -40,6 +41,9 @@ final class RemoteLinkViewModel: ObservableObject {
 
         server.onStateChange = { [weak self] state in
             Task { @MainActor in self?.apply(state) }
+        }
+        server.onAdvertisingChange = { [weak self] advertised in
+            Task { @MainActor in self?.isAdvertised = advertised }
         }
         server.onDevicesChange = { [weak self] in
             Task { @MainActor in self?.reloadDevices() }
@@ -69,6 +73,7 @@ final class RemoteLinkViewModel: ObservableObject {
     func stop() {
         server.stop()
         isRunning = false
+        isAdvertised = false
     }
 
     func beginPairing() {
@@ -120,8 +125,10 @@ final class RemoteLinkViewModel: ObservableObject {
             errorMessage = nil
         case .stopped:
             isRunning = false
+            isAdvertised = false
         case .failed(let message):
             isRunning = false
+            isAdvertised = false
             errorMessage = message
         }
     }

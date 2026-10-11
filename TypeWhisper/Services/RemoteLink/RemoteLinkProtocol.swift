@@ -12,6 +12,10 @@ import Foundation
 // ChaCha20-Poly1305 ciphertext and tag; the nonce is the per-direction frame
 // counter and is never sent. Sealed plaintext is `[flags: UInt8][chunk]`, where
 // bit 0 marks the last chunk of an application message.
+//
+// Each session mixes a fresh X25519 exchange (hello and welcome carry one
+// ephemeral public key each) into the pairing key, so traffic recorded today
+// stays private even if the pairing key leaks later.
 
 enum RemoteLink {
     static let protocolVersion = 1
@@ -188,8 +192,28 @@ struct RemoteLinkSessionKeys: Sendable {
     let sending: SymmetricKey
     let receiving: SymmetricKey
 
+    /// Combines this side's ephemeral private key with the peer's ephemeral
+    /// public key from the hello or welcome message.
+    static func ephemeralSecret(
+        privateKey: Curve25519.KeyAgreement.PrivateKey,
+        peerKey: Data
+    ) throws -> Data {
+        let publicKey: Curve25519.KeyAgreement.PublicKey
+        do {
+            publicKey = try Curve25519.KeyAgreement.PublicKey(rawRepresentation: peerKey)
+        } catch {
+            throw RemoteLinkError.invalidPublicKey
+        }
+        let secret = try privateKey.sharedSecretFromKeyAgreement(with: publicKey)
+        let data = secret.withUnsafeBytes { Data($0) }
+        // A low-order peer key yields an all-zero secret.
+        guard data.contains(where: { $0 != 0 }) else { throw RemoteLinkError.invalidPublicKey }
+        return data
+    }
+
     init(
         pairingKey: SymmetricKey,
+        ephemeralSecret: Data,
         deviceID: String,
         serverID: String,
         clientNonce: Data,
@@ -197,9 +221,10 @@ struct RemoteLinkSessionKeys: Sendable {
         role: RemoteLinkRole
     ) {
         let salt = clientNonce + serverNonce
+        let inputKeyMaterial = SymmetricKey(data: pairingKey.withUnsafeBytes { Data($0) } + ephemeralSecret)
         func derive(_ label: String) -> SymmetricKey {
             HKDF<SHA256>.deriveKey(
-                inputKeyMaterial: pairingKey,
+                inputKeyMaterial: inputKeyMaterial,
                 salt: salt,
                 info: RemoteLinkCrypto.fields([Data("typewhisper-remote-link-v1 \(label)".utf8), Data(deviceID.utf8), Data(serverID.utf8)]),
                 outputByteCount: 32

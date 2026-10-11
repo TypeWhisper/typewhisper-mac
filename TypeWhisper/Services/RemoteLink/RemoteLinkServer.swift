@@ -127,11 +127,15 @@ final class RemoteLinkServer: @unchecked Sendable {
         "POST /v1/transcribe",
     ]
     static let maxConnections = 8
+    static let maxConnectionsPerHost = 3
     static let pairingTimeout: TimeInterval = 120
 
     let store: RemoteLinkDeviceStore
     var onStateChange: (@Sendable (State) -> Void)?
     var onDevicesChange: (@Sendable () -> Void)?
+    /// True once Bonjour registered the service. macOS holds the registration
+    /// back until the user allows local network access.
+    var onAdvertisingChange: (@Sendable (Bool) -> Void)?
     var onPairingFinished: (@Sendable (RemoteLinkDevice?) -> Void)?
 
     private let router: APIRouter
@@ -141,7 +145,7 @@ final class RemoteLinkServer: @unchecked Sendable {
     private let lock = NSLock()
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "RemoteLink")
     private var listener: NWListener?
-    private var activeConnections: [UUID: (connection: RemoteLinkConnection, task: Task<Void, Never>)] = [:]
+    private var activeConnections: [UUID: (connection: RemoteLinkConnection, host: String, task: Task<Void, Never>)] = [:]
     private var pairingApprover: PairingApprover?
     private var isPairingInProgress = false
 
@@ -181,6 +185,16 @@ final class RemoteLinkServer: @unchecked Sendable {
             case .cancelled:
                 self?.onStateChange?(.stopped)
             default:
+                break
+            }
+        }
+        listener.serviceRegistrationUpdateHandler = { [weak self] change in
+            switch change {
+            case .add:
+                self?.onAdvertisingChange?(true)
+            case .remove:
+                self?.onAdvertisingChange?(false)
+            @unknown default:
                 break
             }
         }
@@ -258,11 +272,16 @@ final class RemoteLinkServer: @unchecked Sendable {
         return NWListener.Service(type: RemoteLink.bonjourType, txtRecord: txt)
     }
 
+    /// Caps connections overall and per remote host, so one device on the
+    /// network cannot occupy every slot before it authenticates.
     private func accept(_ nwConnection: NWConnection) {
         let id = UUID()
+        let host = Self.hostKey(for: nwConnection.endpoint)
         let connection = RemoteLinkConnection(connection: nwConnection)
         lock.withLock {
-            guard activeConnections.count < Self.maxConnections else {
+            let fromHost = activeConnections.values.filter { $0.host == host }.count
+            guard activeConnections.count < Self.maxConnections,
+                  fromHost < Self.maxConnectionsPerHost else {
                 nwConnection.cancel()
                 return
             }
@@ -271,8 +290,15 @@ final class RemoteLinkServer: @unchecked Sendable {
                 connection.close()
                 self?.finishConnection(id)
             }
-            activeConnections[id] = (connection, task)
+            activeConnections[id] = (connection, host, task)
         }
+    }
+
+    static func hostKey(for endpoint: NWEndpoint) -> String {
+        if case .hostPort(let host, _) = endpoint {
+            return "\(host)"
+        }
+        return "\(endpoint)"
     }
 
     private func finishConnection(_ id: UUID) {
@@ -303,7 +329,8 @@ final class RemoteLinkServer: @unchecked Sendable {
     private func serveSession(hello: RemoteLinkHandshake, connection: RemoteLinkConnection) async throws {
         guard let deviceID = hello.deviceID,
               let clientNonce = hello.nonce,
-              clientNonce.count == RemoteLink.nonceSize else {
+              clientNonce.count == RemoteLink.nonceSize,
+              let clientEphemeralKey = hello.key else {
             throw RemoteLinkError.malformedHandshake
         }
         guard let pairingKey = store.pairingKey(for: deviceID) else {
@@ -313,10 +340,18 @@ final class RemoteLinkServer: @unchecked Sendable {
 
         let serverID = store.serverID
         let serverNonce = RemoteLinkCrypto.randomNonce()
-        try await connection.send(RemoteLinkHandshake(type: .welcome, serverID: serverID, nonce: serverNonce))
+        let ephemeralKey = Curve25519.KeyAgreement.PrivateKey()
+        let ephemeralSecret = try RemoteLinkSessionKeys.ephemeralSecret(privateKey: ephemeralKey, peerKey: clientEphemeralKey)
+        try await connection.send(RemoteLinkHandshake(
+            type: .welcome,
+            serverID: serverID,
+            nonce: serverNonce,
+            key: ephemeralKey.publicKey.rawRepresentation
+        ))
 
         let keys = RemoteLinkSessionKeys(
             pairingKey: pairingKey,
+            ephemeralSecret: ephemeralSecret,
             deviceID: deviceID,
             serverID: serverID,
             clientNonce: clientNonce,

@@ -26,19 +26,35 @@ struct RemoteLinkSettingsSection: View {
             if viewModel.isEnabled {
                 HStack {
                     Image(systemName: "circle.fill")
-                        .foregroundStyle(viewModel.isRunning ? .green : .orange)
+                        .foregroundStyle(viewModel.isAdvertised ? .green : .orange)
                         .font(.caption2)
                         .accessibilityHidden(true)
-                    Text(viewModel.isRunning
-                         ? localizedAppText(
-                            "Visible as “\(viewModel.computerName)”",
-                            de: "Sichtbar als „\(viewModel.computerName)“",
-                            ja: "「\(viewModel.computerName)」として表示中",
-                            zh: "显示为“\(viewModel.computerName)”"
-                         )
-                         : String(localized: "Not running"))
+                    Text(statusText)
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                }
+
+                if viewModel.isRunning && !viewModel.isAdvertised {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(
+                            localizedAppText(
+                                "If this Mac stays invisible, allow TypeWhisper under Local Network in Privacy & Security.",
+                                de: "Bleibt dieser Mac unsichtbar, erlaube TypeWhisper unter „Lokales Netzwerk“ in „Datenschutz & Sicherheit“.",
+                                ja: "この Mac が表示されないままの場合は、「プライバシーとセキュリティ」の「ローカルネットワーク」で TypeWhisper を許可してください。",
+                                zh: "如果这台 Mac 一直不可见，请在“隐私与安全性”的“本地网络”中允许 TypeWhisper。"
+                            ),
+                            systemImage: "network.badge.shield.half.filled"
+                        )
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        Spacer()
+                        Button(localizedAppText("Open Settings", de: "Einstellungen öffnen", ja: "設定を開く", zh: "打开设置")) {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
 
                 if let error = viewModel.errorMessage {
@@ -73,6 +89,28 @@ struct RemoteLinkSettingsSection: View {
         )) {
             RemoteLinkPairingSheet(viewModel: viewModel)
         }
+    }
+}
+
+private extension RemoteLinkSettingsSection {
+    var statusText: String {
+        if viewModel.isAdvertised {
+            return localizedAppText(
+                "Visible as “\(viewModel.computerName)”",
+                de: "Sichtbar als „\(viewModel.computerName)“",
+                ja: "「\(viewModel.computerName)」として表示中",
+                zh: "显示为“\(viewModel.computerName)”"
+            )
+        }
+        if viewModel.isRunning {
+            return localizedAppText(
+                "Waiting for local network access",
+                de: "Warte auf Zugriff auf das lokale Netzwerk",
+                ja: "ローカルネットワークへのアクセスを待っています",
+                zh: "正在等待本地网络访问权限"
+            )
+        }
+        return String(localized: "Not running")
     }
 }
 

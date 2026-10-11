@@ -36,8 +36,22 @@ final class RemoteLinkTests: XCTestCase {
             "OT1uXquIDY7k3BECGiXgiu37/gzaNiko1yY4lrJiW58="
         )
 
+        let clientEphemeral = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x55, count: 32))
+        let serverEphemeral = try Curve25519.KeyAgreement.PrivateKey(rawRepresentation: Data(repeating: 0x66, count: 32))
+        let ephemeralSecret = try RemoteLinkSessionKeys.ephemeralSecret(
+            privateKey: clientEphemeral,
+            peerKey: serverEphemeral.publicKey.rawRepresentation
+        )
+        XCTAssertEqual(
+            try RemoteLinkSessionKeys.ephemeralSecret(privateKey: serverEphemeral, peerKey: clientEphemeral.publicKey.rawRepresentation),
+            ephemeralSecret
+        )
+        XCTAssertEqual(ephemeralSecret.base64EncodedString(), "VZ7SFxuY+gwPQXt4tcWkPpcZkNdgWGADjZQChNMkUUI=")
+        XCTAssertThrowsError(try RemoteLinkSessionKeys.ephemeralSecret(privateKey: clientEphemeral, peerKey: Data(count: 32)))
+
         let keys = RemoteLinkSessionKeys(
             pairingKey: clientPairingKey,
+            ephemeralSecret: ephemeralSecret,
             deviceID: transcript.deviceID,
             serverID: transcript.serverID,
             clientNonce: transcript.clientNonce,
@@ -48,16 +62,17 @@ final class RemoteLinkTests: XCTestCase {
         let frames = try sealer.seal(message: Data("GET /v1/status HTTP/1.1\r\n\r\n".utf8))
         XCTAssertEqual(
             frames.map { $0.encoded().base64EncodedString() },
-            ["AgAAACxXT+E2cz/8XJxoNLL5B67l9V6iOty7gDmU/6fmM5572mj1WHiJvPyKO30/9w=="]
+            ["AgAAACzeaJ/MWethTEVqhPqK6hAk4mM9W/yOXat1TrZl08PYhmsBiTWeFSCCbXXJFA=="]
         )
     }
 
     func testSealedMessagesRoundTripAcrossChunksAndRejectTamperingAndReordering() throws {
         let pairingKey = SymmetricKey(size: .bits256)
+        let ephemeralSecret = RemoteLinkCrypto.randomNonce()
         let clientNonce = RemoteLinkCrypto.randomNonce()
         let serverNonce = RemoteLinkCrypto.randomNonce()
-        let client = RemoteLinkSessionKeys(pairingKey: pairingKey, deviceID: "d", serverID: "s", clientNonce: clientNonce, serverNonce: serverNonce, role: .client)
-        let server = RemoteLinkSessionKeys(pairingKey: pairingKey, deviceID: "d", serverID: "s", clientNonce: clientNonce, serverNonce: serverNonce, role: .server)
+        let client = RemoteLinkSessionKeys(pairingKey: pairingKey, ephemeralSecret: ephemeralSecret, deviceID: "d", serverID: "s", clientNonce: clientNonce, serverNonce: serverNonce, role: .client)
+        let server = RemoteLinkSessionKeys(pairingKey: pairingKey, ephemeralSecret: ephemeralSecret, deviceID: "d", serverID: "s", clientNonce: clientNonce, serverNonce: serverNonce, role: .server)
 
         let message = Data((0..<(RemoteLink.maxChunkSize * 2 + 17)).map { UInt8(truncatingIfNeeded: $0) })
         var sealer = RemoteLinkSealer(key: client.sending)
@@ -244,6 +259,34 @@ final class RemoteLinkTests: XCTestCase {
         XCTAssertTrue(store.devices().isEmpty)
     }
 
+    func testOneHostCannotOccupyEveryConnectionSlot() async throws {
+        let (store, _) = Self.makeStore()
+        let server = RemoteLinkServer(router: APIRouter(), store: store, serverName: { "Test Mac" }, advertises: false)
+        try server.start()
+        defer { server.stop() }
+        let endpoint = try await Self.endpoint(of: server)
+
+        var idle: [RemoteLinkConnection] = []
+        defer { idle.forEach { $0.close() } }
+        for _ in 0..<RemoteLinkServer.maxConnectionsPerHost {
+            let connection = RemoteLinkConnection(endpoint: endpoint)
+            try await connection.start(timeout: 5)
+            idle.append(connection)
+        }
+        // Let the server register the idle connections before the next one arrives.
+        try await Task.sleep(for: .milliseconds(200))
+
+        let rejected = RemoteLinkConnection(endpoint: endpoint)
+        defer { rejected.close() }
+        try await rejected.start(timeout: 5)
+        do {
+            _ = try await rejected.receiveFrame(timeout: 5)
+            XCTFail("The server must refuse a connection beyond the per-host limit")
+        } catch {
+            XCTAssertNotEqual(error as? RemoteLinkError, .timedOut)
+        }
+    }
+
     // MARK: - Helpers
 
     private static func makeStore() -> (RemoteLinkDeviceStore, RemoteLinkLockedValue<[String: String]>) {
@@ -324,10 +367,17 @@ final class RemoteLinkTests: XCTestCase {
         try await connection.start(timeout: 5)
 
         let clientNonce = RemoteLinkCrypto.randomNonce()
-        try await connection.send(RemoteLinkHandshake(type: .hello, deviceID: deviceID, nonce: clientNonce))
+        let ephemeralKey = Curve25519.KeyAgreement.PrivateKey()
+        try await connection.send(RemoteLinkHandshake(
+            type: .hello,
+            deviceID: deviceID,
+            nonce: clientNonce,
+            key: ephemeralKey.publicKey.rawRepresentation
+        ))
         let welcome = try await connection.receiveHandshake(timeout: 5).expecting(.welcome)
         let keys = RemoteLinkSessionKeys(
             pairingKey: key,
+            ephemeralSecret: try RemoteLinkSessionKeys.ephemeralSecret(privateKey: ephemeralKey, peerKey: try XCTUnwrap(welcome.key)),
             deviceID: deviceID,
             serverID: try XCTUnwrap(welcome.serverID),
             clientNonce: clientNonce,
