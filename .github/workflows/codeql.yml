@@ -59,11 +59,14 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
 
+  # Runs on every trigger, including pull requests and the weekly default-branch scan.
+  # Builds the app and every plugin target; see docs/codeql-swift.md.
   analyze-swift:
     name: Analyze (swift)
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-daily'))
     runs-on: macos-26
-    timeout-minutes: 45
+    timeout-minutes: 120
+    env:
+      XCODE_VERSION: "26.6"
 
     steps:
       - name: Checkout
@@ -72,15 +75,27 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.6"
+          xcode-version: ${{ env.XCODE_VERSION }}
 
+      # Package checkouts only, never compiled artifacts: every Swift file must be
+      # compiled under CodeQL tracing to be extracted.
+      - name: Restore Swift package cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
+
+      # Resolve before CodeQL initialization; package checkouts are slow under tracing.
       - name: Resolve Swift packages
         run: |
           for attempt in 1 2 3; do
             echo "Attempt $attempt of 3"
             if xcodebuild -resolvePackageDependencies \
               -project "$PROJECT" \
-              -scheme "$SCHEME"; then
+              -scheme "$SCHEME" \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
               exit 0
             fi
             echo "Package resolution failed, retrying in 10s..."
@@ -106,20 +121,32 @@ jobs:
           xcrun metal -v
 
       - name: Build Swift for CodeQL
+        env:
+          SOURCE_PACKAGES_DIR: ${{ runner.temp }}/SourcePackages
         run: |
           set -o pipefail
-          xcodebuild -skipPackagePluginValidation -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -configuration Debug \
-            -derivedDataPath codeql-build \
-            -destination 'generic/platform=macOS' \
-            ARCHS=arm64 \
-            ONLY_ACTIVE_ARCH=YES \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO | tee codeql-swift-build.log
+          bash scripts/codeql-build-swift.sh "$RUNNER_TEMP/codeql-build" | tee "$RUNNER_TEMP/codeql-swift-build.log"
 
       - name: Perform CodeQL Analysis
+        id: analyze
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: "/language:swift"
+
+      - name: Check Swift extraction coverage
+        env:
+          SARIF_DIR: ${{ steps.analyze.outputs.sarif-output }}
+        run: python3 scripts/codeql_swift_coverage.py "$SARIF_DIR/swift.sarif"
+
+      - name: Upload CodeQL Swift diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-swift-diagnostics
+          path: |
+            ${{ runner.temp }}/codeql-swift-build.log
+            ${{ runner.temp }}/codeql_databases/swift/log
+            ${{ runner.temp }}/codeql_databases/swift/diagnostic
+            ${{ steps.analyze.outputs.sarif-output }}
+          if-no-files-found: ignore
+          retention-days: 7

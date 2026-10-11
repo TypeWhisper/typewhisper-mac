@@ -1,0 +1,64 @@
+# CodeQL Swift analysis
+
+The `Analyze (swift)` job in [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml)
+runs on every pull request to `main` and `release/**`, on pushes to those branches and
+on non-daily `v*` tags, on the weekly schedule (default branch) and on manual dispatch.
+It is not a required status check.
+
+## What gets built
+
+[`scripts/codeql-build-swift.sh`](../scripts/codeql-build-swift.sh) runs one traced
+`xcodebuild build` with explicit `-target` arguments:
+
+- app targets: `TypeWhisper`, `typewhisper-cli`, `TypeWhisperICloudBridge`,
+  `TypeWhisperWidgetExtension`, `TypeWhisperTranscribeAction` (and through them the
+  `TypeWhisperPluginSDK` package target)
+- one target per `TypeWhisperPluginSDK/Plugins/*/manifest.json`, by directory name
+
+Every maintained plugin has a target of the same name in `TypeWhisper.xcodeproj`
+(also the ones without an SPM target in `TypeWhisperPluginSDK/Package.swift`, such
+as `WhisperKitPlugin`, `LocalLLMPlugin`, `DeepgramPlugin` or `GoogleCloudSTTPlugin`).
+A plugin directory without that target fails the build instead of being skipped.
+
+To print the target list: `bash scripts/codeql-build-swift.sh --print-targets`.
+
+## Coverage check
+
+After the analysis, [`scripts/codeql_swift_coverage.py`](../scripts/codeql_swift_coverage.py)
+reads the SARIF file and lists, per area, how many tracked Swift files CodeQL reports as
+successfully extracted. The job fails when any tracked Swift file of the app, its
+extensions, the SDK sources or a plugin directory was not extracted, and prints the
+missing files. A green build alone is not proof of coverage: before this check, the
+tag-only Swift job reported "CodeQL scanned 32 out of 451 Swift files" for `v1.7.0`.
+
+## Not analyzed
+
+| Sources | Reason |
+| --- | --- |
+| `TypeWhisperTests/`, `TypeWhisperPluginSDK/Tests/`, `Plugins/*/Tests/`, other `*Tests.swift` | Test code; not part of the shipped app or plugins. |
+| `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDKTesting/` | Test support library. |
+| `AppStore/Sources/` and `#if APPSTORE` branches | The Mac App Store edition is a separate XcodeGen project with the `APPSTORE` flag. Building it in the same database would mix two variants of the same types; a separate analysis would add another full macOS build. |
+| Swift package dependencies | Built outside the source root; CodeQL extracts their signatures only. |
+
+## Toolchain and runtime
+
+- Runner `macos-26`, Xcode 26.6, CodeQL bundle from `github/codeql-action` v4.38.2.
+- Debug configuration, arm64 only, no code signing, index store off.
+- `SWIFT_ENABLE_EXPLICIT_MODULES=NO`. With the Xcode 26 default (explicit modules) the
+  extractor processed 1 of 226 app files in a traced build; without it, all 226.
+- The script puts the downloadable Metal toolchain first in `TOOLCHAINS`. Under CodeQL
+  tracing, the `metal` stub in the default toolchain reports a missing Metal Toolchain
+  and the MLX plugins (Qwen3, Canary, Granite, Voxtral, LocalLLM) fail to build.
+- Only package checkouts are restored from the `spm-*` cache that the build workflow
+  saves. Compiled artifacts are never cached: a file that is not compiled under tracing
+  is not extracted.
+
+## Runtime
+
+Measured on GitHub-hosted `macos-26` runners (2026-10-11):
+
+| Run | Package cache | Traced build | Job total |
+| --- | --- | --- | --- |
+| Experiment, explicit modules off, MLX plugins failing on Metal | restored | 47 min (until failure) | 51 min |
+
+The job timeout is 120 minutes. Concurrent runs for the same pull request are cancelled.
