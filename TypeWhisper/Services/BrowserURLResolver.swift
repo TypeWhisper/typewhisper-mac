@@ -51,15 +51,18 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
 
     private let resolutionProvider: ResolutionProvider
     private let meetingTabProvider: MeetingTabProvider
+    private let extensionContext: BrowserExtensionContextStore
 
     init(
         resolutionProvider: ResolutionProvider? = nil,
-        meetingTabProvider: MeetingTabProvider? = nil
+        meetingTabProvider: MeetingTabProvider? = nil,
+        extensionContext: BrowserExtensionContextStore = .shared
     ) {
+        self.extensionContext = extensionContext
 #if APPSTORE
         // The App Store edition cannot send Apple Events or run osascript, so browsers report
-        // no URL and no open tabs. Website workflows do not match; meeting detection keeps
-        // its native signals.
+        // no URL and no open tabs unless a browser extension reports the active tab. Meeting
+        // detection keeps its native signals.
         self.resolutionProvider = resolutionProvider ?? { _, _ in
             BrowserResolution(url: nil, title: nil)
         }
@@ -181,6 +184,10 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         bundleIdentifier: String,
         includeTitle: Bool
     ) async -> BrowserResolution {
+        if let reported = extensionContext.resolution(for: bundleIdentifier) {
+            return BrowserResolution(url: reported.url, title: includeTitle ? reported.title : nil)
+        }
+
         let resolutionProvider = resolutionProvider
         return await withCheckedContinuation { continuation in
             let completion = BrowserResolutionCompletion(continuation: continuation)
@@ -312,7 +319,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
     }
 #endif
 
-    nonisolated private static func validURL(_ value: String) -> URL? {
+    nonisolated static func validURL(_ value: String) -> URL? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > 3, trimmed.count < 2048,
               let url = URL(string: trimmed),

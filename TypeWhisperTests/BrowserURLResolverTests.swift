@@ -376,3 +376,127 @@ final class BrowserURLResolverTests: XCTestCase {
         XCTAssertEqual(probe.maximumActiveCalls, 1)
     }
 }
+
+private final class BrowserExtensionTestEnvironment: @unchecked Sendable {
+    private struct State {
+        var frontmostBundleIdentifier: String?
+        var now = Date(timeIntervalSince1970: 1_000_000)
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    let defaults: UserDefaults
+
+    init(frontmostBundleIdentifier: String?, suiteName: String = #function) {
+        defaults = UserDefaults(suiteName: "BrowserExtensionContextStoreTests.\(suiteName)")!
+        defaults.removePersistentDomain(forName: "BrowserExtensionContextStoreTests.\(suiteName)")
+        state.withLock { $0.frontmostBundleIdentifier = frontmostBundleIdentifier }
+    }
+
+    var frontmostBundleIdentifier: String? {
+        get { state.withLock { $0.frontmostBundleIdentifier } }
+        set { state.withLock { $0.frontmostBundleIdentifier = newValue } }
+    }
+
+    var now: Date { state.withLock { $0.now } }
+
+    func advance(by interval: TimeInterval) {
+        state.withLock { $0.now = $0.now.addingTimeInterval(interval) }
+    }
+
+    func makeStore() -> BrowserExtensionContextStore {
+        BrowserExtensionContextStore(
+            frontmostBundleIdentifier: { [self] in frontmostBundleIdentifier },
+            defaults: defaults,
+            now: { [self] in now }
+        )
+    }
+}
+
+final class BrowserExtensionContextStoreTests: XCTestCase {
+    private let document = URL(string: "https://docs.github.com/en/rest")!
+
+    func testFocusedReportBelongsToTheFrontmostApp() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: SupportedMeetingBrowser.chrome)
+        let store = environment.makeStore()
+
+        let report = await store.report(clientID: "chrome", focused: true, url: document, title: "REST API")
+
+        XCTAssertEqual(report?.bundleIdentifier, SupportedMeetingBrowser.chrome)
+        XCTAssertEqual(
+            store.resolution(for: SupportedMeetingBrowser.chrome),
+            BrowserResolution(url: document, title: "REST API")
+        )
+        XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.safari))
+        XCTAssertTrue(environment.defaults.bool(forKey: UserDefaultsKeys.browserExtensionConnected))
+    }
+
+    func testReportWithoutWebsiteHidesTheBrowserURL() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: SupportedMeetingBrowser.chrome)
+        let store = environment.makeStore()
+
+        await store.report(clientID: "chrome", focused: true, url: nil, title: "New Tab")
+
+        XCTAssertEqual(
+            store.resolution(for: SupportedMeetingBrowser.chrome),
+            BrowserResolution(url: nil, title: "New Tab")
+        )
+    }
+
+    func testLosingFocusOnlyClearsTheExtensionsOwnReport() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: SupportedMeetingBrowser.safari)
+        let store = environment.makeStore()
+
+        await store.report(clientID: "safari", focused: true, url: document, title: nil)
+        await store.report(clientID: "chrome", focused: false, url: nil, title: nil)
+        XCTAssertEqual(store.resolution(for: SupportedMeetingBrowser.safari)?.url, document)
+
+        await store.report(clientID: "safari", focused: false, url: nil, title: nil)
+        XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.safari))
+    }
+
+    func testReportExpiresWhenTheExtensionStopsRepeatingIt() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: SupportedMeetingBrowser.chrome)
+        let store = environment.makeStore()
+
+        await store.report(clientID: "chrome", focused: true, url: document, title: nil)
+        environment.advance(by: BrowserExtensionContextStore.reportLifetime)
+        XCTAssertEqual(store.resolution(for: SupportedMeetingBrowser.chrome)?.url, document)
+
+        environment.advance(by: 1)
+        XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.chrome))
+    }
+
+    func testReportIsIgnoredWithoutAFrontmostBrowser() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: Bundle.main.bundleIdentifier)
+        let store = environment.makeStore()
+
+        let ownReport = await store.report(clientID: "chrome", focused: true, url: document, title: nil)
+        environment.frontmostBundleIdentifier = nil
+        let unknownReport = await store.report(clientID: "chrome", focused: true, url: document, title: nil)
+
+        XCTAssertNil(ownReport)
+        XCTAssertNil(unknownReport)
+        XCTAssertFalse(environment.defaults.bool(forKey: UserDefaultsKeys.browserExtensionConnected))
+    }
+
+    func testResolverPrefersTheExtensionReportForTheSameBrowser() async {
+        let environment = BrowserExtensionTestEnvironment(frontmostBundleIdentifier: SupportedMeetingBrowser.chrome)
+        let store = environment.makeStore()
+        let fallback = URL(string: "https://example.com")!
+        let probe = BrowserResolutionProbe(resolution: BrowserResolution(url: fallback, title: "Fallback"))
+        let resolver = BrowserURLResolver(
+            resolutionProvider: { probe.resolve(bundleIdentifier: $0, includeTitle: $1) },
+            extensionContext: store
+        )
+        await store.report(clientID: "chrome", focused: true, url: document, title: "REST API")
+
+        let activeURL = await resolver.activeURL(for: SupportedMeetingBrowser.chrome)
+        let info = await resolver.activeBrowserInfo(for: SupportedMeetingBrowser.chrome)
+        let otherBrowser = await resolver.activeBrowserInfo(for: SupportedMeetingBrowser.safari)
+
+        XCTAssertEqual(activeURL, document)
+        XCTAssertEqual(info, BrowserResolution(url: document, title: "REST API"))
+        XCTAssertEqual(otherBrowser, BrowserResolution(url: fallback, title: "Fallback"))
+        XCTAssertEqual(probe.calls.map(\.0), [SupportedMeetingBrowser.safari])
+    }
+}

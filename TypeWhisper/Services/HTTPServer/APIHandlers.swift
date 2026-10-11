@@ -17,6 +17,7 @@ final class APIHandlers: @unchecked Sendable {
     private let audioDeviceService: AudioDeviceService
     private let settingsBackupService: SettingsBackupAutomationService
     private let speakerCoordinator: SpeakerTranscriptCoordinator?
+    private let browserExtensionContext: BrowserExtensionContextStore
 
     init(
         modelManager: ModelManagerService,
@@ -29,7 +30,8 @@ final class APIHandlers: @unchecked Sendable {
         audioRecorderViewModel: AudioRecorderViewModel,
         audioDeviceService: AudioDeviceService,
         settingsBackupService: SettingsBackupAutomationService,
-        speakerCoordinator: SpeakerTranscriptCoordinator? = nil
+        speakerCoordinator: SpeakerTranscriptCoordinator? = nil,
+        browserExtensionContext: BrowserExtensionContextStore = .shared
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -42,6 +44,7 @@ final class APIHandlers: @unchecked Sendable {
         self.audioDeviceService = audioDeviceService
         self.settingsBackupService = settingsBackupService
         self.speakerCoordinator = speakerCoordinator
+        self.browserExtensionContext = browserExtensionContext
     }
 
     func register(on router: APIRouter) {
@@ -62,6 +65,7 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/dictation/stop", handler: handleStopDictation)
         router.register("GET", "/v1/dictation/status", handler: handleDictationStatus)
         router.register("GET", "/v1/dictation/transcription", handler: handleDictationTranscription)
+        router.register("PUT", "/v1/browser/context", handler: handlePutBrowserContext)
         router.register("POST", "/v1/recorder/start", handler: handleStartRecorder)
         router.register("POST", "/v1/recorder/stop", handler: handleStopRecorder)
         router.register("GET", "/v1/recorder/status", handler: handleRecorderStatus)
@@ -1613,6 +1617,62 @@ final class APIHandlers: @unchecked Sendable {
                 active_workflow_id: dictationViewModel.activeWorkflowId?.uuidString
             ))
         }
+    }
+
+    // MARK: - PUT /v1/browser/context
+
+    private struct BrowserContextRequest: Decodable {
+        let clientId: String
+        let focused: Bool
+        let url: String?
+        let title: String?
+
+        enum CodingKeys: String, CodingKey {
+            case clientId = "client_id"
+            case focused
+            case url
+            case title
+        }
+    }
+
+    private func handlePutBrowserContext(_ request: HTTPRequest) async -> HTTPResponse {
+        guard let payload = try? JSONDecoder().decode(BrowserContextRequest.self, from: request.body) else {
+            return .error(status: 400, message: "Invalid JSON body")
+        }
+        let clientID = payload.clientId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clientID.isEmpty, clientID.count <= 128 else {
+            return .error(status: 400, message: "Missing or invalid 'client_id'")
+        }
+
+        // New tabs and browser pages such as chrome://settings show no website.
+        let url = payload.url.flatMap(BrowserURLResolver.validURL)
+        let title = payload.title
+            .map { String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(512)) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        let report = await browserExtensionContext.report(
+            clientID: clientID,
+            focused: payload.focused,
+            url: url,
+            title: title
+        )
+
+        struct BrowserContextResponse: Encodable {
+            let status: String
+            let app_bundle_id: String?
+            let url: String?
+        }
+        let status = if !payload.focused {
+            "cleared"
+        } else if report != nil {
+            "active"
+        } else {
+            "ignored"
+        }
+        return .json(BrowserContextResponse(
+            status: status,
+            app_bundle_id: report?.bundleIdentifier,
+            url: report?.url?.absoluteString
+        ))
     }
 
     // MARK: - GET /v1/dictation/transcription

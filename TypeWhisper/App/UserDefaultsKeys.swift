@@ -67,6 +67,7 @@ enum UserDefaultsKeys {
     static let apiServerEnabled = "apiServerEnabled"
     static let apiServerPort = "apiServerPort"
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
+    static let browserExtensionConnected = "browserExtensionConnected"
     static let updateChannel = "updateChannel"
 
     // MARK: - Audio Device

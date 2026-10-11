@@ -2190,6 +2190,60 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(responseText.contains("Access-Control-Allow-Headers: Content-Type"))
     }
 
+    func testBrowserContextAPIStoresTheActiveTabForTheFrontmostBrowser() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let suiteName = "TypeWhisperIntegrationTests.\(#function)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let store = BrowserExtensionContextStore(
+            frontmostBundleIdentifier: { SupportedMeetingBrowser.chrome },
+            defaults: defaults
+        )
+        var context: APIContext?
+        defer {
+            context = nil
+            defaults.removePersistentDomain(forName: suiteName)
+            TestSupport.remove(appSupportDirectory)
+        }
+        context = await MainActor.run {
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, browserExtensionContext: store)
+        }
+        let router = try XCTUnwrap(context?.router)
+
+        func put(_ body: String) async -> HTTPResponse {
+            await router.route(HTTPRequest(
+                method: "PUT",
+                path: "/v1/browser/context",
+                queryParams: [:],
+                headers: ["host": "127.0.0.1:8978", "origin": "chrome-extension://abcdefghijklmnop"],
+                body: Data(body.utf8)
+            ))
+        }
+
+        let active = await put(#"{"client_id":"chrome-1","focused":true,"url":"https://docs.github.com/en","title":"  GitHub Docs  "}"#)
+        XCTAssertEqual(active.status, 200)
+        let activeJSON = try Self.jsonObject(active)
+        XCTAssertEqual(activeJSON["status"] as? String, "active")
+        XCTAssertEqual(activeJSON["app_bundle_id"] as? String, SupportedMeetingBrowser.chrome)
+        XCTAssertEqual(
+            store.resolution(for: SupportedMeetingBrowser.chrome),
+            BrowserResolution(url: URL(string: "https://docs.github.com/en"), title: "GitHub Docs")
+        )
+
+        let browserPage = await put(#"{"client_id":"chrome-1","focused":true,"url":"chrome://settings","title":"Settings"}"#)
+        XCTAssertNil(try Self.jsonObject(browserPage)["url"] as? String)
+        XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.chrome)?.url)
+
+        let cleared = await put(#"{"client_id":"chrome-1","focused":false}"#)
+        XCTAssertEqual(try Self.jsonObject(cleared)["status"] as? String, "cleared")
+        XCTAssertNil(store.resolution(for: SupportedMeetingBrowser.chrome))
+
+        let missingClient = await put(#"{"client_id":" ","focused":true}"#)
+        let invalidBody = await put(#"{"focused":"yes"}"#)
+        XCTAssertEqual(missingClient.status, 400)
+        XCTAssertEqual(invalidBody.status, 400)
+    }
+
     func testHistoryAPIListsSpeakersAndSegmentsOnRequest() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let recordingID = UUID()
@@ -13403,7 +13457,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
         audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
-        audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer()
+        audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
+        browserExtensionContext: BrowserExtensionContextStore = BrowserExtensionContextStore(frontmostBundleIdentifier: { nil })
     ) -> APIContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -13561,7 +13616,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             dictationViewModel: dictationViewModel,
             audioRecorderViewModel: audioRecorderViewModel,
             audioDeviceService: audioDeviceService,
-            settingsBackupService: settingsBackupService
+            settingsBackupService: settingsBackupService,
+            browserExtensionContext: browserExtensionContext
         )
         handlers.register(on: router)
 

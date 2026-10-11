@@ -24,6 +24,7 @@
 		CA1E00000000000000000001 /* CalendarMeetingAutomationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */; };
 		CA1E00000000000000000002 /* MeetingLinkParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000002 /* MeetingLinkParser.swift */; };
 		CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000003 /* BrowserURLResolver.swift */; };
+		BE7C00000000000000000001 /* BrowserExtensionContextStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE7C00000000000000000002 /* BrowserExtensionContextStore.swift */; };
 		CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */; };
 		CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */; };
 		CA4E00000000000000000001 /* MeetingCameraActivityCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */; };
@@ -776,6 +777,7 @@
 		CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationModels.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000002 /* MeetingLinkParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkParser.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000003 /* BrowserURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserURLResolver.swift; sourceTree = "<group>"; };
+		BE7C00000000000000000002 /* BrowserExtensionContextStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserExtensionContextStore.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitCalendarMeetingProvider.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAudioActivityCollector.swift; sourceTree = "<group>"; };
 		CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCameraActivityCollector.swift; sourceTree = "<group>"; };
@@ -2030,6 +2032,7 @@
 				BB00000000000000000032 /* TextInsertionService.swift */,
 				CA1F00000000000000000002 /* MeetingLinkParser.swift */,
 				CA1F00000000000000000003 /* BrowserURLResolver.swift */,
+				BE7C00000000000000000002 /* BrowserExtensionContextStore.swift */,
 				CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */,
 				CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */,
 				CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */,
@@ -5145,6 +5148,7 @@
 				CA1E00000000000000000001 /* CalendarMeetingAutomationModels.swift in Sources */,
 				CA1E00000000000000000002 /* MeetingLinkParser.swift in Sources */,
 				CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */,
+				BE7C00000000000000000001 /* BrowserExtensionContextStore.swift in Sources */,
 				CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */,
 				CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */,
 				CA4E00000000000000000001 /* MeetingCameraActivityCollector.swift in Sources */,

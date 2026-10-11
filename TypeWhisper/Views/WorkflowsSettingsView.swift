@@ -1097,6 +1097,9 @@ private struct WorkflowEditorPage: View {
     @State private var isAdvancedExpanded = false
     @State private var showingAppPicker = false
     @State private var websiteInput = ""
+    #if APPSTORE
+    @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
+    #endif
     @StateObject private var websiteSuggestionStore = WorkflowWebsiteSuggestionStore()
 
     init(workflow: Workflow?) {
@@ -1870,17 +1873,16 @@ private struct WorkflowEditorPage: View {
                 appTriggerEditor
             }
 
-            // The sandboxed App Store edition cannot read browser URLs, so a
-            // website trigger would never match.
-            #if !APPSTORE
-            Divider()
-
-            triggerComponentEditor(
-                title: localizedAppText("Website", de: "Website"),
-                isOn: $draft.isWebsiteTriggerEnabled
-            ) {
-                websiteTriggerEditor
+            // The sandboxed App Store edition cannot read browser URLs itself. A
+            // website trigger only matches once a browser extension reports tabs.
+            #if APPSTORE
+            if browserExtensionConnected {
+                Divider()
+                websiteTriggerComponent
             }
+            #else
+            Divider()
+            websiteTriggerComponent
             #endif
 
             Divider()
@@ -1944,8 +1946,26 @@ private struct WorkflowEditorPage: View {
         }
     }
 
+    private var websiteTriggerComponent: some View {
+        triggerComponentEditor(
+            title: localizedAppText("Website", de: "Website"),
+            isOn: $draft.isWebsiteTriggerEnabled
+        ) {
+            websiteTriggerEditor
+        }
+    }
+
     private var websiteTriggerEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
+            #if APPSTORE
+            Text(localizedAppText(
+                "Matches in browsers with the TypeWhisper extension.",
+                de: "Greift in Browsern mit der TypeWhisper-Erweiterung."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            #endif
+
             if draft.websitePatterns.isEmpty {
                 Text(localizedAppText("No websites added yet.", de: "Noch keine Websites hinzugefügt."))
                     .font(.subheadline)
