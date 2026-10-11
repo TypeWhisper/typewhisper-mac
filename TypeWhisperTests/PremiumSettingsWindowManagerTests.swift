@@ -27,6 +27,10 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             speakerWorkspace: {
                 calls[.speakerWorkspace, default: 0] += 1
                 return self.definition(for: .speakerWorkspace)
+            },
+            pairedDevices: {
+                calls[.pairedDevices, default: 0] += 1
+                return self.definition(for: .pairedDevices)
             }
         )
         let manager = PremiumSettingsWindowManager(
@@ -143,7 +147,8 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             calendarMeeting: factory,
             correctionLearning: factory,
             cloudSync: factory,
-            speakerWorkspace: factory
+            speakerWorkspace: factory,
+            pairedDevices: factory
         )
     }
 
@@ -162,6 +167,8 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             sizes = (CGSize(width: 640, height: 600), CGSize(width: 560, height: 500))
         case .speakerWorkspace:
             sizes = (CGSize(width: 580, height: 520), CGSize(width: 520, height: 420))
+        case .pairedDevices:
+            sizes = (CGSize(width: 600, height: 620), CGSize(width: 520, height: 460))
         }
         return PremiumSettingsWindowDefinition(
             title: destination.rawValue,

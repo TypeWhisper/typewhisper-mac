@@ -1128,7 +1128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSSize(width: 640, height: 820)
         case .cloudSync:
             NSSize(width: 640, height: 640)
-        case .access, .correctionLearning, .speakerWorkspace:
+        case .access, .correctionLearning, .speakerWorkspace, .pairedDevices:
             nil
         }
         prepareScreenshotWindow(window, contentSize: contentSize)

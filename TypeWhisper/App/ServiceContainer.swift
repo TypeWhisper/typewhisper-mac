@@ -453,7 +453,19 @@ final class ServiceContainer: ObservableObject {
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         remoteLinkServer = RemoteLinkServer(router: router)
-        remoteLinkViewModel = RemoteLinkViewModel(server: remoteLinkServer)
+        remoteLinkViewModel = RemoteLinkViewModel(
+            server: remoteLinkServer,
+            premiumAccess: { [licenseService, premiumAccountService] in
+                CalendarMeetingPremiumAccess.isGranted(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
+                )
+            }
+        )
+        remoteLinkViewModel.observePremiumChanges([
+            licenseService.objectWillChange.eraseToAnyPublisher(),
+            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
+        ])
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,

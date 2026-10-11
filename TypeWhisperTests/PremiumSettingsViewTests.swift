@@ -116,12 +116,14 @@ final class PremiumSettingsViewTests: XCTestCase {
         XCTAssertEqual(commercial.action(for: .correctionLearning), .openSettings(.correctionLearning))
         XCTAssertEqual(commercial.action(for: .cloudSync), .manageAccess)
         XCTAssertEqual(commercial.action(for: .speakerWorkspace), .openSettings(.speakerWorkspace))
+        XCTAssertEqual(commercial.action(for: .pairedDevices), .openSettings(.pairedDevices))
 
         let account = access(hasPremiumEntitlement: true, isSignedIn: true)
         XCTAssertEqual(account.action(for: .speakerWorkspace), .openSettings(.speakerWorkspace))
         XCTAssertEqual(account.action(for: .calendarMeeting), .openSettings(.calendarMeeting))
         XCTAssertEqual(account.action(for: .correctionLearning), .manageAccess)
         XCTAssertEqual(account.action(for: .cloudSync), .openSettings(.cloudSync))
+        XCTAssertEqual(account.action(for: .pairedDevices), .openSettings(.pairedDevices))
     }
 
     func testEveryLicenseAccountSignInAndSupporterCombinationUsesTheDocumentedGates() {

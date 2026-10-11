@@ -501,9 +501,6 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-                // MARK: - iPhone and iPad
-                RemoteLinkSettingsSection()
-
                 // MARK: - Command Line Tool
                 #if !APPSTORE
                 Section(String(localized: "Command Line Tool")) {

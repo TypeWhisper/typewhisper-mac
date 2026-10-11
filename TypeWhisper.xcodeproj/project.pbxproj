@@ -232,7 +232,7 @@
 		AA7E11000000000000000002 /* RemoteLinkConnection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000002 /* RemoteLinkConnection.swift */; };
 		AA7E11000000000000000003 /* RemoteLinkServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000003 /* RemoteLinkServer.swift */; };
 		AA7E11000000000000000004 /* RemoteLinkViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000004 /* RemoteLinkViewModel.swift */; };
-		AA7E11000000000000000005 /* RemoteLinkSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000005 /* RemoteLinkSettingsSection.swift */; };
+		AA7E11000000000000000005 /* RemoteLinkSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */; };
 		AA7E11000000000000000006 /* RemoteLinkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7E11000000000000000006 /* RemoteLinkTests.swift */; };
 		AA00000000000000000043 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000043 /* HTTPServer.swift */; };
 		AA00000000000000000044 /* APIHandlers.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000044 /* APIHandlers.swift */; };
@@ -904,7 +904,7 @@
 		BB7E11000000000000000002 /* RemoteLinkConnection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkConnection.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000003 /* RemoteLinkServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkServer.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000004 /* RemoteLinkViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkViewModel.swift; sourceTree = "<group>"; };
-		BB7E11000000000000000005 /* RemoteLinkSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkSettingsSection.swift; sourceTree = "<group>"; };
+		BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkSettingsView.swift; sourceTree = "<group>"; };
 		BB7E11000000000000000006 /* RemoteLinkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteLinkTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000043 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
 		BB00000000000000000044 /* APIHandlers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIHandlers.swift; sourceTree = "<group>"; };
@@ -2210,7 +2210,7 @@
 				CA1F0000000000000000000B /* MeetingAutomationCountdownIndicator.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
-				BB7E11000000000000000005 /* RemoteLinkSettingsSection.swift */,
+				BB7E11000000000000000005 /* RemoteLinkSettingsView.swift */,
 				80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
 				BB000000000000000A1236F2 /* AppearanceSettingsView.swift */,
@@ -5235,7 +5235,7 @@
 				AA00000000000000000041 /* HTTPRequestParser.swift in Sources */,
 				AA00000000000000000042 /* APIRouter.swift in Sources */,
 				AA7E11000000000000000007 /* TextProcessingAPI.swift in Sources */,
-				AA7E11000000000000000005 /* RemoteLinkSettingsSection.swift in Sources */,
+				AA7E11000000000000000005 /* RemoteLinkSettingsView.swift in Sources */,
 				AA7E11000000000000000004 /* RemoteLinkViewModel.swift in Sources */,
 				AA7E11000000000000000003 /* RemoteLinkServer.swift in Sources */,
 				AA7E11000000000000000002 /* RemoteLinkConnection.swift in Sources */,

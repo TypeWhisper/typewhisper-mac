@@ -44,6 +44,7 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case correctionLearning
     case cloudSync
     case speakerWorkspace
+    case pairedDevices
 
     var id: String { rawValue }
 
@@ -51,7 +52,7 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     /// text fields through Accessibility, which the App Sandbox does not allow.
     static var editionFeatures: [PremiumFeatureID] {
         #if APPSTORE
-        [.calendarMeeting, .cloudSync, .speakerWorkspace]
+        [.calendarMeeting, .cloudSync, .speakerWorkspace, .pairedDevices]
         #else
         allCases
         #endif
@@ -154,6 +155,8 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
                 hasCommercialLicense: hasCommercialLicense,
                 hasPremiumEntitlement: hasPremiumEntitlement
             ) ? .available : .commercialOrPremiumAccount
+        case .pairedDevices:
+            return hasAnyPremiumAccess ? .available : .commercialOrPremiumAccount
         }
         #endif
     }
@@ -171,6 +174,8 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
             return .openSettings(.cloudSync)
         case .speakerWorkspace:
             return .openSettings(.speakerWorkspace)
+        case .pairedDevices:
+            return .openSettings(.pairedDevices)
         }
     }
 }
@@ -328,7 +333,53 @@ struct PremiumLockedFeatureOverview: View {
                 statusTone: .secondary,
                 previewLines: [String(localized: "premium.hub.speakers.preview")]
             )
+        case .pairedDevices:
+            PremiumFeatureCard(
+                feature: .pairedDevices,
+                icon: "iphone.radiowaves.left.and.right",
+                accent: .indigo,
+                title: PairedDevicesPremiumCopy.title,
+                description: PairedDevicesPremiumCopy.description,
+                status: String(localized: "premium.hub.status.premium"),
+                statusTone: .secondary,
+                previewLines: [PairedDevicesPremiumCopy.preview]
+            )
         }
+    }
+}
+
+/// Copy for the paired-devices Premium feature, translated inline like the
+/// rest of its settings.
+enum PairedDevicesPremiumCopy {
+    static var title: String {
+        localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad")
+    }
+
+    static var description: String {
+        localizedAppText(
+            "Transcribe and write on your iPhone or iPad with this Mac's models and workflows.",
+            de: "Transkribiere und schreibe auf deinem iPhone oder iPad mit den Modellen und Workflows dieses Macs.",
+            ja: "この Mac のモデルとワークフローを使って、iPhone や iPad で文字起こしや文章作成ができます。",
+            zh: "在 iPhone 或 iPad 上使用这台 Mac 的模型和工作流进行转写和写作。"
+        )
+    }
+
+    static var preview: String {
+        localizedAppText(
+            "Pair once, then dictate on the go",
+            de: "Einmal koppeln, dann unterwegs diktieren",
+            ja: "一度ペアリングすれば、外出先でも音声入力",
+            zh: "配对一次，随时随地听写"
+        )
+    }
+
+    static func pairedCount(_ count: Int) -> String {
+        localizedAppText(
+            "\(count) paired",
+            de: "\(count) gekoppelt",
+            ja: "\(count) 台ペアリング済み",
+            zh: "已配对 \(count) 台"
+        )
     }
 }
 
@@ -380,6 +431,7 @@ struct PremiumActiveFeatureOverview: View {
     }
 
     @ObservedObject private var speakerCoordinator = ServiceContainer.shared.speakerTranscriptCoordinator
+    @ObservedObject private var remoteLink = ServiceContainer.shared.remoteLinkViewModel
 
     private var access: PremiumFeatureAccessSnapshot {
         PremiumFeatureAccessSnapshot(
@@ -425,6 +477,7 @@ struct PremiumActiveFeatureOverview: View {
             case .correctionLearning: AnyView(learningCard)
             case .cloudSync: AnyView(syncCard)
             case .speakerWorkspace: AnyView(speakerCard)
+            case .pairedDevices: AnyView(pairedDevicesCard)
             }
         }
     }
@@ -472,6 +525,26 @@ struct PremiumActiveFeatureOverview: View {
             status: syncStatus,
             statusTone: syncStatusTone,
             previewLines: syncPreviewLines,
+            actionTitle: actionTitle(for: action),
+            action: { perform(action) }
+        )
+    }
+
+    private var pairedDevicesCard: some View {
+        let action = access.action(for: .pairedDevices)
+        let isAvailable = access.requirement(for: .pairedDevices) == .available
+        let isEnabled = remoteLink.isEnabled
+        return PremiumFeatureRow(
+            feature: .pairedDevices,
+            icon: "iphone.radiowaves.left.and.right",
+            accent: .indigo,
+            title: PairedDevicesPremiumCopy.title,
+            description: PairedDevicesPremiumCopy.description,
+            status: isAvailable
+                ? String(localized: isEnabled ? "premium.hub.status.on" : "premium.hub.status.off")
+                : requirementStatus(access.requirement(for: .pairedDevices)),
+            statusTone: isAvailable ? (isEnabled ? .success : .secondary) : .warning,
+            previewLines: [PairedDevicesPremiumCopy.pairedCount(remoteLink.devices.count)],
             actionTitle: actionTitle(for: action),
             action: { perform(action) }
         )
