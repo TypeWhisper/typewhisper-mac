@@ -50,6 +50,7 @@ class SelectTargetsTests(unittest.TestCase):
             "scripts/codeql-build-swift.sh",
             "scripts/codeql_swift_targets.py",
             "TypeWhisper.xcodeproj/project.pbxproj",
+            "CodeSigning.xcconfig",
             "TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved",
             "TypeWhisperPluginSDK/Package.swift",
             "TypeWhisperPluginSDK/Package.resolved",

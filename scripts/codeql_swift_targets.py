@@ -5,8 +5,8 @@ Pushes, tags, the weekly schedule and manual runs build every target. A pull
 request builds only what its Swift changes touch, so a plugin-only change does
 not compile the app and 52 other plugins:
 
-- changes to the CodeQL workflow, its scripts, the Xcode project, a package
-  manifest or lock file, or Plugin SDK sources (the app and every plugin call
+- changes to the CodeQL workflow, its scripts, the Xcode project or its base
+  xcconfig, a package manifest or lock file, or Plugin SDK sources (the app and every plugin call
   into the SDK): every target
 - app, extension or CLI sources: the app targets
 - sources in `TypeWhisperPluginSDK/Plugins/<Name>/`: that plugin's target
@@ -52,6 +52,8 @@ FULL_BUILD_PATHS = (
     "scripts/codeql_swift_coverage.py",
     "scripts/codeql_swift_targets.py",
     "TypeWhisper.xcodeproj/",
+    # Base configuration of every project build configuration.
+    "CodeSigning.xcconfig",
 )
 FULL_BUILD_FILE_NAMES = ("Package.swift", "Package.resolved")
 

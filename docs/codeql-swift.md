@@ -28,7 +28,7 @@ Swift sees through the bridging header:
 
 | Changed files | Targets |
 | --- | --- |
-| `.github/workflows/codeql.yml`, the CodeQL scripts, `TypeWhisper.xcodeproj/`, any `Package.swift` or `Package.resolved` | all |
+| `.github/workflows/codeql.yml`, the CodeQL scripts, `TypeWhisper.xcodeproj/`, `CodeSigning.xcconfig`, any `Package.swift` or `Package.resolved` | all |
 | Sources in `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/` | all, because the app and every plugin call into the SDK |
 | Sources in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
 | Sources in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
