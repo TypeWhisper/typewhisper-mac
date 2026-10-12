@@ -302,9 +302,12 @@ final class CohereLocalPluginTests: XCTestCase {
         }
 
         let childPIDFile = assets.cacheDirectory.appendingPathComponent("test-child.pid")
+        // Rename into place so the test never reads a created but still empty
+        // PID file, even when the model switch stops the child right away.
         let runtimeScript = """
             #!/bin/sh
-            echo $$ > "$CRISPASR_CACHE_DIR/test-child.pid"
+            echo $$ > "$CRISPASR_CACHE_DIR/test-child.pid.tmp"
+            /bin/mv "$CRISPASR_CACHE_DIR/test-child.pid.tmp" "$CRISPASR_CACHE_DIR/test-child.pid"
             exec /bin/sleep 60
             """
         try Data(runtimeScript.utf8).write(to: assets.runtimeExecutableURL)
