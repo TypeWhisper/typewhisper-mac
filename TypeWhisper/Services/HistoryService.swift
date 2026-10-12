@@ -176,12 +176,15 @@ final class HistoryService: ObservableObject {
     private let modelContext: ModelContext
     private let eventEmitter: @MainActor (TypeWhisperEvent) -> Void
     private let historySyncPreferences: HistorySyncPreferences?
+    private let speakerNameWriter: @MainActor (ModelContext) throws -> Void
 
     private(set) var totalRecords: Int = 0
 
     /// Called with the IDs of records right after they were deleted, so data
     /// kept elsewhere for them, such as voice embeddings, goes too.
     var onRecordsDeleted: (([UUID]) -> Void)?
+    /// Preserve local enrollment evidence before a name or speaker correction.
+    var onSpeakerNamesWillChange: ((TranscriptionRecord) throws -> Void)?
 
     /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
     /// as dictations persisted after insertion, pass the generation they were captured in.
@@ -195,11 +198,13 @@ final class HistoryService: ObservableObject {
         historySyncPreferences: HistorySyncPreferences? = nil,
         eventEmitter: @escaping @MainActor (TypeWhisperEvent) -> Void = { event in
             EventBus.shared?.emit(event)
-        }
+        },
+        speakerNameWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         let storeDir = appSupportDirectory
         self.eventEmitter = eventEmitter
         self.historySyncPreferences = historySyncPreferences
+        self.speakerNameWriter = speakerNameWriter
 
         let audioDir = storeDir.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -555,6 +560,7 @@ final class HistoryService: ObservableObject {
     ) -> Bool {
         guard let record = record(withID: id),
               record.speakerTranscript?.revision == transcript.revision else { return false }
+        do { try onSpeakerNamesWillChange?(record) } catch { return false }
         let (renumbered, newSpeakerIDs) = transcript.renumbered()
         guard renumbered.isValid else { return false }
         // An edit that removes all text would leave the record's text and
@@ -632,7 +638,24 @@ final class HistoryService: ObservableObject {
         isSuggestion: Bool = false,
         inRecordID id: UUID
     ) {
+        do {
+            try setSpeakerNamePersisted(name, for: speakerID, profileID: profileID,
+                                        isSuggestion: isSuggestion, inRecordID: id)
+        } catch {
+            logger.error("Speaker name could not be saved: \(error.localizedDescription)")
+        }
+    }
+
+    /// Restores only this edit on failure; unrelated pending History changes
+    /// must not be discarded by a context-wide rollback.
+    func setSpeakerNamePersisted(
+        _ name: String, for speakerID: String, profileID: UUID? = nil,
+        isSuggestion: Bool = false, inRecordID id: UUID
+    ) throws {
         guard let record = record(withID: id), let transcript = record.speakerTranscript else { return }
+        try onSpeakerNamesWillChange?(record)
+        let previousData = record.speakerNamesData
+        let previousDate = record.speakerNamesUpdatedAt
         var names = record.speakerNames ?? SpeakerNameTable(transcriptRevision: transcript.revision)
         let confirmedBefore = names.confirmedEntries
         names.setName(name, for: speakerID, profileID: profileID, isSuggestion: isSuggestion)
@@ -645,7 +668,13 @@ final class HistoryService: ObservableObject {
             record.speakerNamesUpdatedAt = now
         }
         record.speakerNames = stamped.isEmpty ? nil : stamped
-        save()
+        do {
+            try speakerNameWriter(modelContext)
+        } catch {
+            record.speakerNamesData = previousData
+            record.speakerNamesUpdatedAt = previousDate
+            throw error
+        }
         refreshRecentRecords()
     }
 

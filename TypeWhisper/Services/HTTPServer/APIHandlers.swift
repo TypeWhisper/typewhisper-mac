@@ -16,6 +16,7 @@ final class APIHandlers: @unchecked Sendable {
     private let audioRecorderViewModel: AudioRecorderViewModel
     private let audioDeviceService: AudioDeviceService
     private let settingsBackupService: SettingsBackupAutomationService
+    private let speakerVoices: SpeakerVoiceProfileService?
     private let speakerCoordinator: SpeakerTranscriptCoordinator?
     private let browserExtensionContext: BrowserExtensionContextStore
 
@@ -31,6 +32,7 @@ final class APIHandlers: @unchecked Sendable {
         audioDeviceService: AudioDeviceService,
         settingsBackupService: SettingsBackupAutomationService,
         speakerCoordinator: SpeakerTranscriptCoordinator? = nil,
+        speakerVoices: SpeakerVoiceProfileService? = nil,
         browserExtensionContext: BrowserExtensionContextStore = .shared
     ) {
         self.modelManager = modelManager
@@ -43,11 +45,13 @@ final class APIHandlers: @unchecked Sendable {
         self.audioRecorderViewModel = audioRecorderViewModel
         self.audioDeviceService = audioDeviceService
         self.settingsBackupService = settingsBackupService
+        self.speakerVoices = speakerVoices
         self.speakerCoordinator = speakerCoordinator
         self.browserExtensionContext = browserExtensionContext
     }
 
     func register(on router: APIRouter) {
+        if let speakerVoices { APISpeakerProfiles.register(on: router, service: speakerVoices) }
         router.register("POST", "/v1/transcribe", handler: handleTranscribe)
         router.register("POST", "/v1/transcribe/local-file", handler: handleTranscribeLocalFile)
         router.register("GET", "/v1/status", handler: handleStatus)
@@ -990,6 +994,13 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - GET /v1/history
 
     private func handleGetHistory(_ request: HTTPRequest) async -> HTTPResponse {
+        await Self.historyResponse(request, historyService: historyService, speakerVoices: speakerVoices)
+    }
+
+    @MainActor
+    static func historyResponse(
+        _ request: HTTPRequest, historyService: HistoryService, speakerVoices: SpeakerVoiceProfileService?
+    ) -> HTTPResponse {
         let searchText = request.queryParams["q"] ?? ""
         let limit = max(min(Int(request.queryParams["limit"] ?? "") ?? 50, 200), 0)
         let offset = max(Int(request.queryParams["offset"] ?? "") ?? 0, 0)
@@ -998,104 +1009,110 @@ final class APIHandlers: @unchecked Sendable {
             .split(separator: ",")
             .contains("speaker_segments") == true
 
-        let historyService = self.historyService
-        return await MainActor.run {
-            let page = historyService.fetchPage(
-                query: HistoryQuery(searchText: searchText),
-                offset: offset,
-                limit: limit
-            )
+        let page = historyService.fetchPage(
+            query: HistoryQuery(searchText: searchText),
+            offset: offset,
+            limit: limit
+        )
 
-            struct SpeakerEntry: Encodable {
-                let id: String
-                let name: String
-                /// A name a voice profile suggested and nobody confirmed yet.
-                let suggested_name: String?
-            }
-
-            struct SpeakerSegmentEntry: Encodable {
-                let start: Double
-                let end: Double
-                let speaker: String?
-                let text: String
-            }
-
-            struct HistoryEntry: Encodable {
-                let id: String
-                let text: String
-                let raw_text: String
-                let timestamp: Date
-                let app_name: String?
-                let app_bundle_id: String?
-                let app_url: String?
-                let duration: Double
-                let language: String?
-                let engine: String
-                let model: String?
-                let words_count: Int
-                /// The Recorder's `recording_id`, for records the Recorder made.
-                let recording_id: String?
-                /// `pending`, `ready`, or `failed`; absent without speaker detection.
-                let speaker_state: String?
-                let speakers: [SpeakerEntry]?
-                /// Only with `include=speaker_segments`.
-                let speaker_segments: [SpeakerSegmentEntry]?
-            }
-
-
-            struct HistoryResponse: Encodable {
-                let entries: [HistoryEntry]
-                let total: Int
-                let limit: Int
-                let offset: Int
-            }
-
-            let entries = page.records.map { record in
-                let transcript = record.speakerTranscriptState == nil ? nil : record.speakerTranscript
-                let names = record.speakerNames
-                return HistoryEntry(
-                    id: record.id.uuidString,
-                    text: record.finalText,
-                    raw_text: record.rawText,
-                    timestamp: record.timestamp,
-                    app_name: record.appName,
-                    app_bundle_id: record.appBundleIdentifier,
-                    app_url: record.appURL,
-                    duration: record.durationSeconds,
-                    language: record.language,
-                    engine: record.engineUsed,
-                    model: record.modelUsed,
-                    words_count: record.wordsCount,
-                    recording_id: record.recorderRecordingID?.uuidString,
-                    speaker_state: record.speakerTranscriptState?.rawValue,
-                    speakers: transcript?.speakerIDs.map { speakerID in
-                        // Unnamed speakers get the fixed `Speaker N`, not the localized default name.
-                        // A name only suggested by a voice profile is a guess: it is returned
-                        // separately and never as the speaker's name.
-                        let entry = names?.entries.first { $0.speakerID == speakerID }
-                        let isSuggestion = entry?.isSuggestion == true
-                        return SpeakerEntry(
-                            id: speakerID,
-                            name: (isSuggestion ? nil : entry?.displayName)
-                                ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
-                            suggested_name: isSuggestion ? entry?.displayName : nil
-                        )
-                    },
-                    speaker_segments: includesSpeakerSegments
-                        ? transcript?.segments.map {
-                            SpeakerSegmentEntry(start: $0.start, end: $0.end, speaker: $0.speakerID, text: $0.text)
-                        }
-                        : nil
-                )
-            }
-
-            return .json(HistoryResponse(
-                entries: entries,
-                total: page.totalCount,
-                limit: limit,
-                offset: page.offset
-            ))
+        struct SpeakerEntry: Encodable {
+            let id: String
+            let name: String
+            /// A name a voice profile suggested and nobody confirmed yet.
+            let suggested_name: String?
+            let profile_id: UUID?
+            let voice_state: String?
         }
+
+        struct SpeakerSegmentEntry: Encodable {
+            let start: Double
+            let end: Double
+            let speaker: String?
+            let text: String
+        }
+
+        struct HistoryEntry: Encodable {
+            let id: String
+            let text: String
+            let raw_text: String
+            let timestamp: Date
+            let app_name: String?
+            let app_bundle_id: String?
+            let app_url: String?
+            let duration: Double
+            let language: String?
+            let engine: String
+            let model: String?
+            let words_count: Int
+            /// The Recorder's `recording_id`, for records the Recorder made.
+            let recording_id: String?
+            /// `pending`, `ready`, or `failed`; absent without speaker detection.
+            let speaker_state: String?
+            let transcript_revision: UUID?
+            let transcript_version: String?
+            let speakers: [SpeakerEntry]?
+            /// Only with `include=speaker_segments`.
+            let speaker_segments: [SpeakerSegmentEntry]?
+        }
+
+
+        struct HistoryResponse: Encodable {
+            let entries: [HistoryEntry]
+            let total: Int
+            let limit: Int
+            let offset: Int
+        }
+
+        let entries = page.records.map { record in
+            let transcript = record.speakerTranscriptState == nil ? nil : record.speakerTranscript
+            let names = record.speakerNames
+            let states = transcript.flatMap { speakerVoices?.automationStates(record: record, transcript: $0) } ?? [:]
+            return HistoryEntry(
+                id: record.id.uuidString,
+                text: record.finalText,
+                raw_text: record.rawText,
+                timestamp: record.timestamp,
+                app_name: record.appName,
+                app_bundle_id: record.appBundleIdentifier,
+                app_url: record.appURL,
+                duration: record.durationSeconds,
+                language: record.language,
+                engine: record.engineUsed,
+                model: record.modelUsed,
+                words_count: record.wordsCount,
+                recording_id: record.recorderRecordingID?.uuidString,
+                speaker_state: record.speakerTranscriptState?.rawValue,
+                transcript_revision: transcript?.revision,
+                transcript_version: states.values.first?.transcript_version ?? transcript?.automationVersion,
+                speakers: transcript?.speakerIDs.map { speakerID in
+                    // Unnamed speakers get the fixed `Speaker N`, not the localized default name.
+                    // A name only suggested by a voice profile is a guess: it is returned
+                    // separately and never as the speaker's name.
+                    let entry = names?.entries.first { $0.speakerID == speakerID }
+                    let isSuggestion = entry?.isSuggestion == true
+                    return SpeakerEntry(
+                        id: speakerID,
+                        name: (isSuggestion ? nil : entry?.displayName)
+                            ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
+                        suggested_name: isSuggestion ? entry?.displayName : nil,
+                        profile_id: states[speakerID]?.profile_id,
+                        voice_state: states[speakerID]?.voice_state
+                    )
+                },
+                speaker_segments: includesSpeakerSegments
+                    ? transcript?.segments.map {
+                        SpeakerSegmentEntry(start: $0.start, end: $0.end, speaker: $0.speakerID, text: $0.text)
+                    }
+                    : nil
+            )
+        }
+
+        return .json(HistoryResponse(
+            entries: entries,
+            total: page.totalCount,
+            limit: limit,
+            offset: page.offset
+        ))
     }
 
     // MARK: - DELETE /v1/history

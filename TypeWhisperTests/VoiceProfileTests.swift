@@ -472,3 +472,501 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         XCTAssertEqual(store.profile(withID: profileID)?.enrolledSeconds, 60)
     }
 }
+
+/// Exercises the production router and service against disposable on-disk stores.
+@MainActor
+final class SpeakerProfileAPITests: XCTestCase {
+    private var directory: URL!
+    private var history: HistoryService!
+    private var store: VoiceProfileStore!
+    private var service: SpeakerVoiceProfileService!
+    private var router: APIRouter!
+    private var premium = true
+    private var failHistorySave = false
+
+    override func setUp() async throws {
+        directory = try TestSupport.makeTemporaryDirectory()
+        rebuildServices()
+    }
+
+    override func tearDown() async throws {
+        router = nil
+        service = nil
+        store = nil
+        history = nil
+        TestSupport.remove(directory)
+    }
+
+    private func rebuildServices() {
+        router = nil
+        service = nil
+        history = nil
+        store = VoiceProfileStore(directoryURL: directory.appendingPathComponent("voices"))
+        history = HistoryService(appSupportDirectory: directory, eventEmitter: { _ in }, speakerNameWriter: { [unowned self] context in
+            if self.failHistorySave { throw CocoaError(.fileWriteUnknown) }
+            try context.save()
+        })
+        service = SpeakerVoiceProfileService(store: store, historyService: history, premiumAccess: { [unowned self] in self.premium })
+        router = APIRouter(tokenProvider: { "test-token" })
+        APISpeakerProfiles.register(on: router, service: service)
+    }
+
+    @discardableResult
+    private func recording(embedding: [Float] = [1, 0, 0], seconds: Double = 40, model: String = "test-model") throws -> (UUID, UUID) {
+        let id = UUID()
+        try SpeakerAudioWriter.writeAAC(samples: [Float](repeating: 0, count: 16_000), to: history.speakerAudioFileURL(forRecordID: id))
+        let transcript = SpeakerTranscript(source: .localDiarizer, segments: [
+            SpeakerTranscriptSegment(text: "Test speaker.", start: 0, end: seconds, speakerID: "S1")
+        ])
+        XCTAssertTrue(history.addSpeakerRecord(
+            id: id, text: transcript.joinedText, title: "API fixture", source: .recorder,
+            durationSeconds: seconds, language: "en", engineUsed: "fixture", timedText: [], granularity: .segment,
+            transcript: transcript
+        ))
+        service.recordVoices(["S1": embedding], model: model, of: transcript, recordID: id)
+        return (id, transcript.revision)
+    }
+
+    private func request(_ action: String, _ record: (UUID, UUID), extra: [String: Any] = [:], token: String? = "test-token") throws -> HTTPRequest {
+        var body: [String: Any] = ["history_id": record.0.uuidString, "transcript_revision": record.1.uuidString,
+                                   "transcript_version": history.record(withID: record.0)?.speakerTranscript?.automationVersion ?? "missing",
+                                   "speaker_id": "S1"]
+        body.merge(extra) { _, new in new }
+        var headers = ["content-type": "application/json"]
+        if let token { headers["authorization"] = "Bearer " + token }
+        return HTTPRequest(method: action == "name" ? "PUT" : "POST", path: "/v1/history/speakers/" + action,
+                           queryParams: [:], headers: headers, body: try JSONSerialization.data(withJSONObject: body))
+    }
+
+    private func call(_ action: String, _ record: (UUID, UUID), extra: [String: Any] = [:], token: String? = "test-token") async throws -> HTTPResponse {
+        await router.route(try request(action, record, extra: extra, token: token))
+    }
+
+    private func json(_ response: HTTPResponse) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: response.body) as? [String: Any])
+    }
+
+    private func assertStatus(_ response: HTTPResponse, _ status: Int, file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertEqual(response.status, status, String(data: response.body, encoding: .utf8) ?? "", file: file, line: line)
+    }
+
+    func testTokenIsRequiredEvenWhenLegacyAuthenticationIsDisabled() async throws {
+        let record = try recording()
+        for action in ["name", "enroll", "confirm"] {
+            assertStatus(try await call(action, record, token: nil), 401)
+            assertStatus(try await call(action, record, token: "wrong"), 401)
+            let trusted = await router.routeTrusted(try request(action, record))
+            assertStatus(trusted, 403)
+            XCTAssertFalse(RemoteLinkServer.allowedRoutes.contains("\(action == "name" ? "PUT" : "POST") /v1/history/speakers/\(action)"))
+        }
+        router.register("GET", "/v1/history") { _ in .json(["ok": true]) }
+        let legacy = await router.route(HTTPRequest(method: "GET", path: "/v1/history", queryParams: [:], headers: [:], body: Data()))
+        assertStatus(legacy, 200)
+        XCTAssertTrue(store.profiles.isEmpty)
+    }
+
+    func testNamingAndLearningRoundTripAcrossRestartAndLaterRecording() async throws {
+        let first = try recording()
+        assertStatus(try await call("name", first, extra: ["name": "Anna"]), 200)
+        XCTAssertTrue(store.profiles.isEmpty)
+        let enrolled = try await call("enroll", first)
+        assertStatus(enrolled, 200)
+        let profileID = try XCTUnwrap(try json(enrolled)["profile_id"] as? String)
+        XCTAssertEqual(try json(enrolled)["voice_state"] as? String, "linked")
+        XCTAssertEqual(try json(enrolled)["already_learned"] as? Bool, false)
+        rebuildServices()
+        let repeated = try await call("enroll", first)
+        assertStatus(repeated, 200)
+        XCTAssertEqual(try json(repeated)["already_learned"] as? Bool, true)
+        XCTAssertEqual(try json(repeated)["profile_id"] as? String, profileID)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+
+        let second = try recording(embedding: [0.98, 0.05, 0], seconds: 30)
+        let suggested = try XCTUnwrap(service.automationState(recordID: second.0, speakerID: "S1"))
+        XCTAssertEqual(suggested.suggested_name, "Anna")
+        XCTAssertNil(suggested.name)
+        XCTAssertEqual(suggested.profile_id?.uuidString, profileID)
+        assertStatus(try await call("enroll", second), 409)
+        assertStatus(try await call("confirm", second, extra: ["profile_id": UUID().uuidString]), 409)
+        assertStatus(try await call("confirm", second, extra: ["profile_id": profileID]), 200)
+        rebuildServices()
+        let confirmedAgain = try await call("confirm", second, extra: ["profile_id": profileID])
+        assertStatus(confirmedAgain, 200)
+        XCTAssertEqual(try json(confirmedAgain)["already_learned"] as? Bool, true)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 70)
+    }
+
+    func testRetryRepairsHistoryAfterVoiceCommitWithoutLearningAgain() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        failHistorySave = true
+        assertStatus(try await call("enroll", record), 500)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+        XCTAssertNil(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"))
+        failHistorySave = false
+        rebuildServices()
+        let retry = try await call("enroll", record)
+        assertStatus(retry, 200)
+        XCTAssertEqual(try json(retry)["already_learned"] as? Bool, true)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+        XCTAssertNotNil(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"))
+    }
+
+    func testProfileWriteFailureDoesNotPublishOrConfirmAndRetryWorks() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        let file = directory.appendingPathComponent("voices/voice-profiles.json")
+        let saved = try Data(contentsOf: file)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        assertStatus(try await call("enroll", record), 500)
+        XCTAssertTrue(store.profiles.isEmpty)
+        XCTAssertNil(store.learnedProfile(recordID: record.0, revision: record.1, speakerID: "S1"))
+        XCTAssertNil(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"))
+        try FileManager.default.removeItem(at: file)
+        try saved.write(to: file)
+        assertStatus(try await call("enroll", record), 200)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
+    }
+
+    func testNameSaveFailureRestoresPreviousValue() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        failHistorySave = true
+        assertStatus(try await call("name", record, extra: ["name": "Ben"]), 500)
+        XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.displayName(for: "S1"), "Anna")
+        failHistorySave = false
+        rebuildServices()
+        XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.displayName(for: "S1"), "Anna")
+    }
+
+    func testValidationAndPremiumLeaveStoresUntouched() async throws {
+        let record = try recording(seconds: 10)
+        assertStatus(try await call("name", record, extra: ["name": "  "]), 400)
+        assertStatus(try await call("name", record, extra: ["name": "A\u{0}B"]), 400)
+        assertStatus(try await call("name", record, extra: ["name": String(repeating: "a", count: 101)]), 400)
+        assertStatus(try await call("name", record, extra: ["name": "Anna", "unknown": true]), 400)
+        assertStatus(try await call("name", (UUID(), record.1), extra: ["name": "Anna"]), 404)
+        assertStatus(try await call("name", (record.0, UUID()), extra: ["name": "Anna"]), 409)
+        assertStatus(try await call("name", record, extra: ["name": "Anna", "speaker_id": "S99"]), 404)
+        assertStatus(try await call("confirm", record), 400)
+        assertStatus(try await call("enroll", record), 422)
+        premium = false
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", record), 403)
+        premium = true
+        assertStatus(try await call("enroll", record), 422)
+        XCTAssertTrue(store.profiles.isEmpty)
+        history.record(withID: record.0)?.speakerTranscriptState = .pending
+        assertStatus(try await call("name", record, extra: ["name": "Ben"]), 409)
+    }
+
+    func testSameNamesCreateSeparateProfilesUnlessIDIsExplicit() async throws {
+        let first = try recording()
+        assertStatus(try await call("name", first, extra: ["name": "Alex"]), 200)
+        assertStatus(try await call("enroll", first), 200)
+        let id = try XCTUnwrap(store.profiles.first?.id)
+        let second = try recording(embedding: [0, 1, 0])
+        assertStatus(try await call("name", second, extra: ["name": "Alex"]), 200)
+        assertStatus(try await call("enroll", second), 409)
+        assertStatus(try await call("enroll", second, extra: ["create_profile": true]), 200)
+        XCTAssertEqual(store.profiles.count, 2)
+        let third = try recording(embedding: [0, 0, 1])
+        assertStatus(try await call("name", third, extra: ["name": "Alex"]), 200)
+        service.enroll("S1", inRecordID: third.0)
+        XCTAssertEqual(store.profile(withID: id)?.enrolledSeconds, 40)
+        XCTAssertNil(history.record(withID: third.0)?.speakerNames?.profileID(for: "S1"))
+        assertStatus(try await call("enroll", third, extra: ["profile_id": id.uuidString]), 200)
+        XCTAssertEqual(store.profiles.count, 2)
+        XCTAssertEqual(store.profile(withID: id)?.enrolledSeconds, 80)
+        assertStatus(try await call("enroll", second, extra: ["profile_id": id.uuidString]), 409)
+    }
+
+    func testNamingASuggestionDoesNotLearnAndDeletedProfileCannotBeResurrectedByRetry() async throws {
+        let first = try recording()
+        assertStatus(try await call("name", first, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", first), 200)
+        let id = try XCTUnwrap(store.profiles.first?.id)
+        let second = try recording()
+        assertStatus(try await call("name", second, extra: ["name": "Anna"]), 200)
+        XCTAssertEqual(store.profile(withID: id)?.enrolledSeconds, 40)
+        XCTAssertNil(history.record(withID: second.0)?.speakerNames?.profileID(for: "S1"))
+        assertStatus(try await call("confirm", second, extra: ["profile_id": id.uuidString]), 409)
+        service.deleteProfile(id)
+        rebuildServices()
+        assertStatus(try await call("enroll", first), 409)
+        XCTAssertTrue(store.profiles.isEmpty)
+    }
+
+    func testModelMismatchAndMissingEmbeddingCannotTrain() async throws {
+        let first = try recording()
+        assertStatus(try await call("name", first, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", first), 200)
+        let id = try XCTUnwrap(store.profiles.first?.id)
+        let second = try recording(model: "other-model")
+        assertStatus(try await call("name", second, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", second, extra: ["profile_id": id.uuidString]), 409)
+        store.removeEmbeddings(forRecordIDs: [second.0])
+        assertStatus(try await call("enroll", second, extra: ["profile_id": id.uuidString]), 422)
+        XCTAssertEqual(store.profile(withID: id)?.enrolledSeconds, 40)
+    }
+    func testConcurrentRetriesAndReceiptAfterModelChange() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        let request = try request("enroll", record)
+        let router = self.router!
+        let statuses = await withTaskGroup(of: Int.self, returning: [Int].self) { group in
+            for _ in 0..<12 { group.addTask { await router.route(request).status } }
+            var statuses: [Int] = []
+            for await status in group { statuses.append(status) }
+            return statuses
+        }
+        XCTAssertEqual(statuses, Array(repeating: 200, count: 12))
+        XCTAssertEqual(store.profiles.count, 1)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+        try recording(model: "new-model")
+        store.removeEmbeddings(forRecordIDs: [record.0])
+        rebuildServices()
+        assertStatus(try await call("enroll", record), 200)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+    }
+
+    func testRealHTTPConnectionCanNameEnrollAndRetry() async throws {
+        let record = try recording()
+        let server = HTTPServer(router: router)
+        let ready = expectation(description: "Loopback API listening")
+        server.onStateChange = { if $0 { ready.fulfill() } }
+        let port = UInt16.random(in: 49_152...65_535)
+        try server.start(port: port)
+        defer { server.stopAndCancelActiveRequests() }
+        await fulfillment(of: [ready], timeout: 5)
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        for action in ["name", "enroll", "enroll"] {
+            let source = try request(action, record, extra: action == "name" ? ["name": "Anna"] : [:])
+            var request = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(source.path)")!)
+            request.httpMethod = source.method
+            request.httpBody = source.body
+            request.allHTTPHeaderFields = source.headers
+            request.timeoutInterval = 5
+            let (data, response) = try await session.data(for: request)
+            XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200, String(decoding: data, as: UTF8.self))
+        }
+        XCTAssertEqual(store.profiles.count, 1)
+        XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
+    }
+
+    func testHistoryExposesRevisionSuggestionProfileAndLearningStateWithoutEmbeddings() async throws {
+        let first = try recording()
+        assertStatus(try await call("name", first, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", first), 200)
+        let second = try recording()
+        let request = HTTPRequest(method: "GET", path: "/v1/history", queryParams: ["include": "speaker_segments"], headers: [:], body: Data())
+        let response = APIHandlers.historyResponse(request, historyService: history, speakerVoices: service)
+        let entries = try XCTUnwrap(try json(response)["entries"] as? [[String: Any]])
+        let entry = try XCTUnwrap(entries.first { $0["id"] as? String == second.0.uuidString })
+        XCTAssertEqual(entry["transcript_revision"] as? String, second.1.uuidString)
+        XCTAssertEqual(entry["transcript_version"] as? String, history.record(withID: second.0)?.speakerTranscript?.automationVersion)
+        let speaker = try XCTUnwrap((entry["speakers"] as? [[String: Any]])?.first)
+        XCTAssertEqual(speaker["name"] as? String, "Speaker 1")
+        XCTAssertEqual(speaker["suggested_name"] as? String, "Anna")
+        XCTAssertEqual(speaker["voice_state"] as? String, "suggestion")
+        XCTAssertEqual(speaker["profile_id"] as? String, store.profiles.first?.id.uuidString)
+        XCTAssertFalse(String(decoding: response.body, as: UTF8.self).contains("embedding"))
+    }
+
+    func testExplicitWorkspaceReassignmentAndReEnrollmentRemainAvailable() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        service.enroll("S1", inRecordID: record.0)
+        XCTAssertEqual(store.profiles.count, 1)
+        history.setSpeakerName("Ben", for: "S1", inRecordID: record.0)
+        service.enroll("S1", inRecordID: record.0)
+        XCTAssertEqual(store.profiles.count, 2)
+        let ben = try XCTUnwrap(store.profile(named: "Ben"))
+        XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"), ben.id)
+        service.deleteProfile(ben.id)
+        service.enroll("S1", inRecordID: record.0)
+        let newBen = try XCTUnwrap(store.profile(named: "Ben"))
+        XCTAssertNotEqual(newBen.id, ben.id)
+        XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"), newBen.id)
+    }
+
+    private func multipleSpeakers() throws -> (UUID, UUID) {
+        let record = try recording()
+        let transcript = SpeakerTranscript(revision: record.1, source: .localDiarizer, segments: (0..<4).map {
+            SpeakerTranscriptSegment(text: "Speaker sample with several words for splitting.",
+                                     start: Double($0 * 30), end: Double(($0 + 1) * 30), speakerID: "S\($0 + 1)")
+        })
+        history.storeSpeakerTranscript(transcript, forRecordID: record.0)
+        service.recordVoices(["S1": [1, 0, 0], "S2": [0.99, 0.01, 0], "S3": [0, 1, 0], "S4": [0, 0, 1]],
+                             model: "test-model", of: transcript, recordID: record.0)
+        return record
+    }
+
+    func testCorrectionsRejectOldRequestsAndReceiptsFollowRenumberedSpeakers() async throws {
+        let record = try multipleSpeakers()
+        for (speaker, name) in [("S3", "Bob"), ("S4", "Carol")] {
+            assertStatus(try await call("name", record, extra: ["speaker_id": speaker, "name": name]), 200)
+            assertStatus(try await call("enroll", record, extra: ["speaker_id": speaker]), 200)
+        }
+        let bob = try XCTUnwrap(store.profile(named: "Bob"))
+        let carol = try XCTUnwrap(store.profile(named: "Carol"))
+        let oldRequests = try [request("name", record, extra: ["speaker_id": "S3", "name": "Wrong"]),
+                               request("enroll", record, extra: ["speaker_id": "S3"]),
+                               request("confirm", record, extra: ["speaker_id": "S3", "profile_id": bob.id.uuidString])]
+        let workspace = SpeakerWorkspaceModel(recordID: record.0, historyService: history, voices: service)
+        workspace.merge("S2", into: "S1", undoManager: nil)
+        XCTAssertEqual(history.record(withID: record.0)?.speakerTranscript?.revision, record.1)
+        for request in oldRequests { assertStatus(await router.route(request), 409) }
+        rebuildServices()
+        for (speaker, profile) in [("S2", bob), ("S3", carol)] {
+            let reply = try await call("enroll", record, extra: ["speaker_id": speaker, "profile_id": profile.id.uuidString])
+            assertStatus(reply, 200)
+            XCTAssertEqual(try json(reply)["already_learned"] as? Bool, true)
+            XCTAssertEqual(store.profile(withID: profile.id)?.enrolledSeconds, 30)
+        }
+    }
+
+    func testAssignAndSplitInvalidateTranscriptVersion() async throws {
+        let record = try multipleSpeakers()
+        let workspace = SpeakerWorkspaceModel(recordID: record.0, historyService: history, voices: service)
+        let beforeAssign = try request("name", record, extra: ["name": "Old"])
+        workspace.assign(turns: [1], to: "S1", undoManager: nil)
+        assertStatus(await router.route(beforeAssign), 409)
+        let beforeSplit = try request("name", record, extra: ["name": "Old"])
+        workspace.split(at: 10, to: nil, undoManager: nil)
+        assertStatus(await router.route(beforeSplit), 409)
+        assertStatus(try await call("name", record, extra: ["name": "Current"]), 200)
+    }
+
+    func testPartiallyLearnedMergeRequiresExplicitRelearningAndThenRetriesAreSafe() async throws {
+        let record = try multipleSpeakers()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", record), 200)
+        let profile = try XCTUnwrap(store.profile(named: "Anna"))
+        let workspace = SpeakerWorkspaceModel(recordID: record.0, historyService: history, voices: service)
+        workspace.merge("S2", into: "S1", undoManager: nil)
+        assertStatus(try await call("enroll", record), 409)
+        XCTAssertEqual(store.profile(withID: profile.id)?.enrolledSeconds, 30)
+        service.relearn("S1", inRecordID: record.0)
+        XCTAssertEqual(store.profile(withID: profile.id)?.enrolledSeconds, 60)
+        rebuildServices()
+        let retry = try await call("enroll", record)
+        assertStatus(retry, 200)
+        XCTAssertEqual(try json(retry)["already_learned"] as? Bool, true)
+        XCTAssertEqual(store.profile(withID: profile.id)?.enrolledSeconds, 60)
+    }
+
+    func testFailedCorrectionPersistenceCannotUseWrongSpeakerEmbeddingsAfterRestart() async throws {
+        let record = try multipleSpeakers()
+        assertStatus(try await call("name", record, extra: ["speaker_id": "S3", "name": "Bob"]), 200)
+        assertStatus(try await call("enroll", record, extra: ["speaker_id": "S3"]), 200)
+        let file = directory.appendingPathComponent("voices/voice-profiles.json")
+        let saved = try Data(contentsOf: file)
+        try FileManager.default.removeItem(at: file)
+        try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+        let workspace = SpeakerWorkspaceModel(recordID: record.0, historyService: history, voices: service)
+        workspace.merge("S2", into: "S1", undoManager: nil)
+        XCTAssertEqual(history.record(withID: record.0)?.speakerTranscript?.speakerIDs.count, 3)
+        assertStatus(try await call("enroll", record, extra: ["speaker_id": "S2"]), 409)
+        try FileManager.default.removeItem(at: file)
+        try saved.write(to: file)
+        rebuildServices()
+        let retry = try await call("enroll", record, extra: ["speaker_id": "S2"])
+        assertStatus(retry, 409)
+        XCTAssertEqual((try json(retry)["error"] as? [String: Any])?["code"] as? String, "stale_voice_samples")
+        XCTAssertEqual(store.profile(named: "Bob")?.enrolledSeconds, 30)
+    }
+
+    func testLegacyLinkAndWorkspaceNameRoundTripsDoNotLearnAgain() async throws {
+        let record = try recording()
+        let profile = store.enroll(name: "Anna", embedding: [1, 0, 0], model: "test-model", seconds: 40)
+        history.setSpeakerName("Anna", for: "S1", profileID: profile.id, inRecordID: record.0)
+        assertStatus(try await call("name", record, extra: ["name": "ANNA"]), 200)
+        XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.profileID(for: "S1"), profile.id)
+        assertStatus(try await call("name", record, extra: ["name": "Ben"]), 200)
+        service.enroll("S1", inRecordID: record.0)
+        XCTAssertEqual(store.profiles.count, 2)
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        service.enroll("S1", inRecordID: record.0)
+        rebuildServices()
+        let retry = try await call("enroll", record)
+        assertStatus(retry, 200)
+        XCTAssertEqual(try json(retry)["already_learned"] as? Bool, true)
+        XCTAssertEqual(store.profile(withID: profile.id)?.enrolledSeconds, 40)
+    }
+
+    func testUnicodeNamesAndExplicitDuplicateChoice() async throws {
+        let record = try recording()
+        for name in ["Name\u{200C}Name", "Name\u{200D}Name"] {
+            assertStatus(try await call("name", record, extra: ["name": name]), 200)
+            XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.displayName(for: "S1"), name)
+        }
+        assertStatus(try await call("name", record, extra: ["name": "A\nB"]), 400)
+        assertStatus(try await call("name", record, extra: ["name": "Alex"]), 200)
+        let existing = store.enroll(name: "Alex", embedding: [0, 1, 0], model: "test-model", seconds: 40)
+        let conflict = try await call("enroll", record)
+        assertStatus(conflict, 409)
+        XCTAssertEqual((try json(conflict)["error"] as? [String: Any])?["profile_ids"] as? [String], [existing.id.uuidString])
+        XCTAssertEqual(store.profiles.count, 1)
+        assertStatus(try await call("enroll", record, extra: ["create_profile": true, "profile_id": existing.id.uuidString]), 400)
+        assertStatus(try await call("enroll", record, extra: ["profile_id": existing.id.uuidString]), 200)
+        XCTAssertEqual(store.profiles.count, 1)
+    }
+
+    func testDeletingHistoryPurgesReceiptsButDeletingProfileRetainsTombstone() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", record), 200)
+        service.deleteProfile(try XCTUnwrap(store.profiles.first?.id))
+        XCTAssertTrue(store.storedRecordIDs.contains(record.0))
+        XCTAssertTrue(history.deleteRecord(withID: record.0))
+        XCTAssertFalse(store.storedRecordIDs.contains(record.0))
+        rebuildServices()
+        XCTAssertFalse(store.storedRecordIDs.contains(record.0))
+        let bytes = try Data(contentsOf: directory.appendingPathComponent("voices/voice-profiles.json"))
+        XCTAssertFalse(String(decoding: bytes, as: UTF8.self).contains(record.0.uuidString))
+    }
+
+    func testVersionIsRequiredAndHistoryStateReflectsPremium() async throws {
+        let record = try recording()
+        for action in ["name", "enroll", "confirm"] {
+            let original = try request(action, record, extra: ["name": "Anna"])
+            var body = try XCTUnwrap(JSONSerialization.jsonObject(with: original.body) as? [String: Any])
+            body.removeValue(forKey: "transcript_version")
+            if action != "name" { body.removeValue(forKey: "name") }
+            if action == "confirm" { body["profile_id"] = UUID().uuidString }
+            let missing = HTTPRequest(method: original.method, path: original.path, queryParams: [:],
+                                      headers: original.headers, body: try JSONSerialization.data(withJSONObject: body))
+            assertStatus(await router.route(missing), 400)
+        }
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        XCTAssertEqual(service.automationState(recordID: record.0, speakerID: "S1")?.voice_state, "canEnroll")
+        premium = false
+        XCTAssertEqual(service.automationState(recordID: record.0, speakerID: "S1")?.voice_state, "none")
+    }
+
+    func testStartupCleanupAlsoPurgesReceiptsWithoutEmbeddings() async throws {
+        let record = try recording()
+        assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
+        assertStatus(try await call("enroll", record), 200)
+        let file = directory.appendingPathComponent("voices/voice-profiles.json")
+        let bytes = try Data(contentsOf: file)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        object["recordings"] = [] // UUID-keyed Codable dictionaries use alternating arrays.
+        history.onRecordsDeleted = nil
+        XCTAssertTrue(history.deleteRecord(withID: record.0))
+        try JSONSerialization.data(withJSONObject: object).write(to: file)
+        rebuildServices()
+        XCTAssertTrue(store.recordingEmbeddings.isEmpty)
+        XCTAssertTrue(store.storedRecordIDs.contains(record.0))
+        service.removeEmbeddingsOfDeletedRecordings()
+        rebuildServices()
+        XCTAssertFalse(store.storedRecordIDs.contains(record.0))
+        XCTAssertEqual(store.profiles.count, 1)
+    }
+
+}
