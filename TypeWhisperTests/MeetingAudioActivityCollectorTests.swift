@@ -141,6 +141,101 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         }
     }
 
+    func testHelperProcessesInMeetingAppNamespaceCountAsTheApp() {
+        let expectedApps: [(String, String, MeetingProvider)] = [
+            ("com.microsoft.teams2.modulehost", "com.microsoft.teams2", .teams),
+            ("com.microsoft.teams.helper", "com.microsoft.teams", .teams),
+            ("us.zoom.xos.helper", "us.zoom.xos", .zoom),
+            ("com.apple.FaceTime.helper", "com.apple.FaceTime", .faceTime)
+        ]
+
+        for (helper, app, provider) in expectedApps {
+            let canonical = CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                for: helper,
+                executablePath: nil
+            )
+            XCTAssertEqual(canonical, app, "Unexpected app for \(helper)")
+            XCTAssertEqual(
+                canonical.flatMap(NativeMeetingAudioProcessRegistry.provider(for:)),
+                provider
+            )
+        }
+    }
+
+    func testHelperAttributionRejectsLookalikeNamespaces() {
+        for bundleIdentifier in [
+            "com.example.microsoft.teams",
+            "com.microsoft.teams2x.modulehost",
+            "com.microsoft.teamsupdater",
+            "us.zoom.xosx",
+            "com.google.Chrome.updater"
+        ] {
+            XCTAssertNil(
+                CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                    for: bundleIdentifier,
+                    executablePath: "/usr/libexec/\(bundleIdentifier)"
+                ),
+                "Unexpected attribution for \(bundleIdentifier)"
+            )
+        }
+    }
+
+    func testHelperInsideMeetingAppBundleCountsAsTheApp() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let teams = root.appendingPathComponent("Microsoft Teams.app", isDirectory: true)
+        let helper = teams.appendingPathComponent("Contents/Helpers/Media Host.app", isDirectory: true)
+        let other = root.appendingPathComponent("Other.app", isDirectory: true)
+        try writeAppBundle(at: teams, bundleIdentifier: "com.microsoft.teams2")
+        try writeAppBundle(at: helper, bundleIdentifier: "com.vendor.mediahost")
+        try writeAppBundle(at: other, bundleIdentifier: "com.example.other")
+
+        XCTAssertEqual(
+            CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                for: "com.vendor.mediahost",
+                executablePath: helper.appendingPathComponent("Contents/MacOS/Media Host").path
+            ),
+            "com.microsoft.teams2"
+        )
+        XCTAssertNil(
+            CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                for: "com.vendor.mediahost",
+                executablePath: other.appendingPathComponent("Contents/MacOS/Other").path
+            )
+        )
+    }
+
+    func testOutermostAppBundleURLIgnoresNestedHelpersAndBareExecutables() {
+        XCTAssertEqual(
+            NativeMeetingAudioProcessRegistry.outermostAppBundleURL(
+                containing: "/Applications/Microsoft Teams.app/Contents/Helpers/"
+                    + "Media Host.app/Contents/MacOS/Media Host"
+            )?.path,
+            "/Applications/Microsoft Teams.app"
+        )
+        XCTAssertNil(NativeMeetingAudioProcessRegistry.outermostAppBundleURL(
+            containing: "/usr/libexec/avconferenced"
+        ))
+        XCTAssertNil(NativeMeetingAudioProcessRegistry.outermostAppBundleURL(
+            containing: "/usr/local/bin/tool.app"
+        ))
+    }
+
+    private func writeAppBundle(at url: URL, bundleIdentifier: String) throws {
+        let contents = url.appendingPathComponent("Contents", isDirectory: true)
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let infoPlist = try PropertyListSerialization.data(
+            fromPropertyList: [
+                "CFBundleIdentifier": bundleIdentifier,
+                "CFBundlePackageType": "APPL"
+            ],
+            format: .xml,
+            options: 0
+        )
+        try infoPlist.write(to: contents.appendingPathComponent("Info.plist"))
+    }
+
     func testUnsupportedClientFailsClosedAndFinishesStream() async {
         let client = FakeMeetingAudioProcessClient()
         client.configure(
