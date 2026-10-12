@@ -85,6 +85,7 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
     static let partDuration: TimeInterval = 300
 
     func speechRegions(in samples: [Float]) async throws -> [ClosedRange<TimeInterval>] {
+        guard !samples.isEmpty else { return [] }
         let sampleRate = AudioRecorderService.transcriptionSampleRate
         let duration = Double(samples.count) / sampleRate
         let windows = try await Self.windows(in: samples, sampleRate: sampleRate)
@@ -102,6 +103,13 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
         // Each part runs one window past its end, so no window is lost at a boundary.
         let overlapLength = Int(windowDuration * sampleRate)
         let partStarts = Array(stride(from: 0, to: samples.count, by: partLength))
+        // The classifier only reports whole windows. Silence after the recording
+        // completes the last one, so the end is judged on its own audio.
+        let windowLength = Int(windowDuration * sampleRate)
+        let hopLength = Int(windowDuration * (1 - overlapFactor) * sampleRate)
+        let trailingSilence = samples.count < windowLength
+            ? 0
+            : (hopLength - (samples.count - windowLength) % hopLength) % hopLength
         let isCancelled = OSAllocatedUnfairLock(initialState: false)
 
         let parts: [[SpeechActivityWindow]] = try await withTaskCancellationHandler {
@@ -119,6 +127,7 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
                         let result = Result {
                             try classify(
                                 samples[start..<end],
+                                trailingSilence: index == partStarts.count - 1 ? trailingSilence : 0,
                                 offset: Double(start) / sampleRate,
                                 sampleRate: sampleRate,
                                 isCancelled: { isCancelled.withLock { $0 } }
@@ -138,8 +147,17 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
         try Task.checkCancellation()
 
         let duration = Double(samples.count) / sampleRate
-        var windows = parts.flatMap { $0 }.sorted { $0.start < $1.start }
-        // The classifier may leave the last fraction of a window unreported.
+        var windows = parts.flatMap { $0 }
+            .filter { $0.start < duration }
+            .map { window in
+                SpeechActivityWindow(
+                    start: window.start,
+                    end: min(window.end, duration),
+                    speechConfidence: window.speechConfidence
+                )
+            }
+            .sorted { $0.start < $1.start }
+        // Should the classifier still leave the end unreported, the last window covers it.
         if let last = windows.last, last.end < duration {
             windows[windows.count - 1] = SpeechActivityWindow(
                 start: last.start,
@@ -152,6 +170,7 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
 
     private static func classify(
         _ samples: ArraySlice<Float>,
+        trailingSilence: Int,
         offset: TimeInterval,
         sampleRate: Double,
         isCancelled: () -> Bool
@@ -171,11 +190,8 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
         let collector = SpeechWindowCollector(offset: offset, speechLabels: speechLabels)
         try analyzer.add(request, withObserver: collector)
 
-        let blockLength = Int(10 * sampleRate)
-        var position = samples.startIndex
-        while position < samples.endIndex {
-            guard !isCancelled() else { throw CancellationError() }
-            let count = min(blockLength, samples.endIndex - position)
+        var framePosition: AVAudioFramePosition = 0
+        func analyze(count: Int, fill: (UnsafeMutablePointer<Float>) -> Void) throws {
             guard let buffer = AVAudioPCMBuffer(
                 pcmFormat: format,
                 frameCapacity: AVAudioFrameCount(count)
@@ -183,16 +199,27 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
                 throw SpeechDetectionError.unsupportedFormat
             }
             buffer.frameLength = AVAudioFrameCount(count)
-            samples[position..<(position + count)].withUnsafeBufferPointer { source in
-                if let baseAddress = source.baseAddress {
-                    channel.update(from: baseAddress, count: count)
+            fill(channel)
+            analyzer.analyze(buffer, atAudioFramePosition: framePosition)
+            framePosition += AVAudioFramePosition(count)
+        }
+
+        let blockLength = Int(10 * sampleRate)
+        var position = samples.startIndex
+        while position < samples.endIndex {
+            guard !isCancelled() else { throw CancellationError() }
+            let count = min(blockLength, samples.endIndex - position)
+            try analyze(count: count) { channel in
+                samples[position..<(position + count)].withUnsafeBufferPointer { source in
+                    if let baseAddress = source.baseAddress {
+                        channel.update(from: baseAddress, count: count)
+                    }
                 }
             }
-            analyzer.analyze(
-                buffer,
-                atAudioFramePosition: AVAudioFramePosition(position - samples.startIndex)
-            )
             position += count
+        }
+        if trailingSilence > 0 {
+            try analyze(count: trailingSilence) { $0.update(repeating: 0, count: trailingSilence) }
         }
         analyzer.completeAnalysis()
         if let error = collector.error {
