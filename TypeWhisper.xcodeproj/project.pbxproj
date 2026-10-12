@@ -6443,7 +6443,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GeminiPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
@@ -6466,7 +6466,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = GeminiPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.1.5;
+				MARKETING_VERSION = 1.1.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gemini;
 				PRODUCT_NAME = GeminiPlugin;
 				SKIP_INSTALL = YES;
