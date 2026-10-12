@@ -1158,8 +1158,27 @@ private final class GeminiURLSessionWebSocket: GeminiLiveWebSocket, @unchecked S
     func send(_ message: URLSessionWebSocketTask.Message) async throws { try await socket.send(message) }
     func receive() async throws -> URLSessionWebSocketTask.Message { try await socket.receive() }
     func ping() async throws {
+        try await GeminiWebSocketPing.send { socket.sendPing(pongReceiveHandler: $0) }
+    }
+    func close(code: URLSessionWebSocketTask.CloseCode) {
+        socket.cancel(with: code, reason: nil)
+        session.invalidateAndCancel()
+    }
+}
+
+enum GeminiWebSocketPing {
+    /// URLSession can call the pong handler more than once, for example with an
+    /// error once the socket is cancelled. Resuming a checked continuation twice
+    /// traps the whole app, so only the first call counts.
+    static func send(_ sendPing: (@escaping @Sendable (Error?) -> Void) -> Void) async throws {
+        let completed = OSAllocatedUnfairLock(initialState: false)
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            socket.sendPing { error in
+            sendPing { error in
+                let isFirstCall = completed.withLock { completed in
+                    defer { completed = true }
+                    return !completed
+                }
+                guard isFirstCall else { return }
                 if let error {
                     continuation.resume(throwing: error)
                 } else {
@@ -1167,10 +1186,6 @@ private final class GeminiURLSessionWebSocket: GeminiLiveWebSocket, @unchecked S
                 }
             }
         }
-    }
-    func close(code: URLSessionWebSocketTask.CloseCode) {
-        socket.cancel(with: code, reason: nil)
-        session.invalidateAndCancel()
     }
 }
 
