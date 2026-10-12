@@ -1094,6 +1094,65 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(finalPartialTexts, [])
     }
 
+    func testLiveSessionThatStopsReturningTextTranscribesFinalizedRecording() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager()
+        let livePlugin = AudioRecorderStallingLivePlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.stalling-live",
+                name: "Stalling Live",
+                version: "1.0.0",
+                principalClass: "AudioRecorderStallingLivePlugin"
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: makeTemporaryDirectory(),
+            isEnabled: true
+        ))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(livePlugin.providerId)
+        // Six seconds of speech reach the live session, which never transcribes them.
+        let captureSamples = Array(
+            repeating: Float(0.25),
+            count: Int(AudioRecorderService.transcriptionSampleRate * 6)
+        )
+        let finalizedFileSamples = Array(
+            repeating: Float(0.3),
+            count: Int(AudioRecorderService.transcriptionSampleRate * 6)
+        )
+        let recorderService = makeRecorderService(
+            recordingsDirectory: makeTemporaryDirectory(),
+            samples: captureSamples
+        )
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: recorderService,
+            audioSamplesLoader: { _ in finalizedFileSamples }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = true
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        for _ in 0..<50 where livePlugin.liveSessionCreateCount == 0 {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+        viewModel.partialText = "words before the stall"
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "complete transcript")
+        XCTAssertEqual(livePlugin.batchTranscriptionSamples, finalizedFileSamples)
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(recording.transcript, "complete transcript")
+        XCTAssertNil(recording.transcriptionFailure)
+    }
+
     func testSuccessfulTranscriptSaveClearsPriorRecorderFailure() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .success("fresh transcript"))
@@ -2776,6 +2835,66 @@ private final class AudioRecorderDroppingLivePlugin: NSObject, LiveTranscription
 
         func finish() async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "", detectedLanguage: nil)
+        }
+
+        func cancel() async {}
+    }
+}
+
+/// A live session that stays connected but reports text only for its first audio, and
+/// finishes with that text.
+private final class AudioRecorderStallingLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.stalling-live"
+    static let pluginName = "Stalling Live"
+
+    var providerId: String { "stalling-live" }
+    var providerDisplayName: String { "Stalling Live" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
+    var selectedModelId: String? { "live" }
+    var supportsTranslation: Bool { false }
+    private let state = OSAllocatedUnfairLock(initialState: (sessions: 0, batchSamples: [Float]()))
+
+    var liveSessionCreateCount: Int { state.withLock { $0.sessions } }
+    var batchTranscriptionSamples: [Float] { state.withLock { $0.batchSamples } }
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        state.withLock { $0.batchSamples = audio.samples }
+        return PluginTranscriptionResult(text: "complete transcript", detectedLanguage: language)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        state.withLock { $0.sessions += 1 }
+        return StallingSession(onProgress: onProgress)
+    }
+
+    private actor StallingSession: LiveTranscriptionSession {
+        private let onProgress: @Sendable (String) -> Bool
+        private var reportedText = false
+
+        init(onProgress: @Sendable @escaping (String) -> Bool) {
+            self.onProgress = onProgress
+        }
+
+        func appendAudio(samples: [Float]) async throws {
+            guard !reportedText else { return }
+            reportedText = true
+            _ = onProgress("words before the stall")
+        }
+
+        func finish() async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "words before the stall", detectedLanguage: "en")
         }
 
         func cancel() async {}
