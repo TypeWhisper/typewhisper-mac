@@ -1,14 +1,19 @@
 # CodeQL Swift analysis
 
 The `Analyze (swift)` job in [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml)
-runs on every pull request to `main` and `release/**`, on pushes to those branches and
-on non-daily `v*` tags, on the weekly schedule (default branch) and on manual dispatch.
-It is not a required status check.
+runs on every pull request to `main` and `release/**`, on non-daily `v*` tags,
+nightly at 03:26 UTC (default branch), and on manual dispatch. Branch pushes run only
+the Actions and Python analyses. It is not a required status check.
+
+Concurrency groups include the event type and the pull request number or full ref.
+New commits cancel earlier runs for the same pull request or branch push. Scheduled,
+manual and release-tag full scans are allowed to finish; branch pushes and pull
+requests cannot cancel them.
 
 ## What gets built
 
 [`scripts/codeql-build-swift.sh`](../scripts/codeql-build-swift.sh) runs one traced
-`xcodebuild build` with explicit `-target` arguments. On pushes, tags, the weekly
+`xcodebuild build` with explicit `-target` arguments. On release tags, the nightly
 schedule and manual runs it builds every target:
 
 - app targets: `TypeWhisper`, `typewhisper-cli`, `TypeWhisperICloudBridge`,
@@ -130,5 +135,12 @@ other Swift files outside the analyzed areas.
 
 Which row applies depends on the pull request: changes to the workflow, the CodeQL
 scripts, the Xcode project, `CodeSigning.xcconfig`, package manifests or the SDK sources
-build everything. The job timeout is 120 minutes. Concurrent runs for the same pull
-request are cancelled.
+build everything. The Swift job timeout is 180 minutes, including pull requests
+that select every target.
+
+The full scan of [main run 38180344636](https://github.com/TypeWhisper/typewhisper-mac/actions/runs/38180344636)
+spent 100 minutes 31 seconds building and another 14 minutes 27 seconds analyzing
+before reaching the former 120-minute job limit. It was triggered by plugin metadata
+and test changes, which also cancelled the preceding full scan. The nightly schedule
+avoids rebuilding all targets after every merge, and the longer timeout leaves room
+for full-build runtime variation.

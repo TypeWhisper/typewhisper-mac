@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Select the Xcode targets the CodeQL Swift job builds.
 
-Pushes, tags, the weekly schedule and manual runs build every target. A pull
+Release tags, the nightly schedule and manual runs build every target. A pull
 request builds only what its Swift changes touch, so a plugin-only change does
 not compile the app and 52 other plugins:
 
