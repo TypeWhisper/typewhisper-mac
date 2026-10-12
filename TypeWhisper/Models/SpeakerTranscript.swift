@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import NaturalLanguage
 
@@ -155,6 +156,18 @@ struct SpeakerTranscript: Codable, Equatable, Sendable {
         self.source = source
         self.segments = segments
         self.requestedSpeakerCount = requestedSpeakerCount
+    }
+
+    /// An optimistic-write token for this exact transcript, including corrections.
+    /// Unlike `revision` (the diarization run), this changes on merge/assign/split.
+    var automationVersion: String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "Infinity", negativeInfinity: "-Infinity", nan: "NaN"
+        )
+        let data = (try? encoder.encode(self)) ?? Data(revision.uuidString.utf8)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Speaker counts offered besides automatic detection.

@@ -443,6 +443,93 @@ curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 
 Entries with speaker detection carry `speaker_state`. Once a speaker transcript exists, they also carry `speakers`. Each speaker has an `id` and a `name`: the confirmed name, or `Speaker N`. When a voice profile suggested a name that nobody has confirmed yet, it is returned as `suggested_name`, and `name` stays `Speaker N`. Add `include=speaker_segments` to get the speaker segments. Entries that came from the Recorder carry the `recording_id` used by `GET /v1/recorder/recordings` and the `.transcript-ready.json` sidecar.
 
+#### Name speakers and teach voice profiles
+
+History entries with a speaker transcript also include `transcript_revision` and
+`transcript_version`. The latter changes when speakers or transcript text are corrected.
+Each speaker includes `voice_state` (`none`, `canEnroll`, `suggestion`, `linked`,
+or `outdated`) and, when available on this Mac, `profile_id`. The state reflects
+local voice availability and Premium access: `canEnroll` and `outdated` require
+Premium. Existing links and suggestions remain visible without Premium.
+
+The following **local-only** endpoints always require the API bearer token,
+even when authentication for older API endpoints is disabled. They are not
+available through Remote Link. Names can be set without Premium; enrollment and
+confirmation require Premium, current local speaker embeddings, and at least
+20 seconds of speech. Neither audio nor embeddings are accepted or returned.
+
+1. Find the History entry whose `recording_id` matches the Recorder session.
+   Wait for `speaker_state: "ready"`; stop on `failed`. Read its `id`,
+   `transcript_revision`, `transcript_version`, and the exact `speakers[].id` you intend to name.
+2. Set the name with `PUT /v1/history/speakers/name`. This only changes the
+   transcript's name, even if it matches an unconfirmed suggestion. It never
+   teaches a profile. Changing a name unlinks the previous profile; changes in casing preserve it.
+3. Use `POST /v1/history/speakers/enroll` to explicitly teach that voice.
+   Omit `profile_id` to create a profile when no matching name exists, or pass a
+   known profile ID to add the sample to that person. An existing name returns
+   `409 profile_name_exists` with candidate IDs in `error.profile_ids`. Select an
+   ID, or send `create_profile: true` to explicitly create a different person
+   with the same name. Do not combine `create_profile: true` with `profile_id`.
+   Equal names alone never merge API enrollments. With multiple profiles of the
+   same name, the app also disables name-only enrollment; use an explicit
+   `profile_id` or give the profiles distinct names.
+   The named speaker and the existing profile must have matching names.
+   Alternatively, confirm a current suggestion directly with
+   `POST /v1/history/speakers/confirm`, including its `profile_id`.
+
+All three endpoints require both transcript identifiers in a JSON object.
+Unknown fields are rejected.
+`history_id` is the History entry's `id`, **not** the Recorder's `recording_id`.
+For example, after reading the actual identifiers and the token from the
+[discovery file](#authentication):
+
+```bash
+curl -X PUT http://localhost:8978/v1/history/speakers/name \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"history_id":"<history-uuid>","transcript_revision":"<revision-uuid>","transcript_version":"<version>","speaker_id":"S1","name":"Lev"}'
+
+curl -X POST http://localhost:8978/v1/history/speakers/enroll \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"history_id":"<history-uuid>","transcript_revision":"<revision-uuid>","transcript_version":"<version>","speaker_id":"S1"}'
+
+# In a later recording, confirm the profile_id returned with a suggestion:
+curl -X POST http://localhost:8978/v1/history/speakers/confirm \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"history_id":"<later-history-uuid>","transcript_revision":"<later-revision-uuid>","transcript_version":"<later-version>","speaker_id":"S2","profile_id":"<profile-uuid>"}'
+```
+
+A successful response includes `history_id`, `transcript_revision`,
+`transcript_version`, `speaker_id`,
+`voice_state`, `already_learned`, and the available name/profile fields.
+Enrollment and confirmation count each original speaker sample only once per
+profile, including retries after restarting the app or renumbering speakers.
+Merging a learned sample with an unlearned one produces a conflict; use the
+app's explicit relearn action to replace that profile without double weighting.
+A retry can repair the History link after an interrupted write. A receipt for a
+deleted profile produces a conflict; retries do not recreate deleted profiles.
+Re-detection creates a new transcript revision. Merge, split, reassignment, and
+text edits change `transcript_version`, even within the same revision. Scripts
+must re-read the current transcript and reassess speaker identity after a
+`stale_transcript` conflict. Deleting a History record removes its learning
+receipts; deleting only a profile retains them to prevent accidental recreation. Renaming does not undo
+previous learning; use the app's relearn/delete actions to correct a bad profile.
+
+Errors use the standard `error.code`/`error.message` envelope: `400` for malformed
+input or invalid names, `401` for a missing/invalid token, `403` for unavailable
+Premium, `404` for an unknown entry/speaker, `409` for stale transcripts,
+not-ready detection, changed suggestions or conflicting profiles, `422` for
+unavailable/invalid voice samples, and `500` for persistence failures. Retry
+an identical request after a transient `500`; inspect and resolve a `409`
+instead of blindly changing identifiers. Renaming a voice profile or a newer
+speaker correction can intentionally prevent replay of an older request.
+
+Speaker IDs express diarization labels, not microphone/system channels. Scripts
+must establish which speaker belongs to the known attendee; never assume `S1`
+means the microphone or infer identity solely from the invitation list.
+
 ### Dictionary
 
 ```bash

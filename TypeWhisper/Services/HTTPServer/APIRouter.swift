@@ -10,18 +10,23 @@ enum APIAuthenticationRequirement: Sendable, Equatable {
 }
 
 final class APIRouter: Sendable {
-    private typealias RouteEntry = (method: String, path: String, handler: APIHandler)
+    private typealias RouteEntry = (method: String, path: String, requiresToken: Bool, handler: APIHandler)
 
     private let routes = OSAllocatedUnfairLock<[RouteEntry]>(initialState: [])
     private let authenticationProvider: @Sendable () -> APIAuthenticationRequirement
+    private let tokenProvider: @Sendable () -> String?
 
-    init(authenticationProvider: @escaping @Sendable () -> APIAuthenticationRequirement = { .disabled }) {
+    init(
+        authenticationProvider: @escaping @Sendable () -> APIAuthenticationRequirement = { .disabled },
+        tokenProvider: @escaping @Sendable () -> String? = { nil }
+    ) {
         self.authenticationProvider = authenticationProvider
+        self.tokenProvider = tokenProvider
     }
 
-    func register(_ method: String, _ path: String, handler: @escaping APIHandler) {
+    func register(_ method: String, _ path: String, requiresToken: Bool = false, handler: @escaping APIHandler) {
         routes.withLock { routes in
-            routes.append((method: method.uppercased(), path: path, handler: handler))
+            routes.append((method: method.uppercased(), path: path, requiresToken: requiresToken, handler: handler))
         }
     }
 
@@ -41,7 +46,7 @@ final class APIRouter: Sendable {
 
         for route in registeredRoutes {
             if route.method == request.method && route.path == request.path {
-                guard isAuthorized(request) else {
+                guard isAuthorized(request, requiresToken: route.requiresToken) else {
                     return .error(
                         status: 401,
                         message: "Missing or invalid API token",
@@ -76,13 +81,23 @@ final class APIRouter: Sendable {
         guard let route = registeredRoutes.first(where: { $0.method == request.method && $0.path == request.path }) else {
             return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
         }
+        guard !route.requiresToken else {
+            return .error(status: 403, message: "This operation requires the local API token")
+        }
         return await route.handler(request)
     }
 
-    private func isAuthorized(_ request: HTTPRequest) -> Bool {
-        guard !isPublicRoute(request),
-              case .required(let expectedToken) = authenticationProvider() else {
-            return true
+    private func isAuthorized(_ request: HTTPRequest, requiresToken: Bool) -> Bool {
+        let expectedToken: String?
+        if requiresToken {
+            if case .required(let token) = authenticationProvider() {
+                expectedToken = token
+            } else {
+                expectedToken = tokenProvider()
+            }
+        } else {
+            guard !isPublicRoute(request), case .required(let token) = authenticationProvider() else { return true }
+            expectedToken = token
         }
 
         guard let expectedToken, !expectedToken.isEmpty,

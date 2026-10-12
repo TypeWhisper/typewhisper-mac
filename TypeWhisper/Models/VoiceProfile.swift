@@ -37,6 +37,10 @@ struct RecordingSpeakerEmbeddings: Codable, Equatable, Sendable {
     /// The model that produced `embeddings`; nil when stored before it was recorded.
     var embeddingModel: String?
     var embeddings: [String: [Float]]
+    /// Pins the labels to a corrected transcript; nil only in legacy stores.
+    var transcriptVersion: String?
+    /// Current label -> original sample labels within this diarization run.
+    var sourceSpeakerIDs: [String: [String]]?
 }
 
 /// Matching rules for voice profiles.
@@ -123,6 +127,21 @@ enum VoiceProfileMatching {
         from old: SpeakerTranscript,
         to new: SpeakerTranscript
     ) -> [String: [Float]] {
+        let contributors = correctedSpeakerContributors(from: old, to: new)
+        var sums: [String: (embedding: [Float], weight: TimeInterval)] = [:]
+        for (oldID, newID) in contributors {
+            guard let embedding = embeddings[oldID] else { continue }
+            let weight = old.speakingTime(of: oldID)
+            if let sum = sums[newID] {
+                sums[newID] = (mean(sum.embedding, weight: sum.weight, embedding, weight: weight), sum.weight + weight)
+            } else {
+                sums[newID] = (embedding, weight)
+            }
+        }
+        return sums.mapValues(\.embedding)
+    }
+    /// The same majority-overlap mapping used for embeddings and their provenance.
+    static func correctedSpeakerContributors(from old: SpeakerTranscript, to new: SpeakerTranscript) -> [String: String] {
         var shares: [String: [String: TimeInterval]] = [:]
         var first = 0
         for before in old.segments {
@@ -138,19 +157,11 @@ enum VoiceProfileMatching {
                 index += 1
             }
         }
-        var sums: [String: (embedding: [Float], weight: TimeInterval)] = [:]
-        for (oldID, targets) in shares {
-            guard let embedding = embeddings[oldID] else { continue }
+        return shares.compactMapValues { targets in
             let total = targets.values.reduce(0, +)
-            guard let target = targets.max(by: { $0.value < $1.value }), target.value > total / 2 else { continue }
-            let newID = target.key
-            let weight = old.speakingTime(of: oldID)
-            if let sum = sums[newID] {
-                sums[newID] = (mean(sum.embedding, weight: sum.weight, embedding, weight: weight), sum.weight + weight)
-            } else {
-                sums[newID] = (embedding, weight)
-            }
+            guard let target = targets.max(by: { $0.value < $1.value }), target.value > total / 2 else { return nil }
+            return target.key
         }
-        return sums.mapValues(\.embedding)
     }
+
 }

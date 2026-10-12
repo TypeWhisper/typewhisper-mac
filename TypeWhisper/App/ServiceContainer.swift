@@ -394,7 +394,10 @@ final class ServiceContainer: ObservableObject {
 
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
-        let router = APIRouter(authenticationProvider: apiAuthenticator.authenticationRequirement)
+        let router = APIRouter(
+            authenticationProvider: apiAuthenticator.authenticationRequirement,
+            tokenProvider: apiAuthenticator.currentToken
+        )
         let settingsBackupService = SettingsBackupAutomationService(
             workflowService: workflowService,
             dictionaryService: dictionaryService,
@@ -435,7 +438,8 @@ final class ServiceContainer: ObservableObject {
             audioRecorderViewModel: audioRecorderViewModel,
             audioDeviceService: audioDeviceService,
             settingsBackupService: settingsBackupService,
-            speakerCoordinator: speakerTranscriptCoordinator
+            speakerCoordinator: speakerTranscriptCoordinator,
+            speakerVoices: speakerVoiceProfileService
         )
         handlers.register(on: router)
         TextProcessingAPI.live(
