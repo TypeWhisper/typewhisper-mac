@@ -117,7 +117,137 @@ def capture_appstore_screenshot!(language, state, destination)
   end
 end
 
+# Localized store text of the macOS version. Name, subtitle and privacy URL are
+# app-level fields shared with the iOS app and stay in the iOS repository.
+APPSTORE_APP_IDENTIFIER = "com.typewhisper.typewhisper-app"
+APPSTORE_APP_ID = "6759319267"
+APPSTORE_METADATA_PATH = File.join(FASTLANE_DIRECTORY, "appstore-metadata")
+APPSTORE_STORE_LOCALES = %w[en-US de-DE fr-FR it es-ES].freeze
+APPSTORE_VERSION_FIELDS = {
+  "description" => { attribute: :description, limit: 4_000 },
+  "keywords" => { attribute: :keywords, limit: 100 },
+  "promotional_text" => { attribute: :promotional_text, limit: 170 },
+  "marketing_url" => { attribute: :marketing_url },
+  "support_url" => { attribute: :support_url },
+}.freeze
+APPSTORE_EDITABLE_VERSION_STATES = %w[
+  PREPARE_FOR_SUBMISSION
+  DEVELOPER_REJECTED
+  METADATA_REJECTED
+  REJECTED
+].freeze
+
+def appstore_metadata_value(locale, field)
+  path = File.join(APPSTORE_METADATA_PATH, locale, "#{field}.txt")
+  UI.user_error!("Missing metadata file #{path}") unless File.file?(path)
+  File.read(path).strip
+end
+
+def appstore_review_notes
+  File.read(File.join(APPSTORE_METADATA_PATH, "review_information", "notes.txt")).strip
+end
+
+def validate_appstore_metadata!
+  APPSTORE_STORE_LOCALES.each do |locale|
+    APPSTORE_VERSION_FIELDS.each do |field, spec|
+      value = appstore_metadata_value(locale, field)
+      UI.user_error!("#{locale}/#{field}.txt is empty") if value.empty?
+      if spec[:limit] && value.length > spec[:limit]
+        UI.user_error!("#{locale}/#{field}.txt has #{value.length} characters (limit #{spec[:limit]})")
+      end
+    end
+    %w[name subtitle privacy_url release_notes].each do |field|
+      path = File.join(APPSTORE_METADATA_PATH, locale, "#{field}.txt")
+      UI.user_error!("#{path} must not exist: it is shared with the iOS app") if File.exist?(path)
+    end
+  end
+  notes = appstore_review_notes
+  UI.user_error!("Review notes have #{notes.length} characters (limit 4000)") if notes.length > 4_000
+end
+
+def appstore_api_key!
+  api_key_path = ENV["ASC_API_KEY_PATH"].to_s
+  UI.user_error!("Set ASC_API_KEY_PATH to the App Store Connect API key JSON") if api_key_path.empty?
+  api_key = JSON.parse(File.read(File.expand_path(api_key_path)))
+  app_store_connect_api_key(
+    key_id: api_key.fetch("key_id"),
+    issuer_id: api_key["issuer_id"],
+    key_content: api_key.fetch("key"),
+    duration: 1_200,
+    in_house: api_key.fetch("in_house", false),
+    set_spaceship_token: true
+  )
+end
+
+def editable_mac_store_version!(version_string)
+  app = Spaceship::ConnectAPI::App.find(APPSTORE_APP_IDENTIFIER)
+  UI.user_error!("App #{APPSTORE_APP_IDENTIFIER} was not found") unless app
+  UI.user_error!("Unexpected App Store app ID #{app.id}") unless app.id.to_s == APPSTORE_APP_ID
+
+  version = app.get_app_store_versions(filter: { platform: "MAC_OS" })
+    .find { |candidate| candidate.version_string == version_string }
+  UI.user_error!("macOS App Store version #{version_string} was not found") unless version
+
+  state = version.app_version_state || version.app_store_state
+  unless APPSTORE_EDITABLE_VERSION_STATES.include?(state)
+    UI.user_error!("macOS App Store version #{version_string} is not editable (state: #{state || 'unknown'})")
+  end
+  version
+end
+
+def verify_mac_store_metadata!(version)
+  localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
+  APPSTORE_STORE_LOCALES.each do |locale|
+    localization = localizations[locale]
+    UI.user_error!("Missing remote version locale #{locale}") unless localization
+    APPSTORE_VERSION_FIELDS.each do |field, spec|
+      actual = localization.public_send(spec[:attribute]).to_s.strip
+      UI.user_error!("#{locale} #{field} differs in App Store Connect") unless actual == appstore_metadata_value(locale, field)
+    end
+  end
+  notes = version.fetch_app_store_review_detail&.notes.to_s.strip
+  UI.user_error!("Review notes differ in App Store Connect") unless notes == appstore_review_notes
+  UI.success("Verified macOS #{version.version_string} store text in #{APPSTORE_STORE_LOCALES.count} locales and the review notes")
+end
+
 platform :mac do
+  desc "Upload the localized macOS store text and review notes (no binary, no screenshots), then verify them"
+  lane :appstore_metadata_upload do |options|
+    version_string = options[:version].to_s
+    UI.user_error!("Pass version:<version>") if version_string.empty?
+    validate_appstore_metadata!
+    appstore_api_key!
+    editable_mac_store_version!(version_string)
+
+    deliver(
+      api_key: lane_context[SharedValues::APP_STORE_CONNECT_API_KEY],
+      app_identifier: APPSTORE_APP_IDENTIFIER,
+      app_version: version_string,
+      platform: "osx",
+      metadata_path: APPSTORE_METADATA_PATH,
+      app_review_information: { notes: appstore_review_notes },
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_app_version_update: true,
+      edit_live: false,
+      submit_for_review: false,
+      automatic_release: false,
+      force: true,
+      run_precheck_before_submit: false
+    )
+
+    verify_mac_store_metadata!(editable_mac_store_version!(version_string))
+  end
+
+  desc "Compare the macOS store text and review notes in App Store Connect with the repository"
+  lane :appstore_metadata_verify do |options|
+    version_string = options[:version].to_s
+    UI.user_error!("Pass version:<version>") if version_string.empty?
+    validate_appstore_metadata!
+    appstore_api_key!
+    verify_mac_store_metadata!(editable_mac_store_version!(version_string))
+  end
+
   desc "Capture the Mac App Store edition in screenshot mode (raw window images)"
   lane :appstore_screenshots do |options|
     languages = selected_screenshot_languages(options[:languages])

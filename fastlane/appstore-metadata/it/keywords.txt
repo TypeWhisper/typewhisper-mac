@@ -1,0 +1,1 @@
+dettatura,voce in testo,trascrizione,scrittura vocale,Whisper,offline,note riunione,IA
