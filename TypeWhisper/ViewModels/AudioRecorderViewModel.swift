@@ -1541,11 +1541,16 @@ final class AudioRecorderViewModel: ObservableObject {
             throw RecordingHasNoSpeech()
         }
 
-        let speechOnlyAudio = SpeechOnlyAudio(
-            samples: request.buffer,
-            sampleRate: AudioRecorderService.transcriptionSampleRate,
-            speechRegions: regions
-        )
+        // Copying a long recording would hold up the main actor.
+        let samples = request.buffer
+        let speechOnlyAudio = await Task.detached(priority: .userInitiated) {
+            SpeechOnlyAudio(
+                samples: samples,
+                sampleRate: AudioRecorderService.transcriptionSampleRate,
+                speechRegions: regions
+            )
+        }.value
+        try Task.checkCancellation()
         if let speechOnlyAudio {
             logger.info(
                 "Transcribing speech only [parts=\(speechOnlyAudio.parts.count, privacy: .public), speechDuration=\(Double(speechOnlyAudio.samples.count) / AudioRecorderService.transcriptionSampleRate, privacy: .public), audioDuration=\(speechOnlyAudio.originalDuration, privacy: .public)]"

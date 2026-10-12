@@ -249,13 +249,13 @@ private final class SpeechWindowCollector: NSObject, SNResultsObserving, Sendabl
 
 /// A recording with the stretches between its speech regions taken out, and the
 /// way back from its times to the recording's.
-struct SpeechOnlyAudio {
+struct SpeechOnlyAudio: Sendable {
     /// Silence between two kept parts, so the engine hears a pause there.
     static let pauseBetweenParts: TimeInterval = 0.5
     /// Kept parts fade in and out over this time, so a cut does not click.
     static let fadeDuration: TimeInterval = 0.01
 
-    struct Part: Equatable {
+    struct Part: Equatable, Sendable {
         let originalStart: TimeInterval
         let start: TimeInterval
         let duration: TimeInterval
