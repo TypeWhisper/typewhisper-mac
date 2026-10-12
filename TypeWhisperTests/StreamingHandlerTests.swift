@@ -440,6 +440,7 @@ final class StreamingHandlerTests: XCTestCase {
         private var appendedChunkSizes: [Int] = []
         private var onProgress: (@Sendable (String) -> Bool)?
         private var progressUpdates: [String] = []
+        private var progressStopsAfterUpdates = false
         private var shouldBlockNextAppend = false
         private var appendIsBlocked = false
         private var appendWasReleased = false
@@ -453,6 +454,13 @@ final class StreamingHandlerTests: XCTestCase {
 
         func setProgressUpdates(_ progressUpdates: [String]) {
             self.progressUpdates = progressUpdates
+        }
+
+        /// Reports one text per append until the texts run out, then no text at all,
+        /// like a connection that stays open but stops transcribing.
+        func setProgressUpdatesThenStop(_ progressUpdates: [String]) {
+            self.progressUpdates = progressUpdates
+            progressStopsAfterUpdates = true
         }
 
         func setFinalResult(_ finalResult: PluginTranscriptionResult) {
@@ -519,6 +527,7 @@ final class StreamingHandlerTests: XCTestCase {
 
             let progressText: String
             if progressUpdates.isEmpty {
+                guard !progressStopsAfterUpdates else { return }
                 progressText = "chunk-\(samples.count)"
             } else {
                 progressText = progressUpdates.removeFirst()
@@ -1177,6 +1186,117 @@ final class StreamingHandlerTests: XCTestCase {
             return XCTFail("Expected a failed live session, got \(run.outcome)")
         }
         XCTAssertEqual(run.cancelCallCount, 1)
+    }
+
+    /// Streams `chunks` through a live session that reports text for the first chunk
+    /// only, then finishes it with `finalText`.
+    private func finishLiveSessionThatStopsReturningText(
+        chunks: [[Float]],
+        finalText: String
+    ) async throws -> (outcome: StreamingHandler.FinishOutcome, cancelCallCount: Int) {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin(progressMode: .rollingWindow)
+        await plugin.session.setProgressUpdatesThenStop(["Early words stay in the transcript"])
+        await plugin.session.setFinalResult(PluginTranscriptionResult(text: finalText, detectedLanguage: "en"))
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let chunkLock = NSLock()
+        var chunkIndex = 0
+        var nextOffset = 0
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                chunkLock.lock()
+                defer { chunkLock.unlock() }
+                guard chunkIndex < chunks.count else { return ([], nextOffset) }
+                let chunk = chunks[chunkIndex]
+                chunkIndex += 1
+                nextOffset += chunk.count
+                return (chunk, nextOffset)
+            },
+            bufferedDurationProvider: { Double(chunks.joined().count) / 16_000 }
+        )
+
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        var waitAttempts = 0
+        while await plugin.session.recordedChunks().count < chunks.count, waitAttempts < 100 {
+            waitAttempts += 1
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        let recordedChunks = await plugin.session.recordedChunks()
+        XCTAssertEqual(recordedChunks, chunks.map(\.count))
+        let outcome = await handler.finish()
+        let cancellation = await plugin.session.cancellationSnapshot()
+        return (outcome, cancellation.callCount)
+    }
+
+    func testFinishFailsWhenLiveSessionStopsReturningTextDuringSpeech() async throws {
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(speech.prefix(16_000)), speech, speech],
+            finalText: "Early words stay in the transcript"
+        )
+
+        // Six seconds of speech after the last text added nothing to the final result.
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+        // The session finalized on its own, so there is nothing left to cancel.
+        XCTAssertEqual(run.cancelCallCount, 0)
+    }
+
+    func testFinishKeepsLiveResultWhenFinalAddsTextAfterProgressStopped() async throws {
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let finalText = "Early words stay in the transcript and the later words arrive with the final result"
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(speech.prefix(16_000)), speech, speech],
+            finalText: finalText
+        )
+
+        XCTAssertEqual(run.outcome.result?.text, finalText)
+    }
+
+    func testFinishKeepsLiveResultWhenOnlyQuietAudioFollowsLastText() async throws {
+        let speech = Array(repeating: Float(0.2), count: 16_000)
+        let quiet = Array(repeating: Float(0.001), count: 48_000)
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [speech, quiet, quiet],
+            finalText: "Early words stay in the transcript"
+        )
+
+        XCTAssertEqual(run.outcome.result?.text, "Early words stay in the transcript")
     }
 
     func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {

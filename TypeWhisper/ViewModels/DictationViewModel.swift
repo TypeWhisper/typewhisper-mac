@@ -2670,8 +2670,9 @@ final class DictationViewModel: ObservableObject {
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let recordingIsDigitalSilence = !samples.isEmpty && isDigitalSilence(samples)
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
-        // A live session that lost audio or failed to finalize leaves a preview that may
-        // miss part of the recording, so the full recording is transcribed instead.
+        // A live session that lost audio, failed to finalize or stopped returning text
+        // leaves a preview that may miss part of the recording, so the full recording
+        // is transcribed instead.
         var liveSessionFailed = false
         if recordingIsDigitalSilence {
             // Exact zeros carry no speech: don't replay them through a deferred live

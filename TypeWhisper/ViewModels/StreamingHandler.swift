@@ -9,8 +9,9 @@ final class StreamingHandler: @unchecked Sendable {
         /// No live session ran.
         case noLiveSession
         case finished(TranscriptionResult)
-        /// The live session lost audio or could not finalize, so its preview may be
-        /// missing part of the recording; the caller transcribes the full recording.
+        /// The live session lost audio, could not finalize or stopped returning text,
+        /// so its text may be missing part of the recording; the caller transcribes
+        /// the full recording.
         case failed
 
         var result: TranscriptionResult? {
@@ -28,6 +29,10 @@ final class StreamingHandler: @unchecked Sendable {
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
         var liveSessionAppendFailed = false
+        /// Latest text the live session reported, and how much speech it was sent since
+        /// that text last changed.
+        var lastLiveSessionText = ""
+        var speechSentSinceLiveSessionText: TimeInterval = 0
         /// Advances on every reset, so a replaced session's late append failure is
         /// not attributed to the session that follows it.
         var sessionGeneration: UInt64 = 0
@@ -40,11 +45,15 @@ final class StreamingHandler: @unchecked Sendable {
     private static let livePreviewAnalysisFrameDuration: TimeInterval = 0.1
     private static let livePreviewSpeechRMSFloor: Float = 0.004
     private static let livePreviewSustainedSilenceDuration: TimeInterval = 1.4
+    /// Speech a live session may receive without new text before a final result that
+    /// adds no words counts as a session that stopped transcribing.
+    private static let liveSessionStallSpeechDuration: TimeInterval = 5
     private static let recordingReplayChunkSize = 4_096
 
     private struct LivePreviewAudioActivity {
         var duration: TimeInterval
         var containsSpeech: Bool
+        var speechDuration: TimeInterval
         var trailingQuietDuration: TimeInterval
     }
 
@@ -163,6 +172,7 @@ final class StreamingHandler: @unchecked Sendable {
                 dictionaryTermHints: dictionaryTermHints,
                 onProgress: { [weak self] text in
                     guard let self else { return false }
+                    self.recordLiveSessionText(text, sessionGeneration: sessionGeneration)
                     _ = self.processPreviewUpdate(
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
@@ -243,6 +253,8 @@ final class StreamingHandler: @unchecked Sendable {
 
         do {
             if !delta.samples.isEmpty {
+                let tailSpeechDuration = Self.livePreviewAudioActivity(in: delta.samples).speechDuration
+                sharedState.withLock { $0.speechSentSinceLiveSessionText += tailSpeechDuration }
                 try await handle.session.appendAudio(samples: delta.samples)
                 logger.info("Finish timing: tail appendAudio done elapsedMs=\(elapsedMs(), privacy: .public) tailSamples=\(delta.samples.count, privacy: .public)")
             }
@@ -255,6 +267,20 @@ final class StreamingHandler: @unchecked Sendable {
                 normalizeNumbers: sharedState.withLock { $0.normalizeNumbers }
             )
             logger.info("Finish timing: live session finalized elapsedMs=\(elapsedMs(), privacy: .public) resultTextLength=\(result.text.count, privacy: .public)")
+            // A session that stays connected but stops transcribing finishes normally
+            // with the text from before it stopped.
+            let (lastLiveSessionText, unansweredSpeechDuration) = sharedState.withLock {
+                ($0.lastLiveSessionText, $0.speechSentSinceLiveSessionText)
+            }
+            if Self.liveSessionStoppedReturningText(
+                finalText: result.text,
+                lastLiveSessionText: lastLiveSessionText,
+                unansweredSpeechDuration: unansweredSpeechDuration
+            ) {
+                logger.warning("Live session returned no text for the last \(String(format: "%.1f", unansweredSpeechDuration), privacy: .public)s of speech, transcribing the full recording [resultTextLength=\(result.text.count, privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
+                clearStreamingState(notifyStreamingStopped: true)
+                return .failed
+            }
             let finalResult = Self.resultPreferringStablePreviewIfNeeded(
                 result,
                 stablePreview: stablePreviewBeforeFinish
@@ -488,6 +514,8 @@ final class StreamingHandler: @unchecked Sendable {
             state.task = .transcribe
             state.sampleCursor = 0
             state.liveSessionAppendFailed = false
+            state.lastLiveSessionText = ""
+            state.speechSentSinceLiveSessionText = 0
             state.sessionGeneration &+= 1
         }
         progressText.withLock { $0 = "" }
@@ -514,7 +542,20 @@ final class StreamingHandler: @unchecked Sendable {
     private func recordLivePreviewAudio(_ samples: [Float]) -> LivePreviewAudioGateSnapshot {
         let activity = Self.livePreviewAudioActivity(in: samples)
         return sharedState.withLock { state in
-            state.livePreviewAudioGate.update(with: activity)
+            state.speechSentSinceLiveSessionText += activity.speechDuration
+            return state.livePreviewAudioGate.update(with: activity)
+        }
+    }
+
+    /// Changed text shows the live session still transcribes the audio it receives.
+    private func recordLiveSessionText(_ text: String, sessionGeneration: UInt64) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        sharedState.withLock { state in
+            guard state.sessionGeneration == sessionGeneration,
+                  text != state.lastLiveSessionText else { return }
+            state.lastLiveSessionText = text
+            state.speechSentSinceLiveSessionText = 0
         }
     }
 
@@ -576,12 +617,13 @@ final class StreamingHandler: @unchecked Sendable {
 
     private nonisolated static func livePreviewAudioActivity(in samples: [Float]) -> LivePreviewAudioActivity {
         guard !samples.isEmpty else {
-            return LivePreviewAudioActivity(duration: 0, containsSpeech: false, trailingQuietDuration: 0)
+            return LivePreviewAudioActivity(duration: 0, containsSpeech: false, speechDuration: 0, trailingQuietDuration: 0)
         }
 
         let frameSize = max(1, Int(livePreviewSampleRate * livePreviewAnalysisFrameDuration))
         let duration = Double(samples.count) / livePreviewSampleRate
         var containsSpeech = false
+        var speechDuration: TimeInterval = 0
         var trailingQuietDuration: TimeInterval = 0
 
         var offset = 0
@@ -593,6 +635,7 @@ final class StreamingHandler: @unchecked Sendable {
 
             if rms >= livePreviewSpeechRMSFloor {
                 containsSpeech = true
+                speechDuration += frameDuration
                 trailingQuietDuration = 0
             } else {
                 trailingQuietDuration += frameDuration
@@ -604,6 +647,7 @@ final class StreamingHandler: @unchecked Sendable {
         return LivePreviewAudioActivity(
             duration: duration,
             containsSpeech: containsSpeech,
+            speechDuration: speechDuration,
             trailingQuietDuration: trailingQuietDuration
         )
     }
@@ -658,6 +702,17 @@ final class StreamingHandler: @unchecked Sendable {
             engineUsed: result.engineUsed,
             segments: result.segments
         )
+    }
+
+    /// The session got speech after its text last changed, and its final result adds
+    /// no words to that text.
+    private nonisolated static func liveSessionStoppedReturningText(
+        finalText: String,
+        lastLiveSessionText: String,
+        unansweredSpeechDuration: TimeInterval
+    ) -> Bool {
+        guard unansweredSpeechDuration >= liveSessionStallSpeechDuration else { return false }
+        return transcriptWords(in: finalText).count <= transcriptWords(in: lastLiveSessionText).count
     }
 
     private nonisolated static func shouldPreferStablePreview(final: String, preview: String) -> Bool {
