@@ -2841,8 +2841,8 @@ private final class AudioRecorderDroppingLivePlugin: NSObject, LiveTranscription
     }
 }
 
-/// A live session that stays connected but reports text only once, before any audio,
-/// and finishes with that text.
+/// A live session that stays connected but reports text only for its first audio, and
+/// finishes with that text.
 private final class AudioRecorderStallingLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.stalling-live"
     static let pluginName = "Stalling Live"
@@ -2876,12 +2876,22 @@ private final class AudioRecorderStallingLivePlugin: NSObject, LiveTranscription
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
         state.withLock { $0.sessions += 1 }
-        _ = onProgress("words before the stall")
-        return StallingSession()
+        return StallingSession(onProgress: onProgress)
     }
 
     private actor StallingSession: LiveTranscriptionSession {
-        func appendAudio(samples: [Float]) async throws {}
+        private let onProgress: @Sendable (String) -> Bool
+        private var reportedText = false
+
+        init(onProgress: @Sendable @escaping (String) -> Bool) {
+            self.onProgress = onProgress
+        }
+
+        func appendAudio(samples: [Float]) async throws {
+            guard !reportedText else { return }
+            reportedText = true
+            _ = onProgress("words before the stall")
+        }
 
         func finish() async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "words before the stall", detectedLanguage: "en")

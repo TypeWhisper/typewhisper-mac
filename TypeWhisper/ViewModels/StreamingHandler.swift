@@ -172,13 +172,16 @@ final class StreamingHandler: @unchecked Sendable {
                 dictionaryTermHints: dictionaryTermHints,
                 onProgress: { [weak self] text in
                     guard let self else { return false }
-                    self.recordLiveSessionText(text, sessionGeneration: sessionGeneration)
-                    _ = self.processPreviewUpdate(
+                    // Text the preview suppresses during sustained silence is likely a
+                    // hallucination, not a sign the session still transcribes.
+                    if self.processPreviewUpdate(
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
                         persist: true,
                         replacesPreviousPreview: replacesLiveSessionPreview
-                    )
+                    ) {
+                        self.recordLiveSessionText(text, sessionGeneration: sessionGeneration)
+                    }
                     return true
                 }
             ) {
@@ -256,11 +259,9 @@ final class StreamingHandler: @unchecked Sendable {
 
         do {
             if !delta.samples.isEmpty {
+                let activity = recordLivePreviewAudio(delta.samples)
                 try await handle.session.appendAudio(samples: delta.samples)
-                recordSpeechSentToLiveSession(
-                    Self.livePreviewAudioActivity(in: delta.samples).speechDuration,
-                    sessionGeneration: sessionGeneration
-                )
+                recordSpeechSentToLiveSession(activity.speechDuration, sessionGeneration: sessionGeneration)
                 logger.info("Finish timing: tail appendAudio done elapsedMs=\(elapsedMs(), privacy: .public) tailSamples=\(delta.samples.count, privacy: .public)")
             }
             let result = try await modelManager.finishLiveTranscriptionSession(

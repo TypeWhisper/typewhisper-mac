@@ -1025,8 +1025,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var failsFinalization = false
         /// Every audio append throws, like a live connection that dropped.
         var failsAudioAppend = false
-        /// The session reports this text once and never again, then finishes with it,
-        /// like a connection that stays open but stops transcribing.
+        /// The session reports this text for its first audio and never again, then
+        /// finishes with it, like a connection that stays open but stops transcribing.
         var stopsReturningTextAfter: String?
         /// Session creation takes this long and ignores cancellation, like a stalled provider.
         var sessionCreationStall: TimeInterval = 0
@@ -1069,13 +1069,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             while Date() < stallEnd {
                 try? await Task.sleep(for: .milliseconds(20))
             }
-            if let stopsReturningTextAfter {
-                _ = onProgress(stopsReturningTextAfter)
-            }
             return MockLiveSession(
                 failsFinalization: failsFinalization,
                 failsAudioAppend: failsAudioAppend,
+                firstAppendText: stopsReturningTextAfter,
                 finalText: stopsReturningTextAfter ?? "live",
+                onProgress: onProgress,
                 plugin: self
             )
         }
@@ -1091,13 +1090,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private actor MockLiveSession: LiveTranscriptionSession {
             private let failsFinalization: Bool
             private let failsAudioAppend: Bool
+            private var firstAppendText: String?
             private let finalText: String
+            private let onProgress: @Sendable (String) -> Bool
             private let plugin: MockLiveDictationPlugin
 
-            init(failsFinalization: Bool, failsAudioAppend: Bool, finalText: String, plugin: MockLiveDictationPlugin) {
+            init(
+                failsFinalization: Bool,
+                failsAudioAppend: Bool,
+                firstAppendText: String?,
+                finalText: String,
+                onProgress: @Sendable @escaping (String) -> Bool,
+                plugin: MockLiveDictationPlugin
+            ) {
                 self.failsFinalization = failsFinalization
                 self.failsAudioAppend = failsAudioAppend
+                self.firstAppendText = firstAppendText
                 self.finalText = finalText
+                self.onProgress = onProgress
                 self.plugin = plugin
             }
 
@@ -1105,6 +1115,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 plugin.recordAppend()
                 if failsAudioAppend {
                     throw PluginTranscriptionError.networkError("Socket is not connected")
+                }
+                if let firstAppendText {
+                    self.firstAppendText = nil
+                    _ = onProgress(firstAppendText)
                 }
             }
 

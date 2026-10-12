@@ -1338,6 +1338,24 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
+    func testFinishFailsWhenOnlySuppressedTextFollowsUnansweredSpeech() async throws {
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let quiet = Array(repeating: Float(0.001), count: 32_000)
+        let earlyText = "Early words stay in the transcript"
+        // Six seconds of speech get no new text. The text that finally arrives during
+        // two seconds of silence is suppressed as a likely hallucination, and the
+        // final result leaves it out.
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(speech.prefix(16_000)), speech, speech, quiet],
+            texts: [earlyText, earlyText, earlyText, earlyText + " and words nobody said"],
+            finalText: earlyText
+        )
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+    }
+
     func testFinishFailsWhenRollingWindowSessionStopsReturningText() async throws {
         let speech = Array(repeating: Float(0.2), count: 48_000)
         let shortSpeech = Array(speech.prefix(16_000))
