@@ -122,11 +122,7 @@ private final class GeminiRecordingWebSocket: GeminiLiveWebSocket, @unchecked Se
         return message
     }
     func ping() async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            socket.sendPing { error in
-                if let error { continuation.resume(throwing: error) } else { continuation.resume() }
-            }
-        }
+        try await GeminiWebSocketPing.send { socket.sendPing(pongReceiveHandler: $0) }
     }
     func close(code: URLSessionWebSocketTask.CloseCode) {
         socket.cancel(with: code, reason: nil)
