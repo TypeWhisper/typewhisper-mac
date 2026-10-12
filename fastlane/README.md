@@ -77,7 +77,7 @@ Capture plugin screenshots and publish their PNG/WebP website assets
 [bundle exec] fastlane mac appstore_metadata_upload
 ```
 
-Upload the localized macOS store text and review notes (no binary, no screenshots), then verify them
+Upload the localized macOS store text and review notes, then verify them (version:<version>)
 
 ### mac appstore_metadata_verify
 
@@ -85,7 +85,7 @@ Upload the localized macOS store text and review notes (no binary, no screenshot
 [bundle exec] fastlane mac appstore_metadata_verify
 ```
 
-Compare the macOS store text and review notes in App Store Connect with the repository
+Compare the macOS store text and review notes in App Store Connect with the repository (version:<version>)
 
 ### mac appstore_screenshots
 
