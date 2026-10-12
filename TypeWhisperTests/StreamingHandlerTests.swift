@@ -1188,18 +1188,19 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(run.cancelCallCount, 1)
     }
 
-    /// Streams `chunks` through a live session that reports `firstText` for the first
-    /// chunk only, then finishes it with `finalText`.
+    /// Streams `chunks` through a live session that reports one of `texts` for each of
+    /// the first chunks and nothing after them, then finishes it with `finalText`.
     private func finishLiveSessionThatStopsReturningText(
         chunks: [[Float]],
-        firstText: String = "Early words stay in the transcript",
-        finalText: String
+        texts: [String] = ["Early words stay in the transcript"],
+        finalText: String,
+        normalizeNumbers: Bool? = nil
     ) async throws -> (outcome: StreamingHandler.FinishOutcome, cancelCallCount: Int) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let plugin = MockLivePlugin(progressMode: .rollingWindow)
-        await plugin.session.setProgressUpdatesThenStop([firstText])
+        await plugin.session.setProgressUpdatesThenStop(texts)
         await plugin.session.setFinalResult(PluginTranscriptionResult(text: finalText, detectedLanguage: "en"))
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
@@ -1247,6 +1248,7 @@ final class StreamingHandlerTests: XCTestCase {
             languageSelection: .auto,
             task: .transcribe,
             cloudModelOverride: nil,
+            normalizeNumbers: normalizeNumbers,
             allowLiveTranscription: true,
             stateCheck: { true }
         )
@@ -1294,11 +1296,62 @@ final class StreamingHandlerTests: XCTestCase {
         // Chinese has no spaces between words, so both texts are a single word.
         let run = try await finishLiveSessionThatStopsReturningText(
             chunks: [Array(speech.prefix(16_000)), speech, speech],
-            firstText: "你好",
+            texts: ["你好"],
             finalText: "你好世界今天天气很好"
         )
 
         XCTAssertEqual(run.outcome.result?.text, "你好世界今天天气很好")
+    }
+
+    func testFinishKeepsLiveResultWhenNormalizedFinalAddsText() async throws {
+        // The final result has its numbers written as digits, the earlier text does not.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText(
+                "one hundred twenty three",
+                language: "en",
+                normalizeNumbers: true
+            ),
+            "123"
+        )
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let earlyText = "I have one hundred twenty three questions and one hundred twenty three answers"
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(speech.prefix(16_000)), speech, speech],
+            texts: [earlyText],
+            finalText: earlyText + " so far",
+            normalizeNumbers: true
+        )
+
+        XCTAssertEqual(run.outcome.result?.text, "I have 123 questions and 123 answers so far")
+    }
+
+    func testFinishFailsWhenTextArrivesOnlyDuringOneLargeAppend() async throws {
+        // A slow session start leaves six seconds of speech for the first append, and
+        // the session reports text only while that append is still running.
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(repeating: Float(0.2), count: 96_000)],
+            finalText: "Early words stay in the transcript"
+        )
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+    }
+
+    func testFinishFailsWhenRollingWindowSessionStopsReturningText() async throws {
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let shortSpeech = Array(speech.prefix(16_000))
+        // Each text covers only its own window; the final result joins both windows,
+        // so it is longer than the last text but adds nothing to the accumulated preview.
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [shortSpeech, shortSpeech, speech, speech],
+            texts: ["alpha beta gamma delta", "epsilon zeta eta theta"],
+            finalText: "alpha beta gamma delta epsilon zeta eta theta"
+        )
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
     }
 
     func testFinishKeepsLiveResultWhenOnlyQuietAudioFollowsLastText() async throws {
