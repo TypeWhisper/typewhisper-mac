@@ -10,6 +10,15 @@ protocol MeetingAudioProcessClient: Sendable {
 }
 
 enum NativeMeetingAudioProcessRegistry {
+    // App bundles whose helper processes count as the app itself. New Teams, for
+    // example, runs call audio in `com.microsoft.teams2.modulehost`.
+    nonisolated static let appBundleIdentifiers: Set<String> = [
+        "us.zoom.xos",
+        "com.microsoft.teams2",
+        "com.microsoft.teams",
+        "com.apple.FaceTime"
+    ]
+
     nonisolated static func provider(for bundleIdentifier: String) -> MeetingProvider? {
         switch bundleIdentifier {
         case "us.zoom.xos":
@@ -28,6 +37,37 @@ enum NativeMeetingAudioProcessRegistry {
         default:
             nil
         }
+    }
+
+    /// Maps a helper process to the meeting app it belongs to, either by its
+    /// bundle identifier namespace or by the app bundle its executable lives in.
+    nonisolated static func appBundleIdentifier(
+        forHelper bundleIdentifier: String,
+        executablePath: @autoclosure () -> String?
+    ) -> String? {
+        if let app = appBundleIdentifiers
+            .filter({ bundleIdentifier.hasPrefix($0 + ".") })
+            .max(by: { $0.count < $1.count }) {
+            return app
+        }
+        guard let executablePath = executablePath(),
+              let appURL = outermostAppBundleURL(containing: executablePath),
+              let app = Bundle(url: appURL)?.bundleIdentifier,
+              appBundleIdentifiers.contains(app) else {
+            return nil
+        }
+        return app
+    }
+
+    nonisolated static func outermostAppBundleURL(containing executablePath: String) -> URL? {
+        let components = URL(fileURLWithPath: executablePath).pathComponents
+        guard let index = components.dropLast().firstIndex(where: { $0.hasSuffix(".app") }) else {
+            return nil
+        }
+        return URL(
+            fileURLWithPath: NSString.path(withComponents: Array(components[...index])),
+            isDirectory: true
+        )
     }
 }
 
@@ -141,7 +181,8 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
                 continue
             }
             guard let bundleIdentifier = Self.canonicalBundleIdentifier(
-                for: rawProcess.bundleIdentifier
+                for: rawProcess.bundleIdentifier,
+                executablePath: Self.executablePath(processID: rawProcess.processID)
             ) else {
                 continue
             }
@@ -357,15 +398,28 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         return AudioObjectHasProperty(objectID, &address)
     }
 
-    nonisolated private static func canonicalBundleIdentifier(
-        for bundleIdentifier: String
+    nonisolated static func canonicalBundleIdentifier(
+        for bundleIdentifier: String,
+        executablePath: @autoclosure () -> String?
     ) -> String? {
         if NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier) != nil {
             return bundleIdentifier
         }
-        return BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
-            for: bundleIdentifier
+        if let browserBundleIdentifier = BrowserAudioProcessAttribution
+            .canonicalBrowserBundleIdentifier(for: bundleIdentifier) {
+            return browserBundleIdentifier
+        }
+        return NativeMeetingAudioProcessRegistry.appBundleIdentifier(
+            forHelper: bundleIdentifier,
+            executablePath: executablePath()
         )
+    }
+
+    nonisolated private static func executablePath(processID: pid_t) -> String? {
+        var buffer = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(processID, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        let end = buffer.firstIndex(of: 0) ?? buffer.count
+        return String(bytes: buffer.prefix(end).map { UInt8(bitPattern: $0) }, encoding: .utf8)
     }
 }
 
