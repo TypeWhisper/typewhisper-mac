@@ -49,9 +49,6 @@ final class StreamingHandler: @unchecked Sendable {
     /// Speech a live session may receive without new text before a final result that
     /// adds no text counts as a session that stopped transcribing.
     private static let liveSessionStallSpeechDuration: TimeInterval = 5
-    /// Two seconds at 16 kHz. Text reported while one part is sent clears at most that
-    /// part of a backlog, below the stall threshold.
-    private static let liveSessionMaxAppendSampleCount = 32_000
     private static let recordingReplayChunkSize = 4_096
 
     private struct LivePreviewAudioActivity {
@@ -563,25 +560,18 @@ final class StreamingHandler: @unchecked Sendable {
         return activity
     }
 
-    /// Sends all of `samples` in parts of at most two seconds. Each part's speech counts
-    /// once the part is sent, so text reported during a part, whether before or after
-    /// the provider returns, clears at most that part.
+    /// Counts the speech once the append completed: text that arrived while the audio
+    /// was still being sent cannot cover all of it.
     private func appendToLiveSession(
         _ samples: [Float],
         handle: ModelManagerService.LiveTranscriptionSessionHandle,
         sessionGeneration: UInt64
     ) async throws {
-        var offset = 0
-        while offset < samples.count {
-            let end = min(offset + Self.liveSessionMaxAppendSampleCount, samples.count)
-            let part = Array(samples[offset..<end])
-            let activity = recordLivePreviewAudio(part)
-            try await handle.session.appendAudio(samples: part)
-            sharedState.withLock { state in
-                guard state.sessionGeneration == sessionGeneration else { return }
-                state.speechSentSinceLiveSessionText += activity.speechDuration
-            }
-            offset = end
+        let activity = recordLivePreviewAudio(samples)
+        try await handle.session.appendAudio(samples: samples)
+        sharedState.withLock { state in
+            guard state.sessionGeneration == sessionGeneration else { return }
+            state.speechSentSinceLiveSessionText += activity.speechDuration
         }
     }
 
