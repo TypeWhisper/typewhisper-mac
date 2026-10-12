@@ -441,6 +441,8 @@ final class StreamingHandlerTests: XCTestCase {
         private var onProgress: (@Sendable (String) -> Bool)?
         private var progressUpdates: [String] = []
         private var progressStopsAfterUpdates = false
+        private var reportsReceivedAudio = false
+        private var receivedSampleCount = 0
         private var shouldBlockNextAppend = false
         private var appendIsBlocked = false
         private var appendWasReleased = false
@@ -454,6 +456,12 @@ final class StreamingHandlerTests: XCTestCase {
 
         func setProgressUpdates(_ progressUpdates: [String]) {
             self.progressUpdates = progressUpdates
+        }
+
+        /// Before each append returns, reports one word per second of audio received so
+        /// far, like a provider that transcribes synchronously.
+        func reportReceivedAudio() {
+            reportsReceivedAudio = true
         }
 
         /// Reports one text per append until the texts run out, then no text at all,
@@ -508,6 +516,12 @@ final class StreamingHandlerTests: XCTestCase {
                 appendsBeforeError -= 1
             }
             appendedChunkSizes.append(samples.count)
+            if reportsReceivedAudio {
+                receivedSampleCount += samples.count
+                let words = (0..<(receivedSampleCount / 16_000)).map { "word\($0 + 1)" }
+                _ = onProgress?(words.joined(separator: " "))
+                return
+            }
 
             if shouldBlockNextAppend {
                 shouldBlockNextAppend = false
@@ -1189,10 +1203,12 @@ final class StreamingHandlerTests: XCTestCase {
     }
 
     /// Streams `chunks` through a live session that reports one of `texts` for each of
-    /// the first chunks and nothing after them, then finishes it with `finalText`.
+    /// the first appends and nothing after them, then finishes it with `finalText`.
+    /// Chunks longer than two seconds reach the session as several appends.
     private func finishLiveSessionThatStopsReturningText(
         chunks: [[Float]],
         texts: [String] = ["Early words stay in the transcript"],
+        reportsReceivedAudio: Bool = false,
         finalText: String,
         normalizeNumbers: Bool? = nil
     ) async throws -> (outcome: StreamingHandler.FinishOutcome, cancelCallCount: Int) {
@@ -1201,6 +1217,9 @@ final class StreamingHandlerTests: XCTestCase {
 
         let plugin = MockLivePlugin(progressMode: .rollingWindow)
         await plugin.session.setProgressUpdatesThenStop(texts)
+        if reportsReceivedAudio {
+            await plugin.session.reportReceivedAudio()
+        }
         await plugin.session.setFinalResult(PluginTranscriptionResult(text: finalText, detectedLanguage: "en"))
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
@@ -1253,13 +1272,15 @@ final class StreamingHandlerTests: XCTestCase {
             stateCheck: { true }
         )
 
+        let totalSampleCount = chunks.joined().count
         var waitAttempts = 0
-        while await plugin.session.recordedChunks().count < chunks.count, waitAttempts < 100 {
+        while await plugin.session.recordedChunks().reduce(0, +) < totalSampleCount, waitAttempts < 100 {
             waitAttempts += 1
             try await Task.sleep(for: .milliseconds(50))
         }
         let recordedChunks = await plugin.session.recordedChunks()
-        XCTAssertEqual(recordedChunks, chunks.map(\.count))
+        XCTAssertEqual(recordedChunks.reduce(0, +), totalSampleCount)
+        XCTAssertLessThanOrEqual(recordedChunks.max() ?? 0, 32_000)
         let outcome = await handler.finish()
         let cancellation = await plugin.session.cancellationSnapshot()
         return (outcome, cancellation.callCount)
@@ -1339,21 +1360,51 @@ final class StreamingHandlerTests: XCTestCase {
     }
 
     func testFinishFailsWhenOnlySuppressedTextFollowsUnansweredSpeech() async throws {
-        let speech = Array(repeating: Float(0.2), count: 48_000)
+        let speech = Array(repeating: Float(0.2), count: 32_000)
         let quiet = Array(repeating: Float(0.001), count: 32_000)
         let earlyText = "Early words stay in the transcript"
         // Six seconds of speech get no new text. The text that finally arrives during
         // two seconds of silence is suppressed as a likely hallucination, and the
         // final result leaves it out.
         let run = try await finishLiveSessionThatStopsReturningText(
-            chunks: [Array(speech.prefix(16_000)), speech, speech, quiet],
-            texts: [earlyText, earlyText, earlyText, earlyText + " and words nobody said"],
+            chunks: [Array(speech.prefix(16_000)), speech, speech, speech, quiet],
+            texts: [earlyText, earlyText, earlyText, earlyText, earlyText + " and words nobody said"],
             finalText: earlyText
         )
 
         guard case .failed = run.outcome else {
             return XCTFail("Expected a failed live session, got \(run.outcome)")
         }
+    }
+
+    func testFinishFailsWhenOnlyCorrectionsFollowUnansweredSpeech() async throws {
+        let speech = Array(repeating: Float(0.2), count: 32_000)
+        let shortSpeech = Array(speech.prefix(16_000))
+        // Six seconds of speech get no new words; the last update only fixes
+        // capitalization and punctuation.
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [shortSpeech, speech, speech, speech, shortSpeech],
+            texts: ["hello world", "hello world", "hello world", "hello world", "Hello, world."],
+            finalText: "Hello, world."
+        )
+
+        guard case .failed = run.outcome else {
+            return XCTFail("Expected a failed live session, got \(run.outcome)")
+        }
+    }
+
+    func testFinishKeepsLiveResultWhenSynchronousProgressCoversLargeDelta() async throws {
+        // A slow session start leaves six seconds of speech for one delta, and the
+        // session transcribes all audio it received before each append returns.
+        let finalText = "word1 word2 word3 word4 word5 word6"
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(repeating: Float(0.2), count: 96_000)],
+            texts: [],
+            reportsReceivedAudio: true,
+            finalText: finalText
+        )
+
+        XCTAssertEqual(run.outcome.result?.text, finalText)
     }
 
     func testFinishFailsWhenRollingWindowSessionStopsReturningText() async throws {
