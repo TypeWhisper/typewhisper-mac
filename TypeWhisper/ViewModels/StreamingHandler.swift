@@ -46,7 +46,7 @@ final class StreamingHandler: @unchecked Sendable {
     private static let livePreviewSpeechRMSFloor: Float = 0.004
     private static let livePreviewSustainedSilenceDuration: TimeInterval = 1.4
     /// Speech a live session may receive without new text before a final result that
-    /// adds no words counts as a session that stopped transcribing.
+    /// adds no text counts as a session that stopped transcribing.
     private static let liveSessionStallSpeechDuration: TimeInterval = 5
     private static let recordingReplayChunkSize = 4_096
 
@@ -705,14 +705,16 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     /// The session got speech after its text last changed, and its final result adds
-    /// no words to that text.
+    /// no letters or digits to that text. Counting characters instead of words keeps
+    /// scripts without spaces between words, such as Chinese or Thai, comparable.
     private nonisolated static func liveSessionStoppedReturningText(
         finalText: String,
         lastLiveSessionText: String,
         unansweredSpeechDuration: TimeInterval
     ) -> Bool {
         guard unansweredSpeechDuration >= liveSessionStallSpeechDuration else { return false }
-        return transcriptWords(in: finalText).count <= transcriptWords(in: lastLiveSessionText).count
+        return compactNormalizedTranscript(finalText).count
+            <= compactNormalizedTranscript(lastLiveSessionText).count
     }
 
     private nonisolated static func shouldPreferStablePreview(final: String, preview: String) -> Bool {

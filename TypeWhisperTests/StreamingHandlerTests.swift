@@ -1188,17 +1188,18 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(run.cancelCallCount, 1)
     }
 
-    /// Streams `chunks` through a live session that reports text for the first chunk
-    /// only, then finishes it with `finalText`.
+    /// Streams `chunks` through a live session that reports `firstText` for the first
+    /// chunk only, then finishes it with `finalText`.
     private func finishLiveSessionThatStopsReturningText(
         chunks: [[Float]],
+        firstText: String = "Early words stay in the transcript",
         finalText: String
     ) async throws -> (outcome: StreamingHandler.FinishOutcome, cancelCallCount: Int) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let plugin = MockLivePlugin(progressMode: .rollingWindow)
-        await plugin.session.setProgressUpdatesThenStop(["Early words stay in the transcript"])
+        await plugin.session.setProgressUpdatesThenStop([firstText])
         await plugin.session.setFinalResult(PluginTranscriptionResult(text: finalText, detectedLanguage: "en"))
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
@@ -1286,6 +1287,18 @@ final class StreamingHandlerTests: XCTestCase {
         )
 
         XCTAssertEqual(run.outcome.result?.text, finalText)
+    }
+
+    func testFinishKeepsLiveResultWhenUnsegmentedFinalAddsText() async throws {
+        let speech = Array(repeating: Float(0.2), count: 48_000)
+        // Chinese has no spaces between words, so both texts are a single word.
+        let run = try await finishLiveSessionThatStopsReturningText(
+            chunks: [Array(speech.prefix(16_000)), speech, speech],
+            firstText: "你好",
+            finalText: "你好世界今天天气很好"
+        )
+
+        XCTAssertEqual(run.outcome.result?.text, "你好世界今天天气很好")
     }
 
     func testFinishKeepsLiveResultWhenOnlyQuietAudioFollowsLastText() async throws {
