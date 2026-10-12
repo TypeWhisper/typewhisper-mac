@@ -239,7 +239,7 @@ final class SpeechOnlyAudioTests: XCTestCase {
     }
 
     private func synthesizedSpeech(_ text: String) async throws -> [Float] {
-        let collector = SynthesizedSpeechCollector(sampleRate: sampleRate)
+        let collector = SynthesizedSpeechCollector()
         let synthesizer = AVSpeechSynthesizer()
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
@@ -247,65 +247,59 @@ final class SpeechOnlyAudioTests: XCTestCase {
             try await Task.sleep(for: .seconds(20))
             collector.finish()
         }
-        let samples = await withCheckedContinuation { continuation in
+        let speech = await withCheckedContinuation { continuation in
             collector.onFinish = { continuation.resume(returning: $0) }
             synthesizer.write(utterance) { collector.append($0) }
         }
         timeout.cancel()
+        let samples = resampled(speech.samples, from: speech.sampleRate)
         guard samples.count > Int(sampleRate) else {
             throw XCTSkip("Speech synthesis produced no audio on this machine")
         }
         return samples
     }
+
+    /// Linear interpolation is enough for the classifier.
+    private func resampled(_ samples: [Float], from sourceRate: Double) -> [Float] {
+        guard sourceRate > 0, sourceRate != sampleRate, samples.count > 1 else { return samples }
+        let count = Int(Double(samples.count) * sampleRate / sourceRate)
+        return (0..<count).map { index in
+            let position = Double(index) * sourceRate / sampleRate
+            let lower = min(Int(position), samples.count - 1)
+            let upper = min(lower + 1, samples.count - 1)
+            let fraction = Float(position - Double(lower))
+            return samples[lower] * (1 - fraction) + samples[upper] * fraction
+        }
+    }
 }
 
-/// Converts synthesizer buffers to 16 kHz mono and hands them over once.
+/// Collects synthesizer output as mono samples and hands it over once.
 private final class SynthesizedSpeechCollector: @unchecked Sendable {
     private let lock = NSLock()
-    private let targetFormat: AVAudioFormat
-    private var converter: AVAudioConverter?
     private var samples: [Float] = []
+    private var sampleRate: Double = 0
     private var finished = false
-    var onFinish: (([Float]) -> Void)?
-
-    init(sampleRate: Double) {
-        targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: 1,
-            interleaved: false
-        )!
-    }
+    var onFinish: (((samples: [Float], sampleRate: Double)) -> Void)?
 
     func append(_ buffer: AVAudioBuffer) {
         guard let buffer = buffer as? AVAudioPCMBuffer, buffer.frameLength > 0 else {
             finish()
             return
         }
+        let count = Int(buffer.frameLength)
+        let chunk: [Float]
+        if let channel = buffer.floatChannelData?[0] {
+            chunk = Array(UnsafeBufferPointer(start: channel, count: count))
+        } else if let channel = buffer.int16ChannelData?[0] {
+            chunk = UnsafeBufferPointer(start: channel, count: count).map { Float($0) / 32_768 }
+        } else {
+            return
+        }
         lock.lock()
         defer { lock.unlock() }
         guard !finished else { return }
-        if converter == nil {
-            converter = AVAudioConverter(from: buffer.format, to: targetFormat)
-        }
-        let capacity = AVAudioFrameCount(
-            Double(buffer.frameLength) * targetFormat.sampleRate / buffer.format.sampleRate
-        ) + 64
-        guard let converter,
-              let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
-        var delivered = false
-        converter.convert(to: output, error: nil) { _, status in
-            if delivered {
-                status.pointee = .noDataNow
-                return nil
-            }
-            delivered = true
-            status.pointee = .haveData
-            return buffer
-        }
-        if let channel = output.floatChannelData?[0] {
-            samples.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(output.frameLength)))
-        }
+        sampleRate = buffer.format.sampleRate
+        samples.append(contentsOf: chunk)
     }
 
     func finish() {
@@ -315,10 +309,10 @@ private final class SynthesizedSpeechCollector: @unchecked Sendable {
             return
         }
         finished = true
-        let samples = samples
+        let speech = (samples: samples, sampleRate: sampleRate)
         let onFinish = onFinish
         lock.unlock()
-        onFinish?(samples)
+        onFinish?(speech)
     }
 }
 
