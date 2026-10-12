@@ -102,6 +102,13 @@ Both the workflow and `scripts/appstore/testflight-local.sh` create
 recreate them only after capability changes (`recreate_profiles` input or
 `--recreate-profiles`), because recreating revokes them for every other signer.
 
+The localized store text of the macOS version (description, keywords,
+promotional text, URLs) and the App Review notes live in
+`fastlane/appstore-metadata/`. Upload and verify them with
+`ASC_API_KEY_PATH=<key.json> bundle exec fastlane mac appstore_metadata_upload version:<version>`
+(`appstore_metadata_verify` only compares). Name, subtitle and privacy URL are
+shared with the iOS app and are maintained in the iOS repository.
+
 ## Plugins
 
 The marketplace lists the bundled plugins from

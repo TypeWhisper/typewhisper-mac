@@ -71,6 +71,22 @@ Optimize and publish generated plugin screenshots into a typewhisper.com checkou
 
 Capture plugin screenshots and publish their PNG/WebP website assets
 
+### mac appstore_metadata_upload
+
+```sh
+[bundle exec] fastlane mac appstore_metadata_upload
+```
+
+Upload the localized macOS store text and review notes, then verify them (version:<version>)
+
+### mac appstore_metadata_verify
+
+```sh
+[bundle exec] fastlane mac appstore_metadata_verify
+```
+
+Compare the macOS store text and review notes in App Store Connect with the repository (version:<version>)
+
 ### mac appstore_screenshots
 
 ```sh
