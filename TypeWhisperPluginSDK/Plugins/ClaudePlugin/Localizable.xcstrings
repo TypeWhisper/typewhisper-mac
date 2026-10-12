@@ -352,6 +352,556 @@
           }
         }
       }
+    },
+    "Couldn't verify the API key": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIキーを確認できませんでした"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Schlüssel konnte nicht überprüft werden"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法验证 API 密钥"
+          }
+        }
+      }
+    },
+    "Advanced": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "詳細"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erweitert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高级"
+          }
+        }
+      }
+    },
+    "Reasoning Effort": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考負荷"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denkaufwand"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理力度"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Niedrig"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
+        }
+      }
+    },
+    "Medium": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoch"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        }
+      }
+    },
+    "X High": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sehr hoch"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高"
+          }
+        }
+      }
+    },
+    "Maximum": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximum"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大"
+          }
+        }
+      }
+    },
+    "Controls how much thinking time the model spends before answering.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルが回答前にどのくらい考える時間を取るかを制御します。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steuert, wie viel Denkzeit sich das Modell vor der Antwort nimmt."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制模型在回答前花费多少思考时间。"
+          }
+        }
+      }
+    },
+    "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフローで思考負荷が「プロバイダーのデフォルト」のままの場合に適用されます。レベルが高いほど遅くなり、出力トークンも多く消費します。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt, wenn ein Workflow den Denkaufwand auf „Anbieterstandard“ lässt. Höhere Stufen sind langsamer und verbrauchen mehr Ausgabe-Tokens."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
+          }
+        }
+      }
+    },
+    "The selected model doesn't support reasoning effort.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したモデルは思考負荷の設定に対応していません。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das ausgewählte Modell unterstützt keinen einstellbaren Denkaufwand."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选模型不支持设置推理力度。"
+          }
+        }
+      }
+    },
+    "Model Default": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルのデフォルト"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellstandard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型默认"
+          }
+        }
+      }
+    },
+    "Model Default (%@)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルのデフォルト（%@）"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellstandard (%@)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型默认（%@）"
+          }
+        }
+      }
+    },
+    "%@ isn't available for this model, so requests use the model default.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」はこのモデルでは使用できないため、モデルのデフォルトが使われます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ist für dieses Modell nicht verfügbar, daher gilt der Modellstandard."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此模型不支持“%@”，因此请求将使用模型默认值。"
+          }
+        }
+      }
+    },
+    "Custom temperature is ignored for this model or while a reasoning effort is set.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このモデルでは、または思考負荷を設定している間は、カスタム温度は無視されます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die benutzerdefinierte Temperatur wird bei diesem Modell oder bei eingestelltem Denkaufwand ignoriert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于此模型或已设置推理力度时，自定义温度将被忽略。"
+          }
+        }
+      }
+    },
+    "Prompt Caching": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロンプトキャッシュ"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt-Caching"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提示缓存"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフ"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
+          }
+        }
+      }
+    },
+    "5 minutes": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5分"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 Minuten"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 分钟"
+          }
+        }
+      }
+    },
+    "1 hour": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1時間"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Stunde"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 小时"
+          }
+        }
+      }
+    },
+    "Reuses the system prompt across requests within this time, so repeated requests cost less. Only prompts of at least 512 to 4,096 tokens (depending on the model) are cached. Writing the cache costs 1.25× (5 minutes) or 2× (1 hour), reading it a tenth or less. Changing the model or reasoning effort starts a new cache.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この時間内のリクエスト間でシステムプロンプトを再利用し、繰り返しのリクエストのコストを下げます。キャッシュされるのは、モデルに応じて512〜4,096トークン以上のプロンプトのみです。キャッシュの書き込みは1.25倍（5分）または2倍（1時間）、読み取りは10分の1以下のコストです。モデルや思考負荷を変更すると、新しいキャッシュが作成されます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwendet den Systemprompt innerhalb dieser Zeit für weitere Anfragen wieder, sodass wiederholte Anfragen weniger kosten. Zwischengespeichert werden Prompts, die die modellabhängige Mindestlänge erreichen oder überschreiten. Diese liegt je nach Modell zwischen 512 und 4.096 Tokens. Das Schreiben des Caches kostet das 1,25-Fache (5 Minuten) bzw. das 2-Fache (1 Stunde), das Lesen ein Zehntel oder weniger. Ein Wechsel des Modells oder des Denkaufwands startet einen neuen Cache."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此时间内的多次请求之间复用系统提示，降低重复请求的费用。只有至少 512 到 4,096 个 token（取决于模型）的提示才会被缓存。写入缓存的费用为 1.25 倍（5 分钟）或 2 倍（1 小时），读取缓存的费用为十分之一或更低。更换模型或推理力度会开始新的缓存。"
+          }
+        }
+      }
+    },
+    "Last Request": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "前回のリクエスト"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Anfrage"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次请求"
+          }
+        }
+      }
+    },
+    "Cache: %lld read, %lld written · Input: %lld · Output: %lld tokens": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャッシュ: 読み取り %lld、書き込み %lld · 入力: %lld · 出力: %lld トークン"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cache: %lld gelesen, %lld geschrieben · Eingabe: %lld · Ausgabe: %lld Tokens"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缓存：读取 %lld，写入 %lld · 输入：%lld · 输出：%lld 个 token"
+          }
+        }
+      }
+    },
+    "Retry declined requests on a fallback model": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否されたリクエストを代替モデルで再試行"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgelehnte Anfragen mit einem Ersatzmodell wiederholen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用备用模型重试被拒绝的请求"
+          }
+        }
+      }
+    },
+    "Applies to Claude Opus 5.5, Opus 5, Sonnet 5.5 and Fable 5.1. If Anthropic's safety checks decline a request, a fallback model answers it in the same call, billed at that model's rates.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Opus 5.5、Opus 5、Sonnet 5.5、Fable 5.1 に適用されます。Anthropic の安全チェックがリクエストを拒否した場合、同じ呼び出しの中で代替モデルが回答し、そのモデルの料金で課金されます。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gilt für Claude Opus 5.5, Opus 5, Sonnet 5.5 und Fable 5.1. Lehnen die Sicherheitsprüfungen von Anthropic eine Anfrage ab, beantwortet sie ein Ersatzmodell im selben Aufruf, abgerechnet zu den Preisen dieses Modells."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "适用于 Claude Opus 5.5、Opus 5、Sonnet 5.5 和 Fable 5.1。如果 Anthropic 的安全检查拒绝了请求，将在同一次调用中由备用模型回答，并按该模型的价格计费。"
+          }
+        }
+      }
+    },
+    "%@ (fallback after %@ declined)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（%2$@ が拒否したため代替）"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (Ersatz, nachdem %2$@ abgelehnt hat)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@（%2$@ 拒绝后的备用模型）"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

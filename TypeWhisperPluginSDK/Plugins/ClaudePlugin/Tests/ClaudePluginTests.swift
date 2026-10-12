@@ -429,6 +429,31 @@ final class ClaudePluginTests: XCTestCase {
         }
     }
 
+    func testProcessReturnsTextThatFollowsThinkingBlocks() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+
+        let body = #"""
+        {"content":[
+            {"type":"thinking","thinking":"","signature":"sig"},
+            {"type":"redacted_thinking","data":"opaque"},
+            {"type":"text","text":"Hello"},
+            {"type":"text","text":" world\n"}
+        ],"stop_reason":"end_turn"}
+        """#
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+            ])
+        }
+
+        let reply = try await plugin.process(systemPrompt: "sys", userText: "hi", model: "claude-sonnet-5")
+        XCTAssertEqual(reply, "Hello world", "thinking blocks before the answer must not hide the text blocks")
+    }
+
     func testSelectedModelIsPreservedWhenNotInList() throws {
         let host = try PluginTestHostServices(
             defaults: [Self.selectedLLMModelKey: "claude-haiku-4-5-20251001"]
@@ -624,6 +649,591 @@ final class ClaudePluginTests: XCTestCase {
         XCTAssertNil(futureBody["temperature"], "temperature must be omitted for unknown future models")
     }
 
+    // MARK: - Descriptive errors
+
+    func testMalformedSuccessResponseDoesNotExposeBodyInReportedError() async throws {
+        let privateText = "private-transcript-marker"
+        let data = Data("{\"content\":[{\"type\":\"text\",\"text\":\"\(privateText)\"}]".utf8)
+        let error = try await Self.processError(outcomes: [
+            .success(
+                data,
+                Self.httpResponse(url: Self.messagesURL, statusCode: 200, headers: ["request-id": "req_malformed"])
+            ),
+        ])
+
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.contains("Couldn't read Claude's reply (\(data.count) bytes)"), message)
+        XCTAssertTrue(message.contains("HTTP 200"), message)
+        XCTAssertTrue(message.contains("model claude-sonnet-4-6"), message)
+        XCTAssertTrue(message.contains("request req_malformed"), message)
+        XCTAssertFalse(error.localizedDescription.contains(privateText), "Reported errors can be persisted by the host")
+    }
+
+    func testNotFoundNamesModelErrorTypeAndRequestId() async throws {
+        let error = try await Self.processError(
+            outcomes: [
+                .success(
+                    Self.errorBody(type: "not_found_error", message: "model: claude-opus-9"),
+                    Self.httpResponse(url: Self.messagesURL, statusCode: 404, headers: ["request-id": "req_header"])
+                ),
+            ],
+            model: "claude-opus-9"
+        )
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Model claude-opus-9 isn't available to this API key: model: claude-opus-9."), message)
+        XCTAssertTrue(message.contains("Refresh the model list"), message)
+        XCTAssertTrue(message.contains("[HTTP 404 not_found_error · model claude-opus-9 · cache 5m · request req_header]"), message)
+    }
+
+    func testRequestIdFallsBackToErrorBody() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Self.errorBody(type: "invalid_request_error", message: "max_tokens: too large", requestId: "req_from_body"),
+                Self.httpResponse(url: Self.messagesURL, statusCode: 400)
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Claude rejected the request: max_tokens: too large."), message)
+        XCTAssertTrue(message.contains("request req_from_body"), message)
+    }
+
+    func testAuthenticationFailureExplainsWhereToFixTheKey() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Self.errorBody(type: "authentication_error", message: "invalid x-api-key"),
+                Self.httpResponse(url: Self.messagesURL, statusCode: 401)
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Anthropic rejected the API key: invalid x-api-key."), message)
+        XCTAssertTrue(message.contains("Settings › Integrations › Claude"), message)
+    }
+
+    func testRateLimitNamesRetryDelayAndExhaustedLimit() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Self.errorBody(type: "rate_limit_error", message: "Number of request tokens has exceeded your per-minute rate limit"),
+                Self.httpResponse(
+                    url: Self.messagesURL,
+                    statusCode: 429,
+                    headers: [
+                        // Longer than the client's retry budget, so it is not retried.
+                        "retry-after": "40",
+                        "anthropic-ratelimit-output-tokens-limit": "400000",
+                        "anthropic-ratelimit-output-tokens-remaining": "0",
+                        "anthropic-ratelimit-output-tokens-reset": "2026-10-12T10:00:00Z",
+                    ]
+                )
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Anthropic's rate limit was reached:"), message)
+        XCTAssertTrue(message.contains("Retry in 40 s."), message)
+        XCTAssertTrue(message.contains("Output-token limit (400000) used up; it is fully replenished at"), message)
+        XCTAssertTrue(message.contains("HTTP 429 rate_limit_error"), message)
+    }
+
+    func testSpendCapIsToldApartFromRateLimit() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Self.errorBody(
+                    type: "rate_limit_error",
+                    message: "You have reached your API usage limits.",
+                    errorCode: "enforced_spend_limit_reached"
+                ),
+                Self.httpResponse(url: Self.messagesURL, statusCode: 429)
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Your organization reached its monthly API spend cap: You have reached your API usage limits."), message)
+        XCTAssertFalse(message.contains("Retry in"), message)
+    }
+
+    func testOverloadedSuggestsRetrying() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Self.errorBody(type: "overloaded_error", message: "Overloaded"),
+                Self.httpResponse(url: Self.messagesURL, statusCode: 529)
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Anthropic's API is overloaded right now: Overloaded."), message)
+        XCTAssertTrue(message.contains("HTTP 529 overloaded_error"), message)
+    }
+
+    func testHTMLErrorPageIsSummarized() async throws {
+        let html = "<html><head><title>502 Bad Gateway</title></head><body>cloudflare</body></html>"
+        let error = try await Self.processError(outcomes: [
+            .success(
+                Data(html.utf8),
+                Self.httpResponse(url: Self.messagesURL, statusCode: 502, headers: ["Content-Type": "text/html"])
+            ),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Anthropic returned HTTP 502: upstream returned an HTML error page"), message)
+        XCTAssertTrue(message.contains("502 Bad Gateway"), message)
+    }
+
+    func testEmptyJSONErrorBodyIsExplained() async throws {
+        let error = try await Self.processError(outcomes: [
+            .success(Data("{}".utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 500)),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Anthropic had an internal error: the response carried no error details."), message)
+    }
+
+    func testRefusalIsReportedWithCategoryInsteadOfPartialText() async throws {
+        let body = #"""
+        {"content":[{"type":"text","text":"Partial"}],"stop_reason":"refusal",
+         "stop_details":{"type":"refusal","category":"cyber","explanation":"This request may enable harm"}}
+        """#
+        let error = try await Self.processError(outcomes: [
+            .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("Claude declined this request (cyber): This request may enable harm."), message)
+        XCTAssertFalse(message.contains("Partial"), message)
+    }
+
+    func testMaxTokensWithoutTextExplainsTheMissingAnswer() async throws {
+        let body = #"{"content":[{"type":"thinking","thinking":"","signature":"sig"}],"stop_reason":"max_tokens"}"#
+        let error = try await Self.processError(outcomes: [
+            .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.contains("output limit before writing an answer"), message)
+    }
+
+    func testContextWindowStopIsExplained() async throws {
+        let body = #"{"content":[{"type":"text","text":"Part"}],"stop_reason":"model_context_window_exceeded"}"#
+        let error = try await Self.processError(outcomes: [
+            .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.hasPrefix("The text is too long for claude-sonnet-4-6's context window."), message)
+    }
+
+    func testReplyWithoutTextNamesStopReasonAndBlocks() async throws {
+        let body = #"{"content":[{"type":"thinking","thinking":"","signature":"sig"}],"stop_reason":"end_turn"}"#
+        let error = try await Self.processError(outcomes: [
+            .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+        ])
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.contains("stop reason: end_turn; content blocks: thinking"), message)
+    }
+
+    func testTimeoutBecomesNetworkErrorWithTheTimeout() async throws {
+        let error = try await Self.processError(
+            outcomes: [.failure(URLError(.timedOut))],
+            model: "claude-haiku-4-5"
+        )
+        guard case .networkError(let message)? = error as? PluginChatError else {
+            return XCTFail("Expected PluginChatError.networkError, got \(error)")
+        }
+        XCTAssertTrue(message.hasPrefix("Anthropic didn't answer within 60 s."), message)
+        XCTAssertTrue(message.contains("URLError \(URLError.Code.timedOut.rawValue)"), message)
+    }
+
+    func testCancellationIsRethrownUntouched() async throws {
+        let error = try await Self.processError(outcomes: [.failure(URLError(.cancelled))])
+        XCTAssertEqual((error as? URLError)?.code, .cancelled)
+    }
+
+    func testValidationFailureReasonTellsBadKeyFromOutage() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+
+        plugin.setApiKey("bad-key")
+        let rejectingStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            rejectingStore.makeSession(outcomes: [
+                .success(
+                    Self.errorBody(type: "authentication_error", message: "invalid x-api-key"),
+                    Self.httpResponse(url: Self.modelsURL, statusCode: 401)
+                ),
+            ])
+        }
+        let rejected = await plugin.validateApiKey("bad-key")
+        XCTAssertFalse(rejected)
+        let authFailure = try XCTUnwrap(plugin.lastModelRefreshFailure)
+        XCTAssertTrue(authFailure.isAuthenticationFailure)
+        XCTAssertTrue(authFailure.message.hasPrefix("Anthropic rejected the API key: invalid x-api-key."), authFailure.message)
+
+        plugin.setApiKey("good-key")
+        XCTAssertNil(plugin.lastModelRefreshFailure, "a new key must clear the previous key's failure")
+        let outageStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            outageStore.makeSession(outcomes: [
+                .success(
+                    Self.errorBody(type: "api_error", message: "Internal server error"),
+                    Self.httpResponse(url: Self.modelsURL, statusCode: 500)
+                ),
+            ])
+        }
+        let outage = await plugin.validateApiKey("good-key")
+        XCTAssertFalse(outage)
+        let outageFailure = try XCTUnwrap(plugin.lastModelRefreshFailure)
+        XCTAssertFalse(outageFailure.isAuthenticationFailure)
+        XCTAssertEqual(outageFailure.statusCode, 500)
+        XCTAssertTrue(outageFailure.message.hasPrefix("Anthropic had an internal error: Internal server error."), outageFailure.message)
+    }
+
+    func testOfflineRefreshRecordsNetworkReason() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+        plugin.setApiKey("claude-key")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [.failure(URLError(.notConnectedToInternet))])
+        }
+
+        let refreshed = await plugin.refreshModels()
+        XCTAssertFalse(refreshed)
+        let failure = try XCTUnwrap(plugin.lastModelRefreshFailure)
+        XCTAssertNil(failure.statusCode)
+        XCTAssertTrue(failure.message.hasPrefix("This Mac is offline"), failure.message)
+    }
+
+    func testTimeoutMessageNamesTheReasoningEffort() async throws {
+        let error = try await Self.processError(
+            outcomes: [.failure(URLError(.timedOut))],
+            model: "claude-opus-4-8",
+            effort: "xhigh"
+        )
+        guard case .networkError(let message)? = error as? PluginChatError else {
+            return XCTFail("Expected PluginChatError.networkError, got \(error)")
+        }
+        XCTAssertTrue(message.hasPrefix("Anthropic didn't answer within 180 s at reasoning effort xhigh."), message)
+        XCTAssertTrue(message.contains("model claude-opus-4-8 · effort xhigh"), message)
+    }
+
+    // MARK: - Reasoning effort
+
+    func testEffortSendsAdaptiveThinkingAndDropsTemperature() async throws {
+        let request = try await Self.capturedRequest(
+            model: "claude-sonnet-4-6",
+            effort: "high",
+            defaults: [
+                "llmTemperatureMode": PluginLLMTemperatureMode.custom.rawValue,
+                "llmTemperatureValue": 0.7,
+            ]
+        )
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(Self.effort(in: body), "high")
+        XCTAssertEqual(Self.thinkingType(in: body), "adaptive")
+        XCTAssertNil(body["temperature"], "Claude 4.6 models reject a custom temperature while thinking")
+        XCTAssertEqual(body["max_tokens"] as? Int, 16_000)
+        XCTAssertEqual(request.timeoutInterval, 120)
+    }
+
+    func testWithoutEffortTheRequestKeepsModelDefaults() async throws {
+        let request = try await Self.capturedRequest(
+            model: "claude-sonnet-4-6",
+            defaults: [
+                "llmTemperatureMode": PluginLLMTemperatureMode.custom.rawValue,
+                "llmTemperatureValue": 0.7,
+            ]
+        )
+        let body = try Self.jsonBody(from: request)
+        XCTAssertNil(body["output_config"])
+        XCTAssertNil(body["thinking"])
+        XCTAssertEqual(body["temperature"] as? Double, 0.7)
+    }
+
+    func testSavedEffortAppliesWhenTheHostSendsNone() async throws {
+        let request = try await Self.capturedRequest(model: "claude-opus-4-8", defaults: ["reasoningEffort": "low"])
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(Self.effort(in: body), "low")
+        XCTAssertEqual(Self.thinkingType(in: body), "adaptive")
+        XCTAssertEqual(request.timeoutInterval, 60)
+    }
+
+    func testHostEffortOverridesTheSavedEffort() async throws {
+        let request = try await Self.capturedRequest(
+            model: "claude-opus-4-8",
+            effort: "max",
+            defaults: ["reasoningEffort": "low"]
+        )
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(Self.effort(in: body), "max")
+        XCTAssertEqual(request.timeoutInterval, 300)
+    }
+
+    func testEffortTheModelLacksFallsBackToTheModelDefault() async throws {
+        let request = try await Self.capturedRequest(model: "claude-opus-4-6", defaults: ["reasoningEffort": "xhigh"])
+        let body = try Self.jsonBody(from: request)
+        XCTAssertNil(body["output_config"], "Opus 4.6 has no xhigh, so the model default applies")
+        XCTAssertNil(body["thinking"])
+    }
+
+    func testOpus45SendsEffortWithoutAdaptiveThinking() async throws {
+        let body = try Self.jsonBody(from: await Self.capturedRequest(model: "claude-opus-4-5", effort: "medium"))
+        XCTAssertEqual(Self.effort(in: body), "medium")
+        XCTAssertNil(body["thinking"], "adaptive thinking is a 400 on Opus 4.5")
+    }
+
+    func testModelsWithoutEffortNeverSendIt() async throws {
+        let body = try Self.jsonBody(from: await Self.capturedRequest(model: "claude-haiku-4-5", effort: "high"))
+        XCTAssertNil(body["output_config"])
+        XCTAssertNil(body["thinking"])
+    }
+
+    func testClaude3KeepsItsSmallerOutputLimit() async throws {
+        let body = try Self.jsonBody(from: await Self.capturedRequest(model: "claude-3-haiku-20240307"))
+        XCTAssertEqual(body["max_tokens"] as? Int, 4_096)
+    }
+
+    func testSupportedEffortsFollowTheStaticTable() throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.supportedEfforts(for: "claude-opus-4-6").map(\.id), ["low", "medium", "high", "max"])
+        XCTAssertEqual(plugin.supportedEfforts(for: "claude-sonnet-5").map(\.id), ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertEqual(plugin.supportedEfforts(for: "claude-opus-4-5-20251101").map(\.id), ["low", "medium", "high"])
+        XCTAssertTrue(plugin.supportedEfforts(for: "claude-haiku-4-5").isEmpty)
+        XCTAssertEqual(plugin.defaultEffortId(for: "claude-opus-5-5"), "medium")
+        XCTAssertEqual(plugin.defaultEffortId(for: "claude-sonnet-5-5"), "high")
+        XCTAssertNil(plugin.defaultEffortId(for: "claude-haiku-4-5"))
+    }
+
+    func testDefaultEffortIdReportsTheSavedEffortWhenTheModelHasIt() throws {
+        let host = try PluginTestHostServices(defaults: ["reasoningEffort": "xhigh"])
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.defaultEffortId(for: "claude-opus-4-8"), "xhigh")
+        XCTAssertEqual(
+            plugin.defaultEffortId(for: "claude-opus-4-6"),
+            "high",
+            "Opus 4.6 has no xhigh, so a request without an effort uses the model default"
+        )
+        XCTAssertEqual(plugin.modelDefaultEffortId(for: "claude-opus-4-8"), "high")
+    }
+
+    func testSettingTheEffortPersistsItAndNotifiesTheHost() throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+        let notificationsBefore = host.capabilitiesChangedCount
+
+        plugin.setReasoningEffort(" XHigh ")
+        XCTAssertEqual(plugin.reasoningEffortId, "xhigh")
+        XCTAssertEqual(host.userDefault(forKey: "reasoningEffort") as? String, "xhigh")
+        XCTAssertEqual(host.capabilitiesChangedCount, notificationsBefore + 1)
+
+        plugin.setReasoningEffort("xhigh")
+        XCTAssertEqual(host.capabilitiesChangedCount, notificationsBefore + 1, "an unchanged value must not notify again")
+    }
+
+    func testModelsAPICapabilitiesOverrideTheStaticTable() async throws {
+        let page = Data(#"""
+        {"data":[
+          {"id":"claude-next","display_name":"Claude Next","created_at":"2026-09-01T00:00:00Z","type":"model",
+           "max_tokens":8192,
+           "capabilities":{"thinking":{"supported":true,"types":{"adaptive":{"supported":true}}},
+                           "effort":{"supported":true,"low":{"supported":true},"medium":{"supported":false},
+                                     "high":{"supported":true},"xhigh":{"supported":false},"max":{"supported":true}}}},
+          {"id":"claude-odd","display_name":"Odd","created_at":"2026-01-01T00:00:00Z","type":"model",
+           "max_tokens":"lots","capabilities":{"effort":"yes"}}
+        ],"has_more":false}
+        """#.utf8)
+        let decoded = try ClaudePlugin.decodeModelsPage(from: page)
+        let next = try XCTUnwrap(decoded.models.first { $0.id == "claude-next" })
+        XCTAssertEqual(next.effortLevels, ["low", "high", "max"])
+        XCTAssertEqual(next.supportsAdaptiveThinking, true)
+        XCTAssertEqual(next.maxOutputTokens, 8192)
+        let odd = try XCTUnwrap(
+            decoded.models.first { $0.id == "claude-odd" },
+            "an unexpected capability shape must not drop the model"
+        )
+        XCTAssertNil(odd.effortLevels)
+        XCTAssertNil(odd.maxOutputTokens)
+
+        let request = try await Self.capturedRequest(
+            model: "claude-next",
+            effort: "high",
+            cache: ClaudeModelCache(models: decoded.models, fetchedAt: Date())
+        )
+        let body = try Self.jsonBody(from: request)
+        XCTAssertEqual(Self.effort(in: body), "high")
+        XCTAssertEqual(Self.thinkingType(in: body), "adaptive")
+        XCTAssertEqual(body["max_tokens"] as? Int, 8192, "max_tokens is clamped to the model's output limit")
+    }
+
+    func testCachesWrittenByPluginOnePointOneStillDecode() throws {
+        let legacy = Data(#"{"models":[{"id":"claude-opus-4-8","displayName":"Claude Opus 4.8","createdAt":1000}],"fetchedAt":0}"#.utf8)
+        let cache = try JSONDecoder().decode(ClaudeModelCache.self, from: legacy)
+        let model = try XCTUnwrap(cache.models.first)
+        XCTAssertNil(model.effortLevels)
+        XCTAssertEqual(
+            ClaudePlugin.capabilities(for: model.id, metadata: model).effortLevels,
+            ["low", "medium", "high", "xhigh", "max"],
+            "without metadata the static table applies"
+        )
+    }
+
+    // MARK: - Prompt caching
+
+    func testSystemPromptIsCachedForFiveMinutesByDefault() async throws {
+        let body = try Self.jsonBody(
+            from: await Self.capturedRequest(model: "claude-opus-5-5", systemPrompt: "Fix grammar.")
+        )
+        let system = try XCTUnwrap(body["system"] as? [[String: Any]])
+        XCTAssertEqual(system.count, 1)
+        XCTAssertEqual(system.first?["type"] as? String, "text")
+        XCTAssertEqual(system.first?["text"] as? String, "Fix grammar.")
+        XCTAssertEqual(system.first?["cache_control"] as? [String: String], ["type": "ephemeral"])
+        XCTAssertNil(body["cache_control"], "no automatic breakpoint after the dictated text")
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.first?["content"] as? String, "hi", "the dictated text stays a plain, uncached string")
+    }
+
+    func testOneHourCachingSendsTheTTL() async throws {
+        let body = try Self.jsonBody(
+            from: await Self.capturedRequest(
+                model: "claude-opus-5-5",
+                systemPrompt: "Fix grammar.",
+                defaults: ["promptCacheTTL": "1h"]
+            )
+        )
+        let system = try XCTUnwrap(body["system"] as? [[String: Any]])
+        XCTAssertEqual(system.first?["cache_control"] as? [String: String], ["type": "ephemeral", "ttl": "1h"])
+    }
+
+    func testCachingOffSendsThePlainSystemPrompt() async throws {
+        let body = try Self.jsonBody(
+            from: await Self.capturedRequest(
+                model: "claude-opus-5-5",
+                systemPrompt: "Fix grammar.",
+                defaults: ["promptCacheTTL": "off"]
+            )
+        )
+        XCTAssertEqual(body["system"] as? String, "Fix grammar.")
+    }
+
+    func testBlankSystemPromptIsNotSentAsACacheBlock() async throws {
+        let body = try Self.jsonBody(from: await Self.capturedRequest(model: "claude-opus-5-5", systemPrompt: "  "))
+        XCTAssertEqual(body["system"] as? String, "  ", "the API rejects a text block without text")
+    }
+
+    func testLastRequestSummaryReportsCacheUsage() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+        XCTAssertNil(plugin.lastRequestSummary)
+
+        let body = #"""
+        {"model":"claude-opus-5-5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",
+         "usage":{"input_tokens":12,"cache_read_input_tokens":1600,"cache_creation_input_tokens":0,"output_tokens":40}}
+        """#
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+            ])
+        }
+
+        _ = try await plugin.process(systemPrompt: "sys", userText: "hi", model: "claude-opus-5-5")
+        let summary = try XCTUnwrap(plugin.lastRequestSummary)
+        XCTAssertEqual(summary.model, "claude-opus-5-5")
+        XCTAssertEqual(summary.inputTokens, 12)
+        XCTAssertEqual(summary.cacheReadInputTokens, 1600)
+        XCTAssertEqual(summary.cacheCreationInputTokens, 0)
+        XCTAssertEqual(summary.outputTokens, 40)
+    }
+
+    func testPromptCacheSettingPersists() throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.promptCache, .fiveMinutes)
+
+        plugin.setPromptCache(.oneHour)
+        XCTAssertEqual(host.userDefault(forKey: "promptCacheTTL") as? String, "1h")
+
+        let reactivated = ClaudePlugin()
+        reactivated.activate(host: host)
+        XCTAssertEqual(reactivated.promptCache, .oneHour)
+    }
+
+    // MARK: - Refusal fallback
+
+    func testRefusalFallbackIsRequestedForTheSupportedModels() async throws {
+        for model in ["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-1"] {
+            let request = try await Self.capturedRequest(model: model)
+            let body = try Self.jsonBody(from: request)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-beta"), "server-side-fallback-2026-07-01", model)
+            XCTAssertEqual(body["fallbacks"] as? String, "default", model)
+            PluginHTTPClientTestHarness.reset()
+        }
+    }
+
+    func testRefusalFallbackIsNotSentToOtherModels() async throws {
+        for model in ["claude-haiku-5-5", "claude-sonnet-5", "claude-opus-4-8", "claude-fable-5"] {
+            let request = try await Self.capturedRequest(model: model)
+            let body = try Self.jsonBody(from: request)
+            XCTAssertNil(request.value(forHTTPHeaderField: "anthropic-beta"), model)
+            XCTAssertNil(body["fallbacks"], model)
+            PluginHTTPClientTestHarness.reset()
+        }
+    }
+
+    func testRefusalFallbackCanBeTurnedOff() async throws {
+        let request = try await Self.capturedRequest(model: "claude-opus-5-5", defaults: ["refusalFallback": false])
+        let body = try Self.jsonBody(from: request)
+        XCTAssertNil(request.value(forHTTPHeaderField: "anthropic-beta"))
+        XCTAssertNil(body["fallbacks"])
+    }
+
+    func testFallbackBlocksAreNotTreatedAsText() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+
+        let body = #"""
+        {"model":"claude-opus-4-8","stop_reason":"end_turn","content":[
+            {"type":"fallback","from":{"model":"claude-opus-5-5"},"to":{"model":"claude-opus-4-8"}},
+            {"type":"text","text":"Fixed text."}
+        ]}
+        """#
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), Self.httpResponse(url: Self.messagesURL, statusCode: 200)),
+            ])
+        }
+
+        let reply = try await plugin.process(systemPrompt: "sys", userText: "hi", model: "claude-opus-5-5")
+        XCTAssertEqual(reply, "Fixed text.")
+        let summary = try XCTUnwrap(plugin.lastRequestSummary)
+        XCTAssertEqual(summary.model, "claude-opus-4-8")
+        XCTAssertEqual(summary.declinedModel, "claude-opus-5-5")
+    }
+
+    func testRejectedFallbackBetaPointsAtTheToggle() async throws {
+        let error = try await Self.processError(
+            outcomes: [
+                .success(
+                    Self.errorBody(
+                        type: "invalid_request_error",
+                        message: "Unexpected value(s) `server-side-fallback-2026-07-01` for the `anthropic-beta` header."
+                    ),
+                    Self.httpResponse(url: Self.messagesURL, statusCode: 400)
+                ),
+            ],
+            model: "claude-opus-5-5"
+        )
+        let message = Self.apiErrorMessage(error)
+        XCTAssertTrue(message.contains("Turn off “Retry declined requests on a fallback model”"), message)
+        XCTAssertTrue(message.contains("refusal fallback"), message)
+    }
+
     // MARK: - Helpers
 
     private static func waitForRefreshWaiterCount(_ expectedCount: Int, plugin: ClaudePlugin) async {
@@ -673,14 +1283,103 @@ final class ClaudePluginTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
-    private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+    private static func httpResponse(
+        url: String,
+        statusCode: Int,
+        headers: [String: String]? = nil
+    ) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
             statusCode: statusCode,
             httpVersion: nil,
-            headerFields: nil
+            headerFields: headers
         )!
     }
+
+    private static func errorBody(type: String, message: String, errorCode: String? = nil, requestId: String = "req_body") -> Data {
+        var error: [String: Any] = ["type": type, "message": message]
+        if let errorCode {
+            error["details"] = ["error_code": errorCode]
+        }
+        let body: [String: Any] = ["type": "error", "error": error, "request_id": requestId]
+        return try! JSONSerialization.data(withJSONObject: body)
+    }
+
+    /// Sends one request and returns the URLRequest the plugin built.
+    private static func capturedRequest(
+        model: String,
+        effort: String? = nil,
+        systemPrompt: String = "sys",
+        defaults: [String: Any] = [:],
+        cache: ClaudeModelCache? = nil
+    ) async throws -> URLRequest {
+        var defaults = defaults
+        if let cache {
+            defaults[cachedModelsKey] = try JSONEncoder().encode(cache)
+        }
+        let host = try PluginTestHostServices(defaults: defaults)
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(messagesResponse(text: "ok"), httpResponse(url: messagesURL, statusCode: 200)),
+            ])
+        }
+        _ = try await plugin.process(
+            systemPrompt: systemPrompt,
+            userText: "hi",
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+        return try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+    }
+
+    private static func effort(in body: [String: Any]) -> String? {
+        (body["output_config"] as? [String: Any])?["effort"] as? String
+    }
+
+    private static func thinkingType(in body: [String: Any]) -> String? {
+        (body["thinking"] as? [String: Any])?["type"] as? String
+    }
+
+    /// Runs one Messages request against `outcomes` and returns the thrown error.
+    private static func processError(
+        outcomes: [PluginHTTPClientTestOutcome],
+        model: String = "claude-sonnet-4-6",
+        effort: String? = nil
+    ) async throws -> Error {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: outcomes)
+        }
+        do {
+            let reply = try await plugin.process(systemPrompt: "sys", userText: "hi", model: model, effort: effort)
+            throw ClaudeTestExpectationError(description: "expected an error, got reply \(reply)")
+        } catch let error as ClaudeTestExpectationError {
+            throw error
+        } catch {
+            return error
+        }
+    }
+
+    private static func apiErrorMessage(_ error: Error, file: StaticString = #filePath, line: UInt = #line) -> String {
+        guard case .apiError(let message)? = error as? PluginChatError else {
+            XCTFail("Expected PluginChatError.apiError, got \(error)", file: file, line: line)
+            return ""
+        }
+        return message
+    }
+}
+
+private struct ClaudeTestExpectationError: Error, CustomStringConvertible {
+    let description: String
 }
 
 private actor ControlledClaudeModelFetcher {

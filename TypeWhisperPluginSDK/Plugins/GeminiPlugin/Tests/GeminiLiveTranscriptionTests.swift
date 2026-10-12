@@ -7,20 +7,18 @@ import TypeWhisperPluginSDK
 final class GeminiLiveTranscriptionTests: XCTestCase {
     func testCompletionReceivedBeforeReleaseDoesNotWaitForAnotherTurn() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Already complete"},"generationComplete":true}}"#))
 
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
 
         XCTAssertEqual(result.text, "Already complete")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
         XCTAssertTrue(socket.isClosed)
     }
 
     func testGenerationCompleteAfterReleaseEndsWait() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Complete"}}}"#))
         socket.onSend = { message in
             if case .string(let text) = message, text == GeminiLiveTranscriptionSession.audioStreamEndMessage {
@@ -28,11 +26,9 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
             }
         }
 
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
 
         XCTAssertEqual(result.text, "Complete")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
     }
 
     func testSilentAudioAfterCompletionDoesNotWaitForAnotherTurn() async throws {
@@ -46,11 +42,9 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
             try await session.appendAudio(samples: [Float](repeating: 0, count: 4_800))
             clock.advance(by: .milliseconds(50))
 
-            let start = ContinuousClock.now
             let result = try await finishWithWatchdog(session)
 
             XCTAssertEqual(result.text, "Already complete")
-            XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
             XCTAssertTrue(socket.isClosed)
         }
     }
@@ -67,12 +61,10 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
 
     func testTurnCompleteReceivedBeforeReleaseEndsWait() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Complete"},"turnComplete":true}}"#))
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "Complete")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
     }
 
     func testCompletionAllowsLateTranscriptToSettle() async throws {
@@ -218,7 +210,7 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
 
     func testServerTurnEndCreditsCompletionDespiteRoomNoise() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.appendAudio(samples: [0.1])
         try await session.handle(.string(activity("ACTIVITY_START")))
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Already complete"}}}"#))
@@ -227,17 +219,15 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         // Room noise is not digital silence, so only the server VAD can tell that no speech followed.
         try await session.appendAudio(samples: [Float](repeating: 0.001, count: 4_800))
 
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
 
         XCTAssertEqual(result.text, "Already complete")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(300))
         XCTAssertTrue(socket.isClosed)
     }
 
     func testServerTurnEndAfterReleaseEndsWait() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.handle(.string(activity("ACTIVITY_START")))
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Hello"}}}"#))
         // The release flush arrives within the attribution delay of the last audio chunk.
@@ -249,11 +239,9 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
             socket.enqueue(activity("ACTIVITY_END"))
         }
 
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
 
         XCTAssertEqual(result.text, "Hello world")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(300))
     }
 
     func testSpeechResumedBeforeReleaseWaitsForNewServerTurn() async throws {
@@ -535,17 +523,15 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
 
     func testVoiceActivityTypeKeyIsDecoded() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeImmediateCompletionSession(socket: socket)
         try await session.handle(.string(#"{"voiceActivity":{"voiceActivityType":"ACTIVITY_START"}}"#))
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Done"},"generationComplete":true}}"#))
         try await session.handle(.string(#"{"voiceActivity":{"voiceActivityType":"ACTIVITY_END"}}"#))
         try await session.appendAudio(samples: [Float](repeating: 0.001, count: 1_600))
 
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
 
         XCTAssertEqual(result.text, "Done")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(300))
     }
 
     func testServerTurnEndWaitsForSpeechResumeGrace() async throws {
@@ -619,14 +605,12 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
 
     func testReceiveFailureReturnsAvailableText() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeSession(socket: socket, clock: GeminiTestClock())
         try await session.handle(.string(#"{"serverContent":{"inputTranscription":{"text":"Hello"},"generationComplete":true}}"#))
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"world"}}}"#))
         socket.close(code: .abnormalClosure)
-        let start = ContinuousClock.now
-        let result = try await session.finish()
+        let result = try await finishWithWatchdog(session)
         XCTAssertEqual(result.text, "Hello world")
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
     }
 
     func testTimeoutWithoutTextStillFails() async throws {
@@ -656,21 +640,19 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
 
     func testCancellingFinishClosesSocketAndDoesNotReturnPartialText() async throws {
         let socket = GeminiTestWebSocket()
-        let session = try await makeSession(socket: socket)
+        let session = try await makeSession(socket: socket, clock: GeminiTestClock())
         try await session.handle(.string(#"{"serverContent":{"interimInputTranscription":{"text":"Cancelled"}}}"#))
         socket.onSend = { message in
             if isGeminiEndMessage(message) { try await Task.sleep(for: .seconds(10)) }
         }
-        let finish = Task { try await session.finish() }
+        let finish = Task { try await finishWithWatchdog(session) }
         try await waitUntil { socket.sentMessages.contains(where: isGeminiEndMessage) }
-        let start = ContinuousClock.now
         finish.cancel()
         do {
             _ = try await finish.value
             XCTFail("Cancellation must propagate")
         } catch is CancellationError {}
         try await waitUntil { socket.isClosed }
-        XCTAssertLessThan(start.duration(to: .now), .milliseconds(250))
     }
 
     func testConcurrentFinishSendsEndOnlyOnce() async throws {
@@ -705,17 +687,29 @@ final class GeminiLiveTranscriptionTests: XCTestCase {
         XCTAssertTrue(socket.isClosed)
     }
 
+    // A frozen deadline requires completion itself to end the wait. The watchdog
+    // allows slow CI scheduling without letting a timeout pass as completion.
+    // Settling and speech-resume windows have separate tests with an advanced clock.
+    private func makeImmediateCompletionSession(socket: GeminiTestWebSocket) async throws -> GeminiLiveTranscriptionSession {
+        try await makeSession(
+            socket: socket, clock: GeminiTestClock(),
+            completionSettleTime: .zero, speechResumeGrace: .zero
+        )
+    }
+
     private func makeSession(
         socket: GeminiTestWebSocket,
         clock: GeminiTestClock? = nil,
         finishTimeout: Duration = .milliseconds(400),
-        maximumFinishTime: Duration = .milliseconds(400)
+        maximumFinishTime: Duration = .milliseconds(400),
+        completionSettleTime: Duration = .milliseconds(50),
+        speechResumeGrace: Duration = .milliseconds(100)
     ) async throws -> GeminiLiveTranscriptionSession {
         try await GeminiLiveTranscriptionSession.connect(
             apiKey: "test-key", modelId: "gemini-3.5-transcribe-live", mode: .verbatim,
             languageCodes: ["ru-RU"], customVocabulary: ["TypeWhisper"],
             socket: socket, finishTimeout: finishTimeout, maximumFinishTime: maximumFinishTime,
-            completionSettleTime: .milliseconds(50), speechResumeGrace: .milliseconds(100),
+            completionSettleTime: completionSettleTime, speechResumeGrace: speechResumeGrace,
             now: { clock?.now() ?? .now }, onProgress: { _ in true }
         )
     }
