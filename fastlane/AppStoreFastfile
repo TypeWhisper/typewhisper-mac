@@ -119,11 +119,13 @@ end
 
 # Localized store text of the macOS version. Name, subtitle and privacy URL are
 # app-level fields shared with the iOS app and stay in the iOS repository.
-# release_notes.txt is optional: the first version of a platform has none.
+# release_notes.txt is required for updates and must not exist for the first
+# macOS version, which has no "What's New" text.
 APPSTORE_APP_IDENTIFIER = "com.typewhisper.typewhisper-app"
 APPSTORE_APP_ID = "6759319267"
 APPSTORE_METADATA_PATH = File.join(FASTLANE_DIRECTORY, "appstore-metadata")
 APPSTORE_STORE_LOCALES = %w[en-US de-DE fr-FR it es-ES].freeze
+APPSTORE_INITIAL_MAC_VERSION = "1.8.0"
 APPSTORE_VERSION_FIELDS = {
   "description" => { attribute: :description, limit: 4_000 },
   # App Store Connect counts keywords in UTF-8 bytes.
@@ -131,18 +133,24 @@ APPSTORE_VERSION_FIELDS = {
   "promotional_text" => { attribute: :promotional_text, limit: 170 },
   "marketing_url" => { attribute: :marketing_url },
   "support_url" => { attribute: :support_url },
-  "release_notes" => { attribute: :whats_new, limit: 4_000, optional: true },
+  "release_notes" => { attribute: :whats_new, limit: 4_000, release_notes: true },
 }.freeze
+# Same list as Spaceship's get_edit_app_store_version.
 APPSTORE_EDITABLE_VERSION_STATES = %w[
   PREPARE_FOR_SUBMISSION
   DEVELOPER_REJECTED
-  METADATA_REJECTED
   REJECTED
+  METADATA_REJECTED
+  WAITING_FOR_REVIEW
+  INVALID_BINARY
 ].freeze
 
-def appstore_metadata_value(locale, field)
+def appstore_metadata_value(locale, field, version_string)
   path = File.join(APPSTORE_METADATA_PATH, locale, "#{field}.txt")
-  return nil if !File.file?(path) && APPSTORE_VERSION_FIELDS.dig(field, :optional)
+  if APPSTORE_VERSION_FIELDS.dig(field, :release_notes) && version_string == APPSTORE_INITIAL_MAC_VERSION
+    UI.user_error!("#{path} must not exist for the initial macOS version") if File.exist?(path)
+    return nil
+  end
 
   UI.user_error!("Missing metadata file #{path}") unless File.file?(path)
   File.read(path).strip
@@ -153,17 +161,17 @@ def appstore_review_notes
 end
 
 # Attributes of one version localization, keyed by App Store Connect attribute.
-def appstore_localization_attributes(locale)
+def appstore_localization_attributes(locale, version_string)
   APPSTORE_VERSION_FIELDS.each_with_object({}) do |(field, spec), attributes|
-    value = appstore_metadata_value(locale, field)
+    value = appstore_metadata_value(locale, field, version_string)
     attributes[spec[:attribute].to_s] = value unless value.nil?
   end
 end
 
-def validate_appstore_metadata!
+def validate_appstore_metadata!(version_string)
   APPSTORE_STORE_LOCALES.each do |locale|
     APPSTORE_VERSION_FIELDS.each do |field, spec|
-      value = appstore_metadata_value(locale, field)
+      value = appstore_metadata_value(locale, field, version_string)
       next if value.nil?
 
       UI.user_error!("#{locale}/#{field}.txt is empty") if value.empty?
@@ -180,7 +188,7 @@ def validate_appstore_metadata!
     end
   end
   notes = appstore_review_notes
-  UI.user_error!("Review notes have #{notes.length} characters (limit 4000)") if notes.length > 4_000
+  UI.user_error!("Review notes have #{notes.bytesize} bytes (limit 4000)") if notes.bytesize > 4_000
 end
 
 def appstore_api_key!
@@ -222,7 +230,7 @@ end
 def upload_mac_store_metadata!(version)
   localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
   APPSTORE_STORE_LOCALES.each do |locale|
-    attributes = appstore_localization_attributes(locale)
+    attributes = appstore_localization_attributes(locale, version.version_string)
     if (localization = localizations[locale])
       UI.message("Updating #{locale}")
       localization.update(attributes: attributes)
@@ -242,7 +250,7 @@ def verify_mac_store_metadata!(version)
   APPSTORE_STORE_LOCALES.each do |locale|
     localization = localizations[locale]
     UI.user_error!("Missing remote version locale #{locale}") unless localization
-    appstore_localization_attributes(locale).each do |attribute, expected|
+    appstore_localization_attributes(locale, version.version_string).each do |attribute, expected|
       actual = localization.public_send(attribute).to_s.strip
       UI.user_error!("#{locale} #{attribute} differs in App Store Connect") unless actual == expected
     end
@@ -257,7 +265,7 @@ platform :mac do
   lane :appstore_metadata_upload do |options|
     version_string = options[:version].to_s
     UI.user_error!("Pass version:<version>") if version_string.empty?
-    validate_appstore_metadata!
+    validate_appstore_metadata!(version_string)
     appstore_api_key!
     upload_mac_store_metadata!(editable_mac_store_version!(version_string))
     verify_mac_store_metadata!(mac_store_version!(version_string))
@@ -267,7 +275,7 @@ platform :mac do
   lane :appstore_metadata_verify do |options|
     version_string = options[:version].to_s
     UI.user_error!("Pass version:<version>") if version_string.empty?
-    validate_appstore_metadata!
+    validate_appstore_metadata!(version_string)
     appstore_api_key!
     verify_mac_store_metadata!(mac_store_version!(version_string))
   end
