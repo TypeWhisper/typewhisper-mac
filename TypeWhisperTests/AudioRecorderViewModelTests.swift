@@ -230,6 +230,148 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(inputs.first?.recorderRecordingID, events.first?.recordingID)
     }
 
+    // Issue #1553: Whisper writes text for the quiet start of a call.
+    func testRecorderSendsOnlySpeechToTheEngineAndKeepsRecordingTimes() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .timed(
+            text: "Hello there. See you Thursday.",
+            segments: [
+                PluginTranscriptionSegment(text: "Hello there.", start: 1, end: 9),
+                // Starts in the pause between the two parts.
+                PluginTranscriptionSegment(text: "See you Thursday.", start: 10.2, end: 14),
+            ],
+            words: [PluginWordTiming(text: "Thursday.", start: 12, end: 14)]
+        ))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let sampleRate = AudioRecorderService.transcriptionSampleRate
+        let samples = Array(repeating: Float(0.25), count: Int(60 * sampleRate))
+        let viewModel = makeFinalTranscriptionViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            samples: samples,
+            speechRegionDetector: FixedSpeechRegionDetector(regions: [10...20, 40...45])
+        )
+        viewModel.detectSpeakers = true
+        var inputs: [SpeakerRecordingInput] = []
+        viewModel.speakerRecordIntake = { input in
+            inputs.append(input)
+            return UUID()
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+
+        XCTAssertEqual(session.text, "Hello there. See you Thursday.")
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq") as? AudioRecorderMockTranscriptionPlugin
+        )
+        XCTAssertEqual(plugin.requests.count, 1)
+        // 10 s and 5 s of speech with a half-second pause between them.
+        XCTAssertEqual(plugin.requests.first?.audioSampleCount, Int(15.5 * sampleRate))
+
+        let input = try XCTUnwrap(inputs.first)
+        XCTAssertEqual(input.samples.count, samples.count)
+        XCTAssertEqual(input.result.duration, 60, accuracy: 0.001)
+        XCTAssertEqual(input.result.segments.map(\.start), [11, 40])
+        XCTAssertEqual(input.result.segments.map(\.end), [19, 43.5])
+        XCTAssertEqual(input.result.words, [TranscriptionWord(text: "Thursday.", start: 41.5, end: 43.5)])
+    }
+
+    func testRecorderDoesNotTranscribeARecordingWithoutSpeech() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Продолжение следует..."))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            speechRegionDetector: FixedSpeechRegionDetector(regions: [])
+        )
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        // A preview the engine wrote for the silence must not become the transcript.
+        viewModel.partialText = "Thank you."
+        _ = try viewModel.apiStopRecording()
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+
+        let noSpeech = String(localized: "recorder.noSpeechDetectedError")
+        XCTAssertNil(session.text)
+        XCTAssertTrue(session.error?.contains(noSpeech) == true)
+        XCTAssertEqual(viewModel.partialText, "")
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq") as? AudioRecorderMockTranscriptionPlugin
+        )
+        XCTAssertTrue(plugin.requests.isEmpty)
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        XCTAssertEqual(recording.transcriptionFailure?.phase, .emptyResult)
+        XCTAssertEqual(recording.transcriptionFailure?.providerError, noSpeech)
+    }
+
+    func testRecorderTranscribesTheWholeRecordingWhenSpeechDetectionFails() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("whole recording"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let samples = Array(repeating: Float(0.25), count: Int(3 * AudioRecorderService.transcriptionSampleRate))
+        let viewModel = makeFinalTranscriptionViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            samples: samples,
+            speechRegionDetector: FailingSpeechRegionDetector()
+        )
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+
+        XCTAssertEqual(session.text, "whole recording")
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq") as? AudioRecorderMockTranscriptionPlugin
+        )
+        XCTAssertEqual(plugin.requests.map(\.audioSampleCount), [samples.count])
+    }
+
+    func testRetranscribingARecordingWithoutSpeechKeepsTheTranscriptAndRecordsNoSpeech() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Субтитры создавал DimaTorzok"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let audioURL = recordingsDirectory.appendingPathComponent("Meeting.wav")
+        let transcriptURL = audioURL.deletingPathExtension().appendingPathExtension("txt")
+        try Data("audio".utf8).write(to: audioURL)
+        try "keep me".write(to: transcriptURL, atomically: true, encoding: .utf8)
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory),
+            audioSamplesLoader: { _ in Array(repeating: 0.25, count: 32_000) },
+            speechRegionDetector: FixedSpeechRegionDetector(regions: [])
+        )
+        viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: { $0.recordings.first?.transcriptionFailure != nil }
+        )
+
+        XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "keep me")
+        let failure = try XCTUnwrap(viewModel.recordings.first?.transcriptionFailure)
+        XCTAssertEqual(failure.phase, .emptyResult)
+        XCTAssertEqual(failure.providerError, String(localized: "recorder.noSpeechDetectedError"))
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq") as? AudioRecorderMockTranscriptionPlugin
+        )
+        XCTAssertTrue(plugin.requests.isEmpty)
+    }
+
     func testRecorderReadyCoversManualCalendarAndAPIRecordingsAfterReload() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .success("saved transcript"))
@@ -2282,6 +2424,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         dictionaryService: DictionaryService? = nil,
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         audioSamplesLoader: AudioRecorderViewModel.AudioSamplesLoader? = nil,
+        speechRegionDetector: any SpeechRegionDetecting = WholeRecordingSpeechDetector(),
         recordingsLoader: AudioRecorderViewModel.RecordingsLoader? = nil,
         recorderCompletionsLoader: AudioRecorderViewModel.RecorderCompletionsLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
@@ -2299,6 +2442,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             defaults: defaults,
             audioSamplesLoader: audioSamplesLoader,
+            speechRegionDetector: speechRegionDetector,
             recordingsLoader: recordingsLoader,
             recorderCompletionsLoader: recorderCompletionsLoader,
             livePreviewStartObserver: livePreviewStartObserver
@@ -2343,12 +2487,20 @@ final class AudioRecorderViewModelTests: XCTestCase {
     private func makeFinalTranscriptionViewModel(
         defaults: UserDefaults,
         modelManager: ModelManagerService,
-        recordingsDirectory: URL? = nil
+        recordingsDirectory: URL? = nil,
+        samples: [Float] = Array(repeating: 0.25, count: Int(AudioRecorderService.transcriptionSampleRate)),
+        speechRegionDetector: any SpeechRegionDetecting = WholeRecordingSpeechDetector()
     ) -> AudioRecorderViewModel {
         let recorderService = makeRecorderService(
-            recordingsDirectory: recordingsDirectory ?? makeTemporaryDirectory()
+            recordingsDirectory: recordingsDirectory ?? makeTemporaryDirectory(),
+            samples: samples
         )
-        let viewModel = makeViewModel(defaults: defaults, modelManager: modelManager, recorderService: recorderService)
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: recorderService,
+            speechRegionDetector: speechRegionDetector
+        )
         viewModel.transcriptionEnabled = true
         viewModel.livePreviewEnabled = false
         return viewModel
@@ -2917,6 +3069,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         case failure(String)
         case cancellation
         case conditionedShortFallbackComplete(shortText: String, completeText: String)
+        case timed(text: String, segments: [PluginTranscriptionSegment], words: [PluginWordTiming])
     }
 
     static let pluginId = "com.typewhisper.mock.audio-recorder"
@@ -3024,6 +3177,9 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         )
         lastRequest = request
         requests.append(request)
+        if case .timed(_, _, let words) = behavior {
+            PluginWordTimings.report(words)
+        }
         return switch behavior {
         case .success(let text):
             PluginTranscriptionResult(text: text)
@@ -3033,6 +3189,8 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             throw PluginTranscriptionError.apiError(message)
         case .cancellation:
             throw CancellationError()
+        case .timed(let text, let segments, _):
+            PluginTranscriptionResult(text: text, segments: segments)
         case .conditionedShortFallbackComplete(let shortText, let completeText):
             if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 PluginTranscriptionResult(
@@ -3104,5 +3262,19 @@ private final class RecorderOverrideMarkerTranscriptionPlugin: NSObject, Transcr
     ) async throws -> PluginTranscriptionResult {
         let mode = selectedModelOverrides.isEmpty ? "unforced" : "forced"
         return PluginTranscriptionResult(text: "\(mode) \(currentModelId)")
+    }
+}
+
+private struct FixedSpeechRegionDetector: SpeechRegionDetecting {
+    let regions: [ClosedRange<TimeInterval>]
+
+    func speechRegions(in samples: [Float]) async throws -> [ClosedRange<TimeInterval>] {
+        regions
+    }
+}
+
+private struct FailingSpeechRegionDetector: SpeechRegionDetecting {
+    func speechRegions(in samples: [Float]) async throws -> [ClosedRange<TimeInterval>] {
+        throw SpeechDetectionError.unsupportedFormat
     }
 }
