@@ -231,13 +231,14 @@ def upload_mac_store_metadata!(version)
   localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
   APPSTORE_STORE_LOCALES.each do |locale|
     attributes = appstore_localization_attributes(locale, version.version_string)
-    if (localization = localizations[locale])
-      UI.message("Updating #{locale}")
-      localization.update(attributes: attributes)
-    else
+    localization = localizations[locale]
+    unless localization
+      # Create the locale first; only update maps the attribute names to the API's camelCase.
       UI.message("Creating #{locale}")
-      version.create_app_store_version_localization(attributes: attributes.merge("locale" => locale))
+      localization = version.create_app_store_version_localization(attributes: { locale: locale })
     end
+    UI.message("Updating #{locale}")
+    localization.update(attributes: attributes)
   end
 
   review_detail = version.fetch_app_store_review_detail
