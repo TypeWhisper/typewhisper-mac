@@ -165,6 +165,34 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(engine.attempts[2], 2)
     }
 
+    func testLongTranscriptionReportsRecoveredChunkSourceProgressAtOriginalOffset() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        let discoveredSegments = OSAllocatedUnfairLock(initialState: [TranscriptionSegment]())
+        let capture: @Sendable ([TranscriptionSegment]) -> Void = { segments in
+            discoveredSegments.withLock { $0.append(contentsOf: segments) }
+        }
+        engine.segmentDiscoveryCallback = capture
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+
+        let result = try await WhisperKitPlugin.transcribeAudio(
+            with: engine, samples: samples,
+            options: WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+        )
+
+        let recovered = try XCTUnwrap(discoveredSegments.withLock { $0.first { $0.text == "part 2" } })
+        XCTAssertEqual(recovered.seek, 30 * WhisperKit.sampleRate)
+        XCTAssertEqual(recovered.start, 30)
+        XCTAssertEqual(recovered.end, 60)
+        let progress = try XCTUnwrap(WhisperKitPlugin.sourceProgress(
+            fromDiscoveredSegments: [recovered], totalDuration: 90
+        ))
+        XCTAssertEqual(progress.processedDuration, 60)
+        XCTAssertEqual(try XCTUnwrap(progress.fractionCompleted), 2.0 / 3.0, accuracy: 0.000_001)
+        // Callback adjustment must not offset the returned results a second time.
+        XCTAssertEqual(result.segments.map(\.start), [0, 30, 60])
+        XCTAssertEqual(result.segments.map(\.end), [30, 60, 90])
+    }
+
     func testLongTranscriptionDoesNotRetryCancelledChunk() async throws {
         let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
         engine.failureMode = .cancelled

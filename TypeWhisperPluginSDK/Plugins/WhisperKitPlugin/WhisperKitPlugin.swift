@@ -470,8 +470,18 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 // Retry failed chunks serially after the batch has finished, with the
                 // same language, task and conditioning and no recursive VAD batching.
                 do {
+                    let sourceCallback = whisperKit.segmentDiscoveryCallback
+                    let seekTime = Float(chunk.seekOffsetIndex) / Float(WhisperKit.sampleRate)
                     let recovered = try await whisperKit.transcribe(
-                        audioArray: chunk.audioSamples, decodeOptions: chunkOptions, callback: checkedCallback
+                        audioArray: chunk.audioSamples, decodeOptions: chunkOptions, callback: checkedCallback,
+                        segmentCallback: { segments in
+                            // The retry decodes a chunk-local buffer. Report progress in
+                            // the full input's timeline, leaving returned results local
+                            // for the final stitching step below.
+                            sourceCallback?(segments.map {
+                                TranscriptionUtilities.updateSegmentTimings(segment: $0, seekTime: seekTime)
+                            })
+                        }
                     )
                     try checkCancellation()
                     chunkResults[index] = .success(recovered)

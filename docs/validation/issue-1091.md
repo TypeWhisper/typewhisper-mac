@@ -31,6 +31,10 @@ incorrectly marked completed.
 - Both WhisperKit transcription entry points inspect every VAD batch result.
   Failed chunks are retried once, serially after the batch, keeping the selected
   language, task and prompt. Successful chunks are not transcribed again.
+- Retry discovery callbacks report segment and word times in the full input's
+  timeline. Returned results remain chunk-local until stitching applies their
+  offsets once. A regression reproduces a middle chunk reporting 30 seconds of
+  progress instead of 60 seconds before this correction.
 - A remaining failure includes its chunk number and reaches the
   Recorder's existing error display and `.transcription-failure.json` path.
   Neither the live preview nor the initial truncated result masks that failure.
@@ -62,14 +66,24 @@ this change keeps that file limited to existing failure metadata.
 
 ## Verification
 
-On October 13, 2026, all 165 selected tests passed with Xcode 27.0 (27A266a),
-including seven new regression tests. The direct-distribution test build and the
-unsigned App Store compile check both succeeded, including a repeat after the
-review corrections. `git diff --check` passed.
+On October 13, 2026, all 166 selected tests passed with Xcode 27.0 (27A266a),
+including eight new regression tests. The direct-distribution test build passed
+after the retry-callback correction. An unsigned App Store compile check passed
+before publication; the review follow-up also built and launched the signed,
+sandboxed edition with WhisperKit marked installed for that launch.
+`git diff --check` passed.
 
-The repository PR preflight also passed: script tests, plugin and localization
-policies, release-helper self-tests, and 1,148 SDK/plugin tests across 42 test
-bundles (13 skipped, zero failures).
+The signed App Store build passed `codesign --verify --deep --strict`, has an
+Apple Development signature and `com.apple.security.app-sandbox = true`, and
+remained running for more than two minutes. The process mapped the WhisperKit
+executable from its own `Contents/PlugIns/WhisperKitPlugin.bundle`. Visual Recorder
+inspection was attempted but blocked by a ScreenCaptureKit stream error
+(`SCStreamErrorDomain -3811`), so no visual UI or real-model inference validation
+is claimed.
+
+The repository PR preflight passed on the initial PR head: script tests, plugin
+and localization policies, release-helper self-tests, and 1,148 SDK/plugin tests
+across 42 test bundles (13 skipped, zero failures).
 
 The separate `scripts/check_first_party_warnings.sh` check still fails on a
 missing restated Sendable conformance in the unchanged
@@ -95,6 +109,7 @@ xcodebuild test -skipPackagePluginValidation -disableAutomaticPackageResolution 
   CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
 scripts/appstore/build-dev.sh --check
+scripts/appstore/build-dev.sh --run --install-plugin com.typewhisper.whisperkit
 bash scripts/pr-preflight.sh
 ```
 
