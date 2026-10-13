@@ -239,6 +239,7 @@ final class ModelManagerService: ObservableObject {
     private var autoUnloadTargets: [ObjectIdentifier: AutoUnloadTarget] = [:]
     private var autoUnloadDiagnostics: [ObjectIdentifier: ModelAutoUnloadDiagnosticsSnapshot.Entry] = [:]
     private var autoUnloadUsageCounts: [ObjectIdentifier: Int] = [:]
+    var hasProtectedEngineUse: Bool { autoUnloadUsageCounts.values.contains { $0 > 0 } }
     private var cancellables = Set<AnyCancellable>()
     private var pluginConfiguredWaitAttempts = 300
     private var pluginRestoreBusyWaitAttempts = 5_700
@@ -775,6 +776,7 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> LiveTranscriptionSessionHandle? {
+        try HistoryRetranscriptionActivity.checkEngineAccess()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -945,6 +947,7 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
+        try HistoryRetranscriptionActivity.checkEngineAccess()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -1107,6 +1110,7 @@ final class ModelManagerService: ObservableObject {
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> TranscriptionResult {
+        try HistoryRetranscriptionActivity.checkEngineAccess()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),

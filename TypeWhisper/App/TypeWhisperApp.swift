@@ -1041,7 +1041,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if ["history", "history-speakers"].contains(AppConstants.screenshotState) {
+        if ["history", "history-speakers"].contains(AppConstants.screenshotState)
+            || AppConstants.screenshotState?.hasPrefix("history-comparison") == true {
             ManagedAppWindowOpener.shared.open(id: "history")
             prepareScreenshotHistoryWindow()
             return

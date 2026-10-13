@@ -6,6 +6,7 @@ struct HistoryView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var deleteCandidateIDs: Set<UUID> = []
     @State private var showingDeleteConfirmation = false
+    @State private var comparisonRecord: TranscriptionRecord?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -25,6 +26,9 @@ struct HistoryView: View {
             prompt: String(localized: "Search History")
         )
         .toolbar { workspaceToolbar }
+        .sheet(item: $comparisonRecord, onDismiss: { viewModel.reloadAfterTranscriptionComparison() }) { record in
+            HistoryRetranscriptionView(record: record, service: ServiceContainer.shared.historyRetranscriptionService)
+        }
         .alert(
             String(localized: "Save Changes?"),
             isPresented: unsavedChangesBinding
@@ -61,7 +65,14 @@ struct HistoryView: View {
             viewModel.consumePendingDeletion()
         }
         .frame(minWidth: 900, minHeight: 560)
-        .onAppear { viewModel.activate() }
+        .onAppear {
+            viewModel.activate()
+            #if DEBUG
+            if ["history-comparison", "history-comparison-first"].contains(AppConstants.screenshotState) {
+                comparisonRecord = viewModel.selectedRecord
+            }
+            #endif
+        }
         .onDisappear { viewModel.deactivate() }
     }
 
@@ -301,6 +312,16 @@ struct HistoryView: View {
     @ToolbarContentBuilder
     private var workspaceToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
+            if let record = viewModel.selectedRecord {
+                Button {
+                    comparisonRecord = record
+                } label: {
+                    Label(comparisonActionTitle(record), systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                }
+                .disabled(viewModel.isDirty || !canCompare(record))
+                .help(String(localized: "history.retranscribe.actionHelp"))
+                .accessibilityIdentifier("history.retranscribe.open")
+            }
             Menu {
                 Picker(
                     String(localized: "Date"),
@@ -420,6 +441,11 @@ struct HistoryView: View {
             viewModel.copyToClipboard(selected.map(\.displayText).joined(separator: "\n\n"))
         }
 
+        if selected.count == 1 {
+            Button(comparisonActionTitle(record)) { comparisonRecord = record }
+                .disabled(viewModel.isDirty || !canCompare(record))
+        }
+
         Menu(String(localized: "Export as…")) {
             Button(String(localized: "Markdown (.md)")) { export(selected, as: .markdown) }
             Button(String(localized: "Plain Text (.txt)")) { export(selected, as: .plainText) }
@@ -439,6 +465,15 @@ struct HistoryView: View {
         Button(String(localized: "Delete"), role: .destructive) {
             viewModel.requestDeletion(of: Set(selected.map(\.id)))
         }
+    }
+
+    private func canCompare(_ record: TranscriptionRecord) -> Bool {
+        record.transcriptionVersionsData != nil || ServiceContainer.shared.historyRetranscriptionService.canRun(record)
+    }
+
+    private func comparisonActionTitle(_ record: TranscriptionRecord) -> String {
+        ServiceContainer.shared.historyRetranscriptionService.canRun(record)
+            ? String(localized: "history.retranscribe.action") : String(localized: "history.retranscribe.compareAction")
     }
 
     private var deleteConfirmationTitle: String {

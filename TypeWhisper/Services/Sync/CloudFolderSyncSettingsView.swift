@@ -1373,6 +1373,36 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
+    func canRetrieveHistoryAudio(_ record: TranscriptionRecord) -> Bool {
+        guard canUseSync, mode != .off,
+              historySyncPreferences?.isEnabled == true,
+              historySyncPreferences?.isAudioEnabled == true,
+              let descriptor = historyService?.synchronizedAudioDescriptor(for: record),
+              historySyncPreferences?.shouldReceiveSynchronizedAudio(createdAt: descriptor.createdAt) == true else {
+            return false
+        }
+        return descriptor.isValid
+    }
+
+    /// Called only after explicit download consent. Uses the verified sync asset directly,
+    /// so cancellation or a provider error does not install audio or modify the record.
+    func retrieveHistoryAudio(_ record: TranscriptionRecord) async throws -> URL {
+        guard canRetrieveHistoryAudio(record), let folder = activeFolderURL(),
+              let descriptor = historyService?.synchronizedAudioDescriptor(for: record) else {
+            throw HistoryRetranscriptionError.audioMissing
+        }
+        let scoped = folder.startAccessingSecurityScopedResource()
+        defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        let package = CloudFolderSyncEngine.packageURL(for: folder)
+        let source = try await HistorySyncAssetStore.verifiedAssetURL(packageURL: package, descriptor: descriptor)
+        try Task.checkCancellation()
+        guard canRetrieveHistoryAudio(record) else { throw HistoryRetranscriptionError.audioMissing }
+        let copy = FileManager.default.temporaryDirectory
+            .appendingPathComponent("history-comparison-\(UUID().uuidString).wav")
+        try FileManager.default.copyItem(at: source, to: copy)
+        return copy
+    }
+
     func installPendingSynchronizedAudio(
         in folderURL: URL
     ) async -> [CloudFolderSyncDiagnostic] {

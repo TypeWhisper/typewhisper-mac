@@ -50,6 +50,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         case modelDisplayName
         case processingFailureCategory
         case processingFailureMessage
+        case alignmentResetAt
     }
 
     let recordID: UUID
@@ -70,6 +71,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
     let modelDisplayName: String?
     let processingFailureCategory: String?
     let processingFailureMessage: String?
+    /// A promoted run invalidates alignment from earlier runs, independently of text edits.
+    let alignmentResetAt: Date?
 
     init(
         recordID: UUID,
@@ -89,7 +92,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         engineDisplayName: String,
         modelDisplayName: String? = nil,
         processingFailureCategory: String? = nil,
-        processingFailureMessage: String? = nil
+        processingFailureMessage: String? = nil,
+        alignmentResetAt: Date? = nil
     ) {
         self.recordID = recordID
         self.createdAt = createdAt
@@ -111,6 +115,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         self.modelDisplayName = modelDisplayName
         self.processingFailureCategory = processingFailureCategory
         self.processingFailureMessage = processingFailureMessage
+        self.alignmentResetAt = alignmentResetAt
     }
 
     init(from decoder: Decoder) throws {
@@ -145,6 +150,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
             String.self,
             forKey: .processingFailureMessage
         )
+        alignmentResetAt = try container.decodeIfPresent(Date.self, forKey: .alignmentResetAt)
     }
 }
 

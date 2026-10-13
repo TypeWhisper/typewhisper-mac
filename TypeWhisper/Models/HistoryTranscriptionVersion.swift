@@ -1,0 +1,107 @@
+import Foundation
+
+/// A saved run owns its text and alignment data. Promoting a run never reuses another
+/// run's word times or speaker assignments. Legacy entries become the original lazily.
+struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
+    var id = UUID()
+    var createdAt = Date()
+    var rawText: String
+    var finalText: String
+    var engineID: String
+    var engineName: String?
+    var modelID: String?
+    var modelName: String?
+    var language: String?
+    var requestedLanguage: String?
+    var workflowID: UUID?
+    var workflowName: String?
+    var workflowConfiguration: Data?
+    var workflowRecorded: Bool = false
+    var pipelineSteps: String?
+    var renderedDocument: String?
+    var structuredDocumentData: Data?
+    var speakerTranscriptStateRaw: String?
+    var speakerTranscriptData: Data?
+    var speakerNamesData: Data?
+    var timedTextData: Data?
+    var timedTextGranularityRaw: String?
+    var speakerWordsData: Data?
+    var speakerWordsAreFromSecondPass: Bool?
+    var speakerOwnSpeechData: Data?
+    var processingStateRaw: String?
+    var processingFailureCategory: String?
+    var processingFailureMessage: String?
+
+    static func capture(_ record: TranscriptionRecord) -> Self {
+        Self(
+            id: record.id, createdAt: record.timestamp,
+            rawText: record.rawText, finalText: record.finalText,
+            engineID: record.engineUsed, modelName: record.modelUsed,
+            language: record.language, pipelineSteps: record.pipelineSteps,
+            renderedDocument: record.renderedDocument,
+            structuredDocumentData: record.structuredDocumentData,
+            speakerTranscriptStateRaw: record.speakerTranscriptStateRaw,
+            speakerTranscriptData: record.speakerTranscriptData,
+            speakerNamesData: record.speakerNamesData,
+            timedTextData: record.timedTextData,
+            timedTextGranularityRaw: record.timedTextGranularityRaw,
+            speakerWordsData: record.speakerWordsData,
+            speakerWordsAreFromSecondPass: record.speakerWordsAreFromSecondPass,
+            speakerOwnSpeechData: record.speakerOwnSpeechData,
+            processingStateRaw: record.processingStateRaw,
+            processingFailureCategory: record.processingFailureCategory,
+            processingFailureMessage: record.processingFailureMessage
+        )
+    }
+
+    func apply(to record: TranscriptionRecord) {
+        record.rawText = rawText
+        record.finalText = finalText
+        record.engineUsed = engineID
+        record.modelUsed = modelName ?? modelID
+        record.language = language
+        record.pipelineSteps = pipelineSteps
+        record.renderedDocument = renderedDocument
+        record.structuredDocumentData = structuredDocumentData
+        record.speakerTranscriptStateRaw = speakerTranscriptStateRaw
+        record.speakerTranscriptData = speakerTranscriptData
+        record.speakerNamesData = speakerNamesData
+        record.timedTextData = timedTextData
+        record.timedTextGranularityRaw = timedTextGranularityRaw
+        record.speakerWordsData = speakerWordsData
+        record.speakerWordsAreFromSecondPass = speakerWordsAreFromSecondPass
+        record.speakerOwnSpeechData = speakerOwnSpeechData
+        record.processingStateRaw = processingStateRaw ?? RecordingProcessingState.ready.rawValue
+        record.processingFailureCategory = processingFailureCategory
+        record.processingFailureMessage = processingFailureMessage
+    }
+
+    func matchesContent(of record: TranscriptionRecord) -> Bool {
+        // Compare just the materialized fields; provenance belongs to the saved run.
+        var current = Self.capture(record)
+        current.id = id
+        current.createdAt = createdAt
+        current.engineName = engineName
+        current.modelID = modelID
+        current.requestedLanguage = requestedLanguage
+        current.workflowID = workflowID
+        current.workflowName = workflowName
+        current.workflowConfiguration = workflowConfiguration
+        current.workflowRecorded = workflowRecorded
+        var expected = self
+        expected.modelName = modelName ?? modelID
+        expected.processingStateRaw = processingStateRaw ?? RecordingProcessingState.ready.rawValue
+        return current == expected
+    }
+
+    func isActive(in record: TranscriptionRecord) -> Bool {
+        id == (record.activeTranscriptionVersionID ?? record.id) && matchesContent(of: record)
+    }
+}
+
+extension TranscriptionRecord {
+    func savedTranscriptionVersions() throws -> [HistoryTranscriptionVersion] {
+        guard let transcriptionVersionsData else { return [] }
+        return try JSONDecoder().decode([HistoryTranscriptionVersion].self, from: transcriptionVersionsData)
+    }
+}

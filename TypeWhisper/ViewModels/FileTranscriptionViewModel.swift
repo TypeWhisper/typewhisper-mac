@@ -380,6 +380,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     private func transcribe(retryingFailed: Bool) {
+        guard HistoryRetranscriptionActivity.recordID == nil else { return }
         guard canTranscribe else { return }
 
         activeBatchTask?.cancel()

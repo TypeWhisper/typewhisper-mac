@@ -177,6 +177,7 @@ final class HistoryService: ObservableObject {
     private let eventEmitter: @MainActor (TypeWhisperEvent) -> Void
     private let historySyncPreferences: HistorySyncPreferences?
     private let speakerNameWriter: @MainActor (ModelContext) throws -> Void
+    private let versionWriter: @MainActor (ModelContext) throws -> Void
 
     private(set) var totalRecords: Int = 0
 
@@ -199,12 +200,14 @@ final class HistoryService: ObservableObject {
         eventEmitter: @escaping @MainActor (TypeWhisperEvent) -> Void = { event in
             EventBus.shared?.emit(event)
         },
-        speakerNameWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
+        speakerNameWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() },
+        versionWriter: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         let storeDir = appSupportDirectory
         self.eventEmitter = eventEmitter
         self.historySyncPreferences = historySyncPreferences
         self.speakerNameWriter = speakerNameWriter
+        self.versionWriter = versionWriter
 
         let audioDir = storeDir.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -1247,7 +1250,8 @@ final class HistoryService: ObservableObject {
                 engineDisplayName: record.engineUsed,
                 modelDisplayName: record.modelUsed,
                 processingFailureCategory: record.processingFailureCategory,
-                processingFailureMessage: record.processingFailureMessage
+                processingFailureMessage: record.processingFailureMessage,
+                alignmentResetAt: record.transcriptionAlignmentResetAt
             )
             let inbox = UserDataSyncHistoryInboxV1(
                 recordID: record.id,
@@ -1328,6 +1332,20 @@ final class HistoryService: ObservableObject {
                     record.contentUpdatedAt,
                     fallback: record.timestamp
                 ) else { continue }
+                if let reset = content.alignmentResetAt,
+                   reset > (record.transcriptionAlignmentResetAt ?? .distantPast) {
+                    record.speakerTranscriptData = nil
+                    record.speakerTranscriptStateRaw = nil
+                    record.speakerNamesData = nil
+                    record.timedTextData = nil
+                    record.timedTextGranularityRaw = nil
+                    record.speakerWordsData = nil
+                    record.speakerWordsAreFromSecondPass = nil
+                    record.speakerOwnSpeechData = nil
+                    record.transcriptionAlignmentResetAt = reset
+                    record.speakerTranscriptUpdatedAt = max(record.speakerTranscriptUpdatedAt, reset)
+                    record.speakerNamesUpdatedAt = max(record.speakerNamesUpdatedAt, reset)
+                }
                 record.timestamp = content.createdAt
                 record.rawText = content.rawTranscript
                 record.finalText = content.finalText
@@ -1697,6 +1715,101 @@ final class HistoryService: ObservableObject {
         } catch {
             logger.error("Save failed: \(error.localizedDescription)")
         }
+    }
+
+    // MARK: - Local transcription comparisons
+
+    func appendTranscriptionVersion(
+        _ version: HistoryTranscriptionVersion, to record: TranscriptionRecord,
+        expected: HistoryTranscriptionVersion
+    ) throws {
+        guard self.record(withID: record.id) === record, !record.isDeleted,
+              HistoryTranscriptionVersion.capture(record) == expected else {
+            throw HistoryRetranscriptionError.changed
+        }
+        guard !Self.sanitize(version.rawText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !Self.sanitize(version.finalText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw HistoryRetranscriptionError.emptyResult
+        }
+        var versions = try record.savedTranscriptionVersions()
+        guard !versions.contains(where: { $0.id == version.id }), version.id != record.id else {
+            throw HistoryRetranscriptionError.invalidVersion
+        }
+        if versions.isEmpty { versions.append(expected) }
+        versions.append(version)
+        let oldData = record.transcriptionVersionsData
+        record.transcriptionVersionsData = try JSONEncoder().encode(versions)
+        do { try versionWriter(modelContext) }
+        catch {
+            record.transcriptionVersionsData = oldData
+            throw error
+        }
+        // No content timestamp, statistics, correction learning or action-plugin event.
+        refreshRecentRecords()
+    }
+
+    func promoteTranscriptionVersion(_ id: UUID, in record: TranscriptionRecord) throws {
+        guard self.record(withID: record.id) === record, !record.isDeleted else {
+            throw HistoryRetranscriptionError.changed
+        }
+        var versions = try record.savedTranscriptionVersions()
+        guard let version = versions.first(where: { $0.id == id }) else {
+            throw HistoryRetranscriptionError.invalidVersion
+        }
+        let original = HistoryTranscriptionVersion.capture(record)
+        let oldData = record.transcriptionVersionsData
+        let oldID = record.activeTranscriptionVersionID
+        let oldDates = (record.contentUpdatedAt, record.speakerTranscriptUpdatedAt, record.speakerNamesUpdatedAt)
+        let oldWordsCount = record.wordsCount
+        let oldAlignmentReset = record.transcriptionAlignmentResetAt
+        // Preserve manual edits or a newer synchronized result before replacing the active text.
+        if !versions.contains(where: { $0.matchesContent(of: record) }) {
+            var edited = original
+            edited.id = UUID()
+            edited.createdAt = record.contentUpdatedAt
+            versions.append(edited)
+        }
+        try onSpeakerNamesWillChange?(record)
+        record.transcriptionVersionsData = try JSONEncoder().encode(versions)
+        version.apply(to: record)
+        record.activeTranscriptionVersionID = id
+        record.wordsCount = version.finalText.split(whereSeparator: \.isWhitespace).count
+        let now = Date()
+        record.contentUpdatedAt = now
+        record.speakerTranscriptUpdatedAt = now
+        record.speakerNamesUpdatedAt = now
+        record.transcriptionAlignmentResetAt = now
+        do { try versionWriter(modelContext) }
+        catch {
+            original.apply(to: record)
+            record.transcriptionVersionsData = oldData
+            record.activeTranscriptionVersionID = oldID
+            record.wordsCount = oldWordsCount
+            record.transcriptionAlignmentResetAt = oldAlignmentReset
+            (record.contentUpdatedAt, record.speakerTranscriptUpdatedAt, record.speakerNamesUpdatedAt) = oldDates
+            throw error
+        }
+        refreshRecentRecords()
+    }
+
+    func discardTranscriptionVersion(_ id: UUID, in record: TranscriptionRecord) throws {
+        guard self.record(withID: record.id) === record, !record.isDeleted else {
+            throw HistoryRetranscriptionError.changed
+        }
+        var versions = try record.savedTranscriptionVersions()
+        guard id != record.id, id != record.activeTranscriptionVersionID,
+              versions.contains(where: { $0.id == id }) else {
+            throw HistoryRetranscriptionError.invalidVersion
+        }
+        versions.removeAll { $0.id == id }
+        let oldData = record.transcriptionVersionsData
+        record.transcriptionVersionsData = try JSONEncoder().encode(versions)
+        do { try versionWriter(modelContext) }
+        catch {
+            record.transcriptionVersionsData = oldData
+            throw error
+        }
+        refreshRecentRecords()
     }
 
     // MARK: - Demo Data (DEBUG only)

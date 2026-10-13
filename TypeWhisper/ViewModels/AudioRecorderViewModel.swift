@@ -430,7 +430,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
     var canToggleRecording: Bool {
-        retranscribingRecordingURL == nil && Self.canToggleRecording(
+        HistoryRetranscriptionActivity.recordID == nil && retranscribingRecordingURL == nil && Self.canToggleRecording(
             state: state,
             micEnabled: micEnabled,
             systemAudioEnabled: systemAudioEnabled
@@ -715,7 +715,7 @@ final class AudioRecorderViewModel: ObservableObject {
         preferredBaseName: String?,
         transcriptMetadata: CalendarMeetingTranscriptMetadata?
     ) async throws -> URL {
-        guard retranscribingRecordingURL == nil else {
+        guard retranscribingRecordingURL == nil, HistoryRetranscriptionActivity.recordID == nil else {
             throw RecorderAPIError.retranscribing
         }
 
@@ -1205,6 +1205,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func canTranscribeRecording(_ item: RecordingItem) -> Bool {
+        guard HistoryRetranscriptionActivity.recordID == nil else { return false }
         guard state == .idle, retranscribingRecordingURL == nil else { return false }
         guard FileManager.default.fileExists(atPath: item.url.path) else { return false }
         guard let engine = resolvedEngine else { return false }

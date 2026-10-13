@@ -117,6 +117,7 @@ final class ServiceContainer: ObservableObject {
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
+    lazy var historyRetranscriptionService = HistoryRetranscriptionEnvironment.makeService(self)
     let profilesViewModel: ProfilesViewModel
     let dictionaryViewModel: DictionaryViewModel
     let snippetsViewModel: SnippetsViewModel

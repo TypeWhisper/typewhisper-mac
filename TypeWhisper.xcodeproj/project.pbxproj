@@ -653,6 +653,11 @@
 		3CDF1305CF9D40B5AA359371 /* CanaryPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */; };
 		D5B200000000000000000001 /* MicrophonePrerollRingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */; };
 		D5B200000000000000000003 /* MicrophonePrerollRingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */; };
+		A95AAF442CABF1B2C98CACB6 /* HistoryTranscriptionVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */; };
+		693A151E5633B308ABB32871 /* HistoryRetranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78CDA70A0951DD1C2575812 /* HistoryRetranscriptionService.swift */; };
+		EE93DC8E11070DD3985DE3A3 /* HistoryRetranscriptionEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56239FE87451CB56F7536BB /* HistoryRetranscriptionEnvironment.swift */; };
+		818D0DF1B1C225681D429646 /* HistoryRetranscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */; };
+		1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1376,6 +1381,11 @@
 		7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/CanaryPluginTests.swift; sourceTree = "<group>"; };
 		D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBuffer.swift; sourceTree = "<group>"; };
 		D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBufferTests.swift; sourceTree = "<group>"; };
+		FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryTranscriptionVersion.swift; sourceTree = "<group>"; };
+		F78CDA70A0951DD1C2575812 /* HistoryRetranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionService.swift; sourceTree = "<group>"; };
+		D56239FE87451CB56F7536BB /* HistoryRetranscriptionEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionEnvironment.swift; sourceTree = "<group>"; };
+		15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionView.swift; sourceTree = "<group>"; };
+		CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -2012,6 +2022,7 @@
 				BB00000000000000000331 /* PunctuationRules.swift */,
 				BB00000000000000000332 /* DictationRuntimeContext.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
+				FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */,
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
 				91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */,
@@ -2068,6 +2079,8 @@
 				22EA25CFE76E45EA9092FAAC /* SpeakerPlaybackController.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
 				BB00000000000000000061 /* HistoryService.swift */,
+				D56239FE87451CB56F7536BB /* HistoryRetranscriptionEnvironment.swift */,
+				F78CDA70A0951DD1C2575812 /* HistoryRetranscriptionService.swift */,
 				BB8390000000000000000003 /* UsageStatisticsService.swift */,
 				B91F00000000000000000002 /* RecentTranscriptionStore.swift */,
 				BB00000000000000000062 /* TextDiffService.swift */,
@@ -2220,6 +2233,7 @@
 				B40800000000000000000001 /* LanguageSelectionEditor.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
 				F83600000000000000000011 /* HistoryRecordViews.swift */,
+				15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */,
 				0980A016D4AD07DA3B801261 /* HistorySpeakerTranscriptView.swift */,
 				705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */,
 				7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */,
@@ -3122,6 +3136,7 @@
 				BB7E11000000000000000006 /* RemoteLinkTests.swift */,
 				BB7E11000000000000000008 /* TextProcessingAPITests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
+				CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */,
 				519F87550CCFA65F007A9B2B /* SpeakerAlignmentTests.swift */,
 				97070DFC6B00826CBA67BE25 /* SpeakerSyncHistoryTests.swift */,
 				6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */,
@@ -5097,6 +5112,7 @@
 				AA7E11000000000000000006 /* RemoteLinkTests.swift in Sources */,
 				AA7E11000000000000000008 /* TextProcessingAPITests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
+				1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */,
 				E04F3BC001E2391E6C2C130F /* SpeakerAlignmentTests.swift in Sources */,
 				343490F99337D2835B2C2CE0 /* SpeakerSyncHistoryTests.swift in Sources */,
 				B6C2E690A4C76857A9A8CD73 /* VoiceProfileTests.swift in Sources */,
@@ -5272,11 +5288,14 @@
 				AA000000000000000A1236F2 /* AppearanceSettingsView.swift in Sources */,
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,
 				AA00000000000000000060 /* TranscriptionRecord.swift in Sources */,
+				A95AAF442CABF1B2C98CACB6 /* HistoryTranscriptionVersion.swift in Sources */,
 				AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */,
 				AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */,
 				3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */,
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
+				EE93DC8E11070DD3985DE3A3 /* HistoryRetranscriptionEnvironment.swift in Sources */,
+				693A151E5633B308ABB32871 /* HistoryRetranscriptionService.swift in Sources */,
 				AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */,
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
 				AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */,
@@ -5284,6 +5303,7 @@
 				0477459F88CA41D4012CD400 /* SpeakerWorkspaceModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
 				F83600000000000000000001 /* HistoryRecordViews.swift in Sources */,
+				818D0DF1B1C225681D429646 /* HistoryRetranscriptionView.swift in Sources */,
 				97E6ED5123DAF6D67299A03C /* HistorySpeakerTranscriptView.swift in Sources */,
 				09720EF3F2B66441E50D5C57 /* SpeakerWorkspaceView.swift in Sources */,
 				2B115FBD9FDCCE5988E3DEF0 /* SpeakerDetectionToggle.swift in Sources */,

@@ -521,6 +521,11 @@ final class HistoryViewModel: ObservableObject {
         loadDraftForCurrentSelection(force: true)
     }
 
+    func reloadAfterTranscriptionComparison() {
+        loadDraftForCurrentSelection(force: true)
+        reloadCurrentQuery()
+    }
+
     @discardableResult
     func saveEditing() -> Bool {
         guard let record = selectedRecord, canSaveDraft else { return false }

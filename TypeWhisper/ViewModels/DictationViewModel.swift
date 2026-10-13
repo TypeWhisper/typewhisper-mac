@@ -1007,7 +1007,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canStartAPIRecording: Bool {
-        state == .idle || canReplaceUndeliveredTranscriptOffer
+        HistoryRetranscriptionActivity.recordID == nil && (state == .idle || canReplaceUndeliveredTranscriptOffer)
     }
 
     /// The Insert offer stays up for a while, so a new dictation replaces it, as the dictation
@@ -1847,6 +1847,11 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
+        guard HistoryRetranscriptionActivity.recordID == nil else {
+            hotkeyService.cancelDictation()
+            showNotchFeedback(message: HistoryRetranscriptionError.busy.localizedDescription, icon: "hourglass", duration: 2)
+            return
+        }
         guard state == .idle else {
             logger.warning("startRecording rejected: state=\(String(describing: self.state), privacy: .public); resetting hotkey state")
             hotkeyService.cancelDictation()
