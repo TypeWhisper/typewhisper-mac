@@ -112,6 +112,8 @@ final class RecentTranscriptionPaletteHandler {
                     false,
                     nil
                 )
+            } else if result.hasUnverifiableUnchangedField {
+                onShowNotchFeedback?(String(localized: "Paste requested"), "arrow.right", 2.5, false, nil)
             } else {
                 onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
             }

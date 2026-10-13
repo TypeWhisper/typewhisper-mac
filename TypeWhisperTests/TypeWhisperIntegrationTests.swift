@@ -6415,15 +6415,162 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebTerminalPasteDoesNotReportUnchangedInputProxyAsMissedTextField() async throws {
+        // Solo's WKWebView consumes the paste, but its AXTextArea retains value="" and range=0.
+        // Include an intermediate group: the web area is not necessarily the immediate parent.
+        for (awaitsVerification, autoEnter) in [(false, false), (true, false), (false, true)] {
+            let service = TextInsertionService()
+            let pasteboard = NSPasteboard.withUniqueName()
+            let field = AXUIElementCreateApplication(1)
+            let group = AXUIElementCreateApplication(2)
+            let webArea = AXUIElementCreateApplication(3)
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Unknown web host", "com.example.webhost", nil) }
+            service.focusedTextElementOverride = { field }
+            var pastedText: String?
+            service.accessibilityRoleOverride = {
+                XCTAssertNotNil(pastedText, "Web ancestry must not delay the paste")
+                return $0 == webArea ? "AXWebArea" : ($0 == field ? "AXTextArea" : "AXGroup")
+            }
+            service.accessibilityParentOverride = {
+                XCTAssertNotNil(pastedText, "Web ancestry must not delay the paste")
+                return $0 == field ? group : ($0 == group ? webArea : nil)
+            }
+            service.setMessagingTimeoutOverride = { element, _ in
+                XCTAssertNotEqual(element, field, "Ancestry lookup must not change the field's verification timeout")
+            }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.pasteSimulatorOverride = { pastedText = pasteboard.string(forType: .string) }
+            service.autoEnterDelay = .milliseconds(1)
+            var returnCount = 0
+            service.returnSimulatorOverride = { returnCount += 1 }
+
+            let result = try await service.insertText(
+                "Hello from dictation", autoEnter: autoEnter,
+                awaitPasteVerification: awaitsVerification, detectMissedTextField: true
+            )
+
+            XCTAssertEqual(pastedText, "Hello from dictation")
+            XCTAssertFalse(result.missedTextField)
+            XCTAssertEqual(result, .pasted(verification: .unverified(.webContentUnchanged)))
+            XCTAssertEqual(returnCount, autoEnter ? 1 : 0)
+        }
+    }
+
+    @MainActor
+    func testWebTextFieldStillVerifiesObservedPasteAndReportsNativeMisses() async throws {
+        for isWebField in [false, true] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(1)
+            let parent = AXUIElementCreateApplication(2)
+            let pasteboard = NSPasteboard.withUniqueName()
+            var value = "Before"
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            // A native field in a web-hosting app must still report a failed paste.
+            service.captureActiveAppOverride = { ("Solo", "com.soloterm.solo", nil) }
+            service.focusedTextElementOverride = { field }
+            service.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : (isWebField ? "AXWebArea" : "AXWindow") }
+            service.accessibilityParentOverride = { $0 == field ? parent : nil }
+            service.focusedTextStateOverride = { _ in
+                (value: value, selectedText: "", selectedRange: NSRange(location: value.count, length: 0))
+            }
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.pasteSimulatorOverride = {
+                if isWebField { value += "Hello" }
+            }
+
+            // Normal dictation does not explicitly await verification when correction learning is off.
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+            XCTAssertEqual(result.missedTextField, !isWebField)
+            XCTAssertEqual(result, .pasted(verification: isWebField ? .verified : .unverified(.focusedTextUnchanged)))
+            XCTAssertEqual(service.lastInsertionTiming?.verifiedUptimeNanoseconds != nil, isWebField)
+        }
+    }
+
+    @MainActor
+    func testFocusedWebAreaDoesNotSuppressMissedPasteWarning() async throws {
+        let service = TextInsertionService()
+        let webArea = AXUIElementCreateApplication(1)
+        let window = AXUIElementCreateApplication(2)
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Web host", "com.example.webhost", nil) }
+        service.focusedTextElementOverride = { webArea }
+        service.accessibilityRoleOverride = { $0 == webArea ? "AXWebArea" : "AXWindow" }
+        service.accessibilityParentOverride = { $0 == webArea ? window : nil }
+        service.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: "", selectedRange: nil)
+        }
+        service.pasteVerificationAttempts = 0
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
+        XCTAssertTrue(result.missedTextField)
+    }
+
+    @MainActor
+    func testUnchangedPasteWithIncompleteAncestryDoesNotReportMissedField() async throws {
+        for scenario in ["missingParent", "unreadableRole", "cycle", "depthLimit"] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(100)
+            let ancestors = (101...118).map { AXUIElementCreateApplication(pid_t($0)) }
+            let pasteboard = NSPasteboard.withUniqueName()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Web host", "com.example.webhost", nil) }
+            service.focusedTextElementOverride = { field }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            service.accessibilityRoleOverride = { element in
+                if scenario == "unreadableRole" { return nil }
+                return element == ancestors.last ? "AXWebArea" : "AXGroup"
+            }
+            var parentReadCount = 0
+            service.accessibilityParentOverride = { element in
+                parentReadCount += 1
+                if scenario == "missingParent" { return nil }
+                if scenario == "cycle" { return field }
+                if element == field { return ancestors[0] }
+                guard let index = ancestors.firstIndex(of: element), index + 1 < ancestors.count else { return nil }
+                return ancestors[index + 1]
+            }
+            service.setMessagingTimeoutOverride = { _, _ in }
+            service.pasteVerificationAttempts = 0
+            service.pasteSimulatorOverride = {}
+
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+            XCTAssertFalse(result.missedTextField, scenario)
+            XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextAncestryUnavailable)), scenario)
+            XCTAssertLessThanOrEqual(parentReadCount, 17, scenario)
+        }
+    }
+
+    @MainActor
     func testDetectMissedTextFieldReportsReadableFieldThatStayedUnchanged() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
+        let window = AXUIElementCreateApplication(1)
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.pasteVerificationAttempts = 1
         service.pasteVerificationPollingDelay = .milliseconds(1)
         service.focusedTextElementOverride = { element }
+        service.accessibilityRoleOverride = { _ in "AXWindow" }
+        service.accessibilityParentOverride = { $0 == element ? window : nil }
         service.focusedTextStateOverride = { _ in
             (value: "Before", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
         }
@@ -7023,9 +7170,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
+        let window = AXUIElementCreateApplication(1)
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.accessibilityRoleOverride = { _ in "AXWindow" }
+        service.accessibilityParentOverride = { $0 == element ? window : nil }
         service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.pasteVerificationAttempts = 0
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
@@ -8175,6 +8325,101 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
         XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
         XCTAssertFalse(context.dictationViewModel.actionFeedbackIsPaused)
+    }
+
+    @MainActor
+    func testStandaloneWorkflowFeedbackKeepsBusyUntilProcessingFinishes() async throws {
+        for scenario in ["success", "failure", "queuedDictation"] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+            let processingStarted = expectation(description: "Workflow started: \(scenario)")
+            let feedbackCompleted = expectation(description: "Workflow finished: \(scenario)")
+            let recordingStarted = scenario == "queuedDictation"
+                ? expectation(description: "Queued dictation started") : nil
+            let failure = NSError(domain: "WorkflowFeedbackTest", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Workflow failed"])
+            var context: DictationContext? = Self.makeDictationContext(
+                appSupportDirectory: directory,
+                workflowTextProcessingService: WorkflowTextProcessingService(
+                    promptProcessor: { _, _, _, _, _ in
+                        processingStarted.fulfill()
+                        var releases = release.makeAsyncIterator()
+                        _ = await releases.next()
+                        if scenario == "failure" { throw failure }
+                        return "Processed selection"
+                    },
+                    appleTranslator: nil
+                )
+            )
+            defer {
+                releaseContinuation.finish()
+                context = nil
+                TestSupport.remove(directory)
+            }
+            let services = try XCTUnwrap(context)
+            let viewModel = services.dictationViewModel
+            let selectedElement = AXUIElementCreateSystemWide()
+            services.textInsertionService.accessibilityGrantedOverride = true
+            services.textInsertionService.captureActiveAppOverride = { ("Test editor", nil, nil) }
+            services.textInsertionService.textSelectionOverride = {
+                TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
+            }
+            var events: [String] = []
+            services.textInsertionService.insertTextAtOverride = { _, text in
+                XCTAssertEqual(text, "Processed selection")
+                events.append("workflow_insert")
+                return true
+            }
+            services.audioRecordingService.hasMicrophonePermissionOverride = true
+            services.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            services.audioRecordingService.startRecordingOverride = {
+                events.append("recording_start")
+                recordingStarted?.fulfill()
+            }
+            let workflow = try XCTUnwrap(services.workflowService.addWorkflow(
+                name: "Delayed workflow", template: .summary, trigger: .manual()
+            ))
+            let completedMessage = scenario == "failure" ? failure.localizedDescription
+                : try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text replaced")
+            let feedbackSubscription = viewModel.$actionFeedbackMessage
+                .first { $0 == completedMessage }
+                .sink { _ in feedbackCompleted.fulfill() }
+            defer { feedbackSubscription.cancel() }
+
+            viewModel.processWorkflowHotkeyText(workflowId: workflow.id)
+            await fulfillment(of: [processingStarted], timeout: 2)
+            XCTAssertEqual(viewModel.state, .inserting, scenario)
+            XCTAssertEqual(viewModel.actionFeedbackRemainingFraction, 0, scenario)
+            XCTAssertFalse(viewModel.canDismissActionFeedback, scenario)
+
+            viewModel.dismissActionFeedback()
+            XCTAssertEqual(viewModel.state, .inserting, scenario)
+            XCTAssertEqual(viewModel.actionFeedbackMessage, "Delayed workflow...", scenario)
+            if scenario == "queuedDictation" {
+                services.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+                for _ in 0..<10 { await Task.yield() }
+                XCTAssertEqual(viewModel.state, .inserting, scenario)
+            }
+            XCTAssertTrue(events.isEmpty, scenario)
+
+            releaseContinuation.yield()
+            await fulfillment(of: [feedbackCompleted], timeout: 2)
+            if let recordingStarted {
+                await fulfillment(of: [recordingStarted], timeout: 2)
+                await viewModel.testingWaitForRecordingStart()
+                XCTAssertEqual(events, ["workflow_insert", "recording_start"])
+                XCTAssertEqual(viewModel.state, .recording)
+                XCTAssertNil(viewModel.actionFeedbackMessage)
+            } else {
+                XCTAssertEqual(events, scenario == "failure" ? [] : ["workflow_insert"], scenario)
+                XCTAssertEqual(viewModel.actionFeedbackMessage, completedMessage, scenario)
+                XCTAssertEqual(viewModel.actionFeedbackIsError, scenario == "failure", scenario)
+                XCTAssertTrue(viewModel.canDismissActionFeedback, scenario)
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .idle, scenario)
+                XCTAssertNil(viewModel.actionFeedbackMessage, scenario)
+            }
+        }
     }
 
     @MainActor
@@ -9656,11 +9901,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    private func assertRawRestoreWaitsForDeferredPersistence(historyEnabled: Bool) async throws {
+    func testWebPasteRecordsUndoSnapshotWithoutCorrectionLearning() async throws {
+        try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true, usesWebPaste: true)
+    }
+
+    @MainActor
+    private func assertRawRestoreWaitsForDeferredPersistence(
+        historyEnabled: Bool,
+        usesWebPaste: Bool = false
+    ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let defaults = UserDefaults.standard
         let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
-                    UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard]
+                    UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard,
+                    UserDefaultsKeys.targetAppCorrectionLearningEnabled,
+                    UserDefaultsKeys.improveTypeWhisperCaptureEnabled]
         let originals = keys.map { defaults.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
@@ -9670,6 +9925,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         defaults.set(historyEnabled, forKey: UserDefaultsKeys.historyEnabled)
         defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
         defaults.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        defaults.set(false, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        defaults.set(false, forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
         MockTranscriptionPlugin.reset()
         let raw = "  hello world \n"
         MockTranscriptionPlugin.setResponseText(raw)
@@ -9682,7 +9939,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             return BrowserResolution(url: URL(string: "https://example.com/undo-test"), title: nil)
         }
         let context = Self.makeDictationContext(appSupportDirectory: directory, browserURLResolver: resolver)
-        context.dictationViewModel.preserveClipboard = true
+        context.dictationViewModel.preserveClipboard = !usesWebPaste
         defer { context.dictationViewModel.flushPendingPostInsertionPersistence() }
         context.dictionaryService.addEntry(type: .correction, original: "hello", replacement: "Processed greeting")
         let insertion = context.textInsertionService
@@ -9704,6 +9961,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             value = (value as NSString).replacingCharacters(in: selection, with: text)
             selection = NSRange(location: selection.location + (text as NSString).length, length: 0)
             return true
+        }
+        if usesWebPaste {
+            let webArea = AXUIElementCreateApplication(1235)
+            insertion.accessibilityRoleOverride = { $0 == element ? "AXTextArea" : "AXWebArea" }
+            insertion.accessibilityParentOverride = { $0 == element ? webArea : nil }
+            insertion.pasteVerificationPollingDelay = .milliseconds(1)
+            insertion.pasteSimulatorOverride = {
+                value = pasteboard.string(forType: .string) ?? ""
+                selection = NSRange(location: (value as NSString).length, length: 0)
+            }
         }
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
@@ -10784,6 +11051,104 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
         // The verified Insert counts as the dictation's successful insertion.
         XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+    }
+
+    @MainActor
+    func testMissedTextFieldFeedbackSupportsDismissAndUnverifiedRetry() async throws {
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled,
+                    UserDefaultsKeys.historyEnabled]
+        let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer {
+            for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
+        }
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historyEnabled)
+
+        for scenario in ["dismiss", "webRetry", "unknownRetry"] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            var dictationContext: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
+            defer {
+                dictationContext = nil
+                TestSupport.remove(directory)
+            }
+            let context = try XCTUnwrap(dictationContext)
+            let viewModel = context.dictationViewModel
+            viewModel.preserveClipboard = false
+            viewModel.soundFeedbackEnabled = false
+            viewModel.spokenFeedbackEnabled = false
+            let pasteboard = NSPasteboard.withUniqueName()
+            let field = AXUIElementCreateApplication(1)
+            let webArea = AXUIElementCreateApplication(2)
+            var isTextFieldFocused = false
+            var pastedTexts: [String] = []
+            context.textInsertionService.pasteboardProvider = { pasteboard }
+            context.textInsertionService.captureActiveAppOverride = { ("Test editor", "com.example.editor", nil) }
+            context.textInsertionService.accessibilityGrantedOverride = true
+            context.textInsertionService.selectedTextOverride = { nil }
+            context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
+            context.textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
+            context.textInsertionService.focusedTextElementOverride = { isTextFieldFocused ? field : nil }
+            context.textInsertionService.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : "AXWebArea" }
+            context.textInsertionService.accessibilityParentOverride = {
+                scenario != "unknownRetry" && $0 == field ? webArea : nil
+            }
+            context.textInsertionService.setMessagingTimeoutOverride = { _, _ in }
+            context.textInsertionService.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            context.textInsertionService.pasteSimulatorOverride = {
+                pastedTexts.append(pasteboard.string(forType: .string) ?? "")
+            }
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {}
+            context.audioRecordingService.stopRecordingOverride = { _ in
+                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+            }
+            let sessionID = viewModel.apiStartRecording()
+            await viewModel.testingWaitForRecordingStart()
+            _ = viewModel.apiStopRecording()
+            for _ in 0..<80 {
+                if viewModel.apiDictationSession(id: sessionID)?.status == .completed,
+                   context.historyService.recentRecords.first != nil { break }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            XCTAssertEqual(viewModel.apiDictationSession(id: sessionID)?.status, .completed, scenario)
+            XCTAssertEqual(pastedTexts, ["transcribed"], scenario)
+            XCTAssertNil(viewModel.lastSuccessfulDictationInsertion, scenario)
+            XCTAssertEqual(context.historyService.recentRecords.first?.finalText, "transcribed", scenario)
+            XCTAssertEqual(context.recentTranscriptionStore.latestEntry(
+                historyRecords: context.historyService.recentRecords)?.finalText, "transcribed", scenario)
+
+            if scenario == "dismiss" {
+                XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
+                viewModel.setActionFeedbackHovered(true)
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .idle)
+                XCTAssertNil(viewModel.actionFeedbackMessage)
+                XCTAssertNil(viewModel.actionFeedbackActionTitle)
+                XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+            } else {
+                isTextFieldFocused = true
+                viewModel.performActionFeedbackAction()
+                // Dismiss cannot release the indicator while Insert still owns the clipboard.
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .inserting)
+                XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
+                let requestedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Paste requested")
+                for _ in 0..<80 {
+                    if viewModel.actionFeedbackMessage == requestedMessage { break }
+                    try await Task.sleep(for: .milliseconds(25))
+                }
+                XCTAssertEqual(pastedTexts, ["transcribed", "transcribed"])
+                XCTAssertEqual(viewModel.actionFeedbackMessage, requestedMessage)
+                XCTAssertEqual(viewModel.actionFeedbackIcon, "arrow.right")
+                XCTAssertFalse(viewModel.actionFeedbackIsError)
+                XCTAssertNil(viewModel.actionFeedbackActionTitle)
+                XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+            }
+        }
     }
 
     @MainActor
@@ -13927,6 +14292,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioRecordingInputActivator: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
         licenseService: LicenseService? = nil,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         transcriptionDeadline: TimeInterval? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
@@ -14050,6 +14416,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
+            workflowTextProcessingService: workflowTextProcessingService,
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),

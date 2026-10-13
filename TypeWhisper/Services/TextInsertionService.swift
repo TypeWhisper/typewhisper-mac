@@ -203,6 +203,8 @@ final class TextInsertionService {
     var focusedTextElementOverride: (() -> AXUIElement?)?
     /// Whether the app behind a nil `focusedTextElementOverride` hides its focused element.
     var focusedElementHiddenOverride: (() -> Bool)?
+    var accessibilityRoleOverride: ((AXUIElement) -> String?)?
+    var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
@@ -294,10 +296,16 @@ final class TextInsertionService {
         case copiedToClipboard
 #endif
 
-        /// The focused field was readable and still unchanged after the paste. Unreadable fields
-        /// (common in Electron apps) do not count, so they never produce a false failure.
+        /// A readable native field stayed unchanged. Web input proxies may consume a paste
+        /// without retaining its text, so their unchanged state does not prove a failure.
         var leftFocusedTextUnchanged: Bool {
             self == .pasted(verification: .unverified(.focusedTextUnchanged))
+        }
+
+        /// An unchanged web or unidentified field cannot confirm whether it consumed the paste.
+        var hasUnverifiableUnchangedField: Bool {
+            self == .pasted(verification: .unverified(.webContentUnchanged))
+                || self == .pasted(verification: .unverified(.focusedTextAncestryUnavailable))
         }
 
         /// The paste reached no text field: none was focused, or the focused field was readable
@@ -328,7 +336,11 @@ final class TextInsertionService {
     enum PasteVerificationFailure: String, Equatable {
         /// A text element was focused, but its text could not be read.
         case focusedTextStateUnavailable = "focused-text-state-unavailable"
+        /// The field is readable, but its AX ancestry cannot establish whether it is a web input.
+        case focusedTextAncestryUnavailable = "focused-text-ancestry-unavailable"
         case focusedTextUnchanged = "focused-text-unchanged"
+        /// Web editors and terminal input proxies can consume a paste without retaining it here.
+        case webContentUnchanged = "web-content-unchanged"
         /// Accessibility could inspect the focused app, and no text element was focused.
         case noFocusedTextElement = "no-focused-text-element"
     }
@@ -472,8 +484,9 @@ final class TextInsertionService {
         /// hid its focused element.
         fileprivate let noTextElementFocused: Bool
 
-        /// Whether verification can show that the paste missed. Unreadable fields never can.
-        var canDetectMissedTextField: Bool {
+        /// Readable fields can confirm a paste even when an unchanged value cannot prove a miss.
+        /// Keep awaiting that positive evidence so callers can safely record undo snapshots.
+        var canVerifyPaste: Bool {
             focusedTextState.map(\.hasReadableText) ?? noTextElementFocused
         }
     }
@@ -1270,7 +1283,7 @@ final class TextInsertionService {
     ///
     /// A synthetic paste only waits for paste verification when the caller needs the paste to
     /// land before this returns (`autoEnter`, `awaitPasteVerification`), or when
-    /// `detectMissedTextField` asks for it and verification can show a miss (see
+    /// `detectMissedTextField` asks for it and the field is readable or known to be absent (see
     /// `InsertionResult.missedTextField`). With `preserveClipboard`, the clipboard restore runs
     /// afterwards and only while the clipboard still holds the generated payload.
     func insertText(
@@ -1350,7 +1363,7 @@ final class TextInsertionService {
             ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
-            || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
+            || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)
         let initialChangeCount = pasteboard.changeCount
 
         // Set transcribed text on clipboard and simulate Cmd+V.
@@ -1475,7 +1488,16 @@ final class TextInsertionService {
               currentState.keepsReadableText(of: initialState) else {
             return .unverified(.focusedTextStateUnavailable)
         }
-        return .unverified(.focusedTextUnchanged)
+        // Classify only unchanged fields, after the paste and positive verification attempts.
+        // Web input proxies can consume the paste without exposing a text or selection change.
+        switch textFieldAncestry(of: initialState.element) {
+        case .web:
+            return .unverified(.webContentUnchanged)
+        case .unknown:
+            return .unverified(.focusedTextAncestryUnavailable)
+        case .native:
+            return .unverified(.focusedTextUnchanged)
+        }
     }
 
     private func logPasteVerification(_ verification: PasteVerification, bundleId: String?) {
@@ -2378,6 +2400,33 @@ final class TextInsertionService {
         }
         return ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
             .contains(role)
+    }
+
+    private enum TextFieldAncestry {
+        case web
+        case native
+        case unknown
+    }
+
+    /// Web terminals can consume a paste without exposing a text change. A failed or incomplete
+    /// walk cannot rule out such an input. A focused web area alone does not establish one.
+    private func textFieldAncestry(of element: AXUIElement) -> TextFieldAncestry {
+        var ancestor = accessibilityParentOverride.map { $0(element) }
+            ?? axElementAttribute(kAXParentAttribute as CFString, from: element)
+        var visited: Set<AXUIElement> = [element]
+        for _ in 0..<16 {
+            guard let current = ancestor else { return .unknown }
+            guard visited.insert(current).inserted else { return .unknown }
+            // These are separate parent references; do not shorten the captured field's timeout.
+            applyMessagingTimeout(Self.liveFieldMessagingTimeout, to: current)
+            guard let role = accessibilityRoleOverride.map({ $0(current) })
+                ?? stringAttribute(kAXRoleAttribute as CFString, from: current) else { return .unknown }
+            if role == "AXWebArea" { return .web }
+            if role == "AXWindow" || role == "AXApplication" { return .native }
+            ancestor = accessibilityParentOverride.map { $0(current) }
+                ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
+        }
+        return .unknown
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {

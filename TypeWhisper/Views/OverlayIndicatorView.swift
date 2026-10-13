@@ -229,7 +229,7 @@ struct OverlayIndicatorView: View {
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
         .accessibilityElement(
             children: countdownPresentation != nil
-                || presentation.actionFeedbackActionTitle != nil ? .contain : .combine
+                || presentation.actionFeedbackMessage != nil ? .contain : .combine
         )
         .accessibilityLabel(accessibilityLabel)
     }
@@ -304,6 +304,8 @@ struct OverlayIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
+                    onDismiss: !presentation.isRecorder && viewModel.canDismissActionFeedback
+                        ? { viewModel.dismissActionFeedback() } : nil,
                     remainingFraction: presentation.actionFeedbackRemainingFraction,
                     bodyHeight: actionFeedbackBody.height,
                     lineLimit: actionFeedbackBody.lineLimit
@@ -325,6 +327,8 @@ struct OverlayIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
+                    onDismiss: !presentation.isRecorder && viewModel.canDismissActionFeedback
+                        ? { viewModel.dismissActionFeedback() } : nil,
                     remainingFraction: presentation.actionFeedbackRemainingFraction,
                     bodyHeight: actionFeedbackBody.height,
                     lineLimit: actionFeedbackBody.lineLimit
