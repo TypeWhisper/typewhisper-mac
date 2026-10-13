@@ -83,7 +83,7 @@ enum HistoryRetranscriptionEnvironment {
                     effortOverride: copy.behavior.effortId
                 )
                 guard let first = route.attempts.first,
-                      let provider = PluginManager.shared?.llmProvider(for: first.providerId), provider.isAvailable else {
+                      promptProcessing.isProviderReady(first.providerId) else {
                     throw HistoryRetranscriptionError.unavailable
                 }
                 // A comparison uses the displayed provider, never an undisclosed cloud fallback.
@@ -92,7 +92,9 @@ enum HistoryRetranscriptionEnvironment {
                 behavior.cloudModel = first.modelId
                 behavior.effortId = first.effortId
                 copy.behavior = behavior
-                if !PromptProcessingService.isLocalLLMProvider(provider) {
+                if first.providerId != PromptProcessingService.appleIntelligenceId,
+                   let provider = PluginManager.shared?.llmProvider(for: first.providerId),
+                   !PromptProcessingService.isLocalLLMProvider(provider) {
                     cloudProviders.append(String(format: String(localized: "history.retranscribe.textProvider"), provider.llmProviderDisplayName))
                 }
             }

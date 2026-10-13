@@ -711,6 +711,36 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(version.finalText, "cleaned test")
     }
 
+    func testAppleIntelligenceWorkflowUsesBuiltInProviderWithoutCloudConsentAndRejectsUnavailability() async throws {
+        guard #available(macOS 26, *) else { throw XCTSkip("Apple Intelligence requires macOS 26") }
+        let engine = HistoryComparisonRestoreEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        environment.promptProcessing.testingSetAppleIntelligenceProvider(HistoryComparisonAppleIntelligence())
+        let workflow = Workflow(
+            name: "Apple Cleanup", template: .cleanedText, trigger: WorkflowTrigger(kind: .manual),
+            behavior: WorkflowBehavior(providerId: PromptProcessingService.appleIntelligenceId)
+        )
+        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, workflowID: workflow.id)
+        XCTAssertNil(PluginManager.shared.llmProvider(for: PromptProcessingService.appleIntelligenceId))
+        let plan = try HistoryRetranscriptionEnvironment.plan(
+            request, manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [workflow], promptProcessing: environment.promptProcessing
+        )
+        XCTAssertFalse(plan.requiresCloudConfirmation)
+        XCTAssertTrue(plan.cloudProviders.isEmpty)
+        let version = try await plan.run([0.1, -0.1])
+        XCTAssertEqual(version.finalText, "Apple-cleaned result")
+        XCTAssertEqual(version.workflowID, workflow.id)
+
+        environment.promptProcessing.testingSetAppleIntelligenceProvider(nil)
+        XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+            request, manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [workflow], promptProcessing: environment.promptProcessing
+        )) {
+            XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
+        }
+    }
+
     private func makeEnvironment(plugins: [any TypeWhisperPlugin]) throws -> (
         manager: ModelManagerService, dictionary: DictionaryService, promptProcessing: PromptProcessingService
     ) {
@@ -825,4 +855,9 @@ private final class HistoryComparisonLLM: LLMProviderPlugin, @unchecked Sendable
         lock.withLock { self.systemPrompt = systemPrompt }
         return "cleaned test"
     }
+}
+
+private struct HistoryComparisonAppleIntelligence: LLMProvider {
+    var isAvailable: Bool { true }
+    func process(systemPrompt: String, userText: String) async throws -> String { "Apple-cleaned result" }
 }
