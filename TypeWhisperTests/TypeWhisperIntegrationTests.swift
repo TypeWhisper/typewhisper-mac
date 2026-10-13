@@ -8328,6 +8328,101 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testStandaloneWorkflowFeedbackKeepsBusyUntilProcessingFinishes() async throws {
+        for scenario in ["success", "failure", "queuedDictation"] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+            let processingStarted = expectation(description: "Workflow started: \(scenario)")
+            let feedbackCompleted = expectation(description: "Workflow finished: \(scenario)")
+            let recordingStarted = scenario == "queuedDictation"
+                ? expectation(description: "Queued dictation started") : nil
+            let failure = NSError(domain: "WorkflowFeedbackTest", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Workflow failed"])
+            var context: DictationContext? = Self.makeDictationContext(
+                appSupportDirectory: directory,
+                workflowTextProcessingService: WorkflowTextProcessingService(
+                    promptProcessor: { _, _, _, _, _ in
+                        processingStarted.fulfill()
+                        var releases = release.makeAsyncIterator()
+                        _ = await releases.next()
+                        if scenario == "failure" { throw failure }
+                        return "Processed selection"
+                    },
+                    appleTranslator: nil
+                )
+            )
+            defer {
+                releaseContinuation.finish()
+                context = nil
+                TestSupport.remove(directory)
+            }
+            let services = try XCTUnwrap(context)
+            let viewModel = services.dictationViewModel
+            let selectedElement = AXUIElementCreateSystemWide()
+            services.textInsertionService.accessibilityGrantedOverride = true
+            services.textInsertionService.captureActiveAppOverride = { ("Test editor", nil, nil) }
+            services.textInsertionService.textSelectionOverride = {
+                TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
+            }
+            var events: [String] = []
+            services.textInsertionService.insertTextAtOverride = { _, text in
+                XCTAssertEqual(text, "Processed selection")
+                events.append("workflow_insert")
+                return true
+            }
+            services.audioRecordingService.hasMicrophonePermissionOverride = true
+            services.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            services.audioRecordingService.startRecordingOverride = {
+                events.append("recording_start")
+                recordingStarted?.fulfill()
+            }
+            let workflow = try XCTUnwrap(services.workflowService.addWorkflow(
+                name: "Delayed workflow", template: .summary, trigger: .manual()
+            ))
+            let completedMessage = scenario == "failure" ? failure.localizedDescription
+                : try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text replaced")
+            let feedbackSubscription = viewModel.$actionFeedbackMessage
+                .first { $0 == completedMessage }
+                .sink { _ in feedbackCompleted.fulfill() }
+            defer { feedbackSubscription.cancel() }
+
+            viewModel.processWorkflowHotkeyText(workflowId: workflow.id)
+            await fulfillment(of: [processingStarted], timeout: 2)
+            XCTAssertEqual(viewModel.state, .inserting, scenario)
+            XCTAssertEqual(viewModel.actionFeedbackRemainingFraction, 0, scenario)
+            XCTAssertFalse(viewModel.canDismissActionFeedback, scenario)
+
+            viewModel.dismissActionFeedback()
+            XCTAssertEqual(viewModel.state, .inserting, scenario)
+            XCTAssertEqual(viewModel.actionFeedbackMessage, "Delayed workflow...", scenario)
+            if scenario == "queuedDictation" {
+                services.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+                for _ in 0..<10 { await Task.yield() }
+                XCTAssertEqual(viewModel.state, .inserting, scenario)
+            }
+            XCTAssertTrue(events.isEmpty, scenario)
+
+            releaseContinuation.yield()
+            await fulfillment(of: [feedbackCompleted], timeout: 2)
+            if let recordingStarted {
+                await fulfillment(of: [recordingStarted], timeout: 2)
+                await viewModel.testingWaitForRecordingStart()
+                XCTAssertEqual(events, ["workflow_insert", "recording_start"])
+                XCTAssertEqual(viewModel.state, .recording)
+                XCTAssertNil(viewModel.actionFeedbackMessage)
+            } else {
+                XCTAssertEqual(events, scenario == "failure" ? [] : ["workflow_insert"], scenario)
+                XCTAssertEqual(viewModel.actionFeedbackMessage, completedMessage, scenario)
+                XCTAssertEqual(viewModel.actionFeedbackIsError, scenario == "failure", scenario)
+                XCTAssertTrue(viewModel.canDismissActionFeedback, scenario)
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .idle, scenario)
+                XCTAssertNil(viewModel.actionFeedbackMessage, scenario)
+            }
+        }
+    }
+
+    @MainActor
     func testBufferedHotkeyStartIsCancelledWhenPushToTalkStops() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -14197,6 +14292,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioRecordingInputActivator: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
         licenseService: LicenseService? = nil,
+        workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         transcriptionDeadline: TimeInterval? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
@@ -14320,6 +14416,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
+            workflowTextProcessingService: workflowTextProcessingService,
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),

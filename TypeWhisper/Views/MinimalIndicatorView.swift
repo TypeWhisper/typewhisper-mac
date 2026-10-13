@@ -230,7 +230,8 @@ struct MinimalIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
-                    onDismiss: presentation.isRecorder ? nil : { viewModel.dismissActionFeedback() },
+                    onDismiss: !presentation.isRecorder && viewModel.canDismissActionFeedback
+                        ? { viewModel.dismissActionFeedback() } : nil,
                     lineLimit: actionFeedbackBody.lineLimit
                 )
                 .padding(.horizontal, 14)

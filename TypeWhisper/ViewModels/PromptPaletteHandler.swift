@@ -39,6 +39,7 @@ final class PromptPaletteHandler {
     private let activateAppForInsertionOverride: (@MainActor (String?) async -> Bool)?
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
+    var onWorkflowProcessingChanged: ((Bool) -> Void)?
     var onShowError: ((String) -> Void)?
     var executeActionPlugin: ((any ActionPlugin, String, String,
         (name: String?, bundleId: String?, url: String?), String?, String?) async throws -> Void)?
@@ -321,6 +322,7 @@ final class PromptPaletteHandler {
         context ctx: PaletteContext,
         soundFeedbackEnabled: Bool
     ) {
+        onWorkflowProcessingChanged?(true)
         onShowNotchFeedback?(workflow.name + "...", "ellipsis.circle", 30, false, nil)
         accessibilityAnnouncementService.announcePromptProcessing(workflow.name)
 
@@ -328,6 +330,7 @@ final class PromptPaletteHandler {
             guard let self else { return }
             defer {
                 self.textInsertionService.restoreClipboardIfNeeded(ctx.deferredClipboardRestore)
+                self.onWorkflowProcessingChanged?(false)
             }
             do {
                 let browserInfo = await ctx.browserInfoTask?.value

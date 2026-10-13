@@ -380,6 +380,7 @@ final class DictationViewModel: ObservableObject {
     @Published private(set) var actionFeedbackActionTitle: String?
     @Published private(set) var actionFeedbackRemainingFraction: Double = 0
     @Published private(set) var actionFeedbackIsPaused = false
+    @Published private var isProcessingStandaloneWorkflow = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
     private let indicatorFeedbackLifetime = IndicatorFeedbackLifetime()
@@ -779,6 +780,9 @@ final class DictationViewModel: ObservableObject {
             self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
         }
 
+        promptPaletteHandler.onWorkflowProcessingChanged = { [weak self] isProcessing in
+            self?.setStandaloneWorkflowProcessing(isProcessing)
+        }
         promptPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError, category in
             self?.showNotchFeedback(message: message, icon: icon, duration: duration, isError: isError, errorCategory: category ?? "general")
         }
@@ -2093,8 +2097,8 @@ final class DictationViewModel: ObservableObject {
         }
 
         if state == .inserting {
-            if isInsertingUndeliveredTranscript {
-                // insertUndeliveredTranscript starts the queued dictation once its paste is done.
+            if isInsertingUndeliveredTranscript || isProcessingStandaloneWorkflow {
+                // The active operation starts the queued dictation after it releases the target.
             } else if actionFeedbackMessage != nil {
                 indicatorFeedbackLifetime.finishImmediately()
             } else {
@@ -5072,16 +5076,35 @@ final class DictationViewModel: ObservableObject {
         indicatorFeedbackLifetime.setHovered(hovered)
     }
 
+    var canDismissActionFeedback: Bool {
+        state == .inserting && actionFeedbackMessage != nil
+            && !isInsertingUndeliveredTranscript && !isProcessingStandaloneWorkflow
+    }
+
     func dismissActionFeedback() {
-        // A running Insert owns the target and clipboard until its paste has finished.
-        guard state == .inserting, actionFeedbackMessage != nil,
-              !isInsertingUndeliveredTranscript else { return }
+        guard canDismissActionFeedback else { return }
         indicatorFeedbackLifetime.finishImmediately()
+    }
+
+    private func setStandaloneWorkflowProcessing(_ isProcessing: Bool) {
+        isProcessingStandaloneWorkflow = isProcessing
+        guard !isProcessing, state == .inserting else { return }
+        if pendingHotkeyDictationStart != nil {
+            resetDictationState()
+        } else if actionFeedbackMessage != nil {
+            startActionFeedbackLifetime(duration: actionDisplayDuration)
+        }
     }
 
     private func startActionFeedbackLifetime(duration: TimeInterval) {
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        // Workflow progress owns the target until processing, insertion and clipboard
+        // restoration finish. Only its final feedback gets a dismissible lifetime.
+        guard !isProcessingStandaloneWorkflow else {
+            indicatorFeedbackLifetime.cancel()
+            return
+        }
         let shouldRemainPaused = indicatorFeedbackLifetime.isPaused
         indicatorFeedbackLifetime.start(duration: duration) { [weak self] in
             self?.resetDictationState()

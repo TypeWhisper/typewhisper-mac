@@ -391,7 +391,8 @@ struct NotchIndicatorView: View {
                 onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                     viewModel.performActionFeedbackAction()
                 },
-                onDismiss: presentation.isRecorder ? nil : { viewModel.dismissActionFeedback() },
+                onDismiss: !presentation.isRecorder && viewModel.canDismissActionFeedback
+                    ? { viewModel.dismissActionFeedback() } : nil,
                 remainingFraction: presentation.actionFeedbackRemainingFraction,
                 bodyHeight: actionFeedbackBody.height,
                 lineLimit: actionFeedbackBody.lineLimit
