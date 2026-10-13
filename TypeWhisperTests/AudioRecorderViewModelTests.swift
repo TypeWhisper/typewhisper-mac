@@ -305,7 +305,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         )
         XCTAssertTrue(plugin.requests.isEmpty)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        // An early library load can still show the recording without its failure.
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         XCTAssertEqual(recording.transcriptionFailure?.phase, .emptyResult)
@@ -1328,8 +1329,9 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(session.text, "fresh transcript")
         XCTAssertFalse(FileManager.default.fileExists(atPath: failureURL.path))
 
-        // The library reloads in the background after the session completes.
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        // The library reloads in the background after the session completes, and an
+        // early load can still show the recording without its transcript.
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcript != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.transcript, "fresh transcript")
         XCTAssertNil(recording.transcriptionFailure)
@@ -1838,7 +1840,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
         XCTAssertTrue(session.error?.contains("HTTP 500") == true)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         let failure = try XCTUnwrap(recording.transcriptionFailure)
@@ -2556,11 +2558,13 @@ final class AudioRecorderViewModelTests: XCTestCase {
     private func waitForRecordingsToLoad(
         _ viewModel: AudioRecorderViewModel,
         count: Int,
+        recordingsSatisfy: (AudioRecorderViewModel.RecordingItem) -> Bool = { _ in true },
         file: StaticString = #filePath,
         line: UInt = #line
     ) async throws {
         for _ in 0..<100 {
-            if viewModel.recordings.count == count {
+            if viewModel.recordings.count == count,
+               viewModel.recordings.allSatisfy(recordingsSatisfy) {
                 return
             }
             try await Task.sleep(for: .milliseconds(20))
