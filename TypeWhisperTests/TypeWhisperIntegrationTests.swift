@@ -6520,15 +6520,57 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testUnchangedPasteWithIncompleteAncestryDoesNotReportMissedField() async throws {
+        for scenario in ["missingParent", "unreadableRole", "cycle", "depthLimit"] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(100)
+            let ancestors = (101...118).map { AXUIElementCreateApplication(pid_t($0)) }
+            let pasteboard = NSPasteboard.withUniqueName()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Web host", "com.example.webhost", nil) }
+            service.focusedTextElementOverride = { field }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            service.accessibilityRoleOverride = { element in
+                if scenario == "unreadableRole" { return nil }
+                return element == ancestors.last ? "AXWebArea" : "AXGroup"
+            }
+            var parentReadCount = 0
+            service.accessibilityParentOverride = { element in
+                parentReadCount += 1
+                if scenario == "missingParent" { return nil }
+                if scenario == "cycle" { return field }
+                if element == field { return ancestors[0] }
+                guard let index = ancestors.firstIndex(of: element), index + 1 < ancestors.count else { return nil }
+                return ancestors[index + 1]
+            }
+            service.setMessagingTimeoutOverride = { _, _ in }
+            service.pasteVerificationAttempts = 0
+            service.pasteSimulatorOverride = {}
+
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+            XCTAssertFalse(result.missedTextField, scenario)
+            XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextAncestryUnavailable)), scenario)
+            XCTAssertLessThanOrEqual(parentReadCount, 17, scenario)
+        }
+    }
+
+    @MainActor
     func testDetectMissedTextFieldReportsReadableFieldThatStayedUnchanged() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
+        let window = AXUIElementCreateApplication(1)
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.pasteVerificationAttempts = 1
         service.pasteVerificationPollingDelay = .milliseconds(1)
         service.focusedTextElementOverride = { element }
+        service.accessibilityRoleOverride = { _ in "AXWindow" }
+        service.accessibilityParentOverride = { $0 == element ? window : nil }
         service.focusedTextStateOverride = { _ in
             (value: "Before", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
         }
@@ -7128,9 +7170,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
+        let window = AXUIElementCreateApplication(1)
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
+        service.accessibilityRoleOverride = { _ in "AXWindow" }
+        service.accessibilityParentOverride = { $0 == element ? window : nil }
         service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
         service.pasteVerificationAttempts = 0
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
@@ -10915,13 +10960,15 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
     @MainActor
     func testMissedTextFieldFeedbackSupportsDismissAndWebRetry() async throws {
-        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled]
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled,
+                    UserDefaultsKeys.historyEnabled]
         let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
         defer {
             for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
         }
         UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
         UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historyEnabled)
 
         for scenario in ["dismiss", "webRetry"] {
             let directory = try TestSupport.makeTemporaryDirectory()

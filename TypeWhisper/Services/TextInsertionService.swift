@@ -330,6 +330,8 @@ final class TextInsertionService {
     enum PasteVerificationFailure: String, Equatable {
         /// A text element was focused, but its text could not be read.
         case focusedTextStateUnavailable = "focused-text-state-unavailable"
+        /// The field is readable, but its AX ancestry cannot establish whether it is a web input.
+        case focusedTextAncestryUnavailable = "focused-text-ancestry-unavailable"
         case focusedTextUnchanged = "focused-text-unchanged"
         /// Web editors and terminal input proxies can consume a paste without retaining it here.
         case webContentUnchanged = "web-content-unchanged"
@@ -1482,10 +1484,14 @@ final class TextInsertionService {
         }
         // Classify only unchanged fields, after the paste and positive verification attempts.
         // Web input proxies can consume the paste without exposing a text or selection change.
-        guard !hasWebAreaAncestor(initialState.element) else {
+        switch textFieldAncestry(of: initialState.element) {
+        case .web:
             return .unverified(.webContentUnchanged)
+        case .unknown:
+            return .unverified(.focusedTextAncestryUnavailable)
+        case .native:
+            return .unverified(.focusedTextUnchanged)
         }
-        return .unverified(.focusedTextUnchanged)
     }
 
     private func logPasteVerification(_ verification: PasteVerification, bundleId: String?) {
@@ -2390,25 +2396,31 @@ final class TextInsertionService {
             .contains(role)
     }
 
-    /// Web terminals can expose an input proxy whose value and selection remain empty after
-    /// consuming a paste. A focused web area itself does not establish an editable input.
-    private func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+    private enum TextFieldAncestry {
+        case web
+        case native
+        case unknown
+    }
+
+    /// Web terminals can consume a paste without exposing a text change. A failed or incomplete
+    /// walk cannot rule out such an input. A focused web area alone does not establish one.
+    private func textFieldAncestry(of element: AXUIElement) -> TextFieldAncestry {
         var ancestor = accessibilityParentOverride.map { $0(element) }
             ?? axElementAttribute(kAXParentAttribute as CFString, from: element)
         var visited: Set<AXUIElement> = [element]
         for _ in 0..<16 {
-            guard let current = ancestor else { return false }
-            guard visited.insert(current).inserted else { return false }
+            guard let current = ancestor else { return .unknown }
+            guard visited.insert(current).inserted else { return .unknown }
             // These are separate parent references; do not shorten the captured field's timeout.
             applyMessagingTimeout(Self.liveFieldMessagingTimeout, to: current)
-            let role = accessibilityRoleOverride.map { $0(current) }
-                ?? stringAttribute(kAXRoleAttribute as CFString, from: current)
-            if role == "AXWebArea" { return true }
-            if role == "AXWindow" || role == "AXApplication" { return false }
+            guard let role = accessibilityRoleOverride.map({ $0(current) })
+                ?? stringAttribute(kAXRoleAttribute as CFString, from: current) else { return .unknown }
+            if role == "AXWebArea" { return .web }
+            if role == "AXWindow" || role == "AXApplication" { return .native }
             ancestor = accessibilityParentOverride.map { $0(current) }
                 ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
         }
-        return false
+        return .unknown
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
