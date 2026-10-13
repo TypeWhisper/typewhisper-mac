@@ -108,7 +108,8 @@ enum IndicatorFeedbackPanelLayout {
         }
 
         // Safety margin so SwiftUI never needs one more line than measured here.
-        var chrome = padding * 2 + iconWidth + 8 + 6
+        // Include the 24-point dismiss button and its spacing in the line measurement.
+        var chrome = padding * 2 + iconWidth + 8 + 6 + 24 + 8
         if let actionTitle, !actionTitle.isEmpty {
             let titleFont = NSFont.systemFont(ofSize: actionFontSize, weight: .semibold)
             let titleWidth = ceil((actionTitle as NSString).size(withAttributes: [.font: titleFont]).width)

@@ -167,7 +167,7 @@ struct MinimalIndicatorView: View {
             }
             .accessibilityElement(
                 children: countdownPresentation != nil
-                    || presentation.actionFeedbackActionTitle != nil ? .contain : .combine
+                    || presentation.actionFeedbackMessage != nil ? .contain : .combine
             )
             .accessibilityLabel(accessibilityLabel)
         }
@@ -230,6 +230,8 @@ struct MinimalIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
+                    onDismiss: !presentation.isRecorder && viewModel.canDismissActionFeedback
+                        ? { viewModel.dismissActionFeedback() } : nil,
                     lineLimit: actionFeedbackBody.lineLimit
                 )
                 .padding(.horizontal, 14)
@@ -326,6 +328,7 @@ struct MinimalIndicatorView: View {
         iconColor: Color,
         actionTitle: String? = nil,
         onAction: (() -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil,
         lineLimit: Int = 2
     ) -> some View {
         HStack(spacing: 8) {
@@ -349,6 +352,9 @@ struct MinimalIndicatorView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
                     .background(Color.primary.opacity(0.12), in: Capsule())
+            }
+            if let onDismiss {
+                IndicatorFeedbackDismissButton(action: onDismiss)
             }
         }
     }

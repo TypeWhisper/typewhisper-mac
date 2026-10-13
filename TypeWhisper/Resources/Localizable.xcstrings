@@ -1,6 +1,79 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Dismiss notification" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinweis schließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知を閉じる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭通知"
+          }
+        }
+      }
+    },
+    "Paste requested" : {
+      "comment" : "Neutral feedback after sending a paste when the target field cannot confirm whether it consumed the text.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einfügen ausgelöst"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼り付けを要求しました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已请求粘贴"
+          }
+        }
+      }
+    },
+    "recorder.noSpeechDetectedError" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Aufnahme wurde keine Sprache erkannt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No speech was detected in the recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音から音声が検出されませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音中未检测到语音。"
+          }
+        }
+      }
+    },
     "history.retranscribe.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {
