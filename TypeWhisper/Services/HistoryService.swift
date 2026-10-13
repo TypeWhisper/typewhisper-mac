@@ -1336,6 +1336,7 @@ final class HistoryService: ObservableObject {
                 ) else { continue }
                 if let reset = content.alignmentResetAt,
                    reset > (record.transcriptionAlignmentResetAt ?? .distantPast) {
+                    // Microphone-channel evidence describes the unchanged audio and survives this reset.
                     record.speakerTranscriptData = nil
                     record.speakerTranscriptStateRaw = nil
                     record.speakerNamesData = nil
@@ -1343,7 +1344,6 @@ final class HistoryService: ObservableObject {
                     record.timedTextGranularityRaw = nil
                     record.speakerWordsData = nil
                     record.speakerWordsAreFromSecondPass = nil
-                    record.speakerOwnSpeechData = nil
                     record.transcriptionAlignmentResetAt = reset
                     record.speakerTranscriptUpdatedAt = max(record.speakerTranscriptUpdatedAt, reset)
                     record.speakerNamesUpdatedAt = max(record.speakerNamesUpdatedAt, reset)

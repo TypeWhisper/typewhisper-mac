@@ -104,6 +104,12 @@ final class HistoryRetranscriptionService: ObservableObject {
         hasLocalAudio(record) || canRetrieveAudio(record)
     }
 
+    func canCompare(_ record: TranscriptionRecord) -> Bool {
+        canRun(record) || (try? record.savedTranscriptionVersions())?.contains {
+            !$0.isActive(in: record)
+        } == true
+    }
+
     func previewPlan(_ request: Request) throws -> Plan {
         errorMessage = nil
         var plan = try planBuilder(request)

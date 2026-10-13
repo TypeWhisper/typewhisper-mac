@@ -459,6 +459,13 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             return
         }
         let text = record.rawText
+        let alignmentResetAt = record.transcriptionAlignmentResetAt
+        // Sync can replace a version while a provider is suspended. Neither a
+        // late result nor an error may change the replacement's alignment state.
+        func isCurrent() -> Bool {
+            historyService.record(withID: recordID) === record && !record.isDeleted
+                && record.rawText == text && record.transcriptionAlignmentResetAt == alignmentResetAt
+        }
         var timedText = record.timedText
         var granularity = record.timedTextGranularity
         // Words of a second pass belong to another engine's text.
@@ -472,6 +479,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             if granularity == .none, let timingSource {
                 stages[recordID] = .transcribing
                 let result = try await timingSource(audioURL, language)
+                guard isCurrent() else { return }
                 // The pass only provides times; the saved text stays. Its
                 // words then belong to another text, like a second pass.
                 let sentences = SpeakerTranscriptPresentation.timedSentences(
@@ -503,6 +511,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                     speakerLogger.info("No word timing from the second pass: \(error.localizedDescription, privacy: .public)")
                 }
                 try Task.checkCancellation()
+                guard isCurrent() else { return }
                 speakerLogger.info("Second pass for word timing returned \(timed.count) words")
                 if !timed.isEmpty {
                     historyService.setTimedText(
@@ -523,6 +532,8 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                     }
                 }
             }
+            try Task.checkCancellation()
+            guard isCurrent() else { return }
             stages[recordID] = .detecting(0)
             let result = try await provider.diarize(
                 PluginDiarizationRequest(audioURL: audioURL, duration: duration, speakerCount: speakerCount)
@@ -533,6 +544,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 }
             }
             try Task.checkCancellation()
+            guard isCurrent() else { return }
 
             // With a microphone channel the user's own speech is taken from it.
             let rawTurns = SpeakerChannelAttribution.combining(result.turns, ownSpeech: ownSpeech)
@@ -573,8 +585,10 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 recordID: recordID
             )
         } catch is CancellationError {
+            guard isCurrent() else { return }
             finishWithoutResult(recordID: recordID)
         } catch {
+            guard isCurrent() else { return }
             speakerLogger.error("Speaker detection failed: \(error.localizedDescription, privacy: .public)")
             finishWithoutResult(recordID: recordID)
         }

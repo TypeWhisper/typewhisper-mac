@@ -199,6 +199,33 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.audioURL.path))
     }
 
+    func testComparisonRequiresRunnableAudioOrAnInactiveSavedVersion() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        let retrievable = TestFlag(false)
+        let service = HistoryRetranscriptionService(
+            history: f.history,
+            planBuilder: { _ in throw HistoryRetranscriptionError.unavailable },
+            isBusy: { false }, loadAudio: { _ in [] },
+            canRetrieveAudio: { _ in retrievable.value }
+        )
+        XCTAssertTrue(service.canCompare(f.record), "Local audio allows creating a new version")
+        let version = alternative()
+        try append(version, to: f)
+        try FileManager.default.removeItem(at: f.audioURL)
+        XCTAssertTrue(service.canCompare(f.record), "Saved alternatives do not require audio")
+        try f.history.discardTranscriptionVersion(version.id, in: f.record)
+        XCTAssertEqual(try f.record.savedTranscriptionVersions().map(\.id), [f.record.id])
+        XCTAssertFalse(service.canCompare(f.record), "The sole active original offers nothing to compare")
+        retrievable.value = true
+        XCTAssertTrue(service.canCompare(f.record), "Retrievable audio still allows a new version")
+        retrievable.value = false
+        f.history.updateRecord(f.record, finalText: "Manual replacement")
+        XCTAssertTrue(service.canCompare(f.record), "The archived original can be compared with a manual edit")
+        f.record.transcriptionVersionsData = Data("invalid archive".utf8)
+        XCTAssertFalse(service.canCompare(f.record), "An unreadable archive offers no candidates")
+    }
+
     func testDiscardFormerlyActiveVersionAfterManualEditOrSynchronizedReplacement() async throws {
         for synchronize in [false, true] {
             let f = try await fixture()
@@ -476,6 +503,8 @@ final class HistoryRetranscriptionTests: XCTestCase {
         f.record.speakerTranscript = originalTranscript
         f.record.speakerTranscriptState = .ready
         f.record.speakerTranscriptUpdatedAt = Date(timeIntervalSinceNow: -30)
+        let sourceEvidence = try JSONEncoder().encode([[1.0, 2.0]])
+        f.record.speakerOwnSpeechData = sourceEvidence
         let before = try XCTUnwrap(f.history.userDataSyncHistoryRecords().first)
         let version = alternative()
         try append(version, to: f)
@@ -484,6 +513,7 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(f.history.recordCount(query: HistoryQuery(searchText: "new final")), 0)
         try f.history.promoteTranscriptionVersion(version.id, in: f.record)
         XCTAssertEqual(f.history.recordCount(query: HistoryQuery(searchText: "new final")), 1)
+        XCTAssertEqual(f.record.speakerOwnSpeechData, sourceEvidence)
         let promoted = try XCTUnwrap(f.history.userDataSyncHistoryRecords().first)
         XCTAssertEqual(promoted.content.finalText, "new final")
         XCTAssertNotNil(promoted.content.alignmentResetAt)
@@ -496,10 +526,31 @@ final class HistoryRetranscriptionTests: XCTestCase {
         try receiver.applyUserDataSyncMutations([.upsertHistoryContent(before.content), .upsertHistoryTranscript(oldTranscript)])
         let remote = try XCTUnwrap(receiver.record(withID: f.record.id))
         XCTAssertNotNil(remote.speakerTranscript)
+        // Local microphone evidence belongs to the audio, not to synchronized text alignment.
+        let receiverEvidence = try JSONEncoder().encode([[3.0, 4.0]])
+        remote.speakerOwnSpeechData = receiverEvidence
+        remote.timedTextData = try JSONEncoder().encode([
+            TimedTextEntry(text: "original final", start: 0, end: 12, utf16Location: 0, utf16Length: 14)
+        ])
+        remote.timedTextGranularityRaw = TimedTextGranularity.segment.rawValue
+        remote.speakerWordsData = try JSONEncoder().encode([TranscriptionWord(text: "original", start: 0, end: 1)])
+        remote.speakerWordsAreFromSecondPass = true
+        var names = SpeakerNameTable(transcriptRevision: originalTranscript.revision)
+        names.setName("Me", for: "S1")
+        remote.speakerNamesData = try JSONEncoder().encode(names)
         try receiver.applyUserDataSyncMutations([.upsertHistoryContent(promoted.content), .upsertHistoryTranscript(oldTranscript)])
         XCTAssertEqual(remote.finalText, "new final")
         XCTAssertNil(remote.speakerTranscript)
+        XCTAssertNil(remote.speakerTranscriptStateRaw)
+        XCTAssertNil(remote.speakerNamesData)
+        XCTAssertNil(remote.timedTextData)
+        XCTAssertNil(remote.timedTextGranularityRaw)
+        XCTAssertNil(remote.speakerWordsData)
+        XCTAssertNil(remote.speakerWordsAreFromSecondPass)
+        XCTAssertEqual(remote.speakerOwnSpeechData, receiverEvidence)
         XCTAssertNil(remote.transcriptionVersionsData)
+        try receiver.applyUserDataSyncMutations([.upsertHistoryContent(promoted.content)])
+        XCTAssertEqual(remote.speakerOwnSpeechData, receiverEvidence, "Replaying a reset must preserve audio evidence")
         // Returning to the original sends its matching alignment at the promotion timestamp.
         try f.history.promoteTranscriptionVersion(f.record.id, in: f.record)
         let restored = try XCTUnwrap(f.history.userDataSyncHistoryRecords().first)
@@ -508,6 +559,10 @@ final class HistoryRetranscriptionTests: XCTestCase {
         ])
         XCTAssertEqual(remote.speakerTranscript?.revision, originalTranscript.revision)
         XCTAssertEqual(remote.finalText, "original final")
+        XCTAssertEqual(f.record.speakerOwnSpeechData, sourceEvidence)
+        XCTAssertEqual(remote.speakerOwnSpeechData, receiverEvidence)
+        let reopened = HistoryService(appSupportDirectory: receiverDirectory, historySyncPreferences: preferences)
+        XCTAssertEqual(reopened.record(withID: f.record.id)?.speakerOwnSpeechData, receiverEvidence)
     }
 
     func testAudioRemovedDuringRunAndSecondConcurrentRunCannotCommit() async throws {

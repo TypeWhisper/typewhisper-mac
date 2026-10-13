@@ -22927,7 +22927,14 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
-    private func exerciseMeetingAutoStopWithoutNotifications(adHoc: Bool, browser: Bool) async throws {
+    func testCalendarAutoStartRetriesWhenHistoryComparisonReleasesTheEngine() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(adHoc: false, browser: false, deferForComparison: true)
+    }
+
+    @MainActor
+    private func exerciseMeetingAutoStopWithoutNotifications(
+        adHoc: Bool, browser: Bool, deferForComparison: Bool = false
+    ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let suite = "MeetingRuntime-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -22984,6 +22991,7 @@ extension TypeWhisperIntegrationTests {
             premiumAccessProvider: { true }, nowProvider: { now }
         )
         defer { controller.shutdown() }
+        if deferForComparison { controller.initialize() }
         await controller.testingRefresh()
         XCTAssertEqual(controller.calendarAuthorization, adHoc ? .denied : .fullAccess)
         XCTAssertTrue(controller.isAutomationActive)
@@ -22998,8 +23006,24 @@ extension TypeWhisperIntegrationTests {
         now = initialTime.addingTimeInterval(adHoc ? (browser ? 20 : 5) : 3)
         await controller.testingAdvanceTime()
         XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        if deferForComparison {
+            HistoryRetranscriptionActivity.recordID = UUID()
+        }
+        defer { if deferForComparison { HistoryRetranscriptionActivity.recordID = nil } }
         now = now.addingTimeInterval(5)
         await controller.testingAdvanceTime()
+        if deferForComparison {
+            XCTAssertEqual(recorder.state, .idle, "A comparison defers the automatic recording")
+            XCTAssertNil(countdown.presentation)
+            HistoryRetranscriptionActivity.recordID = nil
+            // The activity publisher must trigger a fresh countdown without another calendar refresh.
+            for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+            now = now.addingTimeInterval(5)
+            await controller.testingAdvanceTime()
+        }
         XCTAssertEqual(recorder.state, .recording)
         XCTAssertNil(countdown.presentation)
 

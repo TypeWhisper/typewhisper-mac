@@ -468,7 +468,7 @@ struct HistoryView: View {
     }
 
     private func canCompare(_ record: TranscriptionRecord) -> Bool {
-        record.transcriptionVersionsData != nil || ServiceContainer.shared.historyRetranscriptionService.canRun(record)
+        ServiceContainer.shared.historyRetranscriptionService.canCompare(record)
     }
 
     private func comparisonActionTitle(_ record: TranscriptionRecord) -> String {
