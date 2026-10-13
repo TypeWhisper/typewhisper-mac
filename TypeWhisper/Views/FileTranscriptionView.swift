@@ -443,6 +443,12 @@ struct FileTranscriptionView: View {
         VStack(alignment: .leading, spacing: 12) {
             fileTranscriptionSettings
 
+            if viewModel.isHistoryRetranscribing {
+                Label(String(localized: "history.retranscribe.busy"), systemImage: "hourglass")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
             LanguageSelectionEditor(
                 selection: $viewModel.languageSelection,
                 availableLanguages: fileTranscriptionLanguageOptions,

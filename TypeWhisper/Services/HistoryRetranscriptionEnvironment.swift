@@ -103,10 +103,10 @@ enum HistoryRetranscriptionEnvironment {
                 guard PluginManager.shared?.transcriptionEngine(for: request.engineID) === engine else {
                     throw HistoryRetranscriptionError.unavailable
                 }
-                let result = try await manager.transcribe(
-                    audioSamples: samples, language: request.language, task: .transcribe,
-                    engineOverrideId: request.engineID, cloudModelOverride: modelID,
-                    prompt: dictionaryPrompt, dictionaryTermHints: dictionaryHints
+                let result = try await transcribe(
+                    samples: samples, request: request, modelID: modelID,
+                    workflow: frozenWorkflow, manager: manager,
+                    dictionaryPrompt: dictionaryPrompt, dictionaryHints: dictionaryHints
                 )
                 try Task.checkCancellation()
                 let raw = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,6 +149,19 @@ enum HistoryRetranscriptionEnvironment {
                 }
                 return version
             }
+        )
+    }
+
+    static func transcribe(
+        samples: [Float], request: HistoryRetranscriptionService.Request, modelID: String?,
+        workflow: Workflow?, manager: ModelManagerService,
+        dictionaryPrompt: String?, dictionaryHints: [PluginDictionaryTermHint]
+    ) async throws -> TranscriptionResult {
+        try await manager.transcribe(
+            audioSamples: samples, language: request.language, task: .transcribe,
+            engineOverrideId: request.engineID, cloudModelOverride: modelID,
+            prompt: dictionaryPrompt, dictionaryTermHints: dictionaryHints,
+            normalizeNumbers: workflow?.output.numberNormalizationMode.overrideValue
         )
     }
 }

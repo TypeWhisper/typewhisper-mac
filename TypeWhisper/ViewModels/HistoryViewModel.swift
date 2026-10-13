@@ -523,7 +523,7 @@ final class HistoryViewModel: ObservableObject {
 
     func reloadAfterTranscriptionComparison() {
         loadDraftForCurrentSelection(force: true)
-        reloadCurrentQuery()
+        reloadCurrentQuery(preservingLoadedRecords: true, resetListIdentity: false)
     }
 
     @discardableResult

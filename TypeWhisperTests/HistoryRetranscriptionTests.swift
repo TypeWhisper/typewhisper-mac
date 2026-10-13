@@ -1,3 +1,4 @@
+import Combine
 import SwiftData
 import XCTest
 import TypeWhisperPluginSDK
@@ -5,6 +6,12 @@ import TypeWhisperPluginSDK
 
 @MainActor
 final class HistoryRetranscriptionTests: XCTestCase {
+    @MainActor
+    private final class TestFlag {
+        var value: Bool
+        init(_ value: Bool) { self.value = value }
+    }
+
     private struct Fixture {
         let directory: URL
         let history: HistoryService
@@ -97,6 +104,40 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(try f.record.savedTranscriptionVersions().count, 2)
     }
 
+    func testSanitizedVersionSurvivesReopenAndPromotion() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        var version = alternative()
+        version.rawText = "new\0 raw"
+        version.finalText = "new \0final\0"
+        try append(version, to: f)
+
+        version.rawText = "new raw"
+        version.finalText = "new final"
+        XCTAssertEqual(try f.record.savedTranscriptionVersions().last, version)
+        XCTAssertEqual(f.record.finalText, "original final")
+
+        let reopened = HistoryService(appSupportDirectory: f.directory)
+        let restored = try XCTUnwrap(reopened.record(withID: f.record.id))
+        XCTAssertEqual(try restored.savedTranscriptionVersions().last, version)
+        try reopened.promoteTranscriptionVersion(version.id, in: restored)
+        XCTAssertEqual(restored.rawText, "new raw")
+        XCTAssertEqual(restored.finalText, "new final")
+        XCTAssertTrue(version.isActive(in: restored))
+    }
+
+    func testNullAndWhitespaceOnlyTextCannotBeArchived() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        for keyPath in [\HistoryTranscriptionVersion.rawText, \.finalText] {
+            var version = alternative()
+            version[keyPath: keyPath] = "\0 \n\0"
+            XCTAssertThrowsError(try append(version, to: f))
+            XCTAssertNil(f.record.transcriptionVersionsData)
+            XCTAssertEqual(f.record.finalText, "original final")
+        }
+    }
+
     func testPromotionPreservesManualEditsAndRemoteContentAsAdditionalVersion() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -147,22 +188,22 @@ final class HistoryRetranscriptionTests: XCTestCase {
     }
 
     func testPersistenceFailureRollsBackAppendPromotionAndDiscard() async throws {
-        var fails = false
+        let fails = TestFlag(false)
         let f = try await fixture { context in
-            if fails { throw CocoaError(.fileWriteOutOfSpace) }
+            if fails.value { throw CocoaError(.fileWriteOutOfSpace) }
             try context.save()
         }
         defer { TestSupport.remove(f.directory) }
         let original = HistoryTranscriptionVersion.capture(f.record)
         let originalDate = f.record.contentUpdatedAt
         let version = alternative()
-        fails = true
+        fails.value = true
         XCTAssertThrowsError(try append(version, to: f))
         XCTAssertNil(f.record.transcriptionVersionsData)
-        fails = false
+        fails.value = false
         try append(version, to: f)
         let archive = f.record.transcriptionVersionsData
-        fails = true
+        fails.value = true
         XCTAssertThrowsError(try f.history.promoteTranscriptionVersion(version.id, in: f.record))
         XCTAssertEqual(HistoryTranscriptionVersion.capture(f.record), original)
         XCTAssertEqual(f.record.contentUpdatedAt, originalDate)
@@ -224,6 +265,62 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertNil(service.errorMessage)
     }
 
+    func testFileTranscriptionAvailabilityTracksComparisonThroughCancellation() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        let suite = "HistoryComparisonFileAvailability-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var loads = 0
+        func makeFileViewModel() -> FileTranscriptionViewModel {
+            let viewModel = FileTranscriptionViewModel(
+                modelManager: ModelManagerService(), audioFileService: AudioFileService(),
+                dictionaryService: DictionaryService(appSupportDirectory: f.directory),
+                defaults: defaults,
+                audioSamplesLoader: { _, _, _ in loads += 1; return [0.1] },
+                engineReadinessChecker: { _ in true }
+            )
+            viewModel.addFiles([f.audioURL])
+            return viewModel
+        }
+        let fileViewModel = makeFileViewModel()
+        var activityChanges: [Bool] = []
+        let observation = fileViewModel.$isHistoryRetranscribing.sink { activityChanges.append($0) }
+        defer { observation.cancel() }
+        XCTAssertTrue(fileViewModel.canTranscribe)
+
+        var continuation: CheckedContinuation<HistoryTranscriptionVersion, Never>?
+        let service = HistoryRetranscriptionService(
+            history: f.history,
+            planBuilder: { _ in .init(requiresCloudConfirmation: false, run: { _ in
+                await withCheckedContinuation { continuation = $0 }
+            }) }, isBusy: { false }, loadAudio: { _ in [0.1] }
+        )
+        service.start(record: f.record, request: .init(engineID: "local"), cloudConfirmed: false, downloadConfirmed: false)
+        XCTAssertTrue(fileViewModel.isHistoryRetranscribing)
+        XCTAssertFalse(fileViewModel.canTranscribe)
+        let newlyOpenedFileViewModel = makeFileViewModel()
+        XCTAssertTrue(newlyOpenedFileViewModel.isHistoryRetranscribing)
+        XCTAssertFalse(newlyOpenedFileViewModel.canTranscribe)
+
+        fileViewModel.transcribeAll()
+        newlyOpenedFileViewModel.transcribePending()
+        XCTAssertEqual(fileViewModel.batchState, .idle)
+        XCTAssertEqual(newlyOpenedFileViewModel.batchState, .idle)
+        XCTAssertEqual(loads, 0)
+        for _ in 0..<100 where continuation == nil { await Task.yield() }
+        let pending = try XCTUnwrap(continuation)
+        service.cancel()
+        XCTAssertFalse(fileViewModel.canTranscribe)
+        XCTAssertFalse(newlyOpenedFileViewModel.canTranscribe)
+        pending.resume(returning: alternative())
+        try await wait(service)
+        XCTAssertTrue(fileViewModel.canTranscribe)
+        XCTAssertTrue(newlyOpenedFileViewModel.canTranscribe)
+        XCTAssertEqual(activityChanges, [false, true, false])
+        XCTAssertNil(f.record.transcriptionVersionsData)
+    }
+
     func testProviderErrorAndEmptyResultDoNotMutateHistory() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -250,15 +347,15 @@ final class HistoryRetranscriptionTests: XCTestCase {
     func testBusyAndUnavailableSelectionsFailBeforeAudioLoad() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
-        var busy = true
+        let busy = TestFlag(true)
         var loads = 0
         let service = HistoryRetranscriptionService(
             history: f.history,
             planBuilder: { _ in throw HistoryRetranscriptionError.unavailable },
-            isBusy: { busy }, loadAudio: { _ in loads += 1; return [0.1] }
+            isBusy: { busy.value }, loadAudio: { _ in loads += 1; return [0.1] }
         )
         for value in [true, false] {
-            busy = value
+            busy.value = value
             service.start(record: f.record, request: .init(engineID: "removed"), cloudConfirmed: true, downloadConfirmed: true)
             XCTAssertNil(service.runningRecordID)
             XCTAssertNotNil(service.errorMessage)
@@ -391,6 +488,88 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertFalse(viewModel.showCorrectionBanner)
     }
 
+    func testClosingComparisonPreservesSelectionBeyondFirstPageAndListIdentity() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        for index in 1...125 {
+            XCTAssertTrue(f.history.addRecord(
+                timestamp: f.record.timestamp.addingTimeInterval(Double(index)),
+                rawText: "Newer entry \(index)", finalText: "Newer entry \(index)",
+                appName: "Test", appBundleIdentifier: nil, durationSeconds: 1,
+                language: "en", engineUsed: "test"
+            ))
+        }
+        let viewModel = HistoryViewModel(
+            historyService: f.history, textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: f.directory)
+        )
+        viewModel.activate()
+        defer { viewModel.deactivate() }
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.records.count, 100)
+        viewModel.loadMoreRecords()
+        XCTAssertEqual(viewModel.records.count, 126)
+        viewModel.requestRecordSelection([f.record.id])
+        let queryID = viewModel.queryID
+
+        viewModel.reloadAfterTranscriptionComparison()
+        XCTAssertEqual(viewModel.selectedRecord?.id, f.record.id)
+        XCTAssertEqual(viewModel.editedText, "original final")
+        XCTAssertEqual(viewModel.records.count, 126)
+        XCTAssertEqual(viewModel.queryID, queryID)
+
+        let version = alternative()
+        try append(version, to: f)
+        try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+        viewModel.reloadAfterTranscriptionComparison()
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.selectedRecord?.id, f.record.id)
+        XCTAssertEqual(viewModel.editedText, "new final")
+        XCTAssertEqual(viewModel.records.count, 126)
+        XCTAssertEqual(viewModel.queryID, queryID)
+        XCTAssertFalse(viewModel.isDirty)
+    }
+
+    func testWorkflowNumberFormattingOverridesGlobalDefaultDuringRetranscription() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let previousPluginManager = PluginManager.shared
+        let defaults = UserDefaults.standard
+        let keys = [UserDefaultsKeys.transcriptionNumberNormalizationEnabled,
+                    UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue]
+        let savedDefaults = keys.map { defaults.object(forKey: $0) }
+        defer {
+            PluginManager.shared = previousPluginManager
+            for (key, value) in zip(keys, savedDefaults) { defaults.set(value, forKey: key) }
+            TestSupport.remove(directory)
+        }
+        defaults.set(10, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        let engine = HistoryComparisonNumberEngine()
+        PluginManager.shared = PluginManager(appSupportDirectory: directory)
+        PluginManager.shared.loadedPlugins = [LoadedPlugin(
+            manifest: PluginManifest(id: HistoryComparisonNumberEngine.pluginId,
+                                     name: "Number test", version: "1.0.0", principalClass: "HistoryComparisonNumberEngine"),
+            instance: engine, bundle: Bundle.main, sourceURL: directory, isEnabled: true
+        )]
+        let manager = ModelManagerService()
+        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, language: "en")
+        for globalEnabled in [false, true] {
+            defaults.set(globalEnabled, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            for mode: WorkflowNumberNormalizationMode? in [nil, .inherit, .enabled, .disabled] {
+                let workflow = mode.map { mode in
+                    Workflow(name: "Numbers", template: .dictation, trigger: WorkflowTrigger(kind: .manual),
+                             output: WorkflowOutput(numberNormalizationModeRaw: mode.rawValue))
+                }
+                let result = try await HistoryRetranscriptionEnvironment.transcribe(
+                    samples: [0.1, -0.1], request: request, modelID: nil,
+                    workflow: workflow, manager: manager, dictionaryPrompt: nil, dictionaryHints: []
+                )
+                let normalizes = mode?.overrideValue ?? globalEnabled
+                XCTAssertEqual(result.text, normalizes ? "I counted 42 apples." : "I counted forty two apples.",
+                               "global=\(globalEnabled), workflow=\(String(describing: mode))")
+            }
+        }
+    }
+
     func testIdenticalTextFromAnotherWorkflowStillHasItsOwnActiveVersion() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -472,4 +651,10 @@ private final class HistoryComparisonRestoreEngine: HistoryComparisonTestEngine,
 private final class HistoryComparisonDownloadedEngine: HistoryComparisonTestEngine, PluginDownloadedModelManaging, @unchecked Sendable {
     var downloadedModels: [PluginModelInfo] { [] }
     func deleteDownloadedModel(_ modelId: String) async throws {}
+}
+
+private final class HistoryComparisonNumberEngine: HistoryComparisonTestEngine, @unchecked Sendable {
+    override func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "I counted forty two apples.", detectedLanguage: "en")
+    }
 }

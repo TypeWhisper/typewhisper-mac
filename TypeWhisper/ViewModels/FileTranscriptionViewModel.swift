@@ -113,6 +113,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         }
     }
     @Published var selectedTask: TranscriptionTask = .transcribe
+    @Published private(set) var isHistoryRetranscribing = false
     @Published var selectedEngine: String? {
         didSet {
             defaults.set(selectedEngine, forKey: UserDefaultsKeys.fileTranscriptionEngine)
@@ -218,10 +219,15 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.fileTranscriptionModel)
         self.isInitialized = true
+        HistoryRetranscriptionActivity.recordIDPublisher
+            .map { $0 != nil }
+            .removeDuplicates()
+            .sink { [weak self] in self?.isHistoryRetranscribing = $0 }
+            .store(in: &cancellables)
     }
 
     var canTranscribe: Bool {
-        !files.isEmpty && selectedEngineIsReady && batchState != .processing
+        !files.isEmpty && selectedEngineIsReady && batchState != .processing && !isHistoryRetranscribing
     }
 
     var supportsTranslation: Bool {
@@ -380,7 +386,6 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     private func transcribe(retryingFailed: Bool) {
-        guard HistoryRetranscriptionActivity.recordID == nil else { return }
         guard canTranscribe else { return }
 
         activeBatchTask?.cancel()

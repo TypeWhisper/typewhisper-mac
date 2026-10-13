@@ -21,7 +21,14 @@ enum HistoryRetranscriptionError: LocalizedError {
 /// Other entry points must not start recording or change the shared engine meanwhile.
 @MainActor
 enum HistoryRetranscriptionActivity {
-    static var recordID: UUID?
+    private static let recordIDSubject = CurrentValueSubject<UUID?, Never>(nil)
+    static var recordID: UUID? {
+        get { recordIDSubject.value }
+        set { recordIDSubject.send(newValue) }
+    }
+    static var recordIDPublisher: AnyPublisher<UUID?, Never> {
+        recordIDSubject.eraseToAnyPublisher()
+    }
     @TaskLocal static var ownsEngine = false
 
     static func checkEngineAccess() throws {

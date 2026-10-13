@@ -92,7 +92,13 @@ struct HistoryRetranscriptionView: View {
             selectedVersionID = candidates.last?.id
             refreshPlan()
         }
-        .onChange(of: engineID) { _, _ in modelID = engine?.selectedModelId; language = nil; refreshPlan() }
+        .onChange(of: engineID) { previousID, _ in
+            // onAppear already initialized the model and the recording's language.
+            guard !previousID.isEmpty else { return }
+            modelID = engine?.selectedModelId
+            language = nil
+            refreshPlan()
+        }
         .onChange(of: modelID) { _, _ in refreshPlan() }
         .onChange(of: language) { _, _ in refreshPlan() }
         .onChange(of: workflowID) { _, _ in refreshPlan() }

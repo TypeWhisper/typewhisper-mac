@@ -1727,8 +1727,11 @@ final class HistoryService: ObservableObject {
               HistoryTranscriptionVersion.capture(record) == expected else {
             throw HistoryRetranscriptionError.changed
         }
-        guard !Self.sanitize(version.rawText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !Self.sanitize(version.finalText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        var version = version
+        version.rawText = Self.sanitize(version.rawText)
+        version.finalText = Self.sanitize(version.finalText)
+        guard !version.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !version.finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw HistoryRetranscriptionError.emptyResult
         }
         var versions = try record.savedTranscriptionVersions()
