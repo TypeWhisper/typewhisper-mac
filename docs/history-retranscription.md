@@ -7,7 +7,7 @@ Each successful run stores a result under the same entry. The active text, origi
 ## Processing
 
 - Engine, model, language and Workflow settings are captured for the run. The normal engine/model preferences are restored by the existing one-shot model override path. Engines with a selectable model but no restorable previous selection must first be configured in Integrations.
-- A Workflow executes only its text transformation. Its destination, insertion, clipboard, export and action-plugin behavior is not invoked. The first resolved Workflow provider is pinned; no undisclosed fallback is attempted.
+- A Workflow executes only its text transformation. Its automatic output format uses the saved entry's app and website. Its destination, insertion, clipboard, export and action-plugin behavior is not invoked. The first resolved Workflow provider is pinned; no undisclosed fallback is attempted. Apple Translate requires an available service and a valid target language before a run can start.
 - Cloud audio/text processing shows the selected provider and requires confirmation, including notice of possible usage charges. Changing the choices clears consent.
 - Missing synchronized audio requires a separate download confirmation. Retrieval uses the configured private sync storage, validates the asset hash/size, observes audio-sync/retention settings, and processes a temporary copy. The copy is removed afterward.
 - Dictation, recorder, and file-transcription controls stay unavailable during a comparison. Background transcription requests, including recovery, dictionary training, and speaker timing, wait before accessing the shared engine. Cancellation retains the engine lease until the provider has stopped; a late result is discarded.
@@ -18,8 +18,8 @@ Each successful run stores a result under the same entry. The active text, origi
 - Alternative versions are local to this Mac and are retained until explicitly discarded or their History entry is deleted/purged. They do not duplicate the audio.
 - Search, ordinary copy and TXT/Markdown/JSON exports use the active entry. The comparison dialog copies any version's raw or final text explicitly.
 - History/Inbox sync sends the active content and provenance through the existing content component. Alternatives are not sent. Promoting a version leaves Inbox status, recording time and duration unchanged.
-- Word count on the History entry follows the active text. Re-runs do not count as new dictation sessions or modify lifetime usage statistics. Engine differences and promotion do not feed correction learning.
-- Word times, segment times and speaker assignments belong to their version. Rewritten text does not inherit alignment from the original. Promotion sends an additive `alignmentResetAt` content field so updated clients discard older speaker components. Clients predating this field still receive active text, but require an update to invalidate their old speaker alignment; this includes the separate iOS implementation.
+- Word count on the History entry follows the active text. Re-runs do not count as new dictation sessions, change dictionary correction usage counters or modify lifetime usage statistics. Engine differences and promotion do not feed correction learning.
+- Word times, segment times and speaker assignments belong to their version. Rewritten text does not inherit alignment from the original. Microphone-channel speech evidence belongs to the recording and survives promotion. A queued or running speaker detection must finish before another version can be promoted. Promotion sends an additive `alignmentResetAt` content field so updated clients discard older speaker components. Clients predating this field still receive active text, but require an update to invalidate their old speaker alignment; this includes the separate iOS implementation.
 - Reusing raw text for a Workflow-only run is not part of this audio re-transcription action.
 
 ## Verification

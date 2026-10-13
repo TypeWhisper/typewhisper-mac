@@ -2,6 +2,7 @@ import Foundation
 
 /// A saved run owns its text and alignment data. Promoting a run never reuses another
 /// run's word times or speaker assignments. Legacy entries become the original lazily.
+/// Microphone-channel evidence belongs to the recording and survives every promotion.
 struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
     var id = UUID()
     var createdAt = Date()
@@ -27,7 +28,6 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
     var timedTextGranularityRaw: String?
     var speakerWordsData: Data?
     var speakerWordsAreFromSecondPass: Bool?
-    var speakerOwnSpeechData: Data?
     var processingStateRaw: String?
     var processingFailureCategory: String?
     var processingFailureMessage: String?
@@ -47,7 +47,6 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
             timedTextGranularityRaw: record.timedTextGranularityRaw,
             speakerWordsData: record.speakerWordsData,
             speakerWordsAreFromSecondPass: record.speakerWordsAreFromSecondPass,
-            speakerOwnSpeechData: record.speakerOwnSpeechData,
             processingStateRaw: record.processingStateRaw,
             processingFailureCategory: record.processingFailureCategory,
             processingFailureMessage: record.processingFailureMessage
@@ -70,7 +69,6 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
         record.timedTextGranularityRaw = timedTextGranularityRaw
         record.speakerWordsData = speakerWordsData
         record.speakerWordsAreFromSecondPass = speakerWordsAreFromSecondPass
-        record.speakerOwnSpeechData = speakerOwnSpeechData
         record.processingStateRaw = processingStateRaw ?? RecordingProcessingState.ready.rawValue
         record.processingFailureCategory = processingFailureCategory
         record.processingFailureMessage = processingFailureMessage
@@ -96,6 +94,10 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
 
     func isActive(in record: TranscriptionRecord) -> Bool {
         id == (record.activeTranscriptionVersionID ?? record.id) && matchesContent(of: record)
+    }
+
+    func canDiscard(in record: TranscriptionRecord) -> Bool {
+        id != record.id && !isActive(in: record)
     }
 }
 

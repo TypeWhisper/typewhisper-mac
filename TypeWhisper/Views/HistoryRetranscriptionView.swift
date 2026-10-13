@@ -34,7 +34,8 @@ struct HistoryRetranscriptionView: View {
     private var selectedVersion: HistoryTranscriptionVersion? { candidates.first { $0.id == selectedVersionID } }
     private var running: Bool { service.runningRecordID != nil }
     private var request: HistoryRetranscriptionService.Request {
-        .init(engineID: engineID, modelID: modelID, language: language, workflowID: workflowID)
+        .init(engineID: engineID, modelID: modelID, language: language, workflowID: workflowID,
+              appBundleIdentifier: record.appBundleIdentifier, appURL: record.appURL)
     }
     private var canStart: Bool {
         plan != nil && service.canRun(record)
@@ -259,7 +260,7 @@ struct HistoryRetranscriptionView: View {
                             Button(String(localized: "history.retranscribe.copyText")) { copy(version.finalText) }
                                 .fixedSize()
                             Spacer()
-                            if version.id != record.id, version.id != record.activeTranscriptionVersionID {
+                            if version.canDiscard(in: record) {
                                 Button(role: .destructive) {
                                     showDiscardConfirmation = true
                                 } label: {

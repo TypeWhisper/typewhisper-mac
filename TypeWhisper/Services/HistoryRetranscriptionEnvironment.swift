@@ -99,7 +99,9 @@ enum HistoryRetranscriptionEnvironment {
                 }
             }
             if copy.usesAppleTranslate {
-                guard copy.translationTargetLanguage != nil else {
+                guard WorkflowTranslationLanguageNormalizer.normalizedLanguageIdentifier(
+                    from: copy.translationTargetLanguage
+                ) != nil else {
                     throw HistoryRetranscriptionError.unavailable
                 }
                 #if canImport(Translation)
@@ -113,6 +115,10 @@ enum HistoryRetranscriptionEnvironment {
             workflow = copy
         }
         let frozenWorkflow = workflow
+        let resolvedOutputFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: frozenWorkflow?.output.format,
+            bundleIdentifier: request.appBundleIdentifier, url: request.appURL
+        )
         let configuration = try frozenWorkflow.map {
             try JSONEncoder().encode(WorkflowConfiguration(template: $0.template, behavior: $0.behavior, output: $0.output))
         }
@@ -139,13 +145,14 @@ enum HistoryRetranscriptionEnvironment {
                 try Task.checkCancellation()
                 let raw = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !raw.isEmpty else { throw HistoryRetranscriptionError.emptyResult }
-                var final = dictionary.applyCorrections(to: [raw]).first ?? raw
+                var final = dictionary.previewCorrections(to: raw)
                 var steps = final == raw ? [] : ["Corrections"]
                 if let frozenWorkflow {
                     let beforeWorkflow = final
                     final = try await workflowProcessor.process(
                         workflow: frozenWorkflow, text: final,
-                        detectedLanguage: result.detectedLanguage, configuredLanguage: request.language
+                        detectedLanguage: result.detectedLanguage, configuredLanguage: request.language,
+                        resolvedOutputFormat: resolvedOutputFormat
                     )
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
                 }

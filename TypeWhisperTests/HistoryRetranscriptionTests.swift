@@ -104,6 +104,33 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(try f.record.savedTranscriptionVersions().count, 2)
     }
 
+    func testPromotionKeepsMicrophoneEvidenceForNewAndPreviouslyArchivedVersions() async throws {
+        for hasArchivedEvidence in [false, true] {
+            let f = try await fixture()
+            defer { TestSupport.remove(f.directory) }
+            let evidence = try JSONEncoder().encode([[1.0, 2.0], [4.0, 5.0]])
+            f.record.speakerOwnSpeechData = evidence
+            let version = alternative()
+            try append(version, to: f)
+            if hasArchivedEvidence {
+                // Older archives included this recording-level field in each snapshot.
+                var archive = try XCTUnwrap(JSONSerialization.jsonObject(
+                    with: XCTUnwrap(f.record.transcriptionVersionsData)
+                ) as? [[String: Any]])
+                archive[1]["speakerOwnSpeechData"] = Data("outdated evidence".utf8).base64EncodedString()
+                f.record.transcriptionVersionsData = try JSONSerialization.data(withJSONObject: archive)
+            }
+            try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+            XCTAssertEqual(f.record.speakerOwnSpeechData, evidence)
+            XCTAssertTrue(try XCTUnwrap(f.record.savedTranscriptionVersions().last).isActive(in: f.record))
+            let reopened = HistoryService(appSupportDirectory: f.directory)
+            XCTAssertEqual(reopened.record(withID: f.record.id)?.speakerOwnSpeechData, evidence)
+            try f.history.promoteTranscriptionVersion(f.record.id, in: f.record)
+            XCTAssertEqual(f.record.speakerOwnSpeechData, evidence)
+            XCTAssertEqual(try f.record.savedTranscriptionVersions().count, 2)
+        }
+    }
+
     func testSanitizedVersionSurvivesReopenAndPromotion() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -157,8 +184,11 @@ final class HistoryRetranscriptionTests: XCTestCase {
         defer { TestSupport.remove(f.directory) }
         let version = alternative()
         try append(version, to: f)
+        XCTAssertFalse(HistoryTranscriptionVersion.capture(f.record).canDiscard(in: f.record))
+        XCTAssertTrue(version.canDiscard(in: f.record))
         XCTAssertThrowsError(try f.history.discardTranscriptionVersion(f.record.id, in: f.record))
         try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+        XCTAssertFalse(version.canDiscard(in: f.record))
         XCTAssertThrowsError(try f.history.discardTranscriptionVersion(version.id, in: f.record))
         try f.history.promoteTranscriptionVersion(f.record.id, in: f.record)
         try f.history.discardTranscriptionVersion(version.id, in: f.record)
@@ -190,6 +220,7 @@ final class HistoryRetranscriptionTests: XCTestCase {
                 f.history.updateRecord(f.record, finalText: "replaced text")
             }
             XCTAssertFalse(version.isActive(in: f.record))
+            XCTAssertTrue(version.canDiscard(in: f.record), "The comparison must offer the discard action")
             let current = HistoryTranscriptionVersion.capture(f.record)
             try f.history.discardTranscriptionVersion(version.id, in: f.record)
             XCTAssertEqual(try f.record.savedTranscriptionVersions().map(\.id), [f.record.id])
@@ -850,6 +881,74 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(version.finalText, "cleaned test")
     }
 
+    func testComparisonCorrectionsDoNotCountUsageOnSuccessOrWorkflowFailure() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let llm = HistoryComparisonLLM()
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        environment.dictionary.addEntry(type: .correction, original: "test", replacement: "TypeWhisper")
+        let correction = try XCTUnwrap(environment.dictionary.corrections.first)
+        let plan = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: engine.providerId), manager: environment.manager,
+            dictionary: environment.dictionary, workflows: [], promptProcessing: environment.promptProcessing
+        )
+        let version = try await plan.run([0.1])
+        XCTAssertEqual(version.rawText, "test")
+        XCTAssertEqual(version.finalText, "TypeWhisper")
+        XCTAssertEqual(correction.usageCount, 0)
+
+        llm.error = CocoaError(.fileReadCorruptFile)
+        let workflow = Workflow(
+            name: "Failing Cleanup", template: .cleanedText, trigger: .manual(),
+            behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test")
+        )
+        let failingPlan = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: engine.providerId, workflowID: workflow.id), manager: environment.manager,
+            dictionary: environment.dictionary, workflows: [workflow], promptProcessing: environment.promptProcessing
+        )
+        do {
+            _ = try await failingPlan.run([0.1])
+            XCTFail("The workflow should fail after corrections are previewed")
+        } catch {}
+        XCTAssertEqual(correction.usageCount, 0)
+    }
+
+    func testAutomaticWorkflowFormatUsesSavedAppAndWebsiteContext() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let llm = HistoryComparisonLLM()
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        let workflow = Workflow(
+            name: "Formatted Cleanup", template: .cleanedText, trigger: .manual(),
+            behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test"),
+            output: WorkflowOutput(format: "auto")
+        )
+        let richTextInstruction = "Return Markdown-compatible text for rich-text conversion."
+        let cases: [(String?, String?, String)] = [
+            ("com.apple.mail", nil, "Return the result as html."),
+            ("com.apple.iWork.Pages", nil, richTextInstruction),
+            ("com.google.Chrome", "https://docs.google.com/document/d/test/edit", richTextInstruction),
+            ("com.google.Chrome", "https://mail.google.com/mail/u/0", "Return the result as html."),
+            (nil, nil, "Return the result as plaintext.")
+        ]
+        for (bundleID, url, instruction) in cases {
+            let plan = try HistoryRetranscriptionEnvironment.plan(
+                .init(engineID: engine.providerId, workflowID: workflow.id,
+                      appBundleIdentifier: bundleID, appURL: url),
+                manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing
+            )
+            _ = try await plan.run([0.1])
+            XCTAssertTrue(try XCTUnwrap(llm.lastSystemPrompt).contains(instruction), "Wrong format for \(bundleID ?? "unknown app") / \(url ?? "no URL")")
+        }
+        workflow.output.format = "markdown"
+        let explicitPlan = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: engine.providerId, workflowID: workflow.id, appBundleIdentifier: "com.apple.mail"),
+            manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [workflow], promptProcessing: environment.promptProcessing
+        )
+        _ = try await explicitPlan.run([0.1])
+        XCTAssertTrue(try XCTUnwrap(llm.lastSystemPrompt).contains("Return the result as markdown."))
+    }
+
     func testAppleIntelligenceWorkflowUsesBuiltInProviderWithoutCloudConsentAndRejectsUnavailability() async throws {
         guard #available(macOS 26, *) else { throw XCTSkip("Apple Intelligence requires macOS 26") }
         let engine = HistoryComparisonRestoreEngine()
@@ -909,6 +1008,38 @@ final class HistoryRetranscriptionTests: XCTestCase {
             XCTAssertFalse(plan.requiresCloudConfirmation)
             workflow.behavior.settings.removeValue(forKey: "targetLanguage")
             XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+                request, manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing, translationService: service
+            ))
+        }
+        #endif
+    }
+
+    func testAppleTranslatePlanRejectsInvalidTargetsAndAcceptsNormalizedLanguageAliases() throws {
+        #if canImport(Translation)
+        guard #available(macOS 15, *) else { throw XCTSkip("Apple Translate requires macOS 15") }
+        let engine = HistoryComparisonRestoreEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let service = TranslationService()
+        let workflow = Workflow(
+            name: "Apple Translate", template: .translation, trigger: .manual(),
+            behavior: WorkflowBehavior(settings: [
+                "translationProcessor": WorkflowTranslationProcessor.appleTranslate.rawValue
+            ])
+        )
+        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, workflowID: workflow.id)
+        for target in ["auto", "zz", "not a language", " "] {
+            workflow.behavior.settings["targetLanguage"] = target
+            XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+                request, manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing, translationService: service
+            )) {
+                XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
+            }
+        }
+        for target in ["de", "de_DE", "German", "zh_Hant"] {
+            workflow.behavior.settings["targetLanguage"] = target
+            XCTAssertNoThrow(try HistoryRetranscriptionEnvironment.plan(
                 request, manager: environment.manager, dictionary: environment.dictionary,
                 workflows: [workflow], promptProcessing: environment.promptProcessing, translationService: service
             ))
@@ -1022,12 +1153,14 @@ private final class HistoryComparisonLLM: LLMProviderPlugin, @unchecked Sendable
     var supportedModels: [PluginModelInfo] { [PluginModelInfo(id: "test", displayName: "Test Model")] }
     private let lock = NSLock()
     private var systemPrompt: String?
+    var error: Error?
     var lastSystemPrompt: String? { lock.withLock { systemPrompt } }
     required init() {}
     func activate(host: HostServices) {}
     func deactivate() {}
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
         lock.withLock { self.systemPrompt = systemPrompt }
+        if let error { throw error }
         return "cleaned test"
     }
 }

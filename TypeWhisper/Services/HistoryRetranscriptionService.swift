@@ -51,6 +51,9 @@ final class HistoryRetranscriptionService: ObservableObject {
         var modelID: String?
         var language: String?
         var workflowID: UUID?
+        /// The saved target determines an automatic Workflow output format.
+        var appBundleIdentifier: String?
+        var appURL: String?
     }
 
     struct Plan {

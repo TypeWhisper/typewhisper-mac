@@ -640,6 +640,42 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         observation.cancel()
     }
 
+    func testPromotionWaitsForQueuedAndRunningSpeakerDetection() async throws {
+        for waitForProvider in [false, true] {
+            let coordinator = makeCoordinator()
+            let addedID = await coordinator.addRecording(input(labels: true))
+            let id = try XCTUnwrap(addedID)
+            let record = try XCTUnwrap(history.record(withID: id))
+            let version = HistoryTranscriptionVersion(rawText: "New transcript.", finalText: "New transcript.", engineID: "new-engine")
+            try history.appendTranscriptionVersion(version, to: record, expected: .capture(record))
+            let original = HistoryTranscriptionVersion.capture(record)
+            var release: CheckedContinuation<Void, Never>?
+            provider.beforeDiarization = {
+                await withCheckedContinuation { release = $0 }
+            }
+            defer { release?.resume() }
+            XCTAssertNil(coordinator.start(recordID: id))
+            if waitForProvider {
+                for _ in 0..<100 where release == nil { try await Task.sleep(for: .milliseconds(10)) }
+                XCTAssertNotNil(release)
+            }
+            XCTAssertThrowsError(try history.promoteTranscriptionVersion(version.id, in: record)) {
+                XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.busy.localizedDescription)
+            }
+            XCTAssertEqual(HistoryTranscriptionVersion.capture(record), original)
+            XCTAssertNil(record.activeTranscriptionVersionID)
+            for _ in 0..<100 where release == nil { try await Task.sleep(for: .milliseconds(10)) }
+            let continuation = try XCTUnwrap(release)
+            release = nil
+            continuation.resume()
+            try await waitUntilIdle(coordinator)
+            try history.promoteTranscriptionVersion(version.id, in: record)
+            XCTAssertEqual(record.rawText, "New transcript.")
+            XCTAssertNil(record.speakerTranscript)
+            XCTAssertTrue(version.isActive(in: record))
+        }
+    }
+
     func testSupporterStatusDoesNotUnlockSpeakerDetection() {
         XCTAssertFalse(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: false, hasPremiumEntitlement: false))
         XCTAssertTrue(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: true, hasPremiumEntitlement: false))
@@ -657,6 +693,7 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
     var modelsInstalled = true
     /// How long each detection takes.
     var delay: Duration?
+    var beforeDiarization: (@MainActor () async -> Void)?
     private(set) var requests: [PluginDiarizationRequest] = []
     private(set) var prepareCalls = 0
 
@@ -685,6 +722,7 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
         requests.append(request)
+        if let beforeDiarization { await beforeDiarization() }
         if let delay { try await Task.sleep(for: delay) }
         if let error { throw error }
         return PluginDiarizationResult(turns: turns, speakerEmbeddings: embeddings, engine: "fake-diarizer")

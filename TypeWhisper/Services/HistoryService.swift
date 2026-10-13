@@ -186,6 +186,8 @@ final class HistoryService: ObservableObject {
     var onRecordsDeleted: (([UUID]) -> Void)?
     /// Preserve local enrollment evidence before a name or speaker correction.
     var onSpeakerNamesWillChange: ((TranscriptionRecord) throws -> Void)?
+    /// A pending detector must finish before a version replaces the text it captured.
+    var isSpeakerDetectionActive: ((UUID) -> Bool)?
 
     /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
     /// as dictations persisted after insertion, pass the generation they were captured in.
@@ -1755,6 +1757,9 @@ final class HistoryService: ObservableObject {
         guard self.record(withID: record.id) === record, !record.isDeleted else {
             throw HistoryRetranscriptionError.changed
         }
+        guard isSpeakerDetectionActive?(record.id) != true else {
+            throw HistoryRetranscriptionError.busy
+        }
         var versions = try record.savedTranscriptionVersions()
         guard let version = versions.first(where: { $0.id == id }) else {
             throw HistoryRetranscriptionError.invalidVersion
@@ -1800,8 +1805,7 @@ final class HistoryService: ObservableObject {
             throw HistoryRetranscriptionError.changed
         }
         var versions = try record.savedTranscriptionVersions()
-        guard id != record.id, let version = versions.first(where: { $0.id == id }),
-              !version.isActive(in: record) else {
+        guard let version = versions.first(where: { $0.id == id }), version.canDiscard(in: record) else {
             throw HistoryRetranscriptionError.invalidVersion
         }
         versions.removeAll { $0.id == id }

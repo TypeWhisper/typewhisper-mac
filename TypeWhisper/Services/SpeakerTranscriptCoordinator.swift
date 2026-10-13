@@ -225,6 +225,9 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         self.historyService = historyService
         self.providerSource = providerSource
         self.premiumAccess = premiumAccess
+        historyService.isSpeakerDetectionActive = { [weak self] recordID in
+            self?.stages[recordID] != nil
+        }
     }
 
     var hasPremiumAccess: Bool { premiumAccess() }
