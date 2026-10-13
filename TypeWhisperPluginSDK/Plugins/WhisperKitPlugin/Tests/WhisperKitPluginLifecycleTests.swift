@@ -604,6 +604,64 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertNil(plugin.currentSettingsActivity)
     }
 
+    func testSourceProgressDoesNotRegressDuringEarlierChunkRecovery() {
+        let reported = OSAllocatedUnfairLock(initialState: [PluginTranscriptionSourceProgress]())
+        let callback = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90) { progress in
+            reported.withLock { $0.append(progress) }
+            return true
+        }
+
+        // Later chunks can finish before the serial retry discovers earlier segments.
+        for end: Float in [30, 90, 31, 45, 60] {
+            callback([TranscriptionSegment(start: 0, end: end, text: "")])
+        }
+
+        let values = reported.withLock { $0 }
+        XCTAssertEqual(values.first?.processedDuration, 30)
+        XCTAssertEqual(values.last?.processedDuration, 90)
+        XCTAssertEqual(values.last?.fractionCompleted, 1)
+        XCTAssertTrue(zip(values, values.dropFirst()).allSatisfy {
+            $0.processedDuration <= $1.processedDuration
+        })
+    }
+
+    func testSourceProgressIsOrderedAcrossConcurrentChunkCallbacks() async {
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        let callback = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 100) { progress in
+            reported.withLock { $0.append(progress.processedDuration) }
+            return true
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for end in (1...100).reversed() {
+                group.addTask {
+                    callback([TranscriptionSegment(start: 0, end: Float(end), text: "")])
+                }
+            }
+        }
+
+        let values = reported.withLock { $0 }
+        XCTAssertEqual(values.last, 100)
+        XCTAssertTrue(zip(values, values.dropFirst()).allSatisfy { $0 <= $1 })
+    }
+
+    func testSourceProgressStartsFreshForEachTranscription() {
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        let capture: @Sendable (PluginTranscriptionSourceProgress) -> Bool = { progress in
+            reported.withLock { $0.append(progress.processedDuration) }
+            return true
+        }
+        let first = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90, onSourceProgress: capture)
+        let second = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90, onSourceProgress: capture)
+
+        first([TranscriptionSegment(start: 0, end: 90, text: "")])
+        second([TranscriptionSegment(start: 0, end: 10, text: "")])
+        first([TranscriptionSegment(start: 0, end: 60, text: "")])
+        second([TranscriptionSegment(start: 0, end: 20, text: "")])
+
+        XCTAssertEqual(reported.withLock { $0 }, [90, 10, 20])
+    }
+
     func testSourceProgressUsesLatestDiscoveredSegmentEnd() {
         let progress = WhisperKitPlugin.sourceProgress(
             fromSegmentEnds: [10, 75],

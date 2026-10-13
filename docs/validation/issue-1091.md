@@ -35,6 +35,11 @@ incorrectly marked completed.
   timeline. Returned results remain chunk-local until stitching applies their
   offsets once. A regression reproduces a middle chunk reporting 30 seconds of
   progress instead of 60 seconds before this correction.
+- Source progress keeps the greatest reported position for each transcription.
+  Earlier positions from retries or parallel chunks are ignored, and callback
+  delivery is serialized with that comparison. Three callback regressions failed
+  before this correction and now cover backward updates, concurrent updates and
+  independent transcription runs. Segment timestamps are not changed by this guard.
 - A remaining failure includes its chunk number and reaches the
   Recorder's existing error display and `.transcription-failure.json` path.
   Neither the live preview nor the initial truncated result masks that failure.
@@ -66,16 +71,16 @@ this change keeps that file limited to existing failure metadata.
 
 ## Verification
 
-On October 13, 2026, all 166 selected tests passed with Xcode 27.0 (27A266a),
-including eight new regression tests. The direct-distribution test build passed
-after the retry-callback correction. An unsigned App Store compile check passed
-before publication; the review follow-up also built and launched the signed,
+On October 13, 2026, all 169 selected tests passed with Xcode 27.0 (27A266a),
+including eleven new regression tests. The direct-distribution test build passed
+after both retry-callback corrections. An unsigned App Store compile check passed
+before publication; the latest review follow-up also built and launched the signed,
 sandboxed edition with WhisperKit marked installed for that launch.
 `git diff --check` passed.
 
 The signed App Store build passed `codesign --verify --deep --strict`, has an
 Apple Development signature and `com.apple.security.app-sandbox = true`, and
-remained running for more than two minutes. The process mapped the WhisperKit
+its fresh process was verified after relaunch. The process mapped the WhisperKit
 executable from its own `Contents/PlugIns/WhisperKitPlugin.bundle`. Visual Recorder
 inspection was attempted but blocked by a ScreenCaptureKit stream error
 (`SCStreamErrorDomain -3811`), so no visual UI or real-model inference validation

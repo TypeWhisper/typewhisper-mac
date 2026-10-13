@@ -375,15 +375,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             options.usePrefillPrompt = true
         }
 
-        whisperKit.segmentDiscoveryCallback = { segments in
-            guard let progress = Self.sourceProgress(
-                fromDiscoveredSegments: segments,
-                totalDuration: audio.duration
-            ) else {
-                return
-            }
-            _ = onSourceProgress(progress)
-        }
+        whisperKit.segmentDiscoveryCallback = Self.makeSourceProgressCallback(
+            totalDuration: audio.duration,
+            onSourceProgress: onSourceProgress
+        )
         defer { whisperKit.segmentDiscoveryCallback = nil }
 
         return try await Self.transcribeAudio(
@@ -524,6 +519,28 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+    }
+
+    static func makeSourceProgressCallback(
+        totalDuration: TimeInterval,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) -> @Sendable ([TranscriptionSegment]) -> Void {
+        let latestDuration = OSAllocatedUnfairLock(initialState: 0.0)
+        return { segments in
+            guard let progress = Self.sourceProgress(
+                fromDiscoveredSegments: segments,
+                totalDuration: totalDuration
+            ) else {
+                return
+            }
+            latestDuration.withLock { latest in
+                // Parallel chunks and serial retries may discover earlier positions.
+                // Forward under the same lock so concurrent callbacks stay ordered.
+                guard progress.processedDuration > latest else { return }
+                latest = progress.processedDuration
+                _ = onSourceProgress(progress)
+            }
+        }
     }
 
     static func sourceProgress(
