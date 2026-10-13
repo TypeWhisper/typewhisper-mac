@@ -6418,7 +6418,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testWebTerminalPasteDoesNotReportUnchangedInputProxyAsMissedTextField() async throws {
         // Solo's WKWebView consumes the paste, but its AXTextArea retains value="" and range=0.
         // Include an intermediate group: the web area is not necessarily the immediate parent.
-        for awaitsVerification in [false, true] {
+        for (awaitsVerification, autoEnter) in [(false, false), (true, false), (false, true)] {
             let service = TextInsertionService()
             let pasteboard = NSPasteboard.withUniqueName()
             let field = AXUIElementCreateApplication(1)
@@ -6428,24 +6428,37 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             service.pasteboardProvider = { pasteboard }
             service.captureActiveAppOverride = { ("Unknown web host", "com.example.webhost", nil) }
             service.focusedTextElementOverride = { field }
-            service.accessibilityRoleOverride = { $0 == webArea ? "AXWebArea" : ($0 == field ? "AXTextArea" : "AXGroup") }
-            service.accessibilityParentOverride = { $0 == field ? group : ($0 == group ? webArea : nil) }
+            var pastedText: String?
+            service.accessibilityRoleOverride = {
+                XCTAssertNotNil(pastedText, "Web ancestry must not delay the paste")
+                return $0 == webArea ? "AXWebArea" : ($0 == field ? "AXTextArea" : "AXGroup")
+            }
+            service.accessibilityParentOverride = {
+                XCTAssertNotNil(pastedText, "Web ancestry must not delay the paste")
+                return $0 == field ? group : ($0 == group ? webArea : nil)
+            }
+            service.setMessagingTimeoutOverride = { element, _ in
+                XCTAssertNotEqual(element, field, "Ancestry lookup must not change the field's verification timeout")
+            }
             service.focusedTextStateOverride = { _ in
                 (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
             }
             service.pasteVerificationAttempts = 1
             service.pasteVerificationPollingDelay = .milliseconds(1)
-            var pastedText: String?
             service.pasteSimulatorOverride = { pastedText = pasteboard.string(forType: .string) }
+            service.autoEnterDelay = .milliseconds(1)
+            var returnCount = 0
+            service.returnSimulatorOverride = { returnCount += 1 }
 
             let result = try await service.insertText(
-                "Hello from dictation", awaitPasteVerification: awaitsVerification, detectMissedTextField: true
+                "Hello from dictation", autoEnter: autoEnter,
+                awaitPasteVerification: awaitsVerification, detectMissedTextField: true
             )
 
             XCTAssertEqual(pastedText, "Hello from dictation")
             XCTAssertFalse(result.missedTextField)
-            XCTAssertEqual(result, .pasted(verification: awaitsVerification
-                ? .unverified(.webContentUnchanged) : .notAwaited))
+            XCTAssertEqual(result, .pasted(verification: .unverified(.webContentUnchanged)))
+            XCTAssertEqual(returnCount, autoEnter ? 1 : 0)
         }
     }
 
@@ -6473,11 +6486,37 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 if isWebField { value += "Hello" }
             }
 
-            let result = try await service.insertText("Hello", awaitPasteVerification: true, detectMissedTextField: true)
+            // Normal dictation does not explicitly await verification when correction learning is off.
+            let result = try await service.insertText("Hello", detectMissedTextField: true)
 
             XCTAssertEqual(result.missedTextField, !isWebField)
             XCTAssertEqual(result, .pasted(verification: isWebField ? .verified : .unverified(.focusedTextUnchanged)))
+            XCTAssertEqual(service.lastInsertionTiming?.verifiedUptimeNanoseconds != nil, isWebField)
         }
+    }
+
+    @MainActor
+    func testFocusedWebAreaDoesNotSuppressMissedPasteWarning() async throws {
+        let service = TextInsertionService()
+        let webArea = AXUIElementCreateApplication(1)
+        let window = AXUIElementCreateApplication(2)
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.captureActiveAppOverride = { ("Web host", "com.example.webhost", nil) }
+        service.focusedTextElementOverride = { webArea }
+        service.accessibilityRoleOverride = { $0 == webArea ? "AXWebArea" : "AXWindow" }
+        service.accessibilityParentOverride = { $0 == webArea ? window : nil }
+        service.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: "", selectedRange: nil)
+        }
+        service.pasteVerificationAttempts = 0
+        service.pasteSimulatorOverride = {}
+
+        let result = try await service.insertText("Hello", detectMissedTextField: true)
+
+        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
+        XCTAssertTrue(result.missedTextField)
     }
 
     @MainActor
@@ -9722,11 +9761,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    private func assertRawRestoreWaitsForDeferredPersistence(historyEnabled: Bool) async throws {
+    func testWebPasteRecordsUndoSnapshotWithoutCorrectionLearning() async throws {
+        try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true, usesWebPaste: true)
+    }
+
+    @MainActor
+    private func assertRawRestoreWaitsForDeferredPersistence(
+        historyEnabled: Bool,
+        usesWebPaste: Bool = false
+    ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let defaults = UserDefaults.standard
         let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
-                    UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard]
+                    UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard,
+                    UserDefaultsKeys.targetAppCorrectionLearningEnabled,
+                    UserDefaultsKeys.improveTypeWhisperCaptureEnabled]
         let originals = keys.map { defaults.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
@@ -9736,6 +9785,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         defaults.set(historyEnabled, forKey: UserDefaultsKeys.historyEnabled)
         defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
         defaults.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        defaults.set(false, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        defaults.set(false, forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
         MockTranscriptionPlugin.reset()
         let raw = "  hello world \n"
         MockTranscriptionPlugin.setResponseText(raw)
@@ -9748,7 +9799,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             return BrowserResolution(url: URL(string: "https://example.com/undo-test"), title: nil)
         }
         let context = Self.makeDictationContext(appSupportDirectory: directory, browserURLResolver: resolver)
-        context.dictationViewModel.preserveClipboard = true
+        context.dictationViewModel.preserveClipboard = !usesWebPaste
         defer { context.dictationViewModel.flushPendingPostInsertionPersistence() }
         context.dictionaryService.addEntry(type: .correction, original: "hello", replacement: "Processed greeting")
         let insertion = context.textInsertionService
@@ -9770,6 +9821,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             value = (value as NSString).replacingCharacters(in: selection, with: text)
             selection = NSRange(location: selection.location + (text as NSString).length, length: 0)
             return true
+        }
+        if usesWebPaste {
+            let webArea = AXUIElementCreateApplication(1235)
+            insertion.accessibilityRoleOverride = { $0 == element ? "AXTextArea" : "AXWebArea" }
+            insertion.accessibilityParentOverride = { $0 == element ? webArea : nil }
+            insertion.pasteVerificationPollingDelay = .milliseconds(1)
+            insertion.pasteSimulatorOverride = {
+                value = pasteboard.string(forType: .string) ?? ""
+                selection = NSRange(location: (value as NSString).length, length: 0)
+            }
         }
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }

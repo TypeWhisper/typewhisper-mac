@@ -475,11 +475,11 @@ final class TextInsertionService {
         /// query failed, could not run (for example without access to other apps), or the app
         /// hid its focused element.
         fileprivate let noTextElementFocused: Bool
-        fileprivate let canReportUnchangedText: Bool
 
-        /// Whether verification can show that the paste missed. Unreadable fields never can.
-        var canDetectMissedTextField: Bool {
-            focusedTextState.map { $0.hasReadableText && canReportUnchangedText } ?? noTextElementFocused
+        /// Readable fields can confirm a paste even when an unchanged value cannot prove a miss.
+        /// Keep awaiting that positive evidence so callers can safely record undo snapshots.
+        var canVerifyPaste: Bool {
+            focusedTextState.map(\.hasReadableText) ?? noTextElementFocused
         }
     }
 
@@ -938,8 +938,7 @@ final class TextInsertionService {
             focusedTextState: query.element.flatMap { captureFocusedTextState(for: $0) },
             // A found element whose state could not be captured is not proof of a missing field.
             noTextElementFocused: query.focusIsKnown && query.element == nil
-                && !acceptsPasteWithoutTextElement,
-            canReportUnchangedText: query.element.map { !isWebContentElement($0) } ?? true
+                && !acceptsPasteWithoutTextElement
         )
     }
 
@@ -1276,7 +1275,7 @@ final class TextInsertionService {
     ///
     /// A synthetic paste only waits for paste verification when the caller needs the paste to
     /// land before this returns (`autoEnter`, `awaitPasteVerification`), or when
-    /// `detectMissedTextField` asks for it and verification can show a miss (see
+    /// `detectMissedTextField` asks for it and the field is readable or known to be absent (see
     /// `InsertionResult.missedTextField`). With `preserveClipboard`, the clipboard restore runs
     /// afterwards and only while the clipboard still holds the generated payload.
     func insertText(
@@ -1356,7 +1355,7 @@ final class TextInsertionService {
             ? capturePasteVerificationState(acceptsPasteWithoutTextElement: isTerminalApp)
             : nil
         let verifiesBeforeReturning = autoEnter || awaitPasteVerification
-            || (detectMissedTextField && pasteVerificationState?.canDetectMissedTextField == true)
+            || (detectMissedTextField && pasteVerificationState?.canVerifyPaste == true)
         let initialChangeCount = pasteboard.changeCount
 
         // Set transcribed text on clipboard and simulate Cmd+V.
@@ -1475,14 +1474,16 @@ final class TextInsertionService {
         if canRestoreClipboard(afterPasteUsing: state) {
             return .verified
         }
-        guard state.canReportUnchangedText else {
-            return .unverified(.webContentUnchanged)
-        }
         // Only a field readable before and after the paste proves that the paste missed it.
         guard let initialState = state.focusedTextState, initialState.hasReadableText,
               let currentState = captureFocusedTextState(for: initialState.element),
               currentState.keepsReadableText(of: initialState) else {
             return .unverified(.focusedTextStateUnavailable)
+        }
+        // Classify only unchanged fields, after the paste and positive verification attempts.
+        // Web input proxies can consume the paste without exposing a text or selection change.
+        guard !hasWebAreaAncestor(initialState.element) else {
+            return .unverified(.webContentUnchanged)
         }
         return .unverified(.focusedTextUnchanged)
     }
@@ -2390,21 +2391,22 @@ final class TextInsertionService {
     }
 
     /// Web terminals can expose an input proxy whose value and selection remain empty after
-    /// consuming a paste. Detect the AX ancestry, not the hosting app's bundle identifier.
-    private func isWebContentElement(_ element: AXUIElement) -> Bool {
-        var current = element
-        var visited: Set<AXUIElement> = []
+    /// consuming a paste. A focused web area itself does not establish an editable input.
+    private func hasWebAreaAncestor(_ element: AXUIElement) -> Bool {
+        var ancestor = accessibilityParentOverride.map { $0(element) }
+            ?? axElementAttribute(kAXParentAttribute as CFString, from: element)
+        var visited: Set<AXUIElement> = [element]
         for _ in 0..<16 {
+            guard let current = ancestor else { return false }
             guard visited.insert(current).inserted else { return false }
+            // These are separate parent references; do not shorten the captured field's timeout.
             applyMessagingTimeout(Self.liveFieldMessagingTimeout, to: current)
             let role = accessibilityRoleOverride.map { $0(current) }
                 ?? stringAttribute(kAXRoleAttribute as CFString, from: current)
             if role == "AXWebArea" { return true }
             if role == "AXWindow" || role == "AXApplication" { return false }
-            let parent = accessibilityParentOverride.map { $0(current) }
+            ancestor = accessibilityParentOverride.map { $0(current) }
                 ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
-            guard let parent else { return false }
-            current = parent
         }
         return false
     }
