@@ -195,6 +195,19 @@ final class SpeechOnlyAudioTests: XCTestCase {
         XCTAssertEqual(last.end, 10.3, accuracy: 0.001)
     }
 
+    func testSoundClassifierJudgesAnEndJustAfterAPartBoundary() async throws {
+        // The last part holds only 0.3 s, less than one window.
+        let duration = SoundAnalysisSpeechRegionDetector.partDuration + 0.3
+        let windows = try await SoundAnalysisSpeechRegionDetector.windows(
+            in: [Float](repeating: 0, count: Int(duration * sampleRate)),
+            sampleRate: sampleRate
+        )
+
+        let last = try XCTUnwrap(windows.last)
+        XCTAssertEqual(last.start, duration - 0.8, accuracy: 0.001)
+        XCTAssertEqual(last.end, duration, accuracy: 0.001)
+    }
+
     func testSoundClassifierCoversLongRecordingsAcrossParts() async throws {
         let duration = SoundAnalysisSpeechRegionDetector.partDuration * 2 + 20
         let windows = try await SoundAnalysisSpeechRegionDetector.windows(

@@ -1328,6 +1328,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(session.text, "fresh transcript")
         XCTAssertFalse(FileManager.default.fileExists(atPath: failureURL.path))
 
+        // The library reloads in the background after the session completes.
+        try await waitForRecordingsToLoad(viewModel, count: 1)
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.transcript, "fresh transcript")
         XCTAssertNil(recording.transcriptionFailure)
@@ -1836,6 +1838,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
         XCTAssertTrue(session.error?.contains("HTTP 500") == true)
 
+        try await waitForRecordingsToLoad(viewModel, count: 1)
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         let failure = try XCTUnwrap(recording.transcriptionFailure)

@@ -127,7 +127,9 @@ struct SoundAnalysisSpeechRegionDetector: SpeechRegionDetecting {
                         let result = Result {
                             try classify(
                                 samples[start..<end],
-                                trailingSilence: index == partStarts.count - 1 ? trailingSilence : 0,
+                                // A last part shorter than one window cannot hold one;
+                                // the part before it also reaches the end and covers it.
+                                trailingSilence: end == samples.count ? trailingSilence : 0,
                                 offset: Double(start) / sampleRate,
                                 sampleRate: sampleRate,
                                 isCancelled: { isCancelled.withLock { $0 } }
