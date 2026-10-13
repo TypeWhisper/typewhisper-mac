@@ -34,6 +34,14 @@ enum HistoryRetranscriptionActivity {
     static func checkEngineAccess() throws {
         if recordID != nil, !ownsEngine { throw HistoryRetranscriptionError.busy }
     }
+
+    static func waitForEngineAvailability() async throws {
+        for await recordID in recordIDPublisher.values {
+            try Task.checkCancellation()
+            if recordID == nil { return }
+        }
+        try Task.checkCancellation()
+    }
 }
 
 @MainActor
@@ -94,6 +102,7 @@ final class HistoryRetranscriptionService: ObservableObject {
     }
 
     func previewPlan(_ request: Request) throws -> Plan {
+        errorMessage = nil
         var plan = try planBuilder(request)
         plan.confirmedRequest = request
         return plan

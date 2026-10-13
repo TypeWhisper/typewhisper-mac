@@ -24,7 +24,7 @@ struct HistoryRetranscriptionView: View {
     private var container: ServiceContainer { .shared }
     private var engines: [any TranscriptionEnginePlugin] { PluginManager.shared?.transcriptionEngines ?? [] }
     private var engine: (any TranscriptionEnginePlugin)? { engines.first { $0.providerId == engineID } }
-    private var models: [PluginModelInfo] { engine?.transcriptionModels ?? [] }
+    private var models: [PluginModelInfo] { engine.map { HistoryRetranscriptionEnvironment.models(for: $0) } ?? [] }
     private var versions: [HistoryTranscriptionVersion] { (try? record.savedTranscriptionVersions()) ?? [] }
     private var activeVersion: HistoryTranscriptionVersion {
         versions.first { $0.isActive(in: record) } ?? .capture(record)
@@ -88,7 +88,7 @@ struct HistoryRetranscriptionView: View {
         .onAppear {
             engineID = container.modelManagerService.selectedProviderId ?? engines.first?.providerId ?? ""
             modelID = engine?.selectedModelId
-            language = engine?.supportedLanguages(forModel: modelID).contains(record.language ?? "") == true ? record.language : nil
+            language = HistoryRetranscriptionEnvironment.supportedLanguage(record.language, modelID: modelID, engine: engine)
             selectedVersionID = candidates.last?.id
             refreshPlan()
         }
@@ -99,7 +99,10 @@ struct HistoryRetranscriptionView: View {
             language = nil
             refreshPlan()
         }
-        .onChange(of: modelID) { _, _ in refreshPlan() }
+        .onChange(of: modelID) { _, _ in
+            language = HistoryRetranscriptionEnvironment.supportedLanguage(language, modelID: modelID, engine: engine)
+            refreshPlan()
+        }
         .onChange(of: language) { _, _ in refreshPlan() }
         .onChange(of: workflowID) { _, _ in refreshPlan() }
         .onChange(of: record.transcriptionVersionsData) { _, _ in selectedVersionID = candidates.last?.id }

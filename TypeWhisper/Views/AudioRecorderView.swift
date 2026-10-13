@@ -83,6 +83,12 @@ struct AudioRecorderView: View {
                     .controlSize(.large)
                     .disabled(!viewModel.canToggleRecording)
 
+                    if viewModel.isHistoryRetranscribing {
+                        Label(String(localized: "history.retranscribe.busy"), systemImage: "hourglass")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+
                     // Level meters
                     if viewModel.state == .recording {
                         VStack(spacing: 8) {

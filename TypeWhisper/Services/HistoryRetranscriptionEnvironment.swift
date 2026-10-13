@@ -19,7 +19,7 @@ enum HistoryRetranscriptionEnvironment {
                     || container.audioRecorderViewModel.retranscribingRecordingURL != nil
                     || container.fileTranscriptionViewModel.batchState == .processing
                     || container.speakerTranscriptionViewModel.batchState == .processing
-                    || container.modelManagerService.hasProtectedEngineUse
+                    || isBackgroundTranscriptionBusy(manager: container.modelManagerService, watchFolder: container.watchFolderService)
             },
             loadAudio: { url in
                 try await container.audioFileService.loadAudioSamples(from: url)
@@ -27,6 +27,10 @@ enum HistoryRetranscriptionEnvironment {
             canRetrieveAudio: { container.cloudFolderSyncController.canRetrieveHistoryAudio($0) },
             retrieveAudio: { try await container.cloudFolderSyncController.retrieveHistoryAudio($0) }
         )
+    }
+
+    static func isBackgroundTranscriptionBusy(manager: ModelManagerService, watchFolder: WatchFolderService) -> Bool {
+        watchFolder.currentlyProcessing != nil || manager.hasProtectedEngineUse
     }
 
     static func isLocal(_ engine: any TranscriptionEnginePlugin) -> Bool {
@@ -38,12 +42,23 @@ enum HistoryRetranscriptionEnvironment {
     static func plan(
         _ request: HistoryRetranscriptionService.Request, container: ServiceContainer
     ) throws -> HistoryRetranscriptionService.Plan {
-        let manager = container.modelManagerService
+        try plan(
+            request, manager: container.modelManagerService, dictionary: container.dictionaryService,
+            workflows: container.workflowService.workflows,
+            promptProcessing: container.promptProcessingService, translationService: container.translationService
+        )
+    }
+
+    static func plan(
+        _ request: HistoryRetranscriptionService.Request, manager: ModelManagerService,
+        dictionary: DictionaryService, workflows: [Workflow],
+        promptProcessing: PromptProcessingService, translationService: AnyObject? = nil
+    ) throws -> HistoryRetranscriptionService.Plan {
         guard let engine = PluginManager.shared?.transcriptionEngine(for: request.engineID),
               manager.canPrepareForTranscription(engine) else { throw HistoryRetranscriptionError.unavailable }
         let modelID = request.modelID ?? engine.selectedModelId
         if let modelID {
-            guard engine.transcriptionModels.contains(where: { $0.id == modelID }) else {
+            guard models(for: engine).contains(where: { $0.id == modelID }) else {
                 throw HistoryRetranscriptionError.unavailable
             }
             // The SDK cannot restore a nil model selection. Do not change that preference.
@@ -54,7 +69,7 @@ enum HistoryRetranscriptionEnvironment {
         var cloudProviders = isLocal(engine) ? [] : [String(format: String(localized: "history.retranscribe.audioProvider"), engineName)]
         var workflow: Workflow?
         if let id = request.workflowID {
-            guard let source = container.workflowService.workflows.first(where: { $0.id == id && $0.isEnabled }) else {
+            guard let source = workflows.first(where: { $0.id == id && $0.isEnabled }) else {
                 throw HistoryRetranscriptionError.unavailable
             }
             let copy = Workflow(
@@ -62,7 +77,7 @@ enum HistoryRetranscriptionEnvironment {
                 trigger: WorkflowTrigger(kind: .manual), behavior: source.behavior, output: source.output
             )
             if !copy.usesAppleTranslate, copy.template != .dictation || copy.usesInlineCommands {
-                let route = container.promptProcessingService.workflowProviderResolution(
+                let route = promptProcessing.workflowProviderResolution(
                     providerOverride: copy.behavior.providerId,
                     cloudModelOverride: copy.behavior.cloudModel,
                     effortOverride: copy.behavior.effortId
@@ -90,11 +105,13 @@ enum HistoryRetranscriptionEnvironment {
         let configuration = try frozenWorkflow.map {
             try JSONEncoder().encode(WorkflowConfiguration(template: $0.template, behavior: $0.behavior, output: $0.output))
         }
-        let dictionaryPrompt = container.dictionaryService.getTermsForPrompt(providerId: request.engineID)
-        let dictionaryHints = container.dictionaryService.getTermHints(providerId: request.engineID)
+        let dictionaryPrompt = dictionary.getTermsForPrompt(providerId: request.engineID)
+        let dictionaryHints = dictionary.getTermHints(providerId: request.engineID)
+        let vocabulary = dictionary.vocabularyForPrompt()
         let workflowProcessor = WorkflowTextProcessingService(
-            promptProcessingService: container.promptProcessingService,
-            translationService: container.translationService
+            promptProcessingService: promptProcessing,
+            translationService: translationService,
+            vocabularyProvider: { vocabulary }
         )
         return HistoryRetranscriptionService.Plan(
             requiresCloudConfirmation: !cloudProviders.isEmpty,
@@ -111,7 +128,7 @@ enum HistoryRetranscriptionEnvironment {
                 try Task.checkCancellation()
                 let raw = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !raw.isEmpty else { throw HistoryRetranscriptionError.emptyResult }
-                var final = container.dictionaryService.applyCorrections(to: [raw]).first ?? raw
+                var final = dictionary.applyCorrections(to: [raw]).first ?? raw
                 var steps = final == raw ? [] : ["Corrections"]
                 if let frozenWorkflow {
                     let beforeWorkflow = final
@@ -150,6 +167,28 @@ enum HistoryRetranscriptionEnvironment {
                 return version
             }
         )
+    }
+
+    /// Include cached models when a local engine only advertises its loaded model.
+    static func models(for engine: any TranscriptionEnginePlugin) -> [PluginModelInfo] {
+        guard isLocal(engine) else { return engine.modelCatalog }
+        let loaded = engine.transcriptionModels
+        let downloaded = (engine as? any PluginDownloadedModelManaging)?.downloadedModels ?? []
+        let installedIDs = Set((loaded + downloaded).map(\.id))
+        var models = engine.modelCatalog.filter {
+            installedIDs.contains($0.id) || $0.downloaded == true || $0.loaded == true
+        }
+        for model in loaded + downloaded where !models.contains(where: { $0.id == model.id }) {
+            models.append(model)
+        }
+        return models
+    }
+
+    static func supportedLanguage(
+        _ language: String?, modelID: String?, engine: (any TranscriptionEnginePlugin)?
+    ) -> String? {
+        guard let language, engine?.supportedLanguages(forModel: modelID).contains(language) == true else { return nil }
+        return language
     }
 
     static func transcribe(

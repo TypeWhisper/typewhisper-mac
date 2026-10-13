@@ -616,6 +616,127 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertFalse(HistoryRetranscriptionEnvironment.isLocal(HistoryComparisonTestEngine()))
     }
 
+    func testPreparingAnotherComparisonClearsPriorRunErrorsEvenIfItsPlanIsUnavailable() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        let version = alternative()
+        let service = HistoryRetranscriptionService(
+            history: f.history, planBuilder: { request in
+                if request.engineID == "missing" { throw HistoryRetranscriptionError.unavailable }
+                return .init(requiresCloudConfirmation: true, run: { _ in version })
+            }, isBusy: { false }, loadAudio: { _ in [0.1] }
+        )
+        let request = HistoryRetranscriptionService.Request(engineID: "cloud")
+        for nextRequest in [request, .init(engineID: "missing")] {
+            service.start(record: f.record, request: request, cloudConfirmed: false, downloadConfirmed: false)
+            XCTAssertEqual(service.errorMessage, HistoryRetranscriptionError.confirmationRequired.localizedDescription)
+            if nextRequest.engineID == "missing" {
+                XCTAssertThrowsError(try service.previewPlan(nextRequest)) {
+                    XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
+                }
+            } else {
+                XCTAssertEqual(try service.previewPlan(nextRequest).confirmedRequest, nextRequest)
+            }
+            XCTAssertNil(service.errorMessage)
+        }
+    }
+
+    func testModelChangeClearsUnsupportedLanguageAndKeepsSupportedOrAutomaticSelection() {
+        let engine = HistoryComparisonLanguageEngine()
+        XCTAssertEqual(HistoryRetranscriptionEnvironment.supportedLanguage("ar", modelID: "nova-3", engine: engine), "ar")
+        XCTAssertNil(HistoryRetranscriptionEnvironment.supportedLanguage("ar", modelID: "nova-2", engine: engine))
+        XCTAssertEqual(HistoryRetranscriptionEnvironment.supportedLanguage("en", modelID: "nova-2", engine: engine), "en")
+        XCTAssertNil(HistoryRetranscriptionEnvironment.supportedLanguage(nil, modelID: "nova-2", engine: engine))
+        XCTAssertNil(HistoryRetranscriptionEnvironment.supportedLanguage("en", modelID: "nova-2", engine: nil))
+    }
+
+    func testComparisonRestoresDownloadedLocalModelWithoutOfferingUndownloadedModels() async throws {
+        let engine = HistoryComparisonCachedEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let key = "plugin.\(HistoryComparisonCachedEngine.pluginId).loadedModel"
+        let previousModel = UserDefaults.standard.object(forKey: key)
+        defer { UserDefaults.standard.set(previousModel, forKey: key) }
+        UserDefaults.standard.set("cached", forKey: key)
+        XCTAssertFalse(engine.isConfigured)
+        XCTAssertTrue(engine.transcriptionModels.isEmpty)
+        XCTAssertTrue(environment.manager.canPrepareForTranscription(engine))
+        XCTAssertEqual(HistoryRetranscriptionEnvironment.models(for: engine).map(\.id), ["cached"])
+
+        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, modelID: "cached", language: "en")
+        let plan = try HistoryRetranscriptionEnvironment.plan(
+            request, manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [], promptProcessing: environment.promptProcessing
+        )
+        XCTAssertFalse(plan.requiresCloudConfirmation)
+        let version = try await plan.run([0.1, -0.1])
+        XCTAssertTrue(engine.isConfigured)
+        XCTAssertEqual(engine.restoreCount, 1)
+        XCTAssertEqual(version.modelID, "cached")
+        XCTAssertEqual(version.modelName, "Cached Model")
+        XCTAssertEqual(engine.selectedModelId, "cached")
+        var undownloaded = request
+        undownloaded.modelID = "not-downloaded"
+        XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+            undownloaded, manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [], promptProcessing: environment.promptProcessing
+        ))
+        XCTAssertEqual(engine.selectedModelId, "cached")
+        XCTAssertEqual(engine.restoreCount, 1)
+    }
+
+    func testComparisonWorkflowReceivesProtectedTermsAndCorrectionTargets() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let llm = HistoryComparisonLLM()
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        environment.dictionary.addEntry(type: .term, original: "DEVONthink")
+        environment.dictionary.addEntry(type: .correction, original: "type whisper", replacement: "TypeWhisper")
+        let workflow = Workflow(
+            name: "Cleanup", template: .cleanedText, trigger: WorkflowTrigger(kind: .manual),
+            behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test")
+        )
+        let plan = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: engine.providerId, workflowID: workflow.id),
+            manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [workflow], promptProcessing: environment.promptProcessing
+        )
+        // The confirmed plan freezes its vocabulary just like its workflow and provider.
+        environment.dictionary.addEntry(type: .term, original: "AddedAfterConfirmation")
+        let version = try await plan.run([0.1, -0.1])
+        let prompt = try XCTUnwrap(llm.lastSystemPrompt)
+        XCTAssertTrue(prompt.contains("Protected vocabulary:"))
+        XCTAssertTrue(prompt.contains("DEVONthink"))
+        XCTAssertTrue(prompt.contains("TypeWhisper"))
+        XCTAssertFalse(prompt.contains("AddedAfterConfirmation"))
+        XCTAssertEqual(version.workflowID, workflow.id)
+        XCTAssertEqual(version.finalText, "cleaned test")
+    }
+
+    private func makeEnvironment(plugins: [any TypeWhisperPlugin]) throws -> (
+        manager: ModelManagerService, dictionary: DictionaryService, promptProcessing: PromptProcessingService
+    ) {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let previousPluginManager = PluginManager.shared
+        let suite = "HistoryComparisonEnvironment-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        addTeardownBlock { @MainActor in
+            PluginManager.shared = previousPluginManager
+            defaults.removePersistentDomain(forName: suite)
+            TestSupport.remove(directory)
+        }
+        let pluginManager = PluginManager(appSupportDirectory: directory)
+        pluginManager.loadedPlugins = plugins.map { plugin in
+            LoadedPlugin(
+                manifest: PluginManifest(id: type(of: plugin).pluginId, name: type(of: plugin).pluginName,
+                                         version: "1.0.0", principalClass: "TestPlugin"),
+                instance: plugin, bundle: Bundle.main, sourceURL: directory, isEnabled: true
+            )
+        }
+        PluginManager.shared = pluginManager
+        let manager = ModelManagerService()
+        manager.setPluginRestoreWaitConfigurationForTesting(initialAttempts: 1, busyAttempts: 1, pollInterval: .milliseconds(1))
+        return (manager, DictionaryService(appSupportDirectory: directory), PromptProcessingService(userDefaults: defaults))
+    }
+
     private func wait(_ service: HistoryRetranscriptionService) async throws {
         for _ in 0..<100 {
             if service.runningRecordID == nil { return }
@@ -656,5 +777,52 @@ private final class HistoryComparisonDownloadedEngine: HistoryComparisonTestEngi
 private final class HistoryComparisonNumberEngine: HistoryComparisonTestEngine, @unchecked Sendable {
     override func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "I counted forty two apples.", detectedLanguage: "en")
+    }
+}
+
+private final class HistoryComparisonLanguageEngine: HistoryComparisonTestEngine, @unchecked Sendable {
+    @objc func supportedLanguagesForModelId(_ modelId: String) -> [String] {
+        modelId == "nova-3" ? ["en", "ar"] : ["en"]
+    }
+}
+
+private final class HistoryComparisonCachedEngine: HistoryComparisonTestEngine, TranscriptionModelCatalogProviding,
+    PassiveModelRestoreProviding, PluginDownloadedModelManaging, @unchecked Sendable {
+    private let lock = NSLock()
+    private var configured = false
+    private var restores = 0
+    override var selectedModelId: String? { "cached" }
+    override var isConfigured: Bool { lock.withLock { configured } }
+    var restoreCount: Int { lock.withLock { restores } }
+    override var transcriptionModels: [PluginModelInfo] { isConfigured ? downloadedModels : [] }
+    var downloadedModels: [PluginModelInfo] { [PluginModelInfo(id: "cached", displayName: "Cached Model", downloaded: true)] }
+    var availableModels: [PluginModelInfo] {
+        downloadedModels + [PluginModelInfo(id: "not-downloaded", displayName: "Not Downloaded", downloaded: false)]
+    }
+    func deleteDownloadedModel(_ modelId: String) async throws {}
+    func requestPassiveModelRestore() {}
+    @objc func triggerRestoreModel() {
+        lock.withLock {
+            configured = true
+            restores += 1
+        }
+    }
+}
+
+private final class HistoryComparisonLLM: LLMProviderPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.history-comparison-llm"
+    static let pluginName = "History Comparison LLM"
+    let providerName = "History Comparison LLM"
+    var isAvailable: Bool { true }
+    var supportedModels: [PluginModelInfo] { [PluginModelInfo(id: "test", displayName: "Test Model")] }
+    private let lock = NSLock()
+    private var systemPrompt: String?
+    var lastSystemPrompt: String? { lock.withLock { systemPrompt } }
+    required init() {}
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        lock.withLock { self.systemPrompt = systemPrompt }
+        return "cleaned test"
     }
 }
