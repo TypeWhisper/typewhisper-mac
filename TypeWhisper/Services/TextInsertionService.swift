@@ -203,6 +203,8 @@ final class TextInsertionService {
     var focusedTextElementOverride: (() -> AXUIElement?)?
     /// Whether the app behind a nil `focusedTextElementOverride` hides its focused element.
     var focusedElementHiddenOverride: (() -> Bool)?
+    var accessibilityRoleOverride: ((AXUIElement) -> String?)?
+    var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
@@ -294,8 +296,8 @@ final class TextInsertionService {
         case copiedToClipboard
 #endif
 
-        /// The focused field was readable and still unchanged after the paste. Unreadable fields
-        /// (common in Electron apps) do not count, so they never produce a false failure.
+        /// A readable native field stayed unchanged. Web input proxies may consume a paste
+        /// without retaining its text, so their unchanged state does not prove a failure.
         var leftFocusedTextUnchanged: Bool {
             self == .pasted(verification: .unverified(.focusedTextUnchanged))
         }
@@ -329,6 +331,8 @@ final class TextInsertionService {
         /// A text element was focused, but its text could not be read.
         case focusedTextStateUnavailable = "focused-text-state-unavailable"
         case focusedTextUnchanged = "focused-text-unchanged"
+        /// Web editors and terminal input proxies can consume a paste without retaining it here.
+        case webContentUnchanged = "web-content-unchanged"
         /// Accessibility could inspect the focused app, and no text element was focused.
         case noFocusedTextElement = "no-focused-text-element"
     }
@@ -471,10 +475,11 @@ final class TextInsertionService {
         /// query failed, could not run (for example without access to other apps), or the app
         /// hid its focused element.
         fileprivate let noTextElementFocused: Bool
+        fileprivate let canReportUnchangedText: Bool
 
         /// Whether verification can show that the paste missed. Unreadable fields never can.
         var canDetectMissedTextField: Bool {
-            focusedTextState.map(\.hasReadableText) ?? noTextElementFocused
+            focusedTextState.map { $0.hasReadableText && canReportUnchangedText } ?? noTextElementFocused
         }
     }
 
@@ -933,7 +938,8 @@ final class TextInsertionService {
             focusedTextState: query.element.flatMap { captureFocusedTextState(for: $0) },
             // A found element whose state could not be captured is not proof of a missing field.
             noTextElementFocused: query.focusIsKnown && query.element == nil
-                && !acceptsPasteWithoutTextElement
+                && !acceptsPasteWithoutTextElement,
+            canReportUnchangedText: query.element.map { !isWebContentElement($0) } ?? true
         )
     }
 
@@ -1468,6 +1474,9 @@ final class TextInsertionService {
 
         if canRestoreClipboard(afterPasteUsing: state) {
             return .verified
+        }
+        guard state.canReportUnchangedText else {
+            return .unverified(.webContentUnchanged)
         }
         // Only a field readable before and after the paste proves that the paste missed it.
         guard let initialState = state.focusedTextState, initialState.hasReadableText,
@@ -2378,6 +2387,26 @@ final class TextInsertionService {
         }
         return ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
             .contains(role)
+    }
+
+    /// Web terminals can expose an input proxy whose value and selection remain empty after
+    /// consuming a paste. Detect the AX ancestry, not the hosting app's bundle identifier.
+    private func isWebContentElement(_ element: AXUIElement) -> Bool {
+        var current = element
+        var visited: Set<AXUIElement> = []
+        for _ in 0..<16 {
+            guard visited.insert(current).inserted else { return false }
+            applyMessagingTimeout(Self.liveFieldMessagingTimeout, to: current)
+            let role = accessibilityRoleOverride.map { $0(current) }
+                ?? stringAttribute(kAXRoleAttribute as CFString, from: current)
+            if role == "AXWebArea" { return true }
+            if role == "AXWindow" || role == "AXApplication" { return false }
+            let parent = accessibilityParentOverride.map { $0(current) }
+                ?? axElementAttribute(kAXParentAttribute as CFString, from: current)
+            guard let parent else { return false }
+            current = parent
+        }
+        return false
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {

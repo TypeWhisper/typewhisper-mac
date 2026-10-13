@@ -904,6 +904,10 @@ final class DictationViewModel: ObservableObject {
         defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? true
     }
 
+    nonisolated static func loadMissedTextFieldWarningEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: UserDefaultsKeys.missedTextFieldWarningEnabled) as? Bool ?? true
+    }
+
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
     }
@@ -4160,6 +4164,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func showUndeliveredTranscriptFeedback(_ transcript: UndeliveredTranscript) {
+        // Suppress only this heuristic warning; a changed pinned field still needs recovery.
+        if transcript.reason == .noTextField, !Self.loadMissedTextFieldWarningEnabled() {
+            if case .insertUndeliveredTranscript? = actionFeedbackAction {
+                resetDictationState()
+            }
+            return
+        }
         var message = switch transcript.reason {
         case .noTextField:
             String(localized: "No text field detected")
@@ -5068,6 +5079,13 @@ final class DictationViewModel: ObservableObject {
             return
         }
         indicatorFeedbackLifetime.setHovered(hovered)
+    }
+
+    func dismissActionFeedback() {
+        // A running Insert owns the target and clipboard until its paste has finished.
+        guard state == .inserting, actionFeedbackMessage != nil,
+              !isInsertingUndeliveredTranscript else { return }
+        indicatorFeedbackLifetime.finishImmediately()
     }
 
     private func startActionFeedbackLifetime(duration: TimeInterval) {

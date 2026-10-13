@@ -47,6 +47,12 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertFalse(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
 
+    func testMissedTextFieldWarningDefaultsToEnabledAndHonorsOptOut() {
+        XCTAssertTrue(DictationViewModel.loadMissedTextFieldWarningEnabled(defaults: defaults))
+        defaults.set(false, forKey: UserDefaultsKeys.missedTextFieldWarningEnabled)
+        XCTAssertFalse(DictationViewModel.loadMissedTextFieldWarningEnabled(defaults: defaults))
+    }
+
     func testLiveFieldTranscriptDefaultsToDisabled() {
         XCTAssertFalse(DictationViewModel.loadLiveFieldTranscriptEnabled(defaults: defaults))
     }

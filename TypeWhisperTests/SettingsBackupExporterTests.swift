@@ -696,6 +696,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        source.userDefaults.set(false, forKey: UserDefaultsKeys.missedTextFieldWarningEnabled)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
         source.userDefaults.set(7, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         // Deliberately excluded: engine/model selections must not be exported.
@@ -723,6 +724,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
+        XCTAssertEqual(backup.preferences.missedTextFieldWarningEnabled, false)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
         XCTAssertEqual(backup.preferences.dictationRecoveryRetentionDays, 7)
 
@@ -766,6 +768,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
+        XCTAssertFalse(DictationViewModel.loadMissedTextFieldWarningEnabled(defaults: destination.userDefaults))
         XCTAssertEqual(appliedCancellationBehavior, .instant)
         XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .instant)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)

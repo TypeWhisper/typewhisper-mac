@@ -417,6 +417,7 @@ struct IndicatorActionFeedback: View {
     let contentPadding: CGFloat
     var actionTitle: String? = nil
     var onAction: (() -> Void)? = nil
+    var onDismiss: (() -> Void)? = nil
     var remainingFraction: Double? = nil
     var bodyHeight: CGFloat = IndicatorFeedbackPanelLayout.feedbackBodyHeight
     var lineLimit = 2
@@ -452,14 +453,35 @@ struct IndicatorActionFeedback: View {
                         .padding(.vertical, 4)
                         .background(Color.primary.opacity(0.12), in: Capsule())
                 }
+                if let onDismiss {
+                    IndicatorFeedbackDismissButton(action: onDismiss)
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.horizontal, contentPadding)
         }
         .frame(maxWidth: .infinity)
         .frame(height: bodyHeight)
-        .accessibilityElement(children: actionTitle == nil ? .combine : .contain)
+        .accessibilityElement(children: actionTitle == nil && onDismiss == nil ? .combine : .contain)
         .accessibilityLabel(message)
+    }
+}
+
+struct IndicatorFeedbackDismissButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .semibold))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .help(String(localized: "Dismiss notification"))
+        .accessibilityLabel(String(localized: "Dismiss notification"))
+        .accessibilityIdentifier("indicator.feedback.dismiss")
     }
 }
 

@@ -6415,6 +6415,72 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebTerminalPasteDoesNotReportUnchangedInputProxyAsMissedTextField() async throws {
+        // Solo's WKWebView consumes the paste, but its AXTextArea retains value="" and range=0.
+        // Include an intermediate group: the web area is not necessarily the immediate parent.
+        for awaitsVerification in [false, true] {
+            let service = TextInsertionService()
+            let pasteboard = NSPasteboard.withUniqueName()
+            let field = AXUIElementCreateApplication(1)
+            let group = AXUIElementCreateApplication(2)
+            let webArea = AXUIElementCreateApplication(3)
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            service.captureActiveAppOverride = { ("Unknown web host", "com.example.webhost", nil) }
+            service.focusedTextElementOverride = { field }
+            service.accessibilityRoleOverride = { $0 == webArea ? "AXWebArea" : ($0 == field ? "AXTextArea" : "AXGroup") }
+            service.accessibilityParentOverride = { $0 == field ? group : ($0 == group ? webArea : nil) }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            var pastedText: String?
+            service.pasteSimulatorOverride = { pastedText = pasteboard.string(forType: .string) }
+
+            let result = try await service.insertText(
+                "Hello from dictation", awaitPasteVerification: awaitsVerification, detectMissedTextField: true
+            )
+
+            XCTAssertEqual(pastedText, "Hello from dictation")
+            XCTAssertFalse(result.missedTextField)
+            XCTAssertEqual(result, .pasted(verification: awaitsVerification
+                ? .unverified(.webContentUnchanged) : .notAwaited))
+        }
+    }
+
+    @MainActor
+    func testWebTextFieldStillVerifiesObservedPasteAndReportsNativeMisses() async throws {
+        for isWebField in [false, true] {
+            let service = TextInsertionService()
+            let field = AXUIElementCreateApplication(1)
+            let parent = AXUIElementCreateApplication(2)
+            let pasteboard = NSPasteboard.withUniqueName()
+            var value = "Before"
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { pasteboard }
+            // A native field in a web-hosting app must still report a failed paste.
+            service.captureActiveAppOverride = { ("Solo", "com.soloterm.solo", nil) }
+            service.focusedTextElementOverride = { field }
+            service.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : (isWebField ? "AXWebArea" : "AXWindow") }
+            service.accessibilityParentOverride = { $0 == field ? parent : nil }
+            service.focusedTextStateOverride = { _ in
+                (value: value, selectedText: "", selectedRange: NSRange(location: value.count, length: 0))
+            }
+            service.pasteVerificationAttempts = 1
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.pasteSimulatorOverride = {
+                if isWebField { value += "Hello" }
+            }
+
+            let result = try await service.insertText("Hello", awaitPasteVerification: true, detectMissedTextField: true)
+
+            XCTAssertEqual(result.missedTextField, !isWebField)
+            XCTAssertEqual(result, .pasted(verification: isWebField ? .verified : .unverified(.focusedTextUnchanged)))
+        }
+    }
+
+    @MainActor
     func testDetectMissedTextFieldReportsReadableFieldThatStayedUnchanged() async throws {
         let service = TextInsertionService()
         let pasteboard = NSPasteboard.withUniqueName()
@@ -10784,6 +10850,102 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
         // The verified Insert counts as the dictation's successful insertion.
         XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+    }
+
+    @MainActor
+    func testMissedTextFieldFeedbackSupportsDismissOptOutAndWebRetry() async throws {
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled,
+                    UserDefaultsKeys.missedTextFieldWarningEnabled]
+        let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        defer {
+            for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
+        }
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+
+        for scenario in ["dismiss", "disabled", "webRetry"] {
+            UserDefaults.standard.set(scenario != "disabled", forKey: UserDefaultsKeys.missedTextFieldWarningEnabled)
+            let directory = try TestSupport.makeTemporaryDirectory()
+            var dictationContext: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
+            defer {
+                dictationContext = nil
+                TestSupport.remove(directory)
+            }
+            let context = try XCTUnwrap(dictationContext)
+            let viewModel = context.dictationViewModel
+            viewModel.preserveClipboard = false
+            viewModel.soundFeedbackEnabled = false
+            viewModel.spokenFeedbackEnabled = false
+            let pasteboard = NSPasteboard.withUniqueName()
+            let field = AXUIElementCreateApplication(1)
+            let webArea = AXUIElementCreateApplication(2)
+            var isWebFieldFocused = false
+            var pastedTexts: [String] = []
+            context.textInsertionService.pasteboardProvider = { pasteboard }
+            context.textInsertionService.captureActiveAppOverride = { ("Test editor", "com.example.editor", nil) }
+            context.textInsertionService.accessibilityGrantedOverride = true
+            context.textInsertionService.selectedTextOverride = { nil }
+            context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
+            context.textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
+            context.textInsertionService.focusedTextElementOverride = { isWebFieldFocused ? field : nil }
+            context.textInsertionService.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : "AXWebArea" }
+            context.textInsertionService.accessibilityParentOverride = { $0 == field ? webArea : nil }
+            context.textInsertionService.focusedTextStateOverride = { _ in
+                (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
+            }
+            context.textInsertionService.pasteSimulatorOverride = {
+                pastedTexts.append(pasteboard.string(forType: .string) ?? "")
+            }
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {}
+            context.audioRecordingService.stopRecordingOverride = { _ in
+                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+            }
+            let sessionID = viewModel.apiStartRecording()
+            await viewModel.testingWaitForRecordingStart()
+            _ = viewModel.apiStopRecording()
+            for _ in 0..<80 {
+                if viewModel.apiDictationSession(id: sessionID)?.status == .completed,
+                   context.historyService.recentRecords.first != nil { break }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            XCTAssertEqual(viewModel.apiDictationSession(id: sessionID)?.status, .completed, scenario)
+            XCTAssertEqual(pastedTexts, ["transcribed"], scenario)
+            XCTAssertNil(viewModel.lastSuccessfulDictationInsertion, scenario)
+            XCTAssertEqual(context.historyService.recentRecords.first?.finalText, "transcribed", scenario)
+            XCTAssertEqual(context.recentTranscriptionStore.latestEntry(
+                historyRecords: context.historyService.recentRecords)?.finalText, "transcribed", scenario)
+
+            if scenario == "disabled" {
+                XCTAssertNil(viewModel.actionFeedbackMessage)
+                XCTAssertNil(viewModel.actionFeedbackActionTitle)
+            } else if scenario == "dismiss" {
+                XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
+                viewModel.setActionFeedbackHovered(true)
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .idle)
+                XCTAssertNil(viewModel.actionFeedbackMessage)
+                XCTAssertNil(viewModel.actionFeedbackActionTitle)
+                XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+            } else {
+                isWebFieldFocused = true
+                viewModel.performActionFeedbackAction()
+                // Dismiss cannot release the indicator while Insert still owns the clipboard.
+                viewModel.dismissActionFeedback()
+                XCTAssertEqual(viewModel.state, .inserting)
+                XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
+                let insertedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text inserted")
+                for _ in 0..<80 {
+                    if viewModel.actionFeedbackMessage == insertedMessage { break }
+                    try await Task.sleep(for: .milliseconds(25))
+                }
+                XCTAssertEqual(pastedTexts, ["transcribed", "transcribed"])
+                XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
+                XCTAssertNil(viewModel.actionFeedbackActionTitle)
+                XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+            }
+        }
     }
 
     @MainActor
