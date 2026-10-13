@@ -10,7 +10,7 @@ Each successful run stores a result under the same entry. The active text, origi
 - A Workflow executes only its text transformation. Its destination, insertion, clipboard, export and action-plugin behavior is not invoked. The first resolved Workflow provider is pinned; no undisclosed fallback is attempted.
 - Cloud audio/text processing shows the selected provider and requires confirmation, including notice of possible usage charges. Changing the choices clears consent.
 - Missing synchronized audio requires a separate download confirmation. Retrieval uses the configured private sync storage, validates the asset hash/size, observes audio-sync/retention settings, and processes a temporary copy. The copy is removed afterward.
-- Recording and other engine use cannot overlap a comparison. Cancellation retains the engine lease until the provider has stopped; a late result is discarded.
+- Dictation, recorder, and file-transcription controls stay unavailable during a comparison. Background transcription requests, including recovery, dictionary training, and speaker timing, wait before accessing the shared engine. Cancellation retains the engine lease until the provider has stopped; a late result is discarded.
 - Provider errors, empty results, missing models, cancellation, deleted/changed audio or changed/deleted entries do not save a version. A storage failure restores the entry's prior in-memory state and remains visible for retry.
 
 ## Versions, sync and retention

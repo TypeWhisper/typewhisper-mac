@@ -776,7 +776,7 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> LiveTranscriptionSessionHandle? {
-        try HistoryRetranscriptionActivity.checkEngineAccess()
+        try await HistoryRetranscriptionActivity.waitForEngineAvailability()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -947,7 +947,7 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
-        try HistoryRetranscriptionActivity.checkEngineAccess()
+        try await HistoryRetranscriptionActivity.waitForEngineAvailability()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -1110,7 +1110,7 @@ final class ModelManagerService: ObservableObject {
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> TranscriptionResult {
-        try HistoryRetranscriptionActivity.checkEngineAccess()
+        try await HistoryRetranscriptionActivity.waitForEngineAvailability()
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),

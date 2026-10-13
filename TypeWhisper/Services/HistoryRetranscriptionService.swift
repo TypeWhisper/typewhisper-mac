@@ -18,7 +18,7 @@ enum HistoryRetranscriptionError: LocalizedError {
 }
 
 /// The lease remains held until even a non-cooperative provider returns after cancel.
-/// Other entry points must not start recording or change the shared engine meanwhile.
+/// Recording controls stay disabled and other jobs wait before accessing the shared engine.
 @MainActor
 enum HistoryRetranscriptionActivity {
     private static let recordIDSubject = CurrentValueSubject<UUID?, Never>(nil)
@@ -31,13 +31,13 @@ enum HistoryRetranscriptionActivity {
     }
     @TaskLocal static var ownsEngine = false
 
-    static func checkEngineAccess() throws {
-        if recordID != nil, !ownsEngine { throw HistoryRetranscriptionError.busy }
-    }
-
     static func waitForEngineAvailability() async throws {
-        for await recordID in recordIDPublisher.values {
+        try Task.checkCancellation()
+        guard !ownsEngine else { return }
+        for await _ in recordIDPublisher.values {
             try Task.checkCancellation()
+            // Consult the current lease, since another comparison may have started
+            // before a waiter resumes from a previously published release.
             if recordID == nil { return }
         }
         try Task.checkCancellation()

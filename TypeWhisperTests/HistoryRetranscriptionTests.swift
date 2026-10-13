@@ -169,6 +169,62 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: f.audioURL.path))
     }
 
+    func testDiscardFormerlyActiveVersionAfterManualEditOrSynchronizedReplacement() async throws {
+        for synchronize in [false, true] {
+            let f = try await fixture()
+            defer { TestSupport.remove(f.directory) }
+            let version = alternative()
+            try append(version, to: f)
+            try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+            XCTAssertTrue(version.isActive(in: f.record))
+            if synchronize {
+                let content = UserDataSyncHistoryContentV1(
+                    recordID: f.record.id, createdAt: f.record.timestamp,
+                    updatedAt: Date(timeIntervalSinceNow: 60), originDeviceID: "another-device",
+                    originPlatform: "macOS", source: f.record.source.rawValue, processingState: "ready",
+                    rawTranscript: "remote raw", finalText: "replaced text",
+                    durationSeconds: f.record.durationSeconds, engineDisplayName: "remote engine"
+                )
+                try f.history.applyUserDataSyncMutations([.upsertHistoryContent(content)])
+            } else {
+                f.history.updateRecord(f.record, finalText: "replaced text")
+            }
+            XCTAssertFalse(version.isActive(in: f.record))
+            let current = HistoryTranscriptionVersion.capture(f.record)
+            try f.history.discardTranscriptionVersion(version.id, in: f.record)
+            XCTAssertEqual(try f.record.savedTranscriptionVersions().map(\.id), [f.record.id])
+            XCTAssertNil(f.record.activeTranscriptionVersionID)
+            XCTAssertEqual(HistoryTranscriptionVersion.capture(f.record), current)
+
+            let reopened = HistoryService(appSupportDirectory: f.directory)
+            let restored = try XCTUnwrap(reopened.record(withID: f.record.id))
+            XCTAssertNil(restored.activeTranscriptionVersionID)
+            XCTAssertEqual(try restored.savedTranscriptionVersions().map(\.id), [f.record.id])
+            XCTAssertEqual(restored.finalText, "replaced text")
+        }
+    }
+
+    func testFailedDiscardRestoresFormerlyActiveVersionAndItsIdentifier() async throws {
+        let fails = TestFlag(false)
+        let f = try await fixture { context in
+            if fails.value { throw CocoaError(.fileWriteOutOfSpace) }
+            try context.save()
+        }
+        defer { TestSupport.remove(f.directory) }
+        let version = alternative()
+        try append(version, to: f)
+        try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+        f.history.updateRecord(f.record, finalText: "manual replacement")
+        let archive = f.record.transcriptionVersionsData
+        fails.value = true
+        XCTAssertThrowsError(try f.history.discardTranscriptionVersion(version.id, in: f.record)) {
+            XCTAssertEqual(($0 as NSError).code, CocoaError.fileWriteOutOfSpace.rawValue)
+        }
+        XCTAssertEqual(f.record.transcriptionVersionsData, archive)
+        XCTAssertEqual(f.record.activeTranscriptionVersionID, version.id)
+        XCTAssertEqual(f.record.finalText, "manual replacement")
+    }
+
     func testEmptyStaleDeletedAndCorruptRecordsCannotAcceptAlternative() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -242,23 +298,34 @@ final class HistoryRetranscriptionTests: XCTestCase {
     func testCancellationRetainsLeaseUntilNonCooperativeProviderFinishesAndDiscardsLateResult() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
+        let engine = HistoryComparisonTestEngine()
+        let environment = try makeEnvironment(plugins: [engine])
         let original = HistoryTranscriptionVersion.capture(f.record)
         var continuation: CheckedContinuation<HistoryTranscriptionVersion, Never>?
         let service = HistoryRetranscriptionService(
             history: f.history,
             planBuilder: { _ in .init(requiresCloudConfirmation: false, run: { _ in
                 XCTAssertTrue(HistoryRetranscriptionActivity.ownsEngine)
+                try await self.runEngineRequest(.batch, manager: environment.manager, engineID: engine.providerId)
                 return await withCheckedContinuation { continuation = $0 }
             }) }, isBusy: { false }, loadAudio: { _ in [0.1] }
         )
+        defer { service.cancel() }
         service.start(record: f.record, request: .init(engineID: "local"), cloudConfirmed: false, downloadConfirmed: false)
-        for _ in 0..<100 where continuation == nil { await Task.yield() }
+        for _ in 0..<100 where continuation == nil { try await Task.sleep(for: .milliseconds(10)) }
         let pending = try XCTUnwrap(continuation)
         service.cancel()
         XCTAssertEqual(HistoryRetranscriptionActivity.recordID, f.record.id)
-        XCTAssertThrowsError(try HistoryRetranscriptionActivity.checkEngineAccess())
+        let finished = TestFlag(false)
+        let backgroundJob = Task {
+            defer { finished.value = true }
+            try await runEngineRequest(.batch, manager: environment.manager, engineID: engine.providerId)
+        }
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertFalse(finished.value, "Cancellation must not release the provider before it stops")
         pending.resume(returning: alternative())
         try await wait(service)
+        try await backgroundJob.value
         XCTAssertNil(HistoryRetranscriptionActivity.recordID)
         XCTAssertNil(f.record.transcriptionVersionsData)
         XCTAssertEqual(HistoryTranscriptionVersion.capture(f.record), original)
@@ -616,6 +683,78 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertFalse(HistoryRetranscriptionEnvironment.isLocal(HistoryComparisonTestEngine()))
     }
 
+    func testAllEngineEntryPointsWaitForAnActiveComparison() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let previousActivity = HistoryRetranscriptionActivity.recordID
+        defer { HistoryRetranscriptionActivity.recordID = previousActivity }
+        for entryPoint in EngineEntryPoint.allCases {
+            HistoryRetranscriptionActivity.recordID = UUID()
+            let finished = TestFlag(false)
+            let task = Task {
+                defer { finished.value = true }
+                try await runEngineRequest(entryPoint, manager: environment.manager, engineID: engine.providerId)
+            }
+            for _ in 0..<100 { await Task.yield() }
+            XCTAssertFalse(finished.value, "\(entryPoint) must wait rather than fail")
+            XCTAssertFalse(environment.manager.hasProtectedEngineUse)
+            HistoryRetranscriptionActivity.recordID = nil
+            do { try await task.value }
+            catch { XCTFail("\(entryPoint) failed after the comparison released its engine: \(error)") }
+        }
+    }
+
+    func testWaitingEngineRequestsCanBeCancelledWithoutReleasingTheComparison() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let previousActivity = HistoryRetranscriptionActivity.recordID
+        defer { HistoryRetranscriptionActivity.recordID = previousActivity }
+        let comparisonID = UUID()
+        HistoryRetranscriptionActivity.recordID = comparisonID
+        for entryPoint in EngineEntryPoint.allCases {
+            let task = Task {
+                try await runEngineRequest(entryPoint, manager: environment.manager, engineID: engine.providerId)
+            }
+            for _ in 0..<100 { await Task.yield() }
+            task.cancel()
+            do {
+                try await task.value
+                XCTFail("A cancelled \(entryPoint) request must not reach the engine")
+            } catch {
+                XCTAssertTrue(error is CancellationError, "\(entryPoint): \(error)")
+            }
+            XCTAssertEqual(HistoryRetranscriptionActivity.recordID, comparisonID)
+            XCTAssertFalse(environment.manager.hasProtectedEngineUse)
+        }
+    }
+
+    private enum EngineEntryPoint: CaseIterable {
+        case batch, progress, live
+    }
+
+    private func runEngineRequest(
+        _ entryPoint: EngineEntryPoint, manager: ModelManagerService, engineID: String
+    ) async throws {
+        switch entryPoint {
+        case .batch:
+            let result = try await manager.transcribe(
+                audioSamples: [0.1], language: "en", task: .transcribe, engineOverrideId: engineID
+            )
+            XCTAssertEqual(result.text, "test")
+        case .progress:
+            let result = try await manager.transcribe(
+                audioSamples: [0.1], language: "en", task: .transcribe, engineOverrideId: engineID,
+                onProgress: { _ in true }, onSourceProgress: { _ in true }
+            )
+            XCTAssertEqual(result.text, "test")
+        case .live:
+            let session = try await manager.createLiveTranscriptionSession(
+                language: "en", task: .transcribe, engineOverrideId: engineID, onProgress: { _ in true }
+            )
+            XCTAssertNil(session, "The fixture engine uses batch fallback")
+        }
+    }
+
     func testPreparingAnotherComparisonClearsPriorRunErrorsEvenIfItsPlanIsUnavailable() async throws {
         let f = try await fixture()
         defer { TestSupport.remove(f.directory) }
@@ -739,6 +878,42 @@ final class HistoryRetranscriptionTests: XCTestCase {
         )) {
             XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
         }
+    }
+
+    func testAppleTranslatePlanRejectsMissingOrIncompatibleServiceAndAcceptsAvailableService() throws {
+        let engine = HistoryComparisonRestoreEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let workflow = Workflow(
+            name: "Apple Translate", template: .translation, trigger: .manual(),
+            behavior: WorkflowBehavior(settings: [
+                "translationProcessor": WorkflowTranslationProcessor.appleTranslate.rawValue, "targetLanguage": "de"
+            ])
+        )
+        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, workflowID: workflow.id)
+        for unavailableService: AnyObject? in [nil, NSObject()] {
+            XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+                request, manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing,
+                translationService: unavailableService
+            )) {
+                XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
+            }
+        }
+        #if canImport(Translation)
+        if #available(macOS 15, *) {
+            let service = TranslationService()
+            let plan = try HistoryRetranscriptionEnvironment.plan(
+                request, manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing, translationService: service
+            )
+            XCTAssertFalse(plan.requiresCloudConfirmation)
+            workflow.behavior.settings.removeValue(forKey: "targetLanguage")
+            XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+                request, manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing, translationService: service
+            ))
+        }
+        #endif
     }
 
     private func makeEnvironment(plugins: [any TypeWhisperPlugin]) throws -> (

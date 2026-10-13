@@ -1800,16 +1800,19 @@ final class HistoryService: ObservableObject {
             throw HistoryRetranscriptionError.changed
         }
         var versions = try record.savedTranscriptionVersions()
-        guard id != record.id, id != record.activeTranscriptionVersionID,
-              versions.contains(where: { $0.id == id }) else {
+        guard id != record.id, let version = versions.first(where: { $0.id == id }),
+              !version.isActive(in: record) else {
             throw HistoryRetranscriptionError.invalidVersion
         }
         versions.removeAll { $0.id == id }
         let oldData = record.transcriptionVersionsData
+        let oldID = record.activeTranscriptionVersionID
         record.transcriptionVersionsData = try JSONEncoder().encode(versions)
+        if oldID == id { record.activeTranscriptionVersionID = nil }
         do { try versionWriter(modelContext) }
         catch {
             record.transcriptionVersionsData = oldData
+            record.activeTranscriptionVersionID = oldID
             throw error
         }
         refreshRecentRecords()

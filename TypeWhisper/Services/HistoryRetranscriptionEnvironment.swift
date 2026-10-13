@@ -98,8 +98,17 @@ enum HistoryRetranscriptionEnvironment {
                     cloudProviders.append(String(format: String(localized: "history.retranscribe.textProvider"), provider.llmProviderDisplayName))
                 }
             }
-            if copy.usesAppleTranslate, copy.translationTargetLanguage == nil {
+            if copy.usesAppleTranslate {
+                guard copy.translationTargetLanguage != nil else {
+                    throw HistoryRetranscriptionError.unavailable
+                }
+                #if canImport(Translation)
+                guard #available(macOS 15, *), translationService is TranslationService else {
+                    throw HistoryRetranscriptionError.unavailable
+                }
+                #else
                 throw HistoryRetranscriptionError.unavailable
+                #endif
             }
             workflow = copy
         }
