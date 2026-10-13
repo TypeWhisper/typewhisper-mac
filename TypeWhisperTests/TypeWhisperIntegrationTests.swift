@@ -10959,7 +10959,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testMissedTextFieldFeedbackSupportsDismissAndWebRetry() async throws {
+    func testMissedTextFieldFeedbackSupportsDismissAndUnverifiedRetry() async throws {
         let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled,
                     UserDefaultsKeys.historyEnabled]
         let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
@@ -10970,7 +10970,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         UserDefaults.standard.set(true, forKey: UserDefaultsKeys.historyEnabled)
 
-        for scenario in ["dismiss", "webRetry"] {
+        for scenario in ["dismiss", "webRetry", "unknownRetry"] {
             let directory = try TestSupport.makeTemporaryDirectory()
             var dictationContext: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
             defer {
@@ -10985,7 +10985,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             let pasteboard = NSPasteboard.withUniqueName()
             let field = AXUIElementCreateApplication(1)
             let webArea = AXUIElementCreateApplication(2)
-            var isWebFieldFocused = false
+            var isTextFieldFocused = false
             var pastedTexts: [String] = []
             context.textInsertionService.pasteboardProvider = { pasteboard }
             context.textInsertionService.captureActiveAppOverride = { ("Test editor", "com.example.editor", nil) }
@@ -10993,9 +10993,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             context.textInsertionService.selectedTextOverride = { nil }
             context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
             context.textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
-            context.textInsertionService.focusedTextElementOverride = { isWebFieldFocused ? field : nil }
+            context.textInsertionService.focusedTextElementOverride = { isTextFieldFocused ? field : nil }
             context.textInsertionService.accessibilityRoleOverride = { $0 == field ? "AXTextArea" : "AXWebArea" }
-            context.textInsertionService.accessibilityParentOverride = { $0 == field ? webArea : nil }
+            context.textInsertionService.accessibilityParentOverride = {
+                scenario != "unknownRetry" && $0 == field ? webArea : nil
+            }
+            context.textInsertionService.setMessagingTimeoutOverride = { _, _ in }
             context.textInsertionService.focusedTextStateOverride = { _ in
                 (value: "", selectedText: "", selectedRange: NSRange(location: 0, length: 0))
             }
@@ -11032,19 +11035,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 XCTAssertNil(viewModel.actionFeedbackActionTitle)
                 XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
             } else {
-                isWebFieldFocused = true
+                isTextFieldFocused = true
                 viewModel.performActionFeedbackAction()
                 // Dismiss cannot release the indicator while Insert still owns the clipboard.
                 viewModel.dismissActionFeedback()
                 XCTAssertEqual(viewModel.state, .inserting)
                 XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
-                let insertedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text inserted")
+                let requestedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Paste requested")
                 for _ in 0..<80 {
-                    if viewModel.actionFeedbackMessage == insertedMessage { break }
+                    if viewModel.actionFeedbackMessage == requestedMessage { break }
                     try await Task.sleep(for: .milliseconds(25))
                 }
                 XCTAssertEqual(pastedTexts, ["transcribed", "transcribed"])
-                XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
+                XCTAssertEqual(viewModel.actionFeedbackMessage, requestedMessage)
+                XCTAssertEqual(viewModel.actionFeedbackIcon, "arrow.right")
+                XCTAssertFalse(viewModel.actionFeedbackIsError)
                 XCTAssertNil(viewModel.actionFeedbackActionTitle)
                 XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
             }

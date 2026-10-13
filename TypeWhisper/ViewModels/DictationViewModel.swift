@@ -4244,6 +4244,8 @@ final class DictationViewModel: ObservableObject {
 #endif
             if result.missedTextField {
                 showUndeliveredTranscriptFeedback(transcript.with(reason: .noTextField))
+            } else if result.hasUnverifiableUnchangedField {
+                showNotchFeedback(message: String(localized: "Paste requested"), icon: "arrow.right")
             } else {
                 showNotchFeedback(message: String(localized: "Text inserted"), icon: "checkmark.circle.fill")
             }

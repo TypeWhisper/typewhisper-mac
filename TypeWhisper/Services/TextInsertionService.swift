@@ -302,6 +302,12 @@ final class TextInsertionService {
             self == .pasted(verification: .unverified(.focusedTextUnchanged))
         }
 
+        /// An unchanged web or unidentified field cannot confirm whether it consumed the paste.
+        var hasUnverifiableUnchangedField: Bool {
+            self == .pasted(verification: .unverified(.webContentUnchanged))
+                || self == .pasted(verification: .unverified(.focusedTextAncestryUnavailable))
+        }
+
         /// The paste reached no text field: none was focused, or the focused field was readable
         /// and stayed unchanged.
         var missedTextField: Bool {

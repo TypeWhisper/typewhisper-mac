@@ -199,8 +199,8 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         let cases: [(FocusedField, String, String)] = [
             (.changesOnPaste, "Text inserted", "checkmark.circle.fill"),
             (.nativeUnchanged, "Text may not have been inserted", "exclamationmark.circle.fill"),
-            (.webContentUnchanged, "Text inserted", "checkmark.circle.fill"),
-            (.ancestryUnavailable, "Text inserted", "checkmark.circle.fill"),
+            (.webContentUnchanged, "Paste requested", "arrow.right"),
+            (.ancestryUnavailable, "Paste requested", "arrow.right"),
             (.unreadable, "Text inserted", "checkmark.circle.fill"),
             (.unreadableAfterPaste, "Text inserted", "checkmark.circle.fill"),
             (.exposesNoText, "Text inserted", "checkmark.circle.fill"),
@@ -964,71 +964,80 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(insertionPasteboard.string(forType: .string), "Insert recovered text")
     }
 
-    func testWorkflowPaletteRecentSelectionWarnsWhenNativeTextStaysUnchanged() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
+    func testWorkflowPaletteRecentSelectionOnlyWarnsForUnchangedNativeFields() async throws {
+        let cases: [(parentRole: String?, expectedKey: String, expectedIcon: String)] = [
+            ("AXWindow", "Text may not have been inserted", "exclamationmark.circle.fill"),
+            ("AXWebArea", "Paste requested", "arrow.right"),
+            (nil, "Paste requested", "arrow.right"),
+        ]
+        for (parentRole, expectedKey, expectedIcon) in cases {
+            let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(appSupportDirectory) }
 
-        let textInsertionService = TextInsertionService()
-        textInsertionService.accessibilityGrantedOverride = true
-        textInsertionService.captureActiveAppOverride = { ("Messages", "com.apple.MobileSMS", nil) }
-        textInsertionService.textSelectionOverride = { nil }
-        textInsertionService.textSelectionViaCopyOverride = { nil }
-        textInsertionService.pasteboardProvider = { NSPasteboard.withUniqueName() }
-        textInsertionService.pasteVerificationAttempts = 1
-        textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
-        textInsertionService.pasteSimulatorOverride = {}
-        let element = AXUIElementCreateSystemWide()
-        let window = AXUIElementCreateApplication(1)
-        textInsertionService.focusedTextElementOverride = { element }
-        textInsertionService.accessibilityParentOverride = { $0 == element ? window : nil }
-        textInsertionService.accessibilityRoleOverride = { _ in "AXWindow" }
-        textInsertionService.setMessagingTimeoutOverride = { _, _ in }
-        textInsertionService.focusedTextStateOverride = { _ in
-            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            let textInsertionService = TextInsertionService()
+            textInsertionService.accessibilityGrantedOverride = true
+            textInsertionService.captureActiveAppOverride = { ("Messages", "com.apple.MobileSMS", nil) }
+            textInsertionService.textSelectionOverride = { nil }
+            textInsertionService.textSelectionViaCopyOverride = { nil }
+            textInsertionService.pasteboardProvider = { NSPasteboard.withUniqueName() }
+            textInsertionService.pasteVerificationAttempts = 1
+            textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
+            textInsertionService.pasteSimulatorOverride = {}
+            let element = AXUIElementCreateSystemWide()
+            let container = AXUIElementCreateApplication(1)
+            textInsertionService.focusedTextElementOverride = { element }
+            textInsertionService.accessibilityParentOverride = { parentRole != nil && $0 == element ? container : nil }
+            textInsertionService.accessibilityRoleOverride = { _ in parentRole }
+            textInsertionService.setMessagingTimeoutOverride = { _, _ in }
+            textInsertionService.focusedTextStateOverride = { _ in
+                (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+
+            let generalPasteboard = NSPasteboard.general
+            let savedClipboard = textInsertionService.saveClipboard(from: generalPasteboard)
+            defer { textInsertionService.restoreClipboard(savedClipboard, to: generalPasteboard) }
+            generalPasteboard.clearContents()
+
+            let recentTranscriptionStore = RecentTranscriptionStore()
+            let recentID = UUID()
+            recentTranscriptionStore.recordTranscription(
+                id: recentID,
+                finalText: "Insert recovered text",
+                timestamp: Date(),
+                appName: "Messages",
+                appBundleIdentifier: "com.apple.MobileSMS"
+            )
+
+            let controller = PromptPaletteControllerSpy()
+            let handler = PromptPaletteHandler(
+                textInsertionService: textInsertionService,
+                workflowService: WorkflowService(appSupportDirectory: appSupportDirectory),
+                historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+                recentTranscriptionStore: recentTranscriptionStore,
+                promptProcessingService: PromptProcessingService(),
+                soundService: SoundService(),
+                accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+                promptPaletteController: controller
+            )
+            let feedbackShown = expectation(description: "insertion feedback")
+            var feedback: (message: String, icon: String, isError: Bool)?
+            handler.onShowNotchFeedback = { message, icon, _, isError, _ in
+                feedback = (message, icon, isError)
+                feedbackShown.fulfill()
+            }
+
+            handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
+            try await Task.sleep(for: .milliseconds(50))
+            controller.selectRecent(id: recentID)
+            await fulfillment(of: [feedbackShown], timeout: 1.0)
+
+            XCTAssertEqual(
+                feedback?.message,
+                try TestSupport.localizedCatalogValueForCurrentLocale(for: expectedKey)
+            )
+            XCTAssertEqual(feedback?.icon, expectedIcon)
+            XCTAssertEqual(feedback?.isError, false)
         }
-
-        let generalPasteboard = NSPasteboard.general
-        let savedClipboard = textInsertionService.saveClipboard(from: generalPasteboard)
-        defer { textInsertionService.restoreClipboard(savedClipboard, to: generalPasteboard) }
-        generalPasteboard.clearContents()
-
-        let recentTranscriptionStore = RecentTranscriptionStore()
-        let recentID = UUID()
-        recentTranscriptionStore.recordTranscription(
-            id: recentID,
-            finalText: "Insert recovered text",
-            timestamp: Date(),
-            appName: "Messages",
-            appBundleIdentifier: "com.apple.MobileSMS"
-        )
-
-        let controller = PromptPaletteControllerSpy()
-        let handler = PromptPaletteHandler(
-            textInsertionService: textInsertionService,
-            workflowService: WorkflowService(appSupportDirectory: appSupportDirectory),
-            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
-            recentTranscriptionStore: recentTranscriptionStore,
-            promptProcessingService: PromptProcessingService(),
-            soundService: SoundService(),
-            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
-            promptPaletteController: controller
-        )
-        let feedbackShown = expectation(description: "insertion feedback")
-        var feedbackMessage: String?
-        handler.onShowNotchFeedback = { message, _, _, _, _ in
-            feedbackMessage = message
-            feedbackShown.fulfill()
-        }
-
-        handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
-        try await Task.sleep(for: .milliseconds(50))
-        controller.selectRecent(id: recentID)
-        await fulfillment(of: [feedbackShown], timeout: 1.0)
-
-        XCTAssertEqual(
-            feedbackMessage,
-            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text may not have been inserted")
-        )
     }
 
     func testWorkflowPaletteWorkflowSelectionProcessesOriginalTextContext() async throws {

@@ -26540,6 +26540,29 @@
         }
       }
     },
+    "Paste requested" : {
+      "comment" : "Neutral feedback after sending a paste when the target field cannot confirm whether it consumed the text.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einfügen ausgelöst"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼り付けを要求しました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已请求粘贴"
+          }
+        }
+      }
+    },
     "Pause" : {
       "localizations" : {
         "de" : {
