@@ -191,11 +191,16 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
     }
 
-    func testInsertLatestReportsInsertionOnlyWhenFocusedTextChangesOrIsUnreadable() async throws {
-        enum FocusedField { case changesOnPaste, staysUnchanged, unreadable, unreadableAfterPaste, exposesNoText }
+    func testInsertLatestOnlyWarnsForUnchangedNativeFields() async throws {
+        enum FocusedField {
+            case changesOnPaste, nativeUnchanged, webContentUnchanged, ancestryUnavailable
+            case unreadable, unreadableAfterPaste, exposesNoText
+        }
         let cases: [(FocusedField, String, String)] = [
             (.changesOnPaste, "Text inserted", "checkmark.circle.fill"),
-            (.staysUnchanged, "Text may not have been inserted", "exclamationmark.circle.fill"),
+            (.nativeUnchanged, "Text may not have been inserted", "exclamationmark.circle.fill"),
+            (.webContentUnchanged, "Text inserted", "checkmark.circle.fill"),
+            (.ancestryUnavailable, "Text inserted", "checkmark.circle.fill"),
             (.unreadable, "Text inserted", "checkmark.circle.fill"),
             (.unreadableAfterPaste, "Text inserted", "checkmark.circle.fill"),
             (.exposesNoText, "Text inserted", "checkmark.circle.fill"),
@@ -214,7 +219,15 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
             var pasteCount = 0
             textInsertionService.pasteSimulatorOverride = { pasteCount += 1 }
             let element = AXUIElementCreateSystemWide()
+            let container = AXUIElementCreateApplication(1)
             textInsertionService.focusedTextElementOverride = { field == .unreadable ? nil : element }
+            textInsertionService.accessibilityParentOverride = {
+                field != .ancestryUnavailable && $0 == element ? container : nil
+            }
+            textInsertionService.accessibilityRoleOverride = { _ in
+                field == .webContentUnchanged ? "AXWebArea" : "AXWindow"
+            }
+            textInsertionService.setMessagingTimeoutOverride = { _, _ in }
             textInsertionService.focusedTextStateOverride = { _ in
                 if field == .changesOnPaste, pasteCount > 0 {
                     return (value: "Newest", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
@@ -951,7 +964,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(insertionPasteboard.string(forType: .string), "Insert recovered text")
     }
 
-    func testWorkflowPaletteRecentSelectionDoesNotReportInsertionWhenFocusedTextStaysUnchanged() async throws {
+    func testWorkflowPaletteRecentSelectionWarnsWhenNativeTextStaysUnchanged() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -965,7 +978,11 @@ final class PromptPaletteHandlerTests: XCTestCase {
         textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
         textInsertionService.pasteSimulatorOverride = {}
         let element = AXUIElementCreateSystemWide()
+        let window = AXUIElementCreateApplication(1)
         textInsertionService.focusedTextElementOverride = { element }
+        textInsertionService.accessibilityParentOverride = { $0 == element ? window : nil }
+        textInsertionService.accessibilityRoleOverride = { _ in "AXWindow" }
+        textInsertionService.setMessagingTimeoutOverride = { _, _ in }
         textInsertionService.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
         }
