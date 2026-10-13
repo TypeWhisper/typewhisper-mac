@@ -171,7 +171,8 @@ final class WatchFolderService: ObservableObject {
     private var debounceTask: Task<Void, Never>?
     private var needsRescanAfterProcessing = false
 
-    private let audioFileService: AudioFileService
+    private let loadAudio: @MainActor (URL) async throws -> [Float]
+    private let appSupportDirectory: URL
     private let modelManagerService: ModelManagerService
     private let fileJobAutomationPipeline: FileJobAutomationPipeline
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "WatchFolder")
@@ -179,9 +180,12 @@ final class WatchFolderService: ObservableObject {
     init(
         audioFileService: AudioFileService,
         modelManagerService: ModelManagerService,
-        fileJobAutomationPipeline: FileJobAutomationPipeline = FileJobAutomationPipeline()
+        fileJobAutomationPipeline: FileJobAutomationPipeline = FileJobAutomationPipeline(),
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        audioSamplesLoader: (@MainActor (URL) async throws -> [Float])? = nil
     ) {
-        self.audioFileService = audioFileService
+        self.loadAudio = audioSamplesLoader ?? { try await audioFileService.loadAudioSamples(from: $0) }
+        self.appSupportDirectory = appSupportDirectory
         self.modelManagerService = modelManagerService
         self.fileJobAutomationPipeline = fileJobAutomationPipeline
         loadProcessedFileFingerprints()
@@ -341,7 +345,7 @@ final class WatchFolderService: ObservableObject {
         )
     }
 
-    private func transcribeFile(
+    func transcribeFile(
         url: URL,
         fingerprint: String,
         outputFolder: URL,
@@ -351,9 +355,13 @@ final class WatchFolderService: ObservableObject {
     ) async {
         let fileName = url.lastPathComponent
         currentlyProcessing = fileName
+        defer { currentlyProcessing = nil }
 
         do {
-            let samples = try await audioFileService.loadAudioSamples(from: url)
+            // A new folder job waits for the comparison instead of failing the file.
+            try await HistoryRetranscriptionActivity.waitForEngineAvailability()
+            let samples = try await loadAudio(url)
+            try Task.checkCancellation()
             var result = try await modelManagerService.transcribe(
                 audioSamples: samples,
                 languageSelection: overrides.languageSelection,
@@ -440,6 +448,8 @@ final class WatchFolderService: ObservableObject {
             saveProcessedFiles()
             logger.info("Transcribed: \(fileName)")
 
+        } catch is CancellationError {
+            return
         } catch {
             let item = ProcessedFileItem(
                 id: UUID(),
@@ -453,18 +463,16 @@ final class WatchFolderService: ObservableObject {
             saveProcessedFiles()
             logger.error("Failed to transcribe \(fileName): \(error.localizedDescription)")
         }
-
-        currentlyProcessing = nil
     }
 
     // MARK: - Persistence
 
     private var processedFingerprintsURL: URL {
-        AppConstants.appSupportDirectory.appendingPathComponent("watch-folder-processed.json")
+        appSupportDirectory.appendingPathComponent("watch-folder-processed.json")
     }
 
     private var processedHistoryURL: URL {
-        AppConstants.appSupportDirectory.appendingPathComponent("watch-folder-history.json")
+        appSupportDirectory.appendingPathComponent("watch-folder-history.json")
     }
 
     private func loadProcessedFileFingerprints() {
@@ -475,7 +483,7 @@ final class WatchFolderService: ObservableObject {
 
     private func saveProcessedFileFingerprints() {
         let fm = FileManager.default
-        let dir = AppConstants.appSupportDirectory
+        let dir = appSupportDirectory
         if !fm.fileExists(atPath: dir.path) {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }

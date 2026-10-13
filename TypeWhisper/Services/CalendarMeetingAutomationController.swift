@@ -356,6 +356,14 @@ final class CalendarMeetingAutomationController: ObservableObject {
             }
             .store(in: &cancellables)
 
+        recorderViewModel.$isHistoryRetranscribing
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recorderOrDictationStateDidChange()
+            }
+            .store(in: &cancellables)
+
         dictationViewModel.$state
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -1067,7 +1075,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private func currentRecorderReadiness() -> CalendarMeetingRecorderReadiness {
         guard dictationViewModel.state == .idle else { return .dictationBusy }
-        guard recorderViewModel.retranscribingRecordingURL == nil else { return .finalizing }
+        guard recorderViewModel.retranscribingRecordingURL == nil,
+              !recorderViewModel.isHistoryRetranscribing else { return .finalizing }
         switch recorderViewModel.state {
         case .recording: return .recorderBusy
         case .finalizing: return .finalizing

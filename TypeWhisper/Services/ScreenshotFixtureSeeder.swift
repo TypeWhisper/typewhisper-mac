@@ -212,6 +212,25 @@ extension ServiceContainer {
         if AppConstants.screenshotState == "history-speakers" {
             seedScreenshotSpeakerRecord(languageCode: languageCode, timestamp: referenceDate)
         }
+        if AppConstants.screenshotState?.hasPrefix("history-comparison") == true,
+           let record = historyService.allRecords().first(where: { historyService.audioFileURL(for: $0) != nil }) {
+            let text = languageCode == "de"
+                ? "Wir verschieben die Veröffentlichung auf Freitag. Bitte prüfe vorher die deutsche Übersetzung."
+                : "We will move the release to Friday. Please check the German translation first."
+            let version = HistoryTranscriptionVersion(
+                createdAt: referenceDate.addingTimeInterval(120),
+                rawText: text, finalText: text, engineID: "parakeet", engineName: "Parakeet",
+                modelID: "parakeet-tdt-0.6b-v3", modelName: "Parakeet TDT 0.6B v3",
+                language: languageCode, workflowRecorded: true
+            )
+            if AppConstants.screenshotState != "history-comparison-first" {
+                try? historyService.appendTranscriptionVersion(version, to: record, expected: .capture(record))
+            }
+            if AppConstants.screenshotState == "history-comparison-after" {
+                try? historyService.promoteTranscriptionVersion(version.id, in: record)
+            }
+            historyViewModel.requestRecordSelection([record.id])
+        }
     }
 
     /// A meeting recording with a speaker transcript, selected in History.

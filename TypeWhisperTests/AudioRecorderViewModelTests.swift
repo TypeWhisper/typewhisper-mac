@@ -1,5 +1,6 @@
 import AudioToolbox
 import AVFoundation
+import Combine
 import XCTest
 import os
 import TypeWhisperPluginSDK
@@ -1994,6 +1995,33 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(request.prompt?.contains("TypeWhisper") == true)
         XCTAssertTrue(request.usedFileTranscriptionPipeline)
         XCTAssertTrue(plugin.selectedModelOverrides.contains("universal-3-5-pro"))
+    }
+
+    func testComparisonActivityPublishesRecorderAvailabilityAndRestoresItOnCompletion() async throws {
+        let fixture = try await makeRestorableRecorderFixture(hasPersistedModel: true)
+        let previousActivity = HistoryRetranscriptionActivity.recordID
+        defer { HistoryRetranscriptionActivity.recordID = previousActivity }
+        HistoryRetranscriptionActivity.recordID = nil
+        let viewModel = fixture.viewModel
+        var activity: [Bool] = []
+        let subscription = viewModel.$isHistoryRetranscribing.sink { activity.append($0) }
+        defer { subscription.cancel() }
+        XCTAssertTrue(viewModel.canToggleRecording)
+        XCTAssertTrue(viewModel.canTranscribeRecording(fixture.recording))
+
+        HistoryRetranscriptionActivity.recordID = UUID()
+        XCTAssertTrue(viewModel.isHistoryRetranscribing)
+        XCTAssertFalse(viewModel.canToggleRecording)
+        XCTAssertFalse(viewModel.canTranscribeRecording(fixture.recording))
+        let openedWhileBusy = makeViewModel(defaults: try makeDefaults())
+        XCTAssertTrue(openedWhileBusy.isHistoryRetranscribing)
+        XCTAssertFalse(openedWhileBusy.canToggleRecording)
+
+        HistoryRetranscriptionActivity.recordID = nil
+        XCTAssertTrue(viewModel.canToggleRecording)
+        XCTAssertTrue(viewModel.canTranscribeRecording(fixture.recording))
+        XCTAssertTrue(openedWhileBusy.canToggleRecording)
+        XCTAssertEqual(activity, [false, true, false])
     }
 
     func testRecorderRetranscriptionIsAvailableForAutoUnloadedRestorableEngine() async throws {

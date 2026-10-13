@@ -449,6 +449,7 @@ final class DictationQuickSelectionModel: ObservableObject {
             dictationState: DictationViewModel.shared.state,
             recorderState: recorder.state,
             isTranscribingElsewhere: recorder.isTranscribing
+                || HistoryRetranscriptionActivity.recordID != nil
                 || recorder.retranscribingRecordingURL != nil
                 || FileTranscriptionViewModel.shared.batchState == .processing
                 || DictationRecoveryViewModel.shared.recoveries.contains(where: \.isProcessing)
@@ -467,6 +468,7 @@ final class DictationQuickSelectionModel: ObservableObject {
             SettingsViewModel.shared.$languageSelection.map { _ in () }.eraseToAnyPublisher(),
             modelManager.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             container.workflowService.$workflows.map { _ in () }.eraseToAnyPublisher(),
+            container.historyRetranscriptionService.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             DictationViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$isTranscribing.map { _ in () }.eraseToAnyPublisher(),

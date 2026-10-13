@@ -63,6 +63,10 @@ final class TranscriptionRecord {
     var language: String?
     var engineUsed: String
     var modelUsed: String?
+    /// Local comparison runs. Sync and ordinary exports expose only the active content.
+    var transcriptionVersionsData: Data?
+    var activeTranscriptionVersionID: UUID?
+    var transcriptionAlignmentResetAt: Date?
     var wordsCount: Int = 0
     var audioFileName: String?
     var pipelineSteps: String?

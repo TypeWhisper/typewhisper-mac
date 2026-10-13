@@ -640,6 +640,104 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         observation.cancel()
     }
 
+    func testPromotionWaitsForQueuedAndRunningSpeakerDetection() async throws {
+        for waitForProvider in [false, true] {
+            let coordinator = makeCoordinator()
+            let addedID = await coordinator.addRecording(input(labels: true))
+            let id = try XCTUnwrap(addedID)
+            let record = try XCTUnwrap(history.record(withID: id))
+            let version = HistoryTranscriptionVersion(rawText: "New transcript.", finalText: "New transcript.", engineID: "new-engine")
+            try history.appendTranscriptionVersion(version, to: record, expected: .capture(record))
+            let original = HistoryTranscriptionVersion.capture(record)
+            var release: CheckedContinuation<Void, Never>?
+            provider.beforeDiarization = {
+                await withCheckedContinuation { release = $0 }
+            }
+            defer { release?.resume() }
+            XCTAssertNil(coordinator.start(recordID: id))
+            if waitForProvider {
+                for _ in 0..<100 where release == nil { try await Task.sleep(for: .milliseconds(10)) }
+                XCTAssertNotNil(release)
+            }
+            XCTAssertThrowsError(try history.promoteTranscriptionVersion(version.id, in: record)) {
+                XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.busy.localizedDescription)
+            }
+            XCTAssertEqual(HistoryTranscriptionVersion.capture(record), original)
+            XCTAssertNil(record.activeTranscriptionVersionID)
+            for _ in 0..<100 where release == nil { try await Task.sleep(for: .milliseconds(10)) }
+            let continuation = try XCTUnwrap(release)
+            release = nil
+            continuation.resume()
+            try await waitUntilIdle(coordinator)
+            try history.promoteTranscriptionVersion(version.id, in: record)
+            XCTAssertEqual(record.rawText, "New transcript.")
+            XCTAssertNil(record.speakerTranscript)
+            XCTAssertTrue(version.isActive(in: record))
+        }
+    }
+
+    func testSyncedPromotionInvalidatesEverySuspendedSpeakerDetectionPhase() async throws {
+        for phase in ["timing", "words", "models", "diarization", "failure"] {
+            provider = FakeDiarizationProvider()
+            provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+            let coordinator = makeCoordinator()
+            let addedID = await coordinator.addRecording(input(labels: true))
+            let id = try XCTUnwrap(addedID)
+            let record = try XCTUnwrap(history.record(withID: id))
+            var release: CheckedContinuation<Void, Never>?
+            let pause: @MainActor () async -> Void = {
+                await withCheckedContinuation { release = $0 }
+            }
+            defer { release?.resume() }
+            switch phase {
+            case "timing":
+                record.timedTextData = nil
+                record.timedTextGranularityRaw = nil
+                coordinator.timingSource = { _, _ in
+                    await pause()
+                    return self.input().result
+                }
+            case "words":
+                coordinator.wordTimingSource = { _, _ in
+                    await pause()
+                    return [TranscriptionWord(text: "Good", start: 0, end: 0.5)]
+                }
+            case "models":
+                provider.modelsInstalled = false
+                provider.beforePreparation = pause
+            default:
+                provider.beforeDiarization = pause
+                if phase == "failure" { provider.error = PluginDiarizationError.processingFailed("test") }
+            }
+            XCTAssertNil(coordinator.start(recordID: id), phase)
+            for _ in 0..<100 where release == nil { try await Task.sleep(for: .milliseconds(10)) }
+            let continuation = try XCTUnwrap(release, phase)
+            let reset = Date(timeIntervalSinceNow: 60)
+            // A promotion can invalidate alignment even if its raw text is unchanged.
+            let replacement = phase == "models" ? record.rawText : "Synced replacement."
+            let content = UserDataSyncHistoryContentV1(
+                recordID: id, createdAt: record.timestamp, updatedAt: reset,
+                originDeviceID: "another-device", originPlatform: "macOS",
+                source: record.source.rawValue, processingState: "ready",
+                rawTranscript: replacement, finalText: replacement,
+                durationSeconds: record.durationSeconds, engineDisplayName: "remote-engine",
+                alignmentResetAt: reset
+            )
+            try history.applyUserDataSyncMutations([.upsertHistoryContent(content)])
+            release = nil
+            continuation.resume()
+            try await waitUntilIdle(coordinator)
+            XCTAssertEqual(record.rawText, replacement, phase)
+            XCTAssertNil(record.speakerTranscript, phase)
+            XCTAssertNil(record.speakerTranscriptStateRaw, phase)
+            XCTAssertNil(record.timedTextData, phase)
+            XCTAssertNil(record.speakerWordsData, phase)
+            XCTAssertNil(record.speakerNamesData, phase)
+            XCTAssertEqual(record.speakerTranscriptUpdatedAt, reset, phase)
+            XCTAssertEqual(provider.requests.count, ["diarization", "failure"].contains(phase) ? 1 : 0, phase)
+        }
+    }
+
     func testSupporterStatusDoesNotUnlockSpeakerDetection() {
         XCTAssertFalse(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: false, hasPremiumEntitlement: false))
         XCTAssertTrue(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: true, hasPremiumEntitlement: false))
@@ -657,6 +755,8 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
     var modelsInstalled = true
     /// How long each detection takes.
     var delay: Duration?
+    var beforePreparation: (@MainActor () async -> Void)?
+    var beforeDiarization: (@MainActor () async -> Void)?
     private(set) var requests: [PluginDiarizationRequest] = []
     private(set) var prepareCalls = 0
 
@@ -671,6 +771,7 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
 
     func prepareDiarizationModels(onProgress: @Sendable @escaping (Double) -> Void) async throws {
         prepareCalls += 1
+        if let beforePreparation { await beforePreparation() }
         modelsInstalled = true
     }
 
@@ -685,6 +786,7 @@ private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @
         onProgress: @Sendable @escaping (Double) -> Void
     ) async throws -> PluginDiarizationResult {
         requests.append(request)
+        if let beforeDiarization { await beforeDiarization() }
         if let delay { try await Task.sleep(for: delay) }
         if let error { throw error }
         return PluginDiarizationResult(turns: turns, speakerEmbeddings: embeddings, engine: "fake-diarizer")

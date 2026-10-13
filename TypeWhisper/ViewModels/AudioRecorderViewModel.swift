@@ -432,8 +432,9 @@ final class AudioRecorderViewModel: ObservableObject {
         resolvedEngine?.supportedLanguages(forModel: availableSelectedModel).sorted() ?? []
     }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
+    @Published private(set) var isHistoryRetranscribing = false
     var canToggleRecording: Bool {
-        retranscribingRecordingURL == nil && Self.canToggleRecording(
+        !isHistoryRetranscribing && retranscribingRecordingURL == nil && Self.canToggleRecording(
             state: state,
             micEnabled: micEnabled,
             systemAudioEnabled: systemAudioEnabled
@@ -578,6 +579,12 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func setupBindings() {
+        HistoryRetranscriptionActivity.recordIDPublisher
+            .map { $0 != nil }
+            .removeDuplicates()
+            .sink { [weak self] in self?.isHistoryRetranscribing = $0 }
+            .store(in: &cancellables)
+
         recorderService.$duration
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.duration = value }
@@ -721,7 +728,7 @@ final class AudioRecorderViewModel: ObservableObject {
         preferredBaseName: String?,
         transcriptMetadata: CalendarMeetingTranscriptMetadata?
     ) async throws -> URL {
-        guard retranscribingRecordingURL == nil else {
+        guard retranscribingRecordingURL == nil, HistoryRetranscriptionActivity.recordID == nil else {
             throw RecorderAPIError.retranscribing
         }
 
@@ -1211,6 +1218,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func canTranscribeRecording(_ item: RecordingItem) -> Bool {
+        guard !isHistoryRetranscribing else { return false }
         guard state == .idle, retranscribingRecordingURL == nil else { return false }
         guard FileManager.default.fileExists(atPath: item.url.path) else { return false }
         guard let engine = resolvedEngine else { return false }
