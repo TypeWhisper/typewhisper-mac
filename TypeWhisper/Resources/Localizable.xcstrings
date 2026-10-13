@@ -30385,6 +30385,34 @@
         }
       }
     },
+    "recorder.noSpeechDetectedError" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Aufnahme wurde keine Sprache erkannt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No speech was detected in the recording."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音から音声が検出されませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音中未检测到语音。"
+          }
+        }
+      }
+    },
     "recorder.recordings" : {
       "localizations" : {
         "de" : {

@@ -7,6 +7,9 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecorderViewModel")
 
+/// Speech detection found no speech in the recording, so the engine was not asked.
+private struct RecordingHasNoSpeech: Error {}
+
 private final class RecorderTranscriptionSourceProgressCapture: @unchecked Sendable {
     private let maximumProcessedDuration = OSAllocatedUnfairLock(initialState: TimeInterval.zero)
 
@@ -442,6 +445,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
     private let audioSamplesLoader: AudioSamplesLoader
+    private let speechRegionDetector: any SpeechRegionDetecting
     private let recordingsLoader: RecordingsLoader
     private let recorderCompletionsLoader: RecorderCompletionsLoader
     private let defaults: UserDefaults
@@ -467,6 +471,7 @@ final class AudioRecorderViewModel: ObservableObject {
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
+        speechRegionDetector: (any SpeechRegionDetecting)? = nil,
         recordingsLoader: RecordingsLoader? = nil,
         recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
@@ -478,6 +483,7 @@ final class AudioRecorderViewModel: ObservableObject {
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
             try await audioFileService.loadAudioSamples(from: url)
         }
+        self.speechRegionDetector = speechRegionDetector ?? SoundAnalysisSpeechRegionDetector()
         self.recordingsLoader = recordingsLoader ?? { directory, transientFailures in
             Self.readRecordings(from: directory, transientFailures: transientFailures)
         }
@@ -1413,6 +1419,10 @@ final class AudioRecorderViewModel: ObservableObject {
             }
         } catch is CancellationError {
             return .skipped
+        } catch is RecordingHasNoSpeech {
+            // A preview of a recording without speech is text the engine made up.
+            partialText = ""
+            return recordNoSpeech(for: request)
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // Fall back to streaming result
@@ -1457,6 +1467,8 @@ final class AudioRecorderViewModel: ObservableObject {
             return outcome
         } catch is CancellationError {
             return .skipped
+        } catch is RecordingHasNoSpeech {
+            return recordNoSpeech(for: request)
         } catch {
             recordRetranscriptionFailure(
                 phase: .finalTranscription,
@@ -1495,12 +1507,77 @@ final class AudioRecorderViewModel: ObservableObject {
         ))
     }
 
+    /// The engine gets only the parts of the recording that hold speech; the
+    /// result's times are on the recording's timeline again.
     private func transcribeFinalRecording(
         _ request: FinalTranscriptionRequest,
         task: TranscriptionTask
     ) async throws -> TranscriptionResult {
+        let speechOnlyAudio = try await speechOnlyAudio(for: request)
+        let result = try await transcribeFinalRecording(
+            request,
+            samples: speechOnlyAudio?.samples ?? request.buffer,
+            task: task
+        )
+        return speechOnlyAudio?.restoringOriginalTimes(of: result) ?? result
+    }
+
+    /// `nil` sends the whole recording: it is speech throughout, or detection failed.
+    private func speechOnlyAudio(for request: FinalTranscriptionRequest) async throws -> SpeechOnlyAudio? {
+        let regions: [ClosedRange<TimeInterval>]
+        do {
+            regions = try await speechRegionDetector.speechRegions(in: request.buffer)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning(
+                "Speech detection failed; transcribing the whole recording: \(error.localizedDescription, privacy: .public)"
+            )
+            return nil
+        }
+        try Task.checkCancellation()
+        guard !regions.isEmpty else {
+            logger.info("Speech detection found no speech; the recording is not transcribed")
+            throw RecordingHasNoSpeech()
+        }
+
+        // Copying a long recording would hold up the main actor.
+        let samples = request.buffer
+        let speechOnlyAudio = await Task.detached(priority: .userInitiated) {
+            SpeechOnlyAudio(
+                samples: samples,
+                sampleRate: AudioRecorderService.transcriptionSampleRate,
+                speechRegions: regions
+            )
+        }.value
+        try Task.checkCancellation()
+        if let speechOnlyAudio {
+            logger.info(
+                "Transcribing speech only [parts=\(speechOnlyAudio.parts.count, privacy: .public), speechDuration=\(Double(speechOnlyAudio.samples.count) / AudioRecorderService.transcriptionSampleRate, privacy: .public), audioDuration=\(speechOnlyAudio.originalDuration, privacy: .public)]"
+            )
+        }
+        return speechOnlyAudio
+    }
+
+    private func recordNoSpeech(for request: FinalTranscriptionRequest) -> FinalTranscriptionOutcome {
+        let failure = makeTranscriptionFailure(
+            phase: .emptyResult,
+            providerError: String(localized: "recorder.noSpeechDetectedError"),
+            request: request
+        )
+        let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
+        errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+        return .failed(recordedFailure)
+    }
+
+    private func transcribeFinalRecording(
+        _ request: FinalTranscriptionRequest,
+        samples: [Float],
+        task: TranscriptionTask
+    ) async throws -> TranscriptionResult {
         let initialPass = try await transcribeFinalRecordingPass(
             request,
+            samples: samples,
             task: task,
             prompt: request.prompt,
             dictionaryTermHints: request.dictionaryTermHints
@@ -1509,6 +1586,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
         guard try await shouldRetryWhisperKitWithoutConditioning(
             request: request,
+            samples: samples,
             pass: initialPass
         ) else {
             return initialPass.result
@@ -1522,6 +1600,7 @@ final class AudioRecorderViewModel: ObservableObject {
             try Task.checkCancellation()
             let retryPass = try await transcribeFinalRecordingPass(
                 request,
+                samples: samples,
                 task: task,
                 prompt: nil,
                 dictionaryTermHints: []
@@ -1547,13 +1626,14 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func transcribeFinalRecordingPass(
         _ request: FinalTranscriptionRequest,
+        samples: [Float],
         task: TranscriptionTask,
         prompt: String?,
         dictionaryTermHints: [PluginDictionaryTermHint]
     ) async throws -> FinalTranscriptionPass {
         let progressCapture = RecorderTranscriptionSourceProgressCapture()
         let result = try await modelManager.transcribe(
-            audioSamples: request.buffer,
+            audioSamples: samples,
             languageSelection: request.languageSelection,
             task: task,
             engineOverrideId: request.providerId,
@@ -1575,6 +1655,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func shouldRetryWhisperKitWithoutConditioning(
         request: FinalTranscriptionRequest,
+        samples: [Float],
         pass: FinalTranscriptionPass
     ) async throws -> Bool {
         guard request.providerId == "whisper",
@@ -1584,7 +1665,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         let text = pass.result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let audioDuration = Double(request.buffer.count) / AudioRecorderService.transcriptionSampleRate
+        let audioDuration = Double(samples.count) / AudioRecorderService.transcriptionSampleRate
         let analysisStartTime: TimeInterval
         if text.isEmpty {
             analysisStartTime = 0
@@ -1597,7 +1678,6 @@ final class AudioRecorderViewModel: ObservableObject {
             analysisStartTime = pass.processedDuration
         }
 
-        let samples = request.buffer
         let analysisTask = Task.detached(priority: .utility) {
             recorderAudioHasAudibleTail(
                 samples: samples,

@@ -192,3 +192,10 @@ final class TestHostDefaultsGuard: NSObject, XCTestObservation {
         }
     }
 }
+
+/// Reports the whole recording as speech, so synthetic test audio reaches the engine unchanged.
+struct WholeRecordingSpeechDetector: SpeechRegionDetecting {
+    func speechRegions(in samples: [Float]) async throws -> [ClosedRange<TimeInterval>] {
+        [0...(Double(samples.count) / AudioRecorderService.transcriptionSampleRate)]
+    }
+}

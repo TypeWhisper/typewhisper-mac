@@ -13689,7 +13689,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             recorderService: audioRecorderService,
             modelManager: modelManager,
             dictionaryService: dictionaryService,
-            audioDeviceService: audioDeviceService
+            audioDeviceService: audioDeviceService,
+            speechRegionDetector: WholeRecordingSpeechDetector()
         )
 
         let pluginRegistryService = PluginRegistryService(
