@@ -10914,9 +10914,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testMissedTextFieldFeedbackSupportsDismissOptOutAndWebRetry() async throws {
-        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled,
-                    UserDefaultsKeys.missedTextFieldWarningEnabled]
+    func testMissedTextFieldFeedbackSupportsDismissAndWebRetry() async throws {
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled]
         let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
         defer {
             for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
@@ -10924,8 +10923,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
         UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
 
-        for scenario in ["dismiss", "disabled", "webRetry"] {
-            UserDefaults.standard.set(scenario != "disabled", forKey: UserDefaultsKeys.missedTextFieldWarningEnabled)
+        for scenario in ["dismiss", "webRetry"] {
             let directory = try TestSupport.makeTemporaryDirectory()
             var dictationContext: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
             defer {
@@ -10978,10 +10976,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(context.recentTranscriptionStore.latestEntry(
                 historyRecords: context.historyService.recentRecords)?.finalText, "transcribed", scenario)
 
-            if scenario == "disabled" {
-                XCTAssertNil(viewModel.actionFeedbackMessage)
-                XCTAssertNil(viewModel.actionFeedbackActionTitle)
-            } else if scenario == "dismiss" {
+            if scenario == "dismiss" {
                 XCTAssertNotNil(viewModel.actionFeedbackActionTitle)
                 viewModel.setActionFeedbackHovered(true)
                 viewModel.dismissActionFeedback()

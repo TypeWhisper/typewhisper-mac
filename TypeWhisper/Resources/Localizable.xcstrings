@@ -1,50 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Show an Insert reminder when a dictation appears not to reach a text field. Transcripts remain available in Recent Transcriptions when this is off." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt einen Hinweis zum Einfügen, wenn ein Diktat anscheinend kein Textfeld erreicht hat. Bei deaktivierter Option bleiben die Texte in den letzten Transkriptionen verfügbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "音声入力がテキストフィールドに届かなかった可能性がある場合に、挿入を促す通知を表示します。オフの場合も、テキストは「最近の文字起こし」から利用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当听写内容似乎未输入到文本字段时，显示插入提醒。关闭此选项后，文本仍可在最近的转录中找到。"
-          }
-        }
-      }
-    },
-    "Warn when no text field is detected" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Warnen, wenn kein Textfeld erkannt wird"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストフィールドが見つからない場合に警告する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未检测到文本字段时发出提醒"
-          }
-        }
-      }
-    },
     "Dismiss notification" : {
       "localizations" : {
         "de" : {

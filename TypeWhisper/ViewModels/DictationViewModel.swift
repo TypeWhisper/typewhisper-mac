@@ -904,10 +904,6 @@ final class DictationViewModel: ObservableObject {
         defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? true
     }
 
-    nonisolated static func loadMissedTextFieldWarningEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.missedTextFieldWarningEnabled) as? Bool ?? true
-    }
-
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
     }
@@ -4164,13 +4160,6 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func showUndeliveredTranscriptFeedback(_ transcript: UndeliveredTranscript) {
-        // Suppress only this heuristic warning; a changed pinned field still needs recovery.
-        if transcript.reason == .noTextField, !Self.loadMissedTextFieldWarningEnabled() {
-            if case .insertUndeliveredTranscript? = actionFeedbackAction {
-                resetDictationState()
-            }
-            return
-        }
         var message = switch transcript.reason {
         case .noTextField:
             String(localized: "No text field detected")

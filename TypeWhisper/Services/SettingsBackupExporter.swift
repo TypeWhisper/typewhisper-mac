@@ -180,7 +180,6 @@ enum SettingsBackupExporter {
         var liveFieldTranscriptEnabled: Bool? = nil
         var indicatorTranscriptPreviewFontSizeOffset: Int? = nil
         var preserveClipboard: Bool? = nil
-        var missedTextFieldWarningEnabled: Bool? = nil
         var transcriptionNumberNormalizationEnabled: Bool? = nil
         var transcriptionNumberNormalizationMinimumValue: Int? = nil
         var mediaPauseEnabled: Bool? = nil
@@ -235,7 +234,6 @@ enum SettingsBackupExporter {
             if liveFieldTranscriptEnabled != nil { count += 1 }
             if indicatorTranscriptPreviewFontSizeOffset != nil { count += 1 }
             if preserveClipboard != nil { count += 1 }
-            if missedTextFieldWarningEnabled != nil { count += 1 }
             if transcriptionNumberNormalizationEnabled != nil { count += 1 }
             if transcriptionNumberNormalizationMinimumValue != nil { count += 1 }
             if mediaPauseEnabled != nil { count += 1 }
@@ -575,7 +573,6 @@ enum SettingsBackupExporter {
                 liveFieldTranscriptEnabled: userDefaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
                 indicatorTranscriptPreviewFontSizeOffset: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int,
                 preserveClipboard: userDefaults.object(forKey: UserDefaultsKeys.preserveClipboard) as? Bool,
-                missedTextFieldWarningEnabled: userDefaults.object(forKey: UserDefaultsKeys.missedTextFieldWarningEnabled) as? Bool,
                 transcriptionNumberNormalizationEnabled: userDefaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) as? Bool,
                 transcriptionNumberNormalizationMinimumValue: userDefaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue) == nil
                     ? nil
@@ -1025,7 +1022,6 @@ enum SettingsBackupExporter {
         }
         apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)
-        apply(preferences.missedTextFieldWarningEnabled, forKey: UserDefaultsKeys.missedTextFieldWarningEnabled)
         apply(preferences.transcriptionNumberNormalizationEnabled, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
         if let minimumValue = preferences.transcriptionNumberNormalizationMinimumValue,
            [0, 10, 100].contains(minimumValue) {

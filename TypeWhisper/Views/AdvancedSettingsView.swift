@@ -15,7 +15,6 @@ struct AdvancedSettingsView: View {
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
-    @AppStorage(UserDefaultsKeys.missedTextFieldWarningEnabled) private var missedTextFieldWarningEnabled = true
     @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
@@ -314,13 +313,6 @@ struct AdvancedSettingsView: View {
                 }
 
 #if !APPSTORE
-                Toggle(isOn: $missedTextFieldWarningEnabled) {
-                    SettingsInfoLabel(
-                        title: String(localized: "Warn when no text field is detected"),
-                        info: String(localized: "Show an Insert reminder when a dictation appears not to reach a text field. Transcripts remain available in Recent Transcriptions when this is off.")
-                    )
-                }
-
                 // Live updates write into other apps through the Accessibility API.
                 Toggle(isOn: $dictation.liveFieldTranscriptEnabled) {
                     SettingsInfoLabel(
