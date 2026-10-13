@@ -1425,8 +1425,9 @@ final class AudioRecorderViewModel: ObservableObject {
             return recordNoSpeech(for: request)
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
-            // Fall back to streaming result
-            if previewCanBeTranscript, !partialText.isEmpty {
+            // A WhisperKit error can mean that entire audio chunks are missing.
+            // Its live preview must not turn that failure into a completed recording.
+            if request.providerId != "whisper", previewCanBeTranscript, !partialText.isEmpty {
                 return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
             }
             let failure = makeTranscriptionFailure(
@@ -1596,27 +1597,17 @@ final class AudioRecorderViewModel: ObservableObject {
             "WhisperKit final transcription stopped with audible audio remaining; retrying without dictionary conditioning [processedDuration=\(initialPass.processedDuration, privacy: .public), audioDuration=\(initialPass.result.duration, privacy: .public)]"
         )
 
-        do {
-            try Task.checkCancellation()
-            let retryPass = try await transcribeFinalRecordingPass(
-                request,
-                samples: samples,
-                task: task,
-                prompt: nil,
-                dictionaryTermHints: []
-            )
-            return preferredFinalTranscriptionResult(
-                initial: initialPass,
-                retry: retryPass
-            )
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            logger.warning(
-                "WhisperKit final transcription retry without dictionary conditioning failed; keeping the initial result: \(error.localizedDescription, privacy: .public)"
-            )
-            return initialPass.result
-        }
+        // This retry was needed because the first result left audible audio out.
+        // If it fails, persist the failure instead of declaring that first result complete.
+        try Task.checkCancellation()
+        let retryPass = try await transcribeFinalRecordingPass(
+            request,
+            samples: samples,
+            task: task,
+            prompt: nil,
+            dictionaryTermHints: []
+        )
+        return preferredFinalTranscriptionResult(initial: initialPass, retry: retryPass)
     }
 
     private struct FinalTranscriptionPass {
@@ -1642,6 +1633,12 @@ final class AudioRecorderViewModel: ObservableObject {
             dictionaryTermHints: dictionaryTermHints,
             onProgress: { _ in true },
             onSourceProgress: progressCapture.record
+        )
+        let summary = result.diagnosticSummary(
+            audioDuration: Double(samples.count) / AudioRecorderService.transcriptionSampleRate
+        )
+        logger.info(
+            "Recorder transcription result [engine=\(request.providerId ?? "default", privacy: .public), task=\(task.rawValue, privacy: .public), promptChars=\(prompt?.count ?? 0, privacy: .public), \(summary, privacy: .public)]"
         )
         let segmentDuration = result.segments
             .map(\.end)

@@ -1,8 +1,11 @@
 import Combine
 import Foundation
+import os
 import SwiftUI
 import WhisperKit
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
+
+private let transcriptionLogger = Logger(subsystem: "com.typewhisper.whisperkit", category: "Transcription")
 
 // Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
 enum WhisperKitNetworkAccessPolicy {
@@ -325,18 +328,11 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             options.usePrefillPrompt = true
         }
 
-        let results = try await whisperKit.transcribe(
-            audioArray: audio.samples,
-            decodeOptions: options
+        return try await Self.transcribeAudio(
+            with: whisperKit,
+            samples: audio.samples,
+            options: options
         )
-
-        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let detectedLanguage = results.first?.language
-        let segments = results.flatMap { $0.segments }.map {
-            PluginTranscriptionSegment(text: $0.text, start: Double($0.start), end: Double($0.end))
-        }
-
-        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
     }
 
     func transcribe(
@@ -379,20 +375,16 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             options.usePrefillPrompt = true
         }
 
-        whisperKit.segmentDiscoveryCallback = { segments in
-            guard let progress = Self.sourceProgress(
-                fromDiscoveredSegments: segments,
-                totalDuration: audio.duration
-            ) else {
-                return
-            }
-            _ = onSourceProgress(progress)
-        }
+        whisperKit.segmentDiscoveryCallback = Self.makeSourceProgressCallback(
+            totalDuration: audio.duration,
+            onSourceProgress: onSourceProgress
+        )
         defer { whisperKit.segmentDiscoveryCallback = nil }
 
-        let results = try await whisperKit.transcribe(
-            audioArray: audio.samples,
-            decodeOptions: options,
+        return try await Self.transcribeAudio(
+            with: whisperKit,
+            samples: audio.samples,
+            options: options,
             callback: { progress in
                 let sanitizedText = Self.sanitizedStreamingText(
                     progress.text,
@@ -402,14 +394,115 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 return shouldContinue ? nil : false
             }
         )
+    }
 
-        let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
-        let detectedLanguage = results.first?.language
-        let segments = results.flatMap { $0.segments }.map {
-            PluginTranscriptionSegment(text: $0.text, start: Double($0.start), end: Double($0.end))
+    static func transcribeAudio(
+        with whisperKit: WhisperKit,
+        samples: [Float],
+        options: DecodingOptions,
+        callback: (@Sendable (TranscriptionProgress) -> Bool?)? = nil
+    ) async throws -> PluginTranscriptionResult {
+        let cancelledByCallback = OSAllocatedUnfairLock(initialState: false)
+        let checkedCallback: TranscriptionCallback = { progress in
+            guard !cancelledByCallback.withLock({ $0 }) else { return false }
+            let shouldContinue = callback?(progress)
+            if shouldContinue == false {
+                cancelledByCallback.withLock { $0 = true }
+            }
+            return shouldContinue
+        }
+        func checkCancellation() throws {
+            try Task.checkCancellation()
+            if cancelledByCallback.withLock({ $0 }) { throw CancellationError() }
         }
 
-        return PluginTranscriptionResult(text: text, detectedLanguage: detectedLanguage, segments: segments)
+        try checkCancellation()
+        let results = try await {
+            let windowSamples = whisperKit.featureExtractor.windowSamples ?? 30 * WhisperKit.sampleRate
+            guard samples.count > windowSamples, options.chunkingStrategy == .vad else {
+                return try await whisperKit.transcribe(
+                    audioArray: samples, decodeOptions: options, callback: checkedCallback
+                )
+            }
+
+            // WhisperKit's VAD convenience path drops failed chunk results when
+            // stitching, returning an apparently successful partial transcript (#1091).
+            // Keep its chunking and parallel inference, but inspect every result first.
+            let chunker = VADAudioChunker(vad: whisperKit.voiceActivityDetector ?? EnergyVAD())
+            let chunks = try await chunker.chunkAll(
+                audioArray: samples, maxChunkLength: windowSamples, decodeOptions: options
+            )
+            // Match WhisperKit's batch total before its per-chunk tasks attach progress.
+            whisperKit.progress.totalUnitCount = max(whisperKit.progress.totalUnitCount, Int64(chunks.count))
+            var chunkOptions = options
+            chunkOptions.clipTimestamps = []
+            chunkOptions.chunkingStrategy = nil
+            var chunkResults = await whisperKit.transcribeWithOptions(
+                audioArrays: chunks.map(\.audioSamples),
+                decodeOptionsArray: Array(repeating: chunkOptions, count: chunks.count),
+                seekOffsets: chunks.map(\.seekOffsetIndex),
+                callback: checkedCallback
+            )
+            try checkCancellation()
+            guard !chunks.isEmpty, chunkResults.count == chunks.count else {
+                throw PluginTranscriptionError.apiError("WhisperKit returned an incomplete set of audio segments.")
+            }
+            // A cancelled chunk is not an inference failure and must never be retried.
+            for case .failure(let error) in chunkResults where error is CancellationError {
+                throw CancellationError()
+            }
+
+            var retryCount = 0
+            for index in chunkResults.indices {
+                guard case .failure = chunkResults[index] else { continue }
+                try checkCancellation()
+                let chunk = chunks[index]
+                let start = Double(chunk.seekOffsetIndex) / Double(WhisperKit.sampleRate)
+                let end = start + Double(chunk.audioSamples.count) / Double(WhisperKit.sampleRate)
+                transcriptionLogger.warning(
+                    "Retrying failed audio segment [segment=\(index + 1, privacy: .public), total=\(chunks.count, privacy: .public), inputStart=\(start, privacy: .public), inputEnd=\(end, privacy: .public)]"
+                )
+                // Retry failed chunks serially after the batch has finished, with the
+                // same language, task and conditioning and no recursive VAD batching.
+                do {
+                    let sourceCallback = whisperKit.segmentDiscoveryCallback
+                    let seekTime = Float(chunk.seekOffsetIndex) / Float(WhisperKit.sampleRate)
+                    let recovered = try await whisperKit.transcribe(
+                        audioArray: chunk.audioSamples, decodeOptions: chunkOptions, callback: checkedCallback,
+                        segmentCallback: { segments in
+                            // The retry decodes a chunk-local buffer. Report progress in
+                            // the full input's timeline, leaving returned results local
+                            // for the final stitching step below.
+                            sourceCallback?(segments.map {
+                                TranscriptionUtilities.updateSegmentTimings(segment: $0, seekTime: seekTime)
+                            })
+                        }
+                    )
+                    try checkCancellation()
+                    chunkResults[index] = .success(recovered)
+                    retryCount += 1
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    try checkCancellation()
+                    throw PluginTranscriptionError.apiError(
+                        "WhisperKit could not transcribe audio segment \(index + 1) of \(chunks.count) after retrying: \(error.localizedDescription)"
+                    )
+                }
+            }
+            transcriptionLogger.info(
+                "Transcribed all audio segments [total=\(chunks.count, privacy: .public), retried=\(retryCount, privacy: .public)]"
+            )
+            return chunker.updateSeekOffsetsForResults(chunkedResults: chunkResults, audioChunks: chunks)
+        }()
+        try checkCancellation()
+        return PluginTranscriptionResult(
+            text: results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines),
+            detectedLanguage: results.first?.language,
+            segments: results.flatMap(\.segments).map {
+                PluginTranscriptionSegment(text: $0.text, start: Double($0.start), end: Double($0.end))
+            }
+        )
     }
 
     static func decodingOptions(language: String?, translate: Bool) -> DecodingOptions {
@@ -426,6 +519,28 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             withoutTimestamps: false,
             chunkingStrategy: .vad
         )
+    }
+
+    static func makeSourceProgressCallback(
+        totalDuration: TimeInterval,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) -> @Sendable ([TranscriptionSegment]) -> Void {
+        let latestDuration = OSAllocatedUnfairLock(initialState: 0.0)
+        return { segments in
+            guard let progress = Self.sourceProgress(
+                fromDiscoveredSegments: segments,
+                totalDuration: totalDuration
+            ) else {
+                return
+            }
+            latestDuration.withLock { latest in
+                // Parallel chunks and serial retries may discover earlier positions.
+                // Forward under the same lock so concurrent callbacks stay ordered.
+                guard progress.processedDuration > latest else { return }
+                latest = progress.processedDuration
+                _ = onSourceProgress(progress)
+            }
+        }
     }
 
     static func sourceProgress(

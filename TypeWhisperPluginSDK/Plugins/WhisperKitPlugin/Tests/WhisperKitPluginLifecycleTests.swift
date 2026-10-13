@@ -1,8 +1,50 @@
 import Foundation
 import XCTest
 import WhisperKit
+import class WhisperKit.TranscriptionResult
+import struct WhisperKit.TranscriptionSegment
 import TypeWhisperPluginSDK
+import os
 @testable import TypeWhisper
+
+/// Runs WhisperKit's real VAD chunker and batch scheduler, replacing only inference.
+private final class FailingChunkWhisperKit: WhisperKit, @unchecked Sendable {
+    enum FailureMode { case once, always, cancelled, none }
+    var failureMode: FailureMode = .once
+    private let state = OSAllocatedUnfairLock(initialState: (attempts: [Int: Int](), requests: [DecodingOptions]()))
+    var attempts: [Int: Int] { state.withLock { $0.attempts } }
+    var requests: [DecodingOptions] { state.withLock { $0.requests } }
+
+    override func runTranscribeTask(
+        audioArray: [Float],
+        decodeOptions: DecodingOptions? = nil,
+        callback: TranscriptionCallback = nil,
+        segmentCallback: SegmentDiscoveryCallback? = nil
+    ) async throws -> [TranscriptionResult] {
+        let marker = Int(audioArray.first ?? 0)
+        let attempt = state.withLock { state in
+            state.attempts[marker, default: 0] += 1
+            if let decodeOptions { state.requests.append(decodeOptions) }
+            return state.attempts[marker, default: 0]
+        }
+        if marker == 2 {
+            switch failureMode {
+            case .once where attempt == 1, .always:
+                throw WhisperError.transcriptionFailed("injected chunk failure")
+            case .cancelled:
+                throw CancellationError()
+            default: break
+            }
+        }
+        let text = "part \(marker)"
+        let segment = TranscriptionSegment(
+            start: 0, end: Float(audioArray.count) / Float(WhisperKit.sampleRate), text: text
+        )
+        _ = callback?(TranscriptionProgress(timings: TranscriptionTimings(), text: text, tokens: []))
+        (segmentCallback ?? segmentDiscoveryCallback)?([segment])
+        return [TranscriptionResult(text: text, segments: [segment], language: "nl", timings: TranscriptionTimings())]
+    }
+}
 
 @MainActor
 final class WhisperKitPluginLifecycleTests: XCTestCase {
@@ -89,6 +131,116 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
 
         XCTAssertEqual(options.language, "zh")
         XCTAssertFalse(options.detectLanguage)
+    }
+
+    func testLongTranscriptionRetriesFailedChunkAndKeepsItsPosition() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+        var options = WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+        options.promptTokens = [42]
+
+        let results = try await WhisperKitPlugin.transcribeAudio(with: engine, samples: samples, options: options)
+
+        XCTAssertEqual(results.text, "part 1 part 2 part 3")
+        XCTAssertEqual(results.segments.map(\.start), [0, 30, 60])
+        XCTAssertEqual(results.segments.map(\.end), [30, 60, 90])
+        XCTAssertEqual(engine.attempts, [1: 1, 2: 2, 3: 1])
+        XCTAssertTrue(engine.requests.allSatisfy { $0.language == "nl" && $0.promptTokens == [42] && $0.task == .transcribe })
+    }
+
+    func testLongTranscriptionDoesNotReturnPartialSuccessWhenChunkRetryFails() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .always
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+
+        do {
+            _ = try await WhisperKitPlugin.transcribeAudio(
+                with: engine, samples: samples,
+                options: WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+            )
+            XCTFail("A missing middle chunk must not be returned as a successful transcript")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("2 of 3"), error.localizedDescription)
+        }
+        XCTAssertEqual(engine.attempts[2], 2)
+    }
+
+    func testLongTranscriptionReportsRecoveredChunkSourceProgressAtOriginalOffset() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        let discoveredSegments = OSAllocatedUnfairLock(initialState: [TranscriptionSegment]())
+        let capture: @Sendable ([TranscriptionSegment]) -> Void = { segments in
+            discoveredSegments.withLock { $0.append(contentsOf: segments) }
+        }
+        engine.segmentDiscoveryCallback = capture
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+
+        let result = try await WhisperKitPlugin.transcribeAudio(
+            with: engine, samples: samples,
+            options: WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+        )
+
+        let recovered = try XCTUnwrap(discoveredSegments.withLock { $0.first { $0.text == "part 2" } })
+        XCTAssertEqual(recovered.seek, 30 * WhisperKit.sampleRate)
+        XCTAssertEqual(recovered.start, 30)
+        XCTAssertEqual(recovered.end, 60)
+        let progress = try XCTUnwrap(WhisperKitPlugin.sourceProgress(
+            fromDiscoveredSegments: [recovered], totalDuration: 90
+        ))
+        XCTAssertEqual(progress.processedDuration, 60)
+        XCTAssertEqual(try XCTUnwrap(progress.fractionCompleted), 2.0 / 3.0, accuracy: 0.000_001)
+        // Callback adjustment must not offset the returned results a second time.
+        XCTAssertEqual(result.segments.map(\.start), [0, 30, 60])
+        XCTAssertEqual(result.segments.map(\.end), [30, 60, 90])
+    }
+
+    func testLongTranscriptionDoesNotRetryCancelledChunk() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .cancelled
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+        do {
+            _ = try await WhisperKitPlugin.transcribeAudio(
+                with: engine, samples: samples,
+                options: WhisperKitPlugin.decodingOptions(language: nil, translate: false)
+            )
+            XCTFail("Cancellation must not become partial success")
+        } catch is CancellationError {
+            XCTAssertEqual(engine.attempts[2], 1)
+        }
+    }
+
+    func testCallbackCancellationDoesNotReturnPartialTranscriptOrRetry() async throws {
+        for seconds in [10, 90] {
+            let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+            engine.failureMode = .none
+            do {
+                _ = try await WhisperKitPlugin.transcribeAudio(
+                    with: engine,
+                    samples: Array(repeating: 2, count: seconds * WhisperKit.sampleRate),
+                    options: WhisperKitPlugin.decodingOptions(language: nil, translate: false),
+                    callback: { _ in false }
+                )
+                XCTFail("A cancelled transcription must not report success")
+            } catch is CancellationError {
+                XCTAssertEqual(engine.attempts[2], seconds == 10 ? 1 : 3)
+            }
+        }
+    }
+
+    func testLongTranscriptionKeepsFinalBatchOffsetsWithShortLastChunk() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .none
+        let samples = (1...5).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+            + Array(repeating: Float(6), count: 5 * WhisperKit.sampleRate)
+        var options = WhisperKitPlugin.decodingOptions(language: "nl", translate: true)
+        options.concurrentWorkerCount = 4
+
+        let result = try await WhisperKitPlugin.transcribeAudio(with: engine, samples: samples, options: options)
+
+        XCTAssertEqual(result.text, "part 1 part 2 part 3 part 4 part 5 part 6")
+        XCTAssertEqual(result.segments.map(\.start), [0, 30, 60, 90, 120, 150])
+        XCTAssertEqual(result.segments.last?.end, 155)
+        XCTAssertEqual(engine.attempts, [1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1])
+        XCTAssertTrue(engine.requests.allSatisfy { $0.task == .translate && $0.language == "nl" })
     }
 
     func testActivationPromotesPersistedLoadedModelToSelectedModelWhenSelectionMissing() async throws {
@@ -450,6 +602,64 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
             loadedModelId: "openai_whisper-large-v3_turbo"
         )
         XCTAssertNil(plugin.currentSettingsActivity)
+    }
+
+    func testSourceProgressDoesNotRegressDuringEarlierChunkRecovery() {
+        let reported = OSAllocatedUnfairLock(initialState: [PluginTranscriptionSourceProgress]())
+        let callback = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90) { progress in
+            reported.withLock { $0.append(progress) }
+            return true
+        }
+
+        // Later chunks can finish before the serial retry discovers earlier segments.
+        for end: Float in [30, 90, 31, 45, 60] {
+            callback([TranscriptionSegment(start: 0, end: end, text: "")])
+        }
+
+        let values = reported.withLock { $0 }
+        XCTAssertEqual(values.first?.processedDuration, 30)
+        XCTAssertEqual(values.last?.processedDuration, 90)
+        XCTAssertEqual(values.last?.fractionCompleted, 1)
+        XCTAssertTrue(zip(values, values.dropFirst()).allSatisfy {
+            $0.processedDuration <= $1.processedDuration
+        })
+    }
+
+    func testSourceProgressIsOrderedAcrossConcurrentChunkCallbacks() async {
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        let callback = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 100) { progress in
+            reported.withLock { $0.append(progress.processedDuration) }
+            return true
+        }
+
+        await withTaskGroup(of: Void.self) { group in
+            for end in (1...100).reversed() {
+                group.addTask {
+                    callback([TranscriptionSegment(start: 0, end: Float(end), text: "")])
+                }
+            }
+        }
+
+        let values = reported.withLock { $0 }
+        XCTAssertEqual(values.last, 100)
+        XCTAssertTrue(zip(values, values.dropFirst()).allSatisfy { $0 <= $1 })
+    }
+
+    func testSourceProgressStartsFreshForEachTranscription() {
+        let reported = OSAllocatedUnfairLock(initialState: [Double]())
+        let capture: @Sendable (PluginTranscriptionSourceProgress) -> Bool = { progress in
+            reported.withLock { $0.append(progress.processedDuration) }
+            return true
+        }
+        let first = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90, onSourceProgress: capture)
+        let second = WhisperKitPlugin.makeSourceProgressCallback(totalDuration: 90, onSourceProgress: capture)
+
+        first([TranscriptionSegment(start: 0, end: 90, text: "")])
+        second([TranscriptionSegment(start: 0, end: 10, text: "")])
+        first([TranscriptionSegment(start: 0, end: 60, text: "")])
+        second([TranscriptionSegment(start: 0, end: 20, text: "")])
+
+        XCTAssertEqual(reported.withLock { $0 }, [90, 10, 20])
     }
 
     func testSourceProgressUsesLatestDiscoveredSegmentEnd() {
