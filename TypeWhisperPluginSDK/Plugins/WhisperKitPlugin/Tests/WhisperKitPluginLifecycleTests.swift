@@ -1,8 +1,50 @@
 import Foundation
 import XCTest
 import WhisperKit
+import class WhisperKit.TranscriptionResult
+import struct WhisperKit.TranscriptionSegment
 import TypeWhisperPluginSDK
+import os
 @testable import TypeWhisper
+
+/// Runs WhisperKit's real VAD chunker and batch scheduler, replacing only inference.
+private final class FailingChunkWhisperKit: WhisperKit, @unchecked Sendable {
+    enum FailureMode { case once, always, cancelled, none }
+    var failureMode: FailureMode = .once
+    private let state = OSAllocatedUnfairLock(initialState: (attempts: [Int: Int](), requests: [DecodingOptions]()))
+    var attempts: [Int: Int] { state.withLock { $0.attempts } }
+    var requests: [DecodingOptions] { state.withLock { $0.requests } }
+
+    override func runTranscribeTask(
+        audioArray: [Float],
+        decodeOptions: DecodingOptions? = nil,
+        callback: TranscriptionCallback = nil,
+        segmentCallback: SegmentDiscoveryCallback? = nil
+    ) async throws -> [TranscriptionResult] {
+        let marker = Int(audioArray.first ?? 0)
+        let attempt = state.withLock { state in
+            state.attempts[marker, default: 0] += 1
+            if let decodeOptions { state.requests.append(decodeOptions) }
+            return state.attempts[marker, default: 0]
+        }
+        if marker == 2 {
+            switch failureMode {
+            case .once where attempt == 1, .always:
+                throw WhisperError.transcriptionFailed("injected chunk failure")
+            case .cancelled:
+                throw CancellationError()
+            default: break
+            }
+        }
+        let text = "part \(marker)"
+        let segment = TranscriptionSegment(
+            start: 0, end: Float(audioArray.count) / Float(WhisperKit.sampleRate), text: text
+        )
+        _ = callback?(TranscriptionProgress(timings: TranscriptionTimings(), text: text, tokens: []))
+        (segmentCallback ?? segmentDiscoveryCallback)?([segment])
+        return [TranscriptionResult(text: text, segments: [segment], language: "nl", timings: TranscriptionTimings())]
+    }
+}
 
 @MainActor
 final class WhisperKitPluginLifecycleTests: XCTestCase {
@@ -89,6 +131,88 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
 
         XCTAssertEqual(options.language, "zh")
         XCTAssertFalse(options.detectLanguage)
+    }
+
+    func testLongTranscriptionRetriesFailedChunkAndKeepsItsPosition() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+        var options = WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+        options.promptTokens = [42]
+
+        let results = try await WhisperKitPlugin.transcribeAudio(with: engine, samples: samples, options: options)
+
+        XCTAssertEqual(results.text, "part 1 part 2 part 3")
+        XCTAssertEqual(results.segments.map(\.start), [0, 30, 60])
+        XCTAssertEqual(results.segments.map(\.end), [30, 60, 90])
+        XCTAssertEqual(engine.attempts, [1: 1, 2: 2, 3: 1])
+        XCTAssertTrue(engine.requests.allSatisfy { $0.language == "nl" && $0.promptTokens == [42] && $0.task == .transcribe })
+    }
+
+    func testLongTranscriptionDoesNotReturnPartialSuccessWhenChunkRetryFails() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .always
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+
+        do {
+            _ = try await WhisperKitPlugin.transcribeAudio(
+                with: engine, samples: samples,
+                options: WhisperKitPlugin.decodingOptions(language: "nl", translate: false)
+            )
+            XCTFail("A missing middle chunk must not be returned as a successful transcript")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("2 of 3"), error.localizedDescription)
+        }
+        XCTAssertEqual(engine.attempts[2], 2)
+    }
+
+    func testLongTranscriptionDoesNotRetryCancelledChunk() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .cancelled
+        let samples = (1...3).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+        do {
+            _ = try await WhisperKitPlugin.transcribeAudio(
+                with: engine, samples: samples,
+                options: WhisperKitPlugin.decodingOptions(language: nil, translate: false)
+            )
+            XCTFail("Cancellation must not become partial success")
+        } catch is CancellationError {
+            XCTAssertEqual(engine.attempts[2], 1)
+        }
+    }
+
+    func testCallbackCancellationDoesNotReturnPartialTranscriptOrRetry() async throws {
+        for seconds in [10, 90] {
+            let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+            engine.failureMode = .none
+            do {
+                _ = try await WhisperKitPlugin.transcribeAudio(
+                    with: engine,
+                    samples: Array(repeating: 2, count: seconds * WhisperKit.sampleRate),
+                    options: WhisperKitPlugin.decodingOptions(language: nil, translate: false),
+                    callback: { _ in false }
+                )
+                XCTFail("A cancelled transcription must not report success")
+            } catch is CancellationError {
+                XCTAssertEqual(engine.attempts[2], seconds == 10 ? 1 : 3)
+            }
+        }
+    }
+
+    func testLongTranscriptionKeepsFinalBatchOffsetsWithShortLastChunk() async throws {
+        let engine = try await FailingChunkWhisperKit(WhisperKitConfig(load: false, download: false))
+        engine.failureMode = .none
+        let samples = (1...5).flatMap { Array(repeating: Float($0), count: 30 * WhisperKit.sampleRate) }
+            + Array(repeating: Float(6), count: 5 * WhisperKit.sampleRate)
+        var options = WhisperKitPlugin.decodingOptions(language: "nl", translate: true)
+        options.concurrentWorkerCount = 4
+
+        let result = try await WhisperKitPlugin.transcribeAudio(with: engine, samples: samples, options: options)
+
+        XCTAssertEqual(result.text, "part 1 part 2 part 3 part 4 part 5 part 6")
+        XCTAssertEqual(result.segments.map(\.start), [0, 30, 60, 90, 120, 150])
+        XCTAssertEqual(result.segments.last?.end, 155)
+        XCTAssertEqual(engine.attempts, [1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1])
+        XCTAssertTrue(engine.requests.allSatisfy { $0.task == .translate && $0.language == "nl" })
     }
 
     func testActivationPromotesPersistedLoadedModelToSelectedModelWhenSelectionMissing() async throws {

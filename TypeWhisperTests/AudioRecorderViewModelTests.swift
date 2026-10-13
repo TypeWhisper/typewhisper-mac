@@ -1645,6 +1645,56 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelOverrides, [])
     }
 
+    func testWhisperKitChunkFailureIsNotHiddenByLivePreview() async throws {
+        try preserveStandardDefaults()
+        _ = setupWhisperPluginManager(behavior: .failure("WhisperKit could not transcribe audio segment 2 of 3"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("whisper")
+        let directory = makeTemporaryDirectory()
+        let viewModel = makeFinalTranscriptionViewModel(
+            defaults: try makeDefaults(), modelManager: modelManager, recordingsDirectory: directory
+        )
+        viewModel.livePreviewEnabled = true
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        viewModel.partialText = "only the live preview"
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertNil(session.text)
+        XCTAssertTrue(session.error?.contains("segment 2 of 3") == true)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNotNil(recording.transcriptionFailure)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recording.url.deletingPathExtension().appendingPathExtension("txt").path))
+    }
+
+    func testWhisperKitFailedDictionaryRetryDoesNotSaveTruncatedInitialResult() async throws {
+        try preserveStandardDefaults()
+        let plugin = setupWhisperPluginManager(behavior: .conditionedShortFallbackFailure)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("whisper")
+        let directory = makeTemporaryDirectory()
+        let samples = Array(repeating: Float(0.1), count: 90 * Int(AudioRecorderService.transcriptionSampleRate))
+        let dictionary = DictionaryService(appSupportDirectory: makeTemporaryDirectory())
+        dictionary.addEntry(type: .term, original: "TypeWhisper")
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(), modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: directory, samples: samples),
+            dictionaryService: dictionary, audioSamplesLoader: { _ in samples }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertNil(session.text)
+        XCTAssertEqual(plugin.requests.count, 2)
+        XCTAssertTrue(session.error?.contains("segment 2 of 3") == true)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        XCTAssertNotNil(viewModel.recordings.first?.transcriptionFailure)
+    }
+
     func testWhisperKitFinalTranscriptionRetriesWithLivePreviewEnabledForAudibleTail() async throws {
         try preserveStandardDefaults()
         let plugin = setupWhisperPluginManager(
@@ -3076,6 +3126,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         case failure(String)
         case cancellation
         case conditionedShortFallbackComplete(shortText: String, completeText: String)
+        case conditionedShortFallbackFailure
         case timed(text: String, segments: [PluginTranscriptionSegment], words: [PluginWordTiming])
     }
 
@@ -3198,6 +3249,15 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             throw CancellationError()
         case .timed(let text, let segments, _):
             PluginTranscriptionResult(text: text, segments: segments)
+        case .conditionedShortFallbackFailure:
+            if prompt?.isEmpty == false {
+                PluginTranscriptionResult(
+                    text: "incomplete initial transcript",
+                    segments: [PluginTranscriptionSegment(text: "incomplete initial transcript", start: 0, end: audio.duration * 0.2)]
+                )
+            } else {
+                throw PluginTranscriptionError.apiError("WhisperKit could not transcribe audio segment 2 of 3")
+            }
         case .conditionedShortFallbackComplete(let shortText, let completeText):
             if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 PluginTranscriptionResult(
