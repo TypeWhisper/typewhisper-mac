@@ -32,12 +32,17 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
     var processingFailureCategory: String?
     var processingFailureMessage: String?
 
-    static func capture(_ record: TranscriptionRecord) -> Self {
+    static func capture(_ record: TranscriptionRecord, provenance: Self? = nil) -> Self {
         Self(
             id: record.id, createdAt: record.timestamp,
             rawText: record.rawText, finalText: record.finalText,
-            engineID: record.engineUsed, modelName: record.modelUsed,
-            language: record.language, pipelineSteps: record.pipelineSteps,
+            engineID: record.engineUsed, engineName: provenance?.engineName,
+            modelID: provenance?.modelID, modelName: record.modelUsed,
+            language: record.language, requestedLanguage: provenance?.requestedLanguage,
+            workflowID: provenance?.workflowID, workflowName: provenance?.workflowName,
+            workflowConfiguration: provenance?.workflowConfiguration,
+            workflowRecorded: provenance?.workflowRecorded ?? false,
+            pipelineSteps: record.pipelineSteps,
             renderedDocument: record.renderedDocument,
             structuredDocumentData: record.structuredDocumentData,
             speakerTranscriptStateRaw: record.speakerTranscriptStateRaw,
@@ -76,16 +81,9 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
 
     func matchesContent(of record: TranscriptionRecord) -> Bool {
         // Compare just the materialized fields; provenance belongs to the saved run.
-        var current = Self.capture(record)
+        var current = Self.capture(record, provenance: self)
         current.id = id
         current.createdAt = createdAt
-        current.engineName = engineName
-        current.modelID = modelID
-        current.requestedLanguage = requestedLanguage
-        current.workflowID = workflowID
-        current.workflowName = workflowName
-        current.workflowConfiguration = workflowConfiguration
-        current.workflowRecorded = workflowRecorded
         var expected = self
         expected.modelName = modelName ?? modelID
         expected.processingStateRaw = processingStateRaw ?? RecordingProcessingState.ready.rawValue

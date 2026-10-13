@@ -2,7 +2,7 @@
 
 History's **Re-transcribe…** action opens a two-step dialog for a saved recording. Step 1 selects an installed engine/model, a language or automatic detection, and an optional configured Workflow, then runs **Transcribe again**. Step 2 shows the **Current text** (marked *In use*) next to the **New result**; several results are switched with **Compare with**. Save or discard pending History edits before opening it.
 
-Each successful run stores a result under the same entry. The active text, original metadata and recording remain unchanged until **Use this result** is confirmed. The final text is shown; a raw transcript that differs from it is collapsed below it, and both can be copied. The original and active versions cannot be deleted. Switching to a saved result also preserves any intervening edits as another local version. Retention, search, sync and statistics notes are collapsed under **Details**.
+Each successful run stores a result under the same entry. The active text, original metadata and recording remain unchanged until **Use this result** is confirmed. The final text is shown; a raw transcript that differs from it is collapsed below it, and both can be copied. The original and active versions cannot be deleted. Switching to a saved result also preserves any intervening edits as another local version, including the known source version's model, language choice and Workflow configuration. A synchronized replacement does not inherit that local provenance. Retention, search, sync and statistics notes are collapsed under **Details**.
 
 Without usable local or retrievable audio, **Compare versions** is available only when a saved version differs from the active entry.
 
@@ -10,6 +10,8 @@ Without usable local or retrievable audio, **Compare versions** is available onl
 
 - Engine, model, language and Workflow settings are captured for the run. The normal engine/model preferences are restored by the existing one-shot model override path. Engines with a selectable model but no restorable previous selection must first be configured in Integrations.
 - A Workflow executes only its text transformation. Its automatic output format uses the saved entry's app and website. Its destination, insertion, clipboard, export and action-plugin behavior is not invoked. The first resolved Workflow provider is pinned; no undisclosed fallback is attempted. Apple Translate requires an available service and a valid target language before a run can start.
+- Eligible Workflows honor their segmented-processing setting and use the normal provider-specific policy. Structured output and on-device providers retain whole-text processing. Cancellation or a segment failure waits for outstanding provider calls before releasing the engine or retrying the whole text.
+- The saved language uses the engine's detected language, falling back to the explicitly selected language when detection is absent. The requested language is also retained separately.
 - Cloud audio/text processing shows the selected provider and requires confirmation, including notice of possible usage charges. Changing the choices clears consent.
 - Missing synchronized audio requires a separate download confirmation. Retrieval uses the configured private sync storage, validates the asset hash/size, observes audio-sync/retention settings, and processes a temporary copy. The copy is removed afterward.
 - Dictation, recorder, and file-transcription controls stay unavailable during a comparison. Calendar auto-starts defer while it is active and retry after it releases the engine. Background transcription requests, including recovery, dictionary training, and speaker timing, wait before accessing the shared engine. Cancellation retains the engine lease until the provider has stopped; a late result is discarded.
@@ -29,6 +31,7 @@ Without usable local or retrievable audio, **Compare versions** is available onl
 ```sh
 xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper \
   -destination 'platform=macOS,arch=arm64' \
+  -parallel-testing-enabled NO \
   -only-testing:TypeWhisperTests/HistoryRetranscriptionTests \
   -only-testing:TypeWhisperTests/HistoryServiceTests \
   -only-testing:TypeWhisperTests/SpeakerSyncHistoryTests \
@@ -41,6 +44,8 @@ xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper \
   -only-testing:TypeWhisperTests/FileTranscriptionViewModelTests \
   -only-testing:TypeWhisperTests/AudioRecorderViewModelTests \
   -only-testing:TypeWhisperTests/DictationQuickSelectionTests \
+  -only-testing:TypeWhisperTests/WorkflowServiceTests \
+  -only-testing:TypeWhisperTests/WorkflowSegmentedPostProcessingTests \
   -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO
 ```
 

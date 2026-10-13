@@ -12,6 +12,14 @@ final class HistoryRetranscriptionTests: XCTestCase {
         init(_ value: Bool) { self.value = value }
     }
 
+    @MainActor
+    private final class SegmentGate {
+        var pending: [CheckedContinuation<Void, Never>] = []
+        func wait() async { await withCheckedContinuation { pending.append($0) } }
+        func releaseFirst() { if !pending.isEmpty { pending.removeFirst().resume() } }
+        func releaseAll() { while !pending.isEmpty { releaseFirst() } }
+    }
+
     private struct Fixture {
         let directory: URL
         let history: HistoryService
@@ -177,6 +185,55 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(versions.first?.finalText, "original final")
         XCTAssertEqual(versions.last?.finalText, "manual correction")
         XCTAssertEqual(f.record.finalText, "new final")
+    }
+
+    func testArchivedEditsKeepTheirSourceProvenanceWithoutMisattributingSyncedReplacements() async throws {
+        for synchronize in [false, true] {
+            let f = try await fixture()
+            defer { TestSupport.remove(f.directory) }
+            var source = alternative()
+            source.workflowRecorded = true
+            source.workflowConfiguration = Data(#"{"template":"cleanedText"}"#.utf8)
+            try append(source, to: f)
+            try f.history.promoteTranscriptionVersion(source.id, in: f.record)
+            let content = UserDataSyncHistoryContentV1(
+                recordID: f.record.id, createdAt: f.record.timestamp.addingTimeInterval(-0.0001),
+                updatedAt: Date(timeIntervalSinceNow: 60), originDeviceID: "another-device",
+                originPlatform: "macOS", source: f.record.source.rawValue, processingState: "ready",
+                rawTranscript: source.rawText, finalText: synchronize ? "replacement text" : source.finalText,
+                durationSeconds: f.record.durationSeconds, detectedLanguage: source.language,
+                engineDisplayName: source.engineID, modelDisplayName: source.modelName
+            )
+            try f.history.applyUserDataSyncMutations([.upsertHistoryContent(content)])
+            XCTAssertEqual(f.record.activeTranscriptionVersionID, synchronize ? nil : source.id)
+            if !synchronize {
+                // An unchanged echo with normalized date precision retains the source of a later edit.
+                f.history.updateRecord(f.record, finalText: "replacement text")
+            }
+            let editedAt = f.record.contentUpdatedAt
+            try f.history.promoteTranscriptionVersion(f.record.id, in: f.record)
+            let edited = try XCTUnwrap(f.record.savedTranscriptionVersions().last)
+            XCTAssertNotEqual(edited.id, source.id)
+            XCTAssertEqual(edited.createdAt, editedAt)
+            XCTAssertEqual(edited.rawText, source.rawText)
+            XCTAssertEqual(edited.finalText, "replacement text")
+            XCTAssertEqual(edited.engineID, source.engineID)
+            XCTAssertEqual(edited.modelName, source.modelName)
+            XCTAssertEqual(edited.language, source.language)
+            XCTAssertEqual(edited.engineName, synchronize ? nil : source.engineName)
+            XCTAssertEqual(edited.modelID, synchronize ? nil : source.modelID)
+            XCTAssertEqual(edited.requestedLanguage, synchronize ? nil : source.requestedLanguage)
+            XCTAssertEqual(edited.workflowID, synchronize ? nil : source.workflowID)
+            XCTAssertEqual(edited.workflowName, synchronize ? nil : source.workflowName)
+            XCTAssertEqual(edited.workflowConfiguration, synchronize ? nil : source.workflowConfiguration)
+            XCTAssertEqual(edited.workflowRecorded, !synchronize)
+            try f.history.promoteTranscriptionVersion(edited.id, in: f.record)
+            XCTAssertTrue(edited.isActive(in: f.record))
+            let reopened = HistoryService(appSupportDirectory: f.directory)
+            let restored = try XCTUnwrap(reopened.record(withID: f.record.id))
+            XCTAssertEqual(try restored.savedTranscriptionVersions().last, edited)
+            XCTAssertTrue(edited.isActive(in: restored))
+        }
     }
 
     func testDiscardProtectsOriginalAndActiveVersionAndEntryDeletionRemovesVersions() async throws {
@@ -866,6 +923,127 @@ final class HistoryRetranscriptionTests: XCTestCase {
         }
     }
 
+    func testComparisonRetainsRequestedLanguageWhenEngineDoesNotDetectOne() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let environment = try makeEnvironment(plugins: [engine])
+        let suite = "HistoryComparisonLanguage-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        let cases: [(String?, String?)] = [("de", nil), ("de", "en"), (nil, nil)]
+        for (requested, detected) in cases {
+            let f = try await fixture(sync: preferences)
+            defer { TestSupport.remove(f.directory) }
+            engine.resultOverride = PluginTranscriptionResult(text: "language test", detectedLanguage: detected)
+            let plan = try HistoryRetranscriptionEnvironment.plan(
+                .init(engineID: engine.providerId, language: requested),
+                manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [], promptProcessing: environment.promptProcessing
+            )
+            let version = try await plan.run([0.1])
+            XCTAssertEqual(version.language, detected ?? requested)
+            XCTAssertEqual(version.requestedLanguage, requested)
+            try append(version, to: f)
+            try f.history.promoteTranscriptionVersion(version.id, in: f.record)
+            XCTAssertEqual(f.record.language, detected ?? requested)
+            XCTAssertEqual(try XCTUnwrap(f.history.userDataSyncHistoryRecords().first).content.detectedLanguage, detected ?? requested)
+            let reopened = HistoryService(appSupportDirectory: f.directory)
+            XCTAssertEqual(reopened.record(withID: f.record.id)?.language, detected ?? requested)
+        }
+    }
+
+    func testComparisonHonorsSegmentedWorkflowSettingsAndOutputEligibility() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let text = (0..<75).map { "Sentence \($0) keeps TypeWhisper vocabulary and the original order." }.joined(separator: " ")
+        engine.resultOverride = PluginTranscriptionResult(text: text)
+        let llm = HistoryComparisonLLM()
+        llm.handler = { $0.uppercased() }
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        environment.dictionary.addEntry(type: .term, original: "TypeWhisper")
+        let cases: [(enabled: Bool, format: String, app: String?, local: Bool, splits: Bool)] = [
+            (true, "plaintext", nil, false, true),
+            (false, "plaintext", nil, false, false),
+            (true, "json", nil, false, false),
+            (true, "auto", "com.apple.mail", false, false),
+            (true, "plaintext", nil, true, false)
+        ]
+        for c in cases {
+            llm.requiresExternalCredentials = !c.local
+            let workflow = Workflow(
+                name: "Segmented Cleanup", template: .cleanedText, trigger: .manual(),
+                behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test",
+                                           segmentedPostProcessingEnabled: c.enabled),
+                output: WorkflowOutput(format: c.format)
+            )
+            let plan = try HistoryRetranscriptionEnvironment.plan(
+                .init(engineID: engine.providerId, workflowID: workflow.id, appBundleIdentifier: c.app),
+                manager: environment.manager, dictionary: environment.dictionary,
+                workflows: [workflow], promptProcessing: environment.promptProcessing
+            )
+            workflow.behavior.segmentedPostProcessingEnabled = false
+            let before = llm.inputs.count
+            let version = try await plan.run([0.1])
+            let inputs = Array(llm.inputs.dropFirst(before))
+            XCTAssertEqual(version.finalText, text.uppercased())
+            if c.splits {
+                XCTAssertGreaterThan(inputs.count, 1)
+                XCTAssertTrue(inputs.allSatisfy { $0.count < text.count })
+            } else {
+                XCTAssertEqual(inputs.count, 1)
+                XCTAssertTrue(inputs.first?.contains(text) == true)
+            }
+            XCTAssertTrue(try XCTUnwrap(llm.lastSystemPrompt).contains("Protected vocabulary:"))
+            XCTAssertEqual(version.workflowID, workflow.id)
+        }
+    }
+
+    func testSegmentedComparisonCancellationRetainsLeaseUntilEveryRequestFinishes() async throws {
+        let f = try await fixture()
+        defer { TestSupport.remove(f.directory) }
+        let engine = HistoryComparisonTestEngine()
+        engine.resultOverride = PluginTranscriptionResult(
+            text: (0..<75).map { "Sentence \($0) keeps TypeWhisper vocabulary and the original order." }.joined(separator: " ")
+        )
+        let llm = HistoryComparisonLLM()
+        let gate = SegmentGate()
+        llm.handler = { text in await gate.wait(); return text }
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        let workflow = Workflow(
+            name: "Segmented Cleanup", template: .cleanedText, trigger: .manual(),
+            behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test",
+                                       segmentedPostProcessingEnabled: true)
+        )
+        let service = HistoryRetranscriptionService(
+            history: f.history,
+            planBuilder: { request in
+                try HistoryRetranscriptionEnvironment.plan(
+                    request, manager: environment.manager, dictionary: environment.dictionary,
+                    workflows: [workflow], promptProcessing: environment.promptProcessing
+                )
+            }, isBusy: { false }, loadAudio: { _ in [0.1] }
+        )
+        defer { service.cancel(); gate.releaseAll() }
+        service.start(record: f.record, request: .init(engineID: engine.providerId, workflowID: workflow.id),
+                      cloudConfirmed: true, downloadConfirmed: false)
+        for _ in 0..<100 where gate.pending.count < 2 { try await Task.sleep(for: .milliseconds(10)) }
+        XCTAssertGreaterThan(gate.pending.count, 1)
+        service.cancel()
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertEqual(HistoryRetranscriptionActivity.recordID, f.record.id)
+        XCTAssertEqual(service.runningRecordID, f.record.id)
+        gate.releaseFirst()
+        if !gate.pending.isEmpty {
+            for _ in 0..<100 { await Task.yield() }
+            XCTAssertEqual(HistoryRetranscriptionActivity.recordID, f.record.id)
+        }
+        gate.releaseAll()
+        try await wait(service)
+        XCTAssertNil(HistoryRetranscriptionActivity.recordID)
+        XCTAssertNil(f.record.transcriptionVersionsData)
+        XCTAssertNil(service.errorMessage)
+    }
+
     func testModelChangeClearsUnsupportedLanguageAndKeepsSupportedOrAutomaticSelection() {
         let engine = HistoryComparisonLanguageEngine()
         XCTAssertEqual(HistoryRetranscriptionEnvironment.supportedLanguage("ar", modelID: "nova-3", engine: engine), "ar")
@@ -1142,6 +1320,7 @@ private class HistoryComparisonTestEngine: NSObject, TranscriptionEnginePlugin, 
     static let pluginName = "History Comparison Test Engine"
     required override init() {}
     var providerID = "unknown-engine"
+    var resultOverride: PluginTranscriptionResult?
     var providerId: String { providerID }
     var providerDisplayName: String { "Test Engine" }
     var isConfigured: Bool { true }
@@ -1152,7 +1331,7 @@ private class HistoryComparisonTestEngine: NSObject, TranscriptionEnginePlugin, 
     func deactivate() {}
     func selectModel(_ modelId: String) {}
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        PluginTranscriptionResult(text: "test", detectedLanguage: language)
+        resultOverride ?? PluginTranscriptionResult(text: "test", detectedLanguage: language)
     }
 }
 
@@ -1200,22 +1379,31 @@ private final class HistoryComparisonCachedEngine: HistoryComparisonTestEngine, 
     }
 }
 
-private final class HistoryComparisonLLM: LLMProviderPlugin, @unchecked Sendable {
+private final class HistoryComparisonLLM: LLMProviderPlugin, LLMProviderSetupStatusProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.tests.history-comparison-llm"
     static let pluginName = "History Comparison LLM"
     let providerName = "History Comparison LLM"
     var isAvailable: Bool { true }
+    var requiresExternalCredentials = true
+    var unavailableReason: String? { nil }
     var supportedModels: [PluginModelInfo] { [PluginModelInfo(id: "test", displayName: "Test Model")] }
     private let lock = NSLock()
     private var systemPrompt: String?
+    private var receivedInputs: [String] = []
+    var inputs: [String] { lock.withLock { receivedInputs } }
+    var handler: (@MainActor @Sendable (String) async throws -> String)?
     var error: Error?
     var lastSystemPrompt: String? { lock.withLock { systemPrompt } }
     required init() {}
     func activate(host: HostServices) {}
     func deactivate() {}
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
-        lock.withLock { self.systemPrompt = systemPrompt }
+        lock.withLock {
+            self.systemPrompt = systemPrompt
+            receivedInputs.append(userText)
+        }
         if let error { throw error }
+        if let handler { return try await handler(userText) }
         return "cleaned test"
     }
 }

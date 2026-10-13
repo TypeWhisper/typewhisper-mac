@@ -8,6 +8,33 @@ enum HistoryRetranscriptionEnvironment {
         let behavior: WorkflowBehavior
         let output: WorkflowOutput
     }
+
+    /// The shared segment processor can return before cancelled providers stop.
+    /// A comparison must keep its engine lease until those requests finish.
+    @MainActor
+    private final class WorkflowRequests {
+        private var activeCount = 0
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func run(_ operation: @MainActor () async throws -> String) async throws -> String {
+            try Task.checkCancellation()
+            activeCount += 1
+            defer {
+                activeCount -= 1
+                if activeCount == 0 {
+                    let completed = waiters
+                    waiters.removeAll()
+                    for waiter in completed { waiter.resume() }
+                }
+            }
+            return try await operation()
+        }
+
+        func waitUntilIdle() async {
+            guard activeCount > 0 else { return }
+            await withCheckedContinuation { waiters.append($0) }
+        }
+    }
     static func makeService(_ container: ServiceContainer) -> HistoryRetranscriptionService {
         HistoryRetranscriptionService(
             history: container.historyService,
@@ -149,11 +176,43 @@ enum HistoryRetranscriptionEnvironment {
                 var steps = final == raw ? [] : ["Corrections"]
                 if let frozenWorkflow {
                     let beforeWorkflow = final
-                    final = try await workflowProcessor.process(
-                        workflow: frozenWorkflow, text: final,
-                        detectedLanguage: result.detectedLanguage, configuredLanguage: request.language,
-                        resolvedOutputFormat: resolvedOutputFormat
-                    )
+                    let segmentedRequest = frozenWorkflow.usesSegmentedPostProcessing
+                        ? workflowProcessor.segmentedPromptRequest(
+                            workflow: frozenWorkflow, detectedLanguage: result.detectedLanguage,
+                            configuredLanguage: request.language, resolvedOutputFormat: resolvedOutputFormat
+                        ) : nil
+                    if let segmentedRequest {
+                        let policy = WorkflowSegmentationPolicy.default.forLLMProvider(
+                            isLocal: segmentedRequest.providerResolution?.isLocal
+                                ?? promptProcessing.workflowUsesLocalLLMProvider(providerOverride: segmentedRequest.providerId)
+                        )
+                        let requests = WorkflowRequests()
+                        do {
+                            let outcome = try await WorkflowSegmentedPostProcessor(policy: policy).process(
+                                text: beforeWorkflow, incrementalSession: nil, incrementalRequest: nil,
+                                segmentProcessor: { segment in
+                                    try await requests.run {
+                                        try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                                    }
+                                },
+                                wholeTextProcessor: {
+                                    await requests.waitUntilIdle()
+                                    try Task.checkCancellation()
+                                    return try await workflowProcessor.process(request: segmentedRequest, text: beforeWorkflow)
+                                }
+                            )
+                            final = outcome.text
+                        } catch {
+                            await requests.waitUntilIdle()
+                            throw error
+                        }
+                    } else {
+                        final = try await workflowProcessor.process(
+                            workflow: frozenWorkflow, text: beforeWorkflow,
+                            detectedLanguage: result.detectedLanguage, configuredLanguage: request.language,
+                            resolvedOutputFormat: resolvedOutputFormat
+                        )
+                    }
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
                 }
                 try Task.checkCancellation()
@@ -162,7 +221,7 @@ enum HistoryRetranscriptionEnvironment {
                 var version = HistoryTranscriptionVersion(
                     rawText: raw, finalText: final, engineID: result.engineUsed,
                     engineName: engineName, modelID: modelID, modelName: modelName,
-                    language: result.detectedLanguage, requestedLanguage: request.language,
+                    language: result.detectedLanguage ?? request.language, requestedLanguage: request.language,
                     workflowID: frozenWorkflow?.id, workflowName: frozenWorkflow?.name,
                     workflowConfiguration: configuration, workflowRecorded: true,
                     pipelineSteps: steps.isEmpty ? nil : String(data: try JSONEncoder().encode(steps), encoding: .utf8)

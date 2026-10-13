@@ -1334,6 +1334,7 @@ final class HistoryService: ObservableObject {
                     record.contentUpdatedAt,
                     fallback: record.timestamp
                 ) else { continue }
+                let previousContent = HistoryTranscriptionVersion.capture(record)
                 if let reset = content.alignmentResetAt,
                    reset > (record.transcriptionAlignmentResetAt ?? .distantPast) {
                     // Microphone-channel evidence describes the unchanged audio and survives this reset.
@@ -1366,6 +1367,11 @@ final class HistoryService: ObservableObject {
                 record.processingFailureCategory = content.processingFailureCategory
                 record.processingFailureMessage = content.processingFailureMessage
                 record.contentUpdatedAt = content.updatedAt
+                if !previousContent.matchesContent(of: record) {
+                    // A remote replacement has no known local version provenance.
+                    // An unchanged sync echo can retain the active local source.
+                    record.activeTranscriptionVersionID = nil
+                }
             case .upsertHistoryInbox(let inbox):
                 guard historySyncPreferences?.isSuppressed(inbox.recordID) != true else { continue }
                 let record = remoteRecord(for: inbox.recordID, timestamp: inbox.updatedAt)
@@ -1772,7 +1778,8 @@ final class HistoryService: ObservableObject {
         let oldAlignmentReset = record.transcriptionAlignmentResetAt
         // Preserve manual edits or a newer synchronized result before replacing the active text.
         if !versions.contains(where: { $0.matchesContent(of: record) }) {
-            var edited = original
+            let source = versions.first { $0.id == oldID }
+            var edited = HistoryTranscriptionVersion.capture(record, provenance: source)
             edited.id = UUID()
             edited.createdAt = record.contentUpdatedAt
             versions.append(edited)
