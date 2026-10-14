@@ -50570,7 +50570,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das ausgewählte Modell ist noch nicht bereit. Lade es auf der Einstellungsseite der Engine herunter oder wähle unter Einstellungen > Diktat ein anderes Modell."
+            "value" : "Das ausgewählte Modell ist noch nicht bereit. Lade es auf der Einstellungsseite der Engine herunter oder lade es dort, oder wähle unter Einstellungen > Diktat ein anderes Modell."
           }
         },
         "ja" : {
@@ -50891,6 +50891,270 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快捷键设置…"
+          }
+        }
+      }
+    },
+    "Already recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme läuft bereits"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すでに録音中です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已在录音"
+          }
+        }
+      }
+    },
+    "Recorder is finalizing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorder schließt die Aufnahme ab"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レコーダーは録音を終了処理中です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音器正在完成录音"
+          }
+        }
+      }
+    },
+    "Recorder is transcribing an existing recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorder transkribiert gerade eine vorhandene Aufnahme"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レコーダーは既存の録音を文字起こし中です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音器正在转录现有录音"
+          }
+        }
+      }
+    },
+    "Not recording" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Aufnahme aktiv"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音していません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未在录音"
+          }
+        }
+      }
+    },
+    "The calendar-started recording is no longer active." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die vom Kalender gestartete Aufnahme ist nicht mehr aktiv."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーから開始した録音はすでに終了しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由日历启动的录音已不再活动。"
+          }
+        }
+      }
+    },
+    "Selected microphone conflicts with the current audio route." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ausgewählte Mikrofon kollidiert mit der aktuellen Audio-Route."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したマイクは現在のオーディオルートと競合しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选麦克风与当前音频路由冲突。"
+          }
+        }
+      }
+    },
+    "Selected microphone did not become the active input route." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das ausgewählte Mikrofon wurde nicht zur aktiven Eingabe-Route."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したマイクがアクティブな入力ルートになりませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选麦克风未成为当前输入路由。"
+          }
+        }
+      }
+    },
+    "No audio input available" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Audioeingang verfügbar"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "利用可能なオーディオ入力がありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可用的音频输入"
+          }
+        }
+      }
+    },
+    "Cannot create transcription format" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkriptionsformat kann nicht erstellt werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こし用フォーマットを作成できません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建转录格式"
+          }
+        }
+      }
+    },
+    "Cannot create input-only microphone format" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Format für reine Mikrofoneingabe kann nicht erstellt werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイク専用入力フォーマットを作成できません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建仅麦克风输入格式"
+          }
+        }
+      }
+    },
+    "Cannot create finalization mix buffer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mix-Puffer für den Abschluss kann nicht erstellt werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了処理用ミックスバッファを作成できません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法创建收尾混音缓冲区"
+          }
+        }
+      }
+    },
+    "Cannot access finalization mix channels" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mix-Kanäle für den Abschluss sind nicht zugänglich"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了処理用ミックスチャンネルにアクセスできません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法访问收尾混音声道"
           }
         }
       }

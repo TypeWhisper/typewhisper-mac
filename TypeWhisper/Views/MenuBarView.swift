@@ -173,12 +173,10 @@ private final class MenuBarState: ObservableObject {
 
     private func update(state: DictationViewModel.State) {
         let modelManager = ServiceContainer.shared.modelManagerService
-        if dictationHotkeysPaused, state == .idle {
-            statusText = String(localized: "Dictation hotkeys paused")
-            statusImage = "pause.circle.fill"
-            isModelReady = modelManager.isModelReady
-            return
-        }
+        // Engine state is refreshed on every update, including while hotkeys are paused,
+        // so "Choose Engine..." follows changes made in Settings in the meantime.
+        isModelReady = modelManager.isModelReady
+        needsEngineSetup = modelManager.activeModelName == nil
 
         switch state {
         case .recording:
@@ -190,17 +188,19 @@ private final class MenuBarState: ObservableObject {
         default:
             if let lastDictationError {
                 // Feedback in the indicator fades after seconds; the menu keeps the
-                // last error until the next dictation starts or the user acts on it.
+                // last error until the next dictation starts or the user acts on it,
+                // ahead of the paused state, which has its own Resume entry below.
                 statusText = MenuBarStatusFormatting.errorStatusText(lastDictationError.message)
                 statusImage = "exclamationmark.triangle.fill"
+            } else if dictationHotkeysPaused, state == .idle {
+                statusText = String(localized: "Dictation hotkeys paused")
+                statusImage = "pause.circle.fill"
             } else {
                 let modelStatus = Self.idleModelStatus(from: modelManager)
                 statusText = modelStatus.text
                 statusImage = modelStatus.image
             }
         }
-        isModelReady = modelManager.isModelReady
-        needsEngineSetup = modelManager.activeModelName == nil
     }
 
     private static func idleModelStatus(from modelManager: ModelManagerService) -> (text: String, image: String) {

@@ -1031,7 +1031,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 usesBluetoothTransport: true,
                 reason: "recorder-mic-start"
             ) else {
-                throw RecorderError.engineStartFailed("Selected microphone conflicts with the current audio route.")
+                throw RecorderError.engineStartFailed(String(localized: "Selected microphone conflicts with the current audio route."))
             }
 
             guard micBluetoothInputRouteStabilizer.waitForActivatedDefaultInput(
@@ -1039,7 +1039,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 reason: "recorder-mic-start"
             ) else {
                 micInputActivationGuard.restore(reason: "recorder-mic-route-stabilization-failed")
-                throw RecorderError.engineStartFailed("Selected microphone did not become the active input route.")
+                throw RecorderError.engineStartFailed(String(localized: "Selected microphone did not become the active input route."))
             }
         }
 
@@ -1048,7 +1048,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var inputFormat = inputNode.outputFormat(forBus: 0)
 
         guard inputFormat.sampleRate > 0, inputFormat.channelCount > 0 else {
-            throw RecorderError.engineStartFailed("No audio input available")
+            throw RecorderError.engineStartFailed(String(localized: "No audio input available"))
         }
 
         if try enableMicVoiceProcessingIfNeeded(on: inputNode, currentFormat: inputFormat) {
@@ -1094,7 +1094,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
-            throw RecorderError.engineStartFailed("Cannot create transcription format")
+            throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
         }
         let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
 
@@ -1186,7 +1186,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private func startInputOnlyMicRecording(deviceID: AudioDeviceID, outputURL: URL) throws {
         let inputFormat = try micInputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
         guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat) else {
-            throw RecorderError.engineStartFailed("Cannot create input-only microphone format")
+            throw RecorderError.engineStartFailed(String(localized: "Cannot create input-only microphone format"))
         }
 
         let audioFile = try AVAudioFile(
@@ -1207,7 +1207,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             channels: 1,
             interleaved: false
         ) else {
-            throw RecorderError.engineStartFailed("Cannot create transcription format")
+            throw RecorderError.engineStartFailed(String(localized: "Cannot create transcription format"))
         }
         let transcriptionConverter = AVAudioConverter(from: monoFormat, to: transcriptionFormat)
 
@@ -1466,7 +1466,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 pcmFormat: mixFormat,
                 frameCapacity: frameCount
             ) else {
-                throw RecorderError.engineStartFailed("Cannot create finalization mix buffer")
+                throw RecorderError.engineStartFailed(String(localized: "Cannot create finalization mix buffer"))
             }
             mixedBuffer.frameLength = frameCount
 
@@ -1476,7 +1476,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                   let micRight = micBuffer.floatChannelData?[1],
                   let systemLeft = systemBuffer.floatChannelData?[0],
                   let systemRight = systemBuffer.floatChannelData?[1] else {
-                throw RecorderError.engineStartFailed("Cannot access finalization mix channels")
+                throw RecorderError.engineStartFailed(String(localized: "Cannot access finalization mix channels"))
             }
 
             let micFrameCount = Int(micBuffer.frameLength)

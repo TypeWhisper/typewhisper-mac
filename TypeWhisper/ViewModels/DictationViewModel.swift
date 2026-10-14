@@ -231,6 +231,18 @@ final class DictationViewModel: ObservableObject {
         case openSettings(SettingsTab)
         case insertUndeliveredTranscript(UndeliveredTranscript)
 
+        /// The Settings page the menu bar offers for this error, if the action opens one.
+        var settingsTab: SettingsTab? {
+            switch self {
+            case .openSettings(let tab):
+                tab
+            case .openDictationRecovery:
+                .dictationRecovery
+            case .undoLearnedCorrections, .insertUndeliveredTranscript:
+                nil
+            }
+        }
+
         var title: String {
             switch self {
             case .undoLearnedCorrections:
@@ -1927,7 +1939,8 @@ final class DictationViewModel: ObservableObject {
             let errorMessage = String(localized: "Microphone permission required.")
             logger.warning("startRecording rejected: microphone permission missing; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
-            showError(errorMessage, category: "recording")
+            // Home shows the permission card with "Grant Access"; this is not a transient failure.
+            showError(errorMessage, category: "recording", settingsTab: .home)
             hotkeyService.cancelDictation()
             return
         }
@@ -5079,6 +5092,8 @@ final class DictationViewModel: ObservableObject {
 
         if isError {
             errorLogService.addEntry(message: message, category: errorCategory)
+            // Every error banner, not only those from showError, stays visible in the menu bar.
+            lastDictationError = ErrorSummary(message: message, settingsTab: action?.settingsTab)
         }
 
         startActionFeedbackLifetime(duration: duration)
@@ -5194,7 +5209,6 @@ final class DictationViewModel: ObservableObject {
         recoveryPreservation: DictationRecoveryPreservationResult? = nil,
         settingsTab: SettingsTab? = nil
     ) {
-        lastDictationError = ErrorSummary(message: message, settingsTab: settingsTab)
         soundService.play(.error, enabled: soundFeedbackEnabled)
         let settingsAction = settingsTab.map(ActionFeedbackAction.openSettings)
         // Setup errors need time to read and reach the button; transient errors stay brief.
