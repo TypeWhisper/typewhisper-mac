@@ -1435,6 +1435,14 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
             .integrations
         )
+        // The same holds before the plugin system has been set up at all.
+        let previousPluginManager = PluginManager.shared
+        defer { PluginManager.shared = previousPluginManager }
+        PluginManager.shared = nil
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
+            .integrations
+        )
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: UnknownTranscriptionError()))

@@ -5289,7 +5289,7 @@ final class DictationViewModel: ObservableObject {
 
     private static func engineSettingsTab(providerId: String?) -> SettingsTab {
         guard let providerId,
-              let plugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
+              let plugin = PluginManager.shared?.loadedTranscriptionPlugin(for: providerId) else {
             return .integrations
         }
         return .installedPlugin(pluginId: plugin.id)
