@@ -1048,6 +1048,13 @@ final class MenuBarGroupingTests: XCTestCase {
             ),
             "No transcription engine selected."
         )
+        // Japanese sentences end in "。", which counts as a sentence end as well.
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText(
+                "文字起こしエンジンが選択されていません。設定 > ディクテーションで選択するか、プラグインを見つけるからインストールしてください。"
+            ),
+            "文字起こしエンジンが選択されていません。"
+        )
     }
 
     func testMenuBarSectionsContainExpectedItems() {

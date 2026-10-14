@@ -1398,6 +1398,11 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "API key missing").localizedDescription,
             [String(localized: "\("Cloud") is not available."), "API key missing.", unavailableHint].joined(separator: " ")
         )
+        // Reasons from the Japanese and Chinese catalogs already end in "。" and get no extra period.
+        XCTAssertEqual(
+            TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "ダウンロード済みのモデルがありません。").localizedDescription,
+            [String(localized: "\("Cloud") is not available."), "ダウンロード済みのモデルがありません。", unavailableHint].joined(separator: " ")
+        )
         XCTAssertEqual(
             TranscriptionEngineError.modelLoadFailed("Downloaded model is missing.").localizedDescription,
             [

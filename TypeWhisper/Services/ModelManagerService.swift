@@ -50,8 +50,15 @@ enum TranscriptionEngineError: LocalizedError {
     private static func sentence(_ text: String?) -> String? {
         guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
-        guard let last = trimmed.last, !".!?".contains(last) else { return trimmed }
+        guard let last = trimmed.last, !last.endsSentence else { return trimmed }
         return trimmed + "."
+    }
+}
+
+extension Character {
+    /// Sentence-ending punctuation in any script, such as "." or "。".
+    var endsSentence: Bool {
+        unicodeScalars.last?.properties.isSentenceTerminal ?? false
     }
 }
 

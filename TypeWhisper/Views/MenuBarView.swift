@@ -286,7 +286,7 @@ enum MenuBarStatusFormatting {
     nonisolated static func errorStatusText(_ message: String, limit: Int = 64) -> String {
         let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > limit else { return trimmed }
-        if let end = trimmed.firstIndex(where: { ".!?".contains($0) }) {
+        if let end = trimmed.firstIndex(where: \.endsSentence) {
             let sentence = String(trimmed[...end])
             if sentence.count <= limit { return sentence }
         }
