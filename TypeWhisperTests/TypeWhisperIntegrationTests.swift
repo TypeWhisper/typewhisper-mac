@@ -23056,6 +23056,97 @@ extension TypeWhisperIntegrationTests {
         }
         XCTAssertEqual(recorder.state, .idle)
     }
+
+    @MainActor
+    func testConfirmedSoloCalendarEventRecordsOnlyAfterConsent() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let suite = "MeetingSoloConsent-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            TestSupport.remove(directory)
+            MockTranscriptionPlugin.reset()
+        }
+        defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = directory
+        recorderService.startRecordingOverride = { _, _, _, proposedURL, _ in
+            try Data("recording".utf8).write(to: proposedURL)
+            return proposedURL
+        }
+        recorderService.stopRecordingOverride = { $0 }
+        let recorder = AudioRecorderViewModel(
+            recorderService: recorderService,
+            modelManager: context.modelManager,
+            dictionaryService: context.dictionaryService,
+            audioDeviceService: AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
+            defaults: defaults, recordingsLoader: { _, _ in [] }
+        )
+        recorder.transcriptionEnabled = false
+        recorder.micEnabled = false
+        recorder.systemAudioEnabled = true
+        let countdown = CalendarMeetingCountdownModel()
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        // A private block in the work calendar: the user is the only one on it.
+        let privateBlock = CalendarMeetingOccurrence(
+            eventIdentifier: "private-block", occurrenceStart: now, startDate: now,
+            endDate: now.addingTimeInterval(3600), title: "Private appointment", calendarID: "calendar",
+            participationStatus: .noCurrentUser,
+            meetingLinks: [CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")],
+            hasOtherParticipants: false
+        )
+        let notifications = MeetingRuntimeNotifications(authorization: .authorized)
+        let controller = CalendarMeetingAutomationController(
+            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
+                keychainCopyMatching: { _, _ in errSecItemNotFound }),
+            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
+                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
+            recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
+            countdownModel: countdown, defaults: defaults,
+            eventProviderFactory: { MeetingRuntimeEventProvider(occurrences: [privateBlock]) },
+            audioCollectorFactory: { MeetingRuntimeAudioCollector() },
+            cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
+            browserResolverFactory: { MeetingRuntimeBrowserResolver() },
+            notificationServiceFactory: { notifications },
+            premiumAccessProvider: { true }, nowProvider: { now }
+        )
+        defer { controller.shutdown() }
+        await controller.testingRefresh()
+        XCTAssertFalse(controller.confirmSoloEvents, "Asking first is opt-in")
+        controller.setConfirmSoloEvents(true)
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents))
+
+        let zoom = MeetingAudioProcess(audioObjectID: 1, processID: 123, bundleIdentifier: "us.zoom.xos",
+            isRunningInput: true, isRunningOutput: true)
+        await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available,
+            processes: [zoom]))
+        XCTAssertEqual(notifications.scheduledReminders, [
+            CalendarMeetingUpcomingReminder(occurrence: privateBlock, startMode: .reminder)
+        ])
+        now = now.addingTimeInterval(3)
+        await controller.testingAdvanceTime()
+        XCTAssertNil(countdown.presentation)
+        XCTAssertEqual(notifications.detectedDigests, [privateBlock.occurrenceDigest])
+        now = now.addingTimeInterval(60)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .idle, "Joining a solo event must not start a recording without consent")
+
+        // Start Recording in the detected-meeting notification is the consent.
+        notifications.respond(.armStart(privateBlock.occurrenceDigest))
+        for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        now = now.addingTimeInterval(5)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .recording)
+        recorder.stopRecording()
+        for _ in 0..<100 where recorder.state != .idle {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(recorder.state, .idle)
+    }
 }
 
 private actor MeetingRuntimeEventProvider: CalendarMeetingEventProviding {
@@ -23095,12 +23186,22 @@ private actor MeetingRuntimeBrowserResolver: BrowserURLResolving {
 private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     let authorization: CalendarMeetingNotificationAuthorization
     private(set) var autoStopAttempts = 0
+    private(set) var scheduledReminders: [CalendarMeetingUpcomingReminder] = []
+    private(set) var detectedDigests: [String] = []
+    private var responseHandler: (@MainActor (CalendarMeetingNotificationResponse) -> Void)?
     init(authorization: CalendarMeetingNotificationAuthorization) { self.authorization = authorization }
-    func installRouter(responseHandler: @escaping @MainActor (CalendarMeetingNotificationResponse) -> Void) {}
+    func respond(_ response: CalendarMeetingNotificationResponse) { responseHandler?(response) }
+    func installRouter(responseHandler: @escaping @MainActor (CalendarMeetingNotificationResponse) -> Void) {
+        self.responseHandler = responseHandler
+    }
     func configureAndRequestAuthorization() async -> CalendarMeetingNotificationAuthorization { authorization }
     func refreshAuthorizationStatus() async {}
-    func replaceScheduledReminders(_ occurrences: [CalendarMeetingOccurrence], startMode: CalendarMeetingStartMode, now: Date) async {}
-    func publishDetectedMeeting(_ occurrence: CalendarMeetingOccurrence, now: Date) async {}
+    func replaceScheduledReminders(_ reminders: [CalendarMeetingUpcomingReminder], now: Date) async {
+        scheduledReminders = reminders
+    }
+    func publishDetectedMeeting(_ occurrence: CalendarMeetingOccurrence, now: Date) async {
+        detectedDigests.append(occurrence.occurrenceDigest)
+    }
     func publishAutoStopWarning(occurrenceDigest: String, now: Date) async -> Bool {
         autoStopAttempts += 1
         return false

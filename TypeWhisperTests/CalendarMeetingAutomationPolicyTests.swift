@@ -912,11 +912,157 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
     }
 
+    func testSoloConfirmationOnlyTurnsAutomaticSoloCalendarEventsIntoReminders() {
+        let solo = makeCalendarMeetingTestOccurrence(eventID: "solo", hasOtherParticipants: false)
+        let team = makeCalendarMeetingTestOccurrence(eventID: "team")
+        let adHoc = CalendarMeetingOccurrence(
+            eventIdentifier: "ad-hoc:call",
+            occurrenceStart: solo.startDate,
+            startDate: solo.startDate,
+            endDate: solo.startDate,
+            title: "Zoom call",
+            calendarID: "",
+            participationStatus: .noCurrentUser,
+            meetingLinks: [identity],
+            hasOtherParticipants: false,
+            isAdHoc: true
+        )
+        let confirming = configuration(mode: .automatic, confirmSoloEvents: true)
+
+        XCTAssertEqual(confirming.startMode(for: solo), .reminder)
+        XCTAssertEqual(confirming.startMode(for: team), .automatic)
+        XCTAssertEqual(confirming.startMode(for: adHoc), .automatic)
+        XCTAssertEqual(configuration(mode: .automatic).startMode(for: solo), .automatic)
+        XCTAssertEqual(configuration(mode: .reminder, confirmSoloEvents: true).startMode(for: team), .reminder)
+        XCTAssertEqual(configuration(mode: .off, confirmSoloEvents: true).startMode(for: solo), .off)
+    }
+
+    func testConfirmedSoloEventPublishesDetectedReminderInsteadOfAutoStarting() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        var policy = CalendarMeetingAutomationPolicy()
+        let configured = policy.reduce(.configure(
+            configuration(mode: .automatic, confirmSoloEvents: true),
+            occurrences: [solo],
+            now: now
+        ))
+        XCTAssertTrue(configured.contains(.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: solo, startMode: .reminder)
+        ])))
+        XCTAssertTrue(configured.contains(.startActivityCollector))
+
+        _ = policy.reduce(.activity([signal(for: solo)], now: now))
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(3))),
+            [.publishDetectedMeeting(solo)]
+        )
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(60))).contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+    }
+
+    func testSoloConfirmationKeepsAutomaticStartForMeetingsWithOtherAttendees() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let team = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        let configured = policy.reduce(.configure(
+            configuration(mode: .automatic, confirmSoloEvents: true),
+            occurrences: [team],
+            now: now
+        ))
+        XCTAssertTrue(configured.contains(.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: team, startMode: .automatic)
+        ])))
+
+        _ = policy.reduce(.activity([signal(for: team)], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains(
+            .showStartCountdown(team, deadline: now.addingTimeInterval(8))
+        ))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains(
+            .startRecording(team, identity)
+        ))
+    }
+
+    func testStartWhenIJoinArmsConfirmedSoloEventInAutomaticMode() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(
+            start: now.addingTimeInterval(5 * 60),
+            hasOtherParticipants: false
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, confirmSoloEvents: true),
+            occurrences: [solo],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(solo.id), now: now))
+        _ = policy.reduce(.activity([signal(for: solo)], now: now))
+
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains(
+            .showStartCountdown(solo, deadline: now.addingTimeInterval(8))
+        ))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains(
+            .startRecording(solo, identity)
+        ))
+    }
+
+    func testSoloEventAwaitingConsentKeepsCameraFallbackAmbiguous() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(
+            eventID: "solo",
+            start: now,
+            hasOtherParticipants: false
+        )
+        let team = makeCalendarMeetingTestOccurrence(eventID: "team", start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, confirmSoloEvents: true),
+            occurrences: [solo, team],
+            now: now
+        ))
+        _ = policy.reduce(.cameraActivity(isRunning: true, now: now))
+
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(30))).contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            if case .publishDetectedMeeting = $0 { return true }
+            return false
+        })
+    }
+
+    func testEnablingSoloConfirmationCancelsRunningAutomaticCountdown() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(configuration(mode: .automatic), occurrences: [solo], now: now))
+        _ = policy.reduce(.activity([signal(for: solo)], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains(
+            .showStartCountdown(solo, deadline: now.addingTimeInterval(8))
+        ))
+
+        let changed = policy.reduce(.configure(
+            configuration(mode: .automatic, confirmSoloEvents: true),
+            occurrences: [solo],
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertTrue(changed.contains(.dismissStartCountdown))
+        XCTAssertTrue(changed.contains(.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: solo, startMode: .reminder)
+        ])))
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(8))),
+            [.publishDetectedMeeting(solo)]
+        )
+    }
+
     private func configuration(
         mode: CalendarMeetingStartMode,
         autoStop: Bool = false,
         premium: Bool = true,
-        suppressedDigests: Set<String> = []
+        suppressedDigests: Set<String> = [],
+        confirmSoloEvents: Bool = false
     ) -> CalendarMeetingAutomationConfiguration {
         CalendarMeetingAutomationConfiguration(
             hasPremiumAccess: premium,
@@ -925,7 +1071,8 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             calendarAuthorization: .fullAccess,
             selectedCalendarIDs: ["calendar-1"],
             enabledProviders: Set(MeetingProvider.allCases),
-            suppressedOccurrenceDigests: suppressedDigests
+            suppressedOccurrenceDigests: suppressedDigests,
+            confirmSoloEvents: confirmSoloEvents
         )
     }
 

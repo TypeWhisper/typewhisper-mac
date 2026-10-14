@@ -170,7 +170,8 @@ func makeCalendarMeetingTestOccurrence(
     participation: CalendarMeetingParticipationStatus = .accepted,
     links: [CalendarMeetingCanonicalLink] = [
         CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
-    ]
+    ],
+    hasOtherParticipants: Bool = true
 ) -> CalendarMeetingOccurrence {
     CalendarMeetingOccurrence(
         eventIdentifier: eventID,
@@ -180,7 +181,8 @@ func makeCalendarMeetingTestOccurrence(
         title: title,
         calendarID: calendarID,
         participationStatus: participation,
-        meetingLinks: links
+        meetingLinks: links,
+        hasOtherParticipants: hasOtherParticipants
     )
 }
 

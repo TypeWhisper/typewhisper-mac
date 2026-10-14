@@ -49413,6 +49413,62 @@
         }
       }
     },
+    "calendarMeeting.settings.confirmSoloEvents" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei Terminen ohne weitere Teilnehmer vor der Aufnahme fragen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask before recording events without other attendees"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "他の参加者がいない予定は録音前に確認する"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音前询问没有其他参与者的日历事件"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.confirmSoloEventsHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt für Termine, zu denen niemand sonst eingeladen ist, etwa private Termine mit Anruf-Link. TypeWhisper erinnert dich stattdessen und nimmt erst nach deiner Bestätigung auf."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Applies to events nobody else is invited to, such as private appointments with a call link. TypeWhisper reminds you instead and records only after you confirm."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話リンク付きのプライベートな予定など、ほかに誰も招待されていない予定が対象です。自動では録音せずに通知し、確認後にのみ録音します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于没有邀请其他人的日历事件，例如带通话链接的私人日程。TypeWhisper 会改为提醒你，并在你确认后才开始录音。"
+          }
+        }
+      }
+    },
     "calendarMeeting.settings.providersHelp" : {
       "localizations" : {
         "de" : {

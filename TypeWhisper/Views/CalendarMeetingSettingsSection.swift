@@ -321,6 +321,24 @@ struct CalendarMeetingSettingsSection: View {
                     .accessibilityIdentifier("calendarMeeting.calendar.\(calendar.id)")
                 }
             }
+
+            if controller.startMode == .automatic {
+                Divider()
+
+                Toggle(
+                    String(localized: "calendarMeeting.settings.confirmSoloEvents"),
+                    isOn: Binding(
+                        get: { controller.confirmSoloEvents },
+                        set: { controller.setConfirmSoloEvents($0) }
+                    )
+                )
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("calendarMeeting.confirmSoloEvents")
+
+                Text(String(localized: "calendarMeeting.settings.confirmSoloEventsHelp"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 

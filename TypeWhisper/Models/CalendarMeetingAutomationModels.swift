@@ -258,6 +258,8 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     let calendarID: String
     let participationStatus: CalendarMeetingParticipationStatus
     let meetingLinks: [CalendarMeetingCanonicalLink]
+    /// False for events nobody else is invited to, such as private blocks with a call link.
+    let hasOtherParticipants: Bool
     let transcriptMetadata: CalendarMeetingTranscriptMetadata
     let occurrenceDigest: String
 
@@ -275,6 +277,7 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
         location: String? = nil,
         organizer: CalendarMeetingParticipant? = nil,
         attendees: [CalendarMeetingParticipant] = [],
+        hasOtherParticipants: Bool = true,
         isAdHoc: Bool = false
     ) {
         self.isAdHoc = isAdHoc
@@ -286,6 +289,7 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
         self.calendarID = calendarID
         self.participationStatus = participationStatus
         self.meetingLinks = meetingLinks
+        self.hasOtherParticipants = hasOtherParticipants
         transcriptMetadata = CalendarMeetingTranscriptMetadata(
             eventIdentifier: eventIdentifier,
             title: title,
@@ -312,6 +316,18 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
             end: endDate.addingTimeInterval(30 * 60)
         )
         return interval.contains(date)
+    }
+
+    /// Someone besides the current user is invited, or someone else invited the current
+    /// user. An event without attendees counts as solo even when its organizer is not
+    /// recognized as the current user, so misattributed private blocks stay protected.
+    static func hasOtherParticipants(
+        organizer: CalendarMeetingParticipant?,
+        attendees: [CalendarMeetingParticipant]
+    ) -> Bool {
+        if attendees.contains(where: { !$0.isCurrentUser }) { return true }
+        guard !attendees.isEmpty, let organizer else { return false }
+        return !organizer.isCurrentUser
     }
 }
 

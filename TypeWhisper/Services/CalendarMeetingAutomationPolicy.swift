@@ -64,6 +64,7 @@ struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
     let enabledProviders: Set<MeetingProvider>
     let suppressedOccurrenceDigests: Set<String>
     var detectAdHocMeetings = false
+    var confirmSoloEvents = false
 
     var isOperational: Bool {
         hasPremiumAccess && startMode != .off
@@ -76,6 +77,23 @@ struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
             : calendarAuthorization == .fullAccess && selectedCalendarIDs.contains(occurrence.calendarID)
         return sourceEnabled && !occurrence.providers.isDisjoint(with: enabledProviders)
     }
+
+    /// With confirmation enabled, calendar events nobody else is invited to fall back to
+    /// reminder behavior in automatic mode, so private blocks with a call link need consent.
+    func startMode(for occurrence: CalendarMeetingOccurrence) -> CalendarMeetingStartMode {
+        guard startMode == .automatic,
+              confirmSoloEvents,
+              !occurrence.isAdHoc,
+              !occurrence.hasOtherParticipants else {
+            return startMode
+        }
+        return .reminder
+    }
+}
+
+struct CalendarMeetingUpcomingReminder: Equatable, Sendable {
+    let occurrence: CalendarMeetingOccurrence
+    let startMode: CalendarMeetingStartMode
 }
 
 enum CalendarMeetingRecordingStartFailure: Equatable, Sendable {
@@ -129,7 +147,7 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
 }
 
 enum CalendarMeetingAutomationEffect: Equatable, Sendable {
-    case replaceScheduledReminders([CalendarMeetingOccurrence])
+    case replaceScheduledReminders([CalendarMeetingUpcomingReminder])
     case startActivityCollector
     case stopActivityCollector
     case startCameraActivityCollector
@@ -218,10 +236,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             self.configuration = configuration
             self.occurrences = occurrences.filter(configuration.permits)
             pruneArmedOccurrences(at: now)
-            effects.append(.replaceScheduledReminders(reminderOccurrences(at: now)))
+            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
 
             if !configuration.isOperational
-                || previousConfiguration.startMode != configuration.startMode {
+                || previousConfiguration.startMode != configuration.startMode
+                || previousConfiguration.confirmSoloEvents != configuration.confirmSoloEvents {
                 clearPendingStart(effects: &effects)
                 dwellStates.removeAll()
                 pendingIdleCandidate = nil
@@ -329,7 +348,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 hasObservedSignal: false
             )
             recordedOccurrenceDigests.insert(occurrenceDigest)
-            effects.append(.replaceScheduledReminders(reminderOccurrences(at: now)))
+            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
             updateCollector(at: now, effects: &effects)
             evaluateAutoStop(at: now, effects: &effects)
 
@@ -368,7 +387,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         return effects
     }
 
-    private func reminderOccurrences(at now: Date) -> [CalendarMeetingOccurrence] {
+    private func upcomingReminders(at now: Date) -> [CalendarMeetingUpcomingReminder] {
         guard configuration.isOperational else { return [] }
         let horizon = now.addingTimeInterval(7 * 24 * 60 * 60)
         return occurrences
@@ -382,7 +401,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             }
             .sorted { $0.startDate < $1.startDate }
             .prefix(48)
-            .map { $0 }
+            .map {
+                CalendarMeetingUpcomingReminder(
+                    occurrence: $0,
+                    startMode: configuration.startMode(for: $0)
+                )
+            }
     }
 
     private mutating func updateCollector(
@@ -392,7 +416,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         let needsAutoStopSignal = activeRecording?.autoStopArmed == true
         let hasOpenJoinWindow = activeRecording == nil && occurrences.contains {
             $0.isInsideJoinWindow(at: now)
-                && (configuration.startMode == .automatic
+                && (configuration.startMode(for: $0) == .automatic
                     ? $0.participationStatus.permitsAutomaticStart
                     : $0.participationStatus.permitsReminder)
                 && !configuration.suppressedOccurrenceDigests.contains($0.occurrenceDigest)
@@ -485,7 +509,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             return
         }
 
-        switch configuration.startMode {
+        switch configuration.startMode(for: candidate.occurrence) {
         case .off:
             break
         case .reminder:
@@ -570,15 +594,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 )
             })
         }
-        let ranked: [(CalendarMeetingOccurrence, CalendarMeetingJoinSignal)]
-        if configuration.startMode == .reminder {
-            let armed = eligible.filter {
-                armedOccurrenceDigests.contains($0.0.occurrenceDigest)
-            }
-            ranked = armed.isEmpty ? eligible : armed
-        } else {
-            ranked = eligible
+        // Arming is explicit consent, so it breaks ties. Automatic occurrences get no such
+        // preference: an overlap with an event that still waits for consent stays ambiguous.
+        let armed = eligible.filter {
+            armedOccurrenceDigests.contains($0.0.occurrenceDigest)
         }
+        let ranked = armed.isEmpty ? eligible : armed
         guard let bestQuality = ranked.map({ $0.1.quality.rawValue }).max() else { return nil }
         let best = ranked.filter { $0.1.quality.rawValue == bestQuality }
         let digests = Set(best.map { $0.0.occurrenceDigest })
@@ -594,7 +615,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         guard let occurrence = occurrence(for: digest),
               occurrence.isInsideJoinWindow(at: now),
               occurrence.meetingLinks.contains(identity),
-              configuration.startMode == .automatic
+              configuration.startMode(for: occurrence) == .automatic
                 ? occurrence.participationStatus.permitsAutomaticStart
                 : occurrence.participationStatus.permitsReminder,
               !configuration.suppressedOccurrenceDigests.contains(digest),
@@ -683,8 +704,8 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         switch action {
         case .armOccurrence(let digest):
             guard configuration.isOperational,
-                  configuration.startMode == .reminder,
                   let occurrence = occurrence(for: digest),
+                  configuration.startMode(for: occurrence) == .reminder,
                   occurrence.isInsideJoinWindow(at: now),
                   occurrence.participationStatus.permitsReminder,
                   !configuration.suppressedOccurrenceDigests.contains(digest),
@@ -816,16 +837,18 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     }
 
     private mutating func pruneArmedOccurrences(at now: Date) {
-        guard configuration.isOperational, configuration.startMode == .reminder else {
+        guard configuration.isOperational else {
             armedOccurrenceDigests.removeAll()
             return
         }
+        let configuration = self.configuration
         let suppressedDigests = configuration.suppressedOccurrenceDigests
         let enabledProviders = configuration.enabledProviders
         let recordedDigests = recordedOccurrenceDigests
         let failedDigests = permanentStartFailureDigests
         let validDigests = Set(occurrences.filter {
-            $0.isInsideJoinWindow(at: now)
+            configuration.startMode(for: $0) == .reminder
+                && $0.isInsideJoinWindow(at: now)
                 && $0.participationStatus.permitsReminder
                 && !suppressedDigests.contains($0.occurrenceDigest)
                 && !recordedDigests.contains($0.occurrenceDigest)

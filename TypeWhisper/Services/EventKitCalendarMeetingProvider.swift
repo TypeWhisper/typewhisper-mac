@@ -168,6 +168,8 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
         )
         guard !links.isEmpty else { return nil }
 
+        let organizer = event.organizer.map(Self.participantMetadata)
+        let attendees = event.attendees ?? []
         return CalendarMeetingOccurrence(
             eventIdentifier: eventIdentifier,
             occurrenceStart: startDate,
@@ -178,9 +180,24 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
             participationStatus: participationStatus,
             meetingLinks: links,
             location: Self.normalized(event.location),
-            organizer: event.organizer.map(Self.participantMetadata),
-            attendees: (event.attendees ?? []).map(Self.participantMetadata)
+            organizer: organizer,
+            attendees: attendees.map(Self.participantMetadata),
+            hasOtherParticipants: CalendarMeetingOccurrence.hasOtherParticipants(
+                organizer: organizer,
+                attendees: attendees
+                    .filter { Self.countsAsAttendee($0.participantType) }
+                    .map(Self.participantMetadata)
+            )
         )
+    }
+
+    /// Booked rooms and equipment do not make a private block a meeting with others.
+    nonisolated static func countsAsAttendee(_ type: EKParticipantType) -> Bool {
+        switch type {
+        case .room, .resource: false
+        case .person, .group, .unknown: true
+        @unknown default: true
+        }
     }
 
     private static func participantMetadata(
