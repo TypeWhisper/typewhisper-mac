@@ -38,6 +38,49 @@ final class CalendarMeetingEventProviderTests: XCTestCase {
         XCTAssertEqual(original.eventIdentifier, rescheduled.eventIdentifier)
     }
 
+    func testSoloEventsHaveNobodyElseInvitedAndNoInvitationFromSomeoneElse() {
+        let currentUser = CalendarMeetingParticipant(
+            name: "Me",
+            emailAddress: "me@example.com",
+            status: .accepted,
+            isCurrentUser: true
+        )
+        let colleague = CalendarMeetingParticipant(
+            name: "Colleague",
+            emailAddress: "colleague@example.com",
+            status: .accepted,
+            isCurrentUser: false
+        )
+
+        XCTAssertFalse(CalendarMeetingOccurrence.hasOtherParticipants(organizer: currentUser, attendees: []))
+        XCTAssertFalse(CalendarMeetingOccurrence.hasOtherParticipants(organizer: nil, attendees: []))
+        XCTAssertFalse(CalendarMeetingOccurrence.hasOtherParticipants(
+            organizer: colleague,
+            attendees: []
+        ), "Without attendees, an unrecognized organizer must not turn a private block into a meeting")
+        XCTAssertFalse(CalendarMeetingOccurrence.hasOtherParticipants(
+            organizer: currentUser,
+            attendees: [currentUser]
+        ))
+        XCTAssertFalse(CalendarMeetingOccurrence.hasOtherParticipants(organizer: nil, attendees: [currentUser]))
+        XCTAssertTrue(CalendarMeetingOccurrence.hasOtherParticipants(
+            organizer: currentUser,
+            attendees: [currentUser, colleague]
+        ))
+        XCTAssertTrue(CalendarMeetingOccurrence.hasOtherParticipants(
+            organizer: colleague,
+            attendees: [currentUser]
+        ))
+    }
+
+    func testRoomsAndResourcesDoNotCountAsOtherParticipants() {
+        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsParticipant(.room))
+        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsParticipant(.resource))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.person))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.group))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.unknown))
+    }
+
     func testJoinWindowIncludesLeadAndThirtyMinuteTail() {
         let start = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: start, duration: 1_800)

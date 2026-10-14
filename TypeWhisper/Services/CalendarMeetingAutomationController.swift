@@ -143,6 +143,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     @Published private(set) var startMode: CalendarMeetingStartMode
     @Published private(set) var autoStopEnabled: Bool
     @Published private(set) var detectAdHocMeetings: Bool
+    @Published private(set) var confirmSoloEvents: Bool
     @Published private(set) var selectedCalendarIDs: Set<String>
     @Published private(set) var enabledProviders: Set<MeetingProvider>
     @Published private(set) var calendars: [CalendarMeetingCalendar] = []
@@ -262,6 +263,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         ) ?? .off
         autoStopEnabled = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
         detectAdHocMeetings = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
+        confirmSoloEvents = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
         selectedCalendarIDs = Set(
             defaults.stringArray(forKey: UserDefaultsKeys.calendarMeetingSelectedCalendarIDs) ?? []
         )
@@ -412,6 +414,15 @@ final class CalendarMeetingAutomationController: ObservableObject {
         }
         applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
+    }
+
+    func setConfirmSoloEvents(_ enabled: Bool) {
+        guard enabled != confirmSoloEvents else { return }
+        // An in-flight start stays valid here: the consent check after the recorder start
+        // cancels it only if the event now needs confirmation, and keeps it armable.
+        confirmSoloEvents = enabled
+        defaults.set(enabled, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
+        applyPolicyConfiguration(now: nowProvider())
     }
 
     func requestCalendarAccess() {
@@ -760,7 +771,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
             selectedCalendarIDs: selectedCalendarIDs,
             enabledProviders: enabledProviders,
             suppressedOccurrenceDigests: suppressedDigests,
-            detectAdHocMeetings: detectAdHocMeetings
+            detectAdHocMeetings: detectAdHocMeetings,
+            confirmSoloEvents: confirmSoloEvents
         )
         if activeCalendarRecording != nil,
            (!configuration.isOperational || !configuration.autoStopEnabled) {
@@ -779,17 +791,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private func handle(_ effect: CalendarMeetingAutomationEffect) {
         switch effect {
-        case .replaceScheduledReminders(let occurrences):
+        case .replaceScheduledReminders(let reminders):
             guard notificationService != nil || isAutomationActive else { return }
             let service = notificationServiceInstance()
             let now = nowProvider()
-            let scheduledStartMode = startMode
             enqueueNotificationOperation {
-                await service.replaceScheduledReminders(
-                    occurrences,
-                    startMode: scheduledStartMode,
-                    now: now
-                )
+                await service.replaceScheduledReminders(reminders, now: now)
             }
 
         case .startActivityCollector:
@@ -963,6 +970,16 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 ))
                 return
             }
+            guard self.policy.permitsStart(
+                of: occurrence.occurrenceDigest,
+                identity: identity,
+                at: self.nowProvider()
+            ) else {
+                self.applyPolicy(.recordingStartCancelled(
+                    occurrenceDigest: occurrence.occurrenceDigest
+                ))
+                return
+            }
             let readiness = self.currentRecorderReadiness()
             guard readiness == .idle else {
                 self.applyPolicy(.recordingStartDeferred(
@@ -995,6 +1012,19 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     self.applyPolicy(.recordingStartFailed(
                         occurrenceDigest: occurrence.occurrenceDigest,
                         failure: .captureFailed
+                    ))
+                    return
+                }
+                // A calendar refresh during the await can withdraw consent, e.g. when the
+                // event became solo and was never armed. The user can still confirm it later.
+                guard self.policy.permitsStart(
+                    of: occurrence.occurrenceDigest,
+                    identity: identity,
+                    at: self.nowProvider()
+                ) else {
+                    try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
+                    self.applyPolicy(.recordingStartCancelled(
+                        occurrenceDigest: occurrence.occurrenceDigest
                     ))
                     return
                 }

@@ -38,6 +38,19 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
     }
 }
 
+private extension CalendarMeetingNotificationService {
+    func replaceScheduledReminders(
+        _ occurrences: [CalendarMeetingOccurrence],
+        startMode: CalendarMeetingStartMode = .reminder,
+        now: Date
+    ) async {
+        await replaceScheduledReminders(
+            occurrences.map { CalendarMeetingUpcomingReminder(occurrence: $0, startMode: startMode) },
+            now: now
+        )
+    }
+}
+
 @MainActor
 final class CalendarMeetingNotificationServiceTests: XCTestCase {
     func testReminderPlanningIsSortedLimitedToSevenDaysAndFortyEight() async throws {
@@ -259,6 +272,38 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
             now: now
         )
         XCTAssertEqual(client.added.last?.category, .upcomingReminder)
+    }
+
+    func testUpcomingNotificationCategoryFollowsEachReminderStartMode() async throws {
+        let suiteName = "CalendarMeetingNotificationMixedModeTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(
+            eventID: "solo",
+            start: now.addingTimeInterval(10 * 60),
+            title: "Dentist",
+            hasOtherParticipants: false
+        )
+        let team = makeCalendarMeetingTestOccurrence(
+            eventID: "team",
+            start: now.addingTimeInterval(20 * 60)
+        )
+
+        await service.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: solo, startMode: .reminder),
+            CalendarMeetingUpcomingReminder(occurrence: team, startMode: .automatic),
+        ], now: now)
+
+        XCTAssertEqual(client.added.map(\.occurrenceDigest), [solo.id, team.id])
+        XCTAssertEqual(client.added.map(\.category), [.upcomingReminder, .upcomingAutomatic])
+        XCTAssertEqual(client.added.first?.body, "Dentist")
+        XCTAssertEqual(
+            client.added.last?.body,
+            String(localized: "calendarMeeting.notification.upcomingAutomaticBody")
+        )
     }
 
     func testRefreshOnlyRemovesCalendarMeetingRequests() async throws {

@@ -790,6 +790,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaultsKeys.calendarMeetingStartMode: CalendarMeetingStartMode.off.rawValue,
             UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,
             UserDefaultsKeys.calendarMeetingDetectAdHoc: false,
+            UserDefaultsKeys.calendarMeetingConfirmSoloEvents: false,
             UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests: [String](),
             UserDefaultsKeys.calendarMeetingReminderRequestDigests: [String](),
             UserDefaultsKeys.calendarMeetingNotificationsConfigured: false,

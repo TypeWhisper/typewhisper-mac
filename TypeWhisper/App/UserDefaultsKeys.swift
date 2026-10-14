@@ -110,6 +110,7 @@ enum UserDefaultsKeys {
     static let calendarMeetingStartMode = "calendarMeetingStartMode"
     static let calendarMeetingAutoStopEnabled = "calendarMeetingAutoStopEnabled"
     static let calendarMeetingDetectAdHoc = "calendarMeetingDetectAdHoc"
+    static let calendarMeetingConfirmSoloEvents = "calendarMeetingConfirmSoloEvents"
     static let calendarMeetingSelectedCalendarIDs = "calendarMeetingSelectedCalendarIDs"
     static let calendarMeetingCalendarSelectionInitialized = "calendarMeetingCalendarSelectionInitialized"
     static let calendarMeetingEnabledProviderIDs = "calendarMeetingEnabledProviderIDs"

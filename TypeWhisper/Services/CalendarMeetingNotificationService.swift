@@ -396,8 +396,7 @@ protocol CalendarMeetingNotifying: AnyObject {
     func configureAndRequestAuthorization() async -> CalendarMeetingNotificationAuthorization
     func refreshAuthorizationStatus() async
     func replaceScheduledReminders(
-        _ occurrences: [CalendarMeetingOccurrence],
-        startMode: CalendarMeetingStartMode,
+        _ reminders: [CalendarMeetingUpcomingReminder],
         now: Date
     ) async
     func publishDetectedMeeting(
@@ -485,12 +484,10 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
     }
 
     func replaceScheduledReminders(
-        _ occurrences: [CalendarMeetingOccurrence],
-        startMode: CalendarMeetingStartMode = .reminder,
+        _ reminders: [CalendarMeetingUpcomingReminder],
         now: Date = Date()
     ) async {
         await removeScheduledMeetingRequests()
-        guard startMode != .off else { return }
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
         let requestedDigests: Set<String> = Set(
             defaults.stringArray(
@@ -498,30 +495,31 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             ) ?? []
         )
         typealias ReminderCandidate = (
-            occurrence: CalendarMeetingOccurrence,
+            reminder: CalendarMeetingUpcomingReminder,
             fireDate: Date
         )
-        let datedOccurrences: [ReminderCandidate] = occurrences.map { occurrence in
+        let datedReminders: [ReminderCandidate] = reminders.map { reminder in
             (
-                occurrence: occurrence,
-                fireDate: occurrence.startDate.addingTimeInterval(-5 * 60)
+                reminder: reminder,
+                fireDate: reminder.occurrence.startDate.addingTimeInterval(-5 * 60)
             )
         }
-        let activeCandidates: [ReminderCandidate] = datedOccurrences.filter { candidate in
+        let activeCandidates: [ReminderCandidate] = datedReminders.filter { candidate in
             candidate.fireDate <= upperBound
-                && candidate.occurrence.endDate.addingTimeInterval(30 * 60) >= now
+                && candidate.reminder.occurrence.endDate.addingTimeInterval(30 * 60) >= now
         }
         let pendingCandidates: [ReminderCandidate] = activeCandidates.filter { candidate in
             candidate.fireDate > now
-                || !requestedDigests.contains(candidate.occurrence.occurrenceDigest)
+                || !requestedDigests.contains(candidate.reminder.occurrence.occurrenceDigest)
         }
         let sortedCandidates: [ReminderCandidate] = pendingCandidates.sorted { lhs, rhs in
             max(lhs.fireDate, now) < max(rhs.fireDate, now)
         }
         let candidates = sortedCandidates.prefix(48)
 
-        for (occurrence, fireDate) in candidates {
+        for (reminder, fireDate) in candidates {
             guard !Task.isCancelled else { return }
+            let occurrence = reminder.occurrence
             let isCatchUp = fireDate <= now
             let title = occurrence.title.trimmingCharacters(
                 in: CharacterSet.whitespacesAndNewlines
@@ -529,7 +527,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             let category: CalendarMeetingNotificationCategory
             let notificationTitle: String
             let body: String
-            switch startMode {
+            switch reminder.startMode {
             case .off:
                 continue
             case .reminder:
