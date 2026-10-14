@@ -23190,6 +23190,7 @@ extension TypeWhisperIntegrationTests {
         }
         let teamMeeting = occurrence(attendees: [colleague])
         let events = MeetingRuntimeEventProvider(occurrences: [teamMeeting])
+        let notifications = MeetingRuntimeNotifications(authorization: .authorized)
         let controller = CalendarMeetingAutomationController(
             licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
                 keychainCopyMatching: { _, _ in errSecItemNotFound }),
@@ -23201,7 +23202,7 @@ extension TypeWhisperIntegrationTests {
             audioCollectorFactory: { MeetingRuntimeAudioCollector() },
             cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
             browserResolverFactory: { MeetingRuntimeBrowserResolver() },
-            notificationServiceFactory: { MeetingRuntimeNotifications(authorization: .authorized) },
+            notificationServiceFactory: { notifications },
             premiumAccessProvider: { true }, nowProvider: { now }
         )
         defer { controller.shutdown() }
@@ -23229,8 +23230,27 @@ extension TypeWhisperIntegrationTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertEqual(recorder.state, .idle, "The now solo event was never armed, so the started recording must stop")
-        now = now.addingTimeInterval(30)
+
+        // The withdrawn start must not block consent: the detected-meeting prompt follows,
+        // and Start Recording records the event.
+        now = now.addingTimeInterval(1)
         await controller.testingAdvanceTime()
+        now = now.addingTimeInterval(3)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .idle)
+        XCTAssertEqual(notifications.detectedDigests, [privateBlock.occurrenceDigest])
+        notifications.respond(.armStart(privateBlock.occurrenceDigest))
+        for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        now = now.addingTimeInterval(5)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .recording)
+        recorder.stopRecording()
+        for _ in 0..<100 where recorder.state != .idle {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         XCTAssertEqual(recorder.state, .idle)
     }
 }

@@ -1115,6 +1115,34 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         XCTAssertTrue(effects.contains(.publishDetectedMeeting(nowSolo)))
     }
 
+    func testStartCancelledForWithdrawnConsentKeepsOccurrenceArmable() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let team = makeCalendarMeetingTestOccurrence(start: now)
+        let nowSolo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        let confirming = configuration(mode: .automatic, confirmSoloEvents: true)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(confirming, occurrences: [team], now: now))
+        _ = policy.reduce(.activity([signal(for: team)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains(
+            .startRecording(team, identity)
+        ))
+
+        // The refresh arrives while the recorder is starting.
+        _ = policy.reduce(.configure(confirming, occurrences: [nowSolo], now: now.addingTimeInterval(8)))
+        XCTAssertFalse(policy.permitsStart(of: team.id, identity: identity, at: now.addingTimeInterval(8)))
+        _ = policy.reduce(.recordingStartCancelled(occurrenceDigest: team.id))
+
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(9)))
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(12))),
+            [.publishDetectedMeeting(nowSolo)]
+        )
+        let armed = policy.reduce(.userAction(.armOccurrence(nowSolo.id), now: now.addingTimeInterval(12)))
+        XCTAssertTrue(armed.contains(.showStartCountdown(nowSolo, deadline: now.addingTimeInterval(17))))
+        XCTAssertTrue(policy.permitsStart(of: nowSolo.id, identity: identity, at: now.addingTimeInterval(17)))
+    }
+
     func testCalendarRefreshKeepsPendingStartOfArmedSoloEvent() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let solo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)

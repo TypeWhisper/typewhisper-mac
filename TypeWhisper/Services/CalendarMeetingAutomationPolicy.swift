@@ -137,6 +137,9 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
         occurrenceDigest: String,
         failure: CalendarMeetingRecordingStartFailure
     )
+    /// Consent was withdrawn while the start was in flight. Unlike a failure, the
+    /// occurrence can still be armed afterwards.
+    case recordingStartCancelled(occurrenceDigest: String)
     case recordingStartDeferred(
         occurrenceDigest: String,
         identity: CalendarMeetingCanonicalLink,
@@ -358,6 +361,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             }
             armedOccurrenceDigests.remove(digest)
             permanentStartFailureDigests.insert(digest)
+            clearPendingStart(effects: &effects)
+
+        case .recordingStartCancelled(let digest):
+            if startRequestedDigest == digest {
+                startRequestedDigest = nil
+            }
             clearPendingStart(effects: &effects)
 
         case .recordingStartDeferred(let digest, let identity, let readiness, _):
