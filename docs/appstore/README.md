@@ -109,6 +109,22 @@ promotional text, URLs) and the App Review notes live in
 (`appstore_metadata_verify` only compares). Name, subtitle and privacy URL are
 shared with the iOS app and are maintained in the iOS repository.
 
+Screenshots come from the App Store edition in screenshot mode:
+
+```sh
+bundle exec fastlane mac appstore_screenshots languages:en-US,de-DE
+ASC_API_KEY_PATH=<key.json> bundle exec fastlane mac appstore_screenshots_upload version:<version>
+```
+
+The first lane writes raw window captures to `fastlane/screenshots/appstore/`.
+The second composes the states listed in `APPSTORE_STORE_SCREENSHOT_STATES`
+into 2880 x 1800 images with `scripts/appstore/compose_store_screenshots.swift`,
+replaces the desktop screenshots of en-US and de-DE and reads them back
+(`appstore_screenshots_verify` only compares). Apple accepts screenshot changes
+only before submission or after a rejection, not while waiting for review. French,
+Italian and Spanish show the en-US screenshots because the app is not localized
+into those languages.
+
 ## Plugins
 
 The marketplace lists the bundled plugins from
@@ -207,7 +223,6 @@ Differences to the direct app, which uses the Accessibility API and an event-sup
 3. Test iCloud sync, the widget and the Finder action with a provisioned build.
 4. First signed TestFlight upload (workflow, audit and universal Release build are in place).
 5. App size: each MLX plugin links its own copy of MLX.
-6. App Store Connect: add the macOS platform to app `6759319267`, Mac screenshots, review notes.
 
 ## Before submission
 

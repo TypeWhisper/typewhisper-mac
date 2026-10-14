@@ -95,6 +95,22 @@ Compare the macOS store text and review notes in App Store Connect with the repo
 
 Capture the Mac App Store edition in screenshot mode (raw window images)
 
+### mac appstore_screenshots_upload
+
+```sh
+[bundle exec] fastlane mac appstore_screenshots_upload
+```
+
+Compose the raw captures into 2880x1800 store images, replace the macOS screenshots and verify them (version:<version>)
+
+### mac appstore_screenshots_verify
+
+```sh
+[bundle exec] fastlane mac appstore_screenshots_verify
+```
+
+Compare the macOS screenshots in App Store Connect with the composed images (version:<version>)
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

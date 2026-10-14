@@ -1,10 +1,12 @@
+require "digest"
+
 # Mac App Store edition screenshots.
 #
 # Captures the App Store edition (APPSTORE build of TypeWhisperAppStore.xcodeproj)
 # in screenshot mode, using the deterministic fixtures and window handling of
 # the regular screenshot lane. Raw window captures are written to
 # fastlane/screenshots/appstore/<language>/<state>.png and composed into store
-# images by scripts/appstore/compose_store_screenshots.rb.
+# images by scripts/appstore/compose_store_screenshots.swift.
 
 APPSTORE_SCREENSHOT_DERIVED_DATA = File.join(REPOSITORY_ROOT, "build", "appstore-screenshots")
 APPSTORE_SCREENSHOT_PRODUCT = "TypeWhisper App Store Dev"
@@ -29,6 +31,24 @@ APPSTORE_SCREENSHOT_STATES = %w[
   file-transcription
   premium
 ].freeze
+
+# Store screenshots in listing order (App Store Connect allows ten). home repeats
+# the indicator background, recording shows Apple Speech as not ready, premium
+# has no StoreKit prices in screenshot mode and hotkeys has no shortcuts, so
+# they are left out. The app is not localized into French, Italian and Spanish;
+# those store locales show the en-US screenshots.
+APPSTORE_STORE_SCREENSHOT_STATES = %w[
+  indicator
+  history
+  file-transcription
+  workflows
+  dictionary
+  snippets
+  integrations-available
+  statistics
+].freeze
+APPSTORE_STORE_SCREENSHOT_LOCALES = %w[en-US de-DE].freeze
+APPSTORE_COMPOSED_SCREENSHOT_OUTPUT = File.join(APPSTORE_SCREENSHOT_OUTPUT, "store")
 
 def appstore_screenshot_states(value)
   requested = value.to_s.split(",").map(&:strip).reject(&:empty?)
@@ -144,6 +164,9 @@ APPSTORE_EDITABLE_VERSION_STATES = %w[
   WAITING_FOR_REVIEW
   INVALID_BINARY
 ].freeze
+# Apple accepts screenshot changes only before submission or after a rejection.
+APPSTORE_SCREENSHOT_EDITABLE_VERSION_STATES = (APPSTORE_EDITABLE_VERSION_STATES - %w[WAITING_FOR_REVIEW]).freeze
+APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT = 600
 
 def appstore_metadata_value(locale, field, version_string)
   path = File.join(APPSTORE_METADATA_PATH, locale, "#{field}.txt")
@@ -216,10 +239,10 @@ def mac_store_version!(version_string)
   version
 end
 
-def editable_mac_store_version!(version_string)
+def editable_mac_store_version!(version_string, states: APPSTORE_EDITABLE_VERSION_STATES)
   version = mac_store_version!(version_string)
   state = version.app_version_state || version.app_store_state
-  unless APPSTORE_EDITABLE_VERSION_STATES.include?(state)
+  unless states.include?(state)
     UI.user_error!("macOS App Store version #{version_string} is not editable (state: #{state || 'unknown'})")
   end
   version
@@ -261,6 +284,77 @@ def verify_mac_store_metadata!(version)
   UI.success("Verified macOS #{version.version_string} store text in #{APPSTORE_STORE_LOCALES.count} locales and the review notes")
 end
 
+def compose_mac_store_screenshots!
+  script = File.join(REPOSITORY_ROOT, "scripts", "appstore", "compose_store_screenshots.swift")
+  APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
+    directory = File.join(APPSTORE_COMPOSED_SCREENSHOT_OUTPUT, locale)
+    FileUtils.rm_rf(directory)
+    FileUtils.mkdir_p(directory)
+    APPSTORE_STORE_SCREENSHOT_STATES.each_with_index do |state, index|
+      raw = File.join(APPSTORE_SCREENSHOT_OUTPUT, locale, "#{state}.png")
+      UI.user_error!("Missing raw capture #{raw}; run mac appstore_screenshots first") unless File.file?(raw)
+      composed = File.join(directory, format("%02d-%s.png", index + 1, state))
+      sh(Shellwords.join(["swift", script, raw, composed]), log: false)
+    end
+  end
+end
+
+def composed_mac_store_screenshots(locale)
+  Dir[File.join(APPSTORE_COMPOSED_SCREENSHOT_OUTPUT, locale, "*.png")].sort
+end
+
+# Replaces the desktop screenshot set of each locale with the composed images.
+def upload_mac_store_screenshots!(version)
+  localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
+  display_type = Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_DESKTOP
+  missing = APPSTORE_STORE_SCREENSHOT_LOCALES - localizations.keys
+  UI.user_error!("Missing remote version locales #{missing.join(', ')}; upload the store text first") unless missing.empty?
+
+  APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
+    localization = localizations[locale]
+    localization.get_app_screenshot_sets
+      .select { |set| set.screenshot_display_type == display_type }
+      .each(&:delete!)
+    set = localization.create_app_screenshot_set(attributes: { screenshotDisplayType: display_type })
+    composed_mac_store_screenshots(locale).each do |path|
+      UI.message("Uploading #{locale} #{File.basename(path)}")
+      # Processing is awaited with a deadline in verify_mac_store_screenshots!.
+      set.upload_screenshot(path: path, wait_for_processing: false)
+    end
+  end
+end
+
+def verify_mac_store_screenshots!(version)
+  localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
+  display_type = Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_DESKTOP
+  APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
+    deadline = Time.now + APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT
+    expected = composed_mac_store_screenshots(locale).map { |path| [File.basename(path), Digest::MD5.file(path).hexdigest] }
+    unless expected.count == APPSTORE_STORE_SCREENSHOT_STATES.count
+      UI.user_error!("Expected #{APPSTORE_STORE_SCREENSHOT_STATES.count} composed #{locale} screenshots, found #{expected.count}; run mac appstore_screenshots_upload")
+    end
+    actual = nil
+    loop do
+      set = localizations[locale]&.get_app_screenshot_sets&.find { |candidate| candidate.screenshot_display_type == display_type }
+      UI.user_error!("#{locale} has no desktop screenshots in App Store Connect") unless set
+      actual = set.app_screenshots.to_a
+      failed = actual.select(&:error?)
+      UI.user_error!("#{locale}: processing failed for #{failed.map(&:file_name).join(', ')}") unless failed.empty?
+      break if actual.count == expected.count && actual.all?(&:complete?)
+
+      pending = expected.count - actual.count(&:complete?)
+      UI.user_error!("#{locale}: #{pending} screenshots are still processing after #{APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT} seconds") if Time.now > deadline
+      UI.message("Waiting for #{pending} #{locale} screenshots to finish processing")
+      sleep(5)
+    end
+    # source_file_checksum is the MD5 of the uploaded file.
+    unless actual.map { |screenshot| [screenshot.file_name, screenshot.source_file_checksum] } == expected
+      UI.user_error!("#{locale} screenshots differ in App Store Connect: #{actual.map(&:file_name).join(', ')}")
+    end
+  end
+  UI.success("Verified #{APPSTORE_STORE_SCREENSHOT_STATES.count} macOS screenshots in #{APPSTORE_STORE_SCREENSHOT_LOCALES.join(', ')}")
+end
+
 platform :mac do
   desc "Upload the localized macOS store text and review notes, then verify them (version:<version>)"
   lane :appstore_metadata_upload do |options|
@@ -294,5 +388,25 @@ platform :mac do
         capture_appstore_screenshot!(language, state, File.join(directory, "#{state}.png"))
       end
     end
+  end
+
+  desc "Compose the raw captures into 2880x1800 store images, replace the macOS screenshots and verify them (version:<version>)"
+  lane :appstore_screenshots_upload do |options|
+    version_string = options[:version].to_s
+    UI.user_error!("Pass version:<version>") if version_string.empty?
+    compose_mac_store_screenshots!
+    appstore_api_key!
+    upload_mac_store_screenshots!(
+      editable_mac_store_version!(version_string, states: APPSTORE_SCREENSHOT_EDITABLE_VERSION_STATES)
+    )
+    verify_mac_store_screenshots!(mac_store_version!(version_string))
+  end
+
+  desc "Compare the macOS screenshots in App Store Connect with the composed images (version:<version>)"
+  lane :appstore_screenshots_verify do |options|
+    version_string = options[:version].to_s
+    UI.user_error!("Pass version:<version>") if version_string.empty?
+    appstore_api_key!
+    verify_mac_store_screenshots!(mac_store_version!(version_string))
   end
 end
