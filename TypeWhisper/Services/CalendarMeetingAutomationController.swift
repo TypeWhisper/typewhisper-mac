@@ -962,7 +962,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
                   self.allOccurrences.contains(where: {
                       $0.occurrenceDigest == occurrence.occurrenceDigest
                           && $0.isInsideJoinWindow(at: self.nowProvider())
-                  }) else {
+                  }),
+                  self.policy.permitsStart(
+                      of: occurrence.occurrenceDigest,
+                      identity: identity,
+                      at: self.nowProvider()
+                  ) else {
                 self.applyPolicy(.recordingStartFailed(
                     occurrenceDigest: occurrence.occurrenceDigest,
                     failure: .captureFailed
@@ -989,6 +994,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     preferredBaseName: preferredBaseName,
                     transcriptMetadata: occurrence.isAdHoc ? nil : occurrence.transcriptMetadata
                 )
+                // A calendar refresh during the await can withdraw consent, e.g. when the
+                // event became solo and was never armed.
                 guard generation == self.recordingStartGeneration,
                       self.hasPremiumAccess,
                       self.startMode != .off,
@@ -996,7 +1003,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
                       self.allOccurrences.contains(where: {
                           $0.occurrenceDigest == occurrence.occurrenceDigest
                               && $0.isInsideJoinWindow(at: self.nowProvider())
-                      }) else {
+                      }),
+                      self.policy.permitsStart(
+                          of: occurrence.occurrenceDigest,
+                          identity: identity,
+                          at: self.nowProvider()
+                      ) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
                     self.applyPolicy(.recordingStartFailed(
                         occurrenceDigest: occurrence.occurrenceDigest,

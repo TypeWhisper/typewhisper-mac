@@ -23147,11 +23147,98 @@ extension TypeWhisperIntegrationTests {
         }
         XCTAssertEqual(recorder.state, .idle)
     }
+
+    @MainActor
+    func testCalendarRefreshDuringRecorderStartWithdrawsConsentForNowSoloEvent() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let suite = "MeetingSoloRefreshDuringStart-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            TestSupport.remove(directory)
+            MockTranscriptionPlugin.reset()
+        }
+        defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
+        defaults.set(true, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = directory
+        recorderService.stopRecordingOverride = { $0 }
+        let recorder = AudioRecorderViewModel(
+            recorderService: recorderService,
+            modelManager: context.modelManager,
+            dictionaryService: context.dictionaryService,
+            audioDeviceService: AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
+            defaults: defaults, recordingsLoader: { _, _ in [] }
+        )
+        recorder.transcriptionEnabled = false
+        recorder.micEnabled = false
+        recorder.systemAudioEnabled = true
+        let countdown = CalendarMeetingCountdownModel()
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let colleague = CalendarMeetingParticipant(name: "Colleague", emailAddress: "colleague@example.com",
+            status: .accepted, isCurrentUser: false)
+        func occurrence(attendees: [CalendarMeetingParticipant]) -> CalendarMeetingOccurrence {
+            CalendarMeetingOccurrence(
+                eventIdentifier: "sync", occurrenceStart: now, startDate: now,
+                endDate: now.addingTimeInterval(3600), title: "Sync", calendarID: "calendar",
+                participationStatus: .noCurrentUser,
+                meetingLinks: [CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")],
+                attendees: attendees,
+                hasOtherParticipants: !attendees.isEmpty
+            )
+        }
+        let teamMeeting = occurrence(attendees: [colleague])
+        let events = MeetingRuntimeEventProvider(occurrences: [teamMeeting])
+        let controller = CalendarMeetingAutomationController(
+            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
+                keychainCopyMatching: { _, _ in errSecItemNotFound }),
+            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
+                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
+            recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
+            countdownModel: countdown, defaults: defaults,
+            eventProviderFactory: { events },
+            audioCollectorFactory: { MeetingRuntimeAudioCollector() },
+            cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
+            browserResolverFactory: { MeetingRuntimeBrowserResolver() },
+            notificationServiceFactory: { MeetingRuntimeNotifications(authorization: .authorized) },
+            premiumAccessProvider: { true }, nowProvider: { now }
+        )
+        defer { controller.shutdown() }
+        let privateBlock = occurrence(attendees: [])
+        // The colleague is removed from the event while the recorder is starting.
+        recorderService.startRecordingOverride = { [weak controller] _, _, _, proposedURL, _ in
+            try Data("recording".utf8).write(to: proposedURL)
+            await events.replace([privateBlock])
+            await controller?.testingRefresh()
+            return proposedURL
+        }
+        await controller.testingRefresh()
+
+        let zoom = MeetingAudioProcess(audioObjectID: 1, processID: 123, bundleIdentifier: "us.zoom.xos",
+            isRunningInput: true, isRunningOutput: true)
+        await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available,
+            processes: [zoom]))
+        now = now.addingTimeInterval(3)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        now = now.addingTimeInterval(5)
+        await controller.testingAdvanceTime()
+
+        for _ in 0..<100 where recorder.state != .idle {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(recorder.state, .idle, "The now solo event was never armed, so the started recording must stop")
+        now = now.addingTimeInterval(30)
+        await controller.testingAdvanceTime()
+        XCTAssertEqual(recorder.state, .idle)
+    }
 }
 
 private actor MeetingRuntimeEventProvider: CalendarMeetingEventProviding {
-    let values: [CalendarMeetingOccurrence]
+    private var values: [CalendarMeetingOccurrence]
     init(occurrences: [CalendarMeetingOccurrence]) { values = occurrences }
+    func replace(_ occurrences: [CalendarMeetingOccurrence]) { values = occurrences }
     func authorizationStatus() -> CalendarMeetingCalendarAuthorization { values.isEmpty ? .denied : .fullAccess }
     func requestFullAccess() -> Bool { false }
     func calendars() -> [CalendarMeetingCalendar] {

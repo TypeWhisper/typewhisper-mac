@@ -623,6 +623,16 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         return occurrence
     }
 
+    /// Lets the controller check consent again after awaiting the recorder start, because a
+    /// calendar refresh can arrive while the start is in flight.
+    func permitsStart(
+        of digest: String,
+        identity: CalendarMeetingCanonicalLink,
+        at now: Date
+    ) -> Bool {
+        consentedStartOccurrence(digest: digest, identity: identity, at: now) != nil
+    }
+
     /// Calendar refreshes can change an occurrence while a start waits for its countdown or
     /// an idle recorder, so consent is checked again: automatic occurrences may start on
     /// their own, reminder occurrences only after the user armed them.
