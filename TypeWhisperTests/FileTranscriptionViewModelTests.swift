@@ -1430,6 +1430,11 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             .integrations
         )
         XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .integrations)
+        // An engine that is not installed still leads to Discover plugins.
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
+            .integrations
+        )
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: UnknownTranscriptionError()))

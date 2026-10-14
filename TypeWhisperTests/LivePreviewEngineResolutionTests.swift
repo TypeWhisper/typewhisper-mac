@@ -295,8 +295,11 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
             }
             XCTAssertEqual(
                 error.localizedDescription,
-                "Live Preview Readiness is not available. Transcription authentication is unavailable. "
-                    + "Check its setup in Integrations or choose another engine in Settings > Dictation."
+                [
+                    String(localized: "\("Live Preview Readiness") is not available."),
+                    "Transcription authentication is unavailable.",
+                    String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation."),
+                ].joined(separator: " ")
             )
         }
     }

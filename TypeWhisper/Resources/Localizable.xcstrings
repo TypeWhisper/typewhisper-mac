@@ -51158,6 +51158,50 @@
           }
         }
       }
+    },
+    "It is not installed or is disabled." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie ist nicht installiert oder deaktiviert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インストールされていないか、無効になっています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它未安装或已被禁用。"
+          }
+        }
+      }
+    },
+    "It has no downloaded model." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sie hat kein heruntergeladenes Modell."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロード済みのモデルがありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "它没有已下载的模型。"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"

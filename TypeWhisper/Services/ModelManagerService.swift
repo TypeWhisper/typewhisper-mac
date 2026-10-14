@@ -306,14 +306,14 @@ final class ModelManagerService: ObservableObject {
     func transcriptionReadinessError(providerId: String?) -> TranscriptionEngineError? {
         guard let providerId else { return .noEngineSelected }
         guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
-            return .engineUnavailable(engineName: nil, reason: "It is not installed or is disabled.")
+            return .engineUnavailable(engineName: nil, reason: String(localized: "It is not installed or is disabled."))
         }
         let authStatus = transcriptionAuthStatus(for: engine)
         guard authStatus.isAvailable else {
             return .engineUnavailable(engineName: engine.providerDisplayName, reason: authStatus.unavailableReason)
         }
         if lacksDownloadedModel(engine) {
-            return .engineUnavailable(engineName: engine.providerDisplayName, reason: "It has no downloaded model.")
+            return .engineUnavailable(engineName: engine.providerDisplayName, reason: String(localized: "It has no downloaded model."))
         }
         return nil
     }
