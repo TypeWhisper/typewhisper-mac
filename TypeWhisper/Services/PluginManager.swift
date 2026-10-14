@@ -444,18 +444,24 @@ final class PluginManager: ObservableObject {
     }
 
     func loadedTranscriptionPlugin(for providerId: String) -> LoadedPlugin? {
-        loadedPlugins.first {
-            guard $0.isEnabled else { return false }
-            if let engine = $0.instance as? TranscriptionEnginePlugin,
-               engine.providerId == providerId {
-                return true
-            }
-            if let expanded = $0.instance as? AdditionalTranscriptionEnginesProviding,
-               expanded.additionalTranscriptionEngines.contains(where: { $0.providerId == providerId }) {
-                return true
-            }
-            return false
+        loadedPlugins.first { $0.isEnabled && Self.plugin($0, provides: providerId) }
+    }
+
+    /// Also finds disabled plugins, so callers can open the page where one gets re-enabled.
+    func installedTranscriptionPlugin(for providerId: String) -> LoadedPlugin? {
+        loadedPlugins.first { Self.plugin($0, provides: providerId) }
+    }
+
+    private static func plugin(_ plugin: LoadedPlugin, provides providerId: String) -> Bool {
+        if let engine = plugin.instance as? TranscriptionEnginePlugin,
+           engine.providerId == providerId {
+            return true
         }
+        if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding,
+           expanded.additionalTranscriptionEngines.contains(where: { $0.providerId == providerId }) {
+            return true
+        }
+        return false
     }
 
     func ttsProvider(for providerId: String) -> TTSProviderPlugin? {

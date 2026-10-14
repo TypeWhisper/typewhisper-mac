@@ -1462,6 +1462,42 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
+    func testEngineErrorsOpenTheInstalledPluginPageEvenWhenItIsDisabled() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        addTeardownBlock { @MainActor in
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: FileTranscriptionModelListPlugin.pluginId,
+                    name: FileTranscriptionModelListPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "FileTranscriptionModelListPlugin"
+                ),
+                instance: FileTranscriptionModelListPlugin(providerId: "disabled-engine", modelIDs: ["m"]),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: false
+            )
+        ]
+        PluginManager.shared = pluginManager
+
+        // A disabled engine is not usable, but it is still installed, and its own page is where it gets re-enabled.
+        XCTAssertNil(pluginManager.loadedTranscriptionPlugin(for: "disabled-engine"))
+        XCTAssertEqual(pluginManager.installedTranscriptionPlugin(for: "disabled-engine")?.id, FileTranscriptionModelListPlugin.pluginId)
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(
+                forTranscriptionError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil),
+                providerId: "disabled-engine"
+            ),
+            .installedPlugin(pluginId: FileTranscriptionModelListPlugin.pluginId)
+        )
+    }
+
     func testAutomaticRecoveryFallbackRejectsCancellation() {
         XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: CancellationError()))
         XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: URLError(.cancelled)))
