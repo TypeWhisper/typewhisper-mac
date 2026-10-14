@@ -1,3 +1,5 @@
+require "digest"
+
 # Mac App Store edition screenshots.
 #
 # Captures the App Store edition (APPSTORE build of TypeWhisperAppStore.xcodeproj)
@@ -305,9 +307,11 @@ end
 def upload_mac_store_screenshots!(version)
   localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
   display_type = Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_DESKTOP
+  missing = APPSTORE_STORE_SCREENSHOT_LOCALES - localizations.keys
+  UI.user_error!("Missing remote version locales #{missing.join(', ')}; upload the store text first") unless missing.empty?
+
   APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
     localization = localizations[locale]
-    UI.user_error!("Missing remote version locale #{locale}; upload the store text first") unless localization
     localization.get_app_screenshot_sets
       .select { |set| set.screenshot_display_type == display_type }
       .each(&:delete!)
@@ -323,9 +327,9 @@ end
 def verify_mac_store_screenshots!(version)
   localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
   display_type = Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_DESKTOP
-  deadline = Time.now + APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT
   APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
-    expected = composed_mac_store_screenshots(locale).map { |path| File.basename(path) }
+    deadline = Time.now + APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT
+    expected = composed_mac_store_screenshots(locale).map { |path| [File.basename(path), Digest::MD5.file(path).hexdigest] }
     actual = nil
     loop do
       set = localizations[locale]&.get_app_screenshot_sets&.find { |candidate| candidate.screenshot_display_type == display_type }
@@ -340,7 +344,8 @@ def verify_mac_store_screenshots!(version)
       UI.message("Waiting for #{pending} #{locale} screenshots to finish processing")
       sleep(5)
     end
-    unless actual.map(&:file_name) == expected
+    # source_file_checksum is the MD5 of the uploaded file.
+    unless actual.map { |screenshot| [screenshot.file_name, screenshot.source_file_checksum] } == expected
       UI.user_error!("#{locale} screenshots differ in App Store Connect: #{actual.map(&:file_name).join(', ')}")
     end
   end
