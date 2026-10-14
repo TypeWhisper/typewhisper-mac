@@ -2,6 +2,37 @@ import XCTest
 @testable import TypeWhisper
 
 final class IndicatorTranscriptPreviewSizingTests: XCTestCase {
+    func testTranscriptAreaFollowsItsTextUpToTheMaximum() {
+        // One line of 13 pt text plus padding; a single sentence no longer opens the full box.
+        XCTAssertEqual(
+            IndicatorExpandableText.visibleHeight(contentHeight: 45, expanded: true, maximum: 100, fontSize: 13),
+            45
+        )
+        XCTAssertEqual(
+            IndicatorExpandableText.visibleHeight(contentHeight: 180, expanded: true, maximum: 100, fontSize: 13),
+            100
+        )
+    }
+
+    func testTranscriptAreaKeepsOneLineBeforeTextArrives() {
+        let singleLine = (13 * 1.25).rounded(.up) + 2 * IndicatorExpandableText.verticalPadding
+        XCTAssertEqual(
+            IndicatorExpandableText.visibleHeight(contentHeight: 0, expanded: true, maximum: 100, fontSize: 13),
+            singleLine
+        )
+    }
+
+    func testTranscriptAreaCollapsesWhenNotExpanded() {
+        XCTAssertEqual(
+            IndicatorExpandableText.visibleHeight(contentHeight: 60, expanded: false, maximum: 100, fontSize: 13),
+            0
+        )
+        XCTAssertEqual(
+            IndicatorExpandableText.visibleHeight(contentHeight: 60, expanded: true, maximum: 0, fontSize: 12),
+            0
+        )
+    }
+
     func testNotchExpandedHeightScalesWithFontSize() {
         XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch, offset: 0), 80)
         XCTAssertEqual(DictationViewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch, offset: 8), 134)

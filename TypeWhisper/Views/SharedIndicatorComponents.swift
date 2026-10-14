@@ -359,9 +359,38 @@ struct IndicatorRecordingContent: View {
 struct IndicatorExpandableText: View {
     let text: String
     let fontSize: CGFloat
+    /// Upper bound; the area only grows this tall once the text needs it.
     let expandedHeight: CGFloat
     let expanded: Bool
     let contentPadding: CGFloat
+    /// Lets a container that draws its own body (the notch) follow the text height.
+    var onContentHeightChange: ((CGFloat) -> Void)? = nil
+
+    @State private var contentHeight: CGFloat = 0
+
+    nonisolated static let verticalPadding: CGFloat = 14
+
+    /// Height for the transcript area: at least one line, at most `maximum`, otherwise
+    /// what the text needs. A fixed maximum left a single sentence in a mostly empty box.
+    nonisolated static func visibleHeight(
+        contentHeight: CGFloat,
+        expanded: Bool,
+        maximum: CGFloat,
+        fontSize: CGFloat
+    ) -> CGFloat {
+        guard expanded, maximum > 0 else { return 0 }
+        let singleLine = (fontSize * 1.25).rounded(.up) + 2 * verticalPadding
+        return min(max(contentHeight, singleLine), maximum)
+    }
+
+    private var visibleHeight: CGFloat {
+        Self.visibleHeight(
+            contentHeight: contentHeight,
+            expanded: expanded,
+            maximum: expandedHeight,
+            fontSize: fontSize
+        )
+    }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -371,10 +400,16 @@ struct IndicatorExpandableText: View {
                     .foregroundStyle(Color.primary.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, contentPadding)
-                    .padding(.vertical, 14)
+                    .padding(.vertical, Self.verticalPadding)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.height
+                    } action: { height in
+                        contentHeight = height
+                        onContentHeightChange?(height)
+                    }
                     .id("bottom")
             }
-            .frame(height: expanded ? expandedHeight : 0)
+            .frame(height: visibleHeight)
             .clipped()
             .onChange(of: text) {
                 withAnimation(nil) {
