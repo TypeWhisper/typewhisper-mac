@@ -280,24 +280,45 @@ final class FinderTranscriptionService: NSObject {
     }
 }
 
+/// Only the recording flag reaches the status item. Observing the dictation view model
+/// directly re-rendered the icon for every audio level sample during a dictation.
+@MainActor
+private final class MenuBarIconModel: ObservableObject {
+    @Published private(set) var isRecordingActive: Bool
+    private var cancellable: AnyCancellable?
+
+    init(
+        dictation: DictationViewModel = .shared,
+        recorder: AudioRecorderViewModel = .shared
+    ) {
+        isRecordingActive = MenuBarIconState.isRecordingActive(
+            dictationState: dictation.state,
+            recorderState: recorder.state
+        )
+        cancellable = Publishers.CombineLatest(dictation.$state, recorder.$state)
+            .map { MenuBarIconState.isRecordingActive(dictationState: $0, recorderState: $1) }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] active in
+                self?.isRecordingActive = active
+            }
+    }
+}
+
 private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
-    @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @StateObject private var icon = MenuBarIconModel()
 
     private var title: String {
         AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
     }
 
     private var isRecordingActive: Bool {
-        MenuBarIconState.isRecordingActive(
-            dictationState: dictation.state,
-            recorderState: recorder.state
-        )
+        icon.isRecordingActive
     }
 
     var body: some View {
-        Image(nsImage: MenuBarLogoMarkImage.image(isRecordingActive: isRecordingActive))
+        Image(nsImage: MenuBarLogoMarkImage.cachedImage(isRecordingActive: isRecordingActive))
             .resizable()
             .renderingMode(isRecordingActive ? .original : .template)
             .frame(width: 18, height: 18)
@@ -332,6 +353,14 @@ private struct ManagedWindowOpenerRegistrar: View {
 enum MenuBarLogoMarkImage {
     static let size = CGSize(width: 18, height: 18)
     private static let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
+
+    @MainActor private static let idleImage = image(isRecordingActive: false)
+    @MainActor private static let recordingImage = image(isRecordingActive: true)
+
+    /// Both states are drawn once; the status item swaps between them.
+    @MainActor static func cachedImage(isRecordingActive: Bool) -> NSImage {
+        isRecordingActive ? recordingImage : idleImage
+    }
 
     static func image(isRecordingActive: Bool) -> NSImage {
         let image = NSImage(size: size)

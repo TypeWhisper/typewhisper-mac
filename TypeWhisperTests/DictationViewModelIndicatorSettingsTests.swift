@@ -2224,6 +2224,19 @@ final class MenuBarLogoMarkImageTests: XCTestCase {
         XCTAssertTrue(idleImage.isTemplate)
         XCTAssertFalse(recordingImage.isTemplate)
     }
+
+    @MainActor
+    func testCachedImagesAreReusedAcrossStateChanges() {
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: false)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: false)
+        )
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: true)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: true)
+        )
+        XCTAssertFalse(MenuBarLogoMarkImage.cachedImage(isRecordingActive: true).isTemplate)
+    }
 }
 
 final class RecorderMenuActionStateTests: XCTestCase {
