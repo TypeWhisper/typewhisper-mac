@@ -330,6 +330,9 @@ def verify_mac_store_screenshots!(version)
   APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
     deadline = Time.now + APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT
     expected = composed_mac_store_screenshots(locale).map { |path| [File.basename(path), Digest::MD5.file(path).hexdigest] }
+    unless expected.count == APPSTORE_STORE_SCREENSHOT_STATES.count
+      UI.user_error!("Expected #{APPSTORE_STORE_SCREENSHOT_STATES.count} composed #{locale} screenshots, found #{expected.count}; run mac appstore_screenshots_upload")
+    end
     actual = nil
     loop do
       set = localizations[locale]&.get_app_screenshot_sets&.find { |candidate| candidate.screenshot_display_type == display_type }
@@ -337,9 +340,9 @@ def verify_mac_store_screenshots!(version)
       actual = set.app_screenshots.to_a
       failed = actual.select(&:error?)
       UI.user_error!("#{locale}: processing failed for #{failed.map(&:file_name).join(', ')}") unless failed.empty?
-      break if actual.all?(&:complete?)
+      break if actual.count == expected.count && actual.all?(&:complete?)
 
-      pending = actual.reject(&:complete?).count
+      pending = expected.count - actual.count(&:complete?)
       UI.user_error!("#{locale}: #{pending} screenshots are still processing after #{APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT} seconds") if Time.now > deadline
       UI.message("Waiting for #{pending} #{locale} screenshots to finish processing")
       sleep(5)
