@@ -168,7 +168,6 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
         )
         guard !links.isEmpty else { return nil }
 
-        let organizer = event.organizer.map(Self.participantMetadata)
         let attendees = event.attendees ?? []
         return CalendarMeetingOccurrence(
             eventIdentifier: eventIdentifier,
@@ -180,24 +179,27 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
             participationStatus: participationStatus,
             meetingLinks: links,
             location: Self.normalized(event.location),
-            organizer: organizer,
+            organizer: event.organizer.map(Self.participantMetadata),
             attendees: attendees.map(Self.participantMetadata),
             hasOtherParticipants: CalendarMeetingOccurrence.hasOtherParticipants(
-                organizer: organizer,
-                attendees: attendees
-                    .filter { Self.countsAsAttendee($0.participantType) }
-                    .map(Self.participantMetadata)
+                organizer: event.organizer.flatMap(Self.personMetadata),
+                attendees: attendees.compactMap(Self.personMetadata)
             )
         )
     }
 
-    /// Booked rooms and equipment do not make a private block a meeting with others.
-    nonisolated static func countsAsAttendee(_ type: EKParticipantType) -> Bool {
+    /// Booked rooms and equipment do not make a private block a meeting with others,
+    /// whether they appear as attendees or as the organizer.
+    nonisolated static func countsAsParticipant(_ type: EKParticipantType) -> Bool {
         switch type {
         case .room, .resource: false
         case .person, .group, .unknown: true
         @unknown default: true
         }
+    }
+
+    private static func personMetadata(_ participant: EKParticipant) -> CalendarMeetingParticipant? {
+        countsAsParticipant(participant.participantType) ? participantMetadata(participant) : nil
     }
 
     private static func participantMetadata(

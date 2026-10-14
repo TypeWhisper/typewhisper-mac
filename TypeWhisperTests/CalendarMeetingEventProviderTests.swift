@@ -73,12 +73,12 @@ final class CalendarMeetingEventProviderTests: XCTestCase {
         ))
     }
 
-    func testRoomsAndResourcesDoNotCountAsOtherAttendees() {
-        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsAttendee(.room))
-        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsAttendee(.resource))
-        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsAttendee(.person))
-        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsAttendee(.group))
-        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsAttendee(.unknown))
+    func testRoomsAndResourcesDoNotCountAsOtherParticipants() {
+        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsParticipant(.room))
+        XCTAssertFalse(EventKitCalendarMeetingProvider.countsAsParticipant(.resource))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.person))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.group))
+        XCTAssertTrue(EventKitCalendarMeetingProvider.countsAsParticipant(.unknown))
     }
 
     func testJoinWindowIncludesLeadAndThirtyMinuteTail() {

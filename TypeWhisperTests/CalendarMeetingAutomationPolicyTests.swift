@@ -1057,6 +1057,87 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         )
     }
 
+    func testCalendarRefreshThatMakesEventSoloCancelsPendingAutomaticStart() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let team = makeCalendarMeetingTestOccurrence(start: now)
+        let nowSolo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        XCTAssertEqual(team.id, nowSolo.id)
+        let confirming = configuration(mode: .automatic, confirmSoloEvents: true)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(confirming, occurrences: [team], now: now))
+        _ = policy.reduce(.activity([signal(for: team)], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains(
+            .showStartCountdown(team, deadline: now.addingTimeInterval(8))
+        ))
+
+        // The only other attendee was removed while the countdown ran.
+        let refreshed = policy.reduce(.configure(
+            confirming,
+            occurrences: [nowSolo],
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertTrue(refreshed.contains(.dismissStartCountdown))
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(11))),
+            [.publishDetectedMeeting(nowSolo)]
+        )
+    }
+
+    func testCalendarRefreshThatMakesEventSoloDropsBusyRecorderRetry() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let team = makeCalendarMeetingTestOccurrence(start: now)
+        let nowSolo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        let confirming = configuration(mode: .automatic, confirmSoloEvents: true)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(confirming, occurrences: [team], now: now))
+        _ = policy.reduce(.recorderReadiness(.recorderBusy, now: now))
+        _ = policy.reduce(.activity([signal(for: team)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+
+        var effects = policy.reduce(.configure(
+            confirming,
+            occurrences: [nowSolo],
+            now: now.addingTimeInterval(4)
+        ))
+        effects += policy.reduce(.recorderReadiness(.idle, now: now.addingTimeInterval(5)))
+        effects += policy.reduce(.timeAdvanced(now.addingTimeInterval(30)))
+
+        XCTAssertFalse(effects.contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+        XCTAssertTrue(effects.contains(.publishDetectedMeeting(nowSolo)))
+    }
+
+    func testCalendarRefreshKeepsPendingStartOfArmedSoloEvent() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let solo = makeCalendarMeetingTestOccurrence(start: now, hasOtherParticipants: false)
+        let confirming = configuration(mode: .automatic, confirmSoloEvents: true)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(confirming, occurrences: [solo], now: now))
+        _ = policy.reduce(.userAction(.armOccurrence(solo.id), now: now))
+        _ = policy.reduce(.activity([signal(for: solo)], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains(
+            .showStartCountdown(solo, deadline: now.addingTimeInterval(8))
+        ))
+
+        let refreshed = policy.reduce(.configure(
+            confirming,
+            occurrences: [solo],
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertFalse(refreshed.contains(.dismissStartCountdown))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains(
+            .startRecording(solo, identity)
+        ))
+    }
+
     private func configuration(
         mode: CalendarMeetingStartMode,
         autoStop: Bool = false,

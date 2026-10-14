@@ -462,12 +462,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 at: now
             )
             guard signalStillPresent,
-                  occurrence(for: pendingStart.occurrenceDigest)?.isInsideJoinWindow(at: now) == true,
-                  !configuration.suppressedOccurrenceDigests.contains(
-                      pendingStart.occurrenceDigest
-                  ),
-                  !recordedOccurrenceDigests.contains(pendingStart.occurrenceDigest),
-                  !permanentStartFailureDigests.contains(pendingStart.occurrenceDigest) else {
+                  let occurrence = consentedStartOccurrence(
+                      digest: pendingStart.occurrenceDigest,
+                      identity: pendingStart.identity,
+                      at: now
+                  ) else {
                 dwellStates.removeValue(forKey: pendingStart.occurrenceDigest)
                 clearPendingStart(effects: &effects)
                 return
@@ -478,11 +477,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                     clearPendingStart(effects: &effects)
                     return
                 }
-                if let occurrence = occurrence(for: pendingStart.occurrenceDigest) {
-                    startRequestedDigest = occurrence.occurrenceDigest
-                    effects.append(.startRecording(occurrence, pendingStart.identity))
-                    clearPendingStart(effects: &effects)
-                }
+                startRequestedDigest = occurrence.occurrenceDigest
+                effects.append(.startRecording(occurrence, pendingStart.identity))
+                clearPendingStart(effects: &effects)
             }
             return
         }
@@ -626,6 +623,22 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         return occurrence
     }
 
+    /// Calendar refreshes can change an occurrence while a start waits for its countdown or
+    /// an idle recorder, so consent is checked again: automatic occurrences may start on
+    /// their own, reminder occurrences only after the user armed them.
+    private func consentedStartOccurrence(
+        digest: String,
+        identity: CalendarMeetingCanonicalLink,
+        at now: Date
+    ) -> CalendarMeetingOccurrence? {
+        guard let occurrence = eligibleStartOccurrence(digest: digest, identity: identity, at: now),
+              configuration.startMode(for: occurrence) == .automatic
+                || armedOccurrenceDigests.contains(digest) else {
+            return nil
+        }
+        return occurrence
+    }
+
     private func startEvidenceIsPresent(
         digest: String,
         identity: CalendarMeetingCanonicalLink,
@@ -679,11 +692,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         effects: inout [CalendarMeetingAutomationEffect]
     ) {
         guard pendingStart == nil,
-              let occurrence = occurrence(for: digest),
-              occurrence.isInsideJoinWindow(at: now),
-              !configuration.suppressedOccurrenceDigests.contains(digest),
-              !recordedOccurrenceDigests.contains(digest),
-              !permanentStartFailureDigests.contains(digest),
+              let occurrence = consentedStartOccurrence(digest: digest, identity: identity, at: now),
               startEvidenceIsPresent(digest: digest, identity: identity, at: now) else {
             return
         }
