@@ -1470,18 +1470,36 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let messages = errors.map(\.localizedDescription)
 
         XCTAssertEqual(Set(messages).count, messages.count)
-        XCTAssertTrue(messages.allSatisfy { $0.contains("Settings") || $0.contains("try again") })
+        XCTAssertTrue(messages.allSatisfy { !$0.isEmpty })
+        // The texts are localized, so expectations go through the same catalog lookups.
+        let unavailableHint = String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation.")
         XCTAssertEqual(
             TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "API key missing").localizedDescription,
-            "Cloud is not available. API key missing. Check its setup in Integrations or choose another engine in Settings > Dictation."
+            [String(localized: "\("Cloud") is not available."), "API key missing.", unavailableHint].joined(separator: " ")
+        )
+        // Reasons from the Japanese and Chinese catalogs already end in "。" and get no extra period.
+        XCTAssertEqual(
+            TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "ダウンロード済みのモデルがありません。").localizedDescription,
+            [String(localized: "\("Cloud") is not available."), "ダウンロード済みのモデルがありません。", unavailableHint].joined(separator: " ")
         )
         XCTAssertEqual(
             TranscriptionEngineError.modelLoadFailed("Downloaded model is missing.").localizedDescription,
-            "Failed to load the selected model. Downloaded model is missing. Try again, or choose another model in Settings > Dictation."
+            [
+                String(localized: "Failed to load the selected model."),
+                "Downloaded model is missing.",
+                String(localized: "Try again, or choose another model under Settings > Dictation."),
+            ].joined(separator: " ")
         )
         XCTAssertEqual(
             TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil).localizedDescription,
-            "The selected transcription engine is not available. Check its setup in Integrations or choose another engine in Settings > Dictation."
+            [
+                String(localized: "\(String(localized: "The selected transcription engine")) is not available."),
+                unavailableHint,
+            ].joined(separator: " ")
+        )
+        XCTAssertFalse(
+            TranscriptionEngineError.noEngineSelected.localizedDescription.contains("Integrations"),
+            "The sidebar has no Integrations page; errors must name Discover plugins instead."
         )
     }
 
@@ -1496,6 +1514,19 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             .integrations
         )
         XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .integrations)
+        // An engine that is not installed still leads to Discover plugins.
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
+            .integrations
+        )
+        // The same holds before the plugin system has been set up at all.
+        let previousPluginManager = PluginManager.shared
+        defer { PluginManager.shared = previousPluginManager }
+        PluginManager.shared = nil
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
+            .integrations
+        )
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: UnknownTranscriptionError()))
@@ -1507,6 +1538,42 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                 )
             ),
             .integrations
+        )
+    }
+
+    func testEngineErrorsOpenTheInstalledPluginPageEvenWhenItIsDisabled() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        addTeardownBlock { @MainActor in
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: FileTranscriptionModelListPlugin.pluginId,
+                    name: FileTranscriptionModelListPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "FileTranscriptionModelListPlugin"
+                ),
+                instance: FileTranscriptionModelListPlugin(providerId: "disabled-engine", modelIDs: ["m"]),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: false
+            )
+        ]
+        PluginManager.shared = pluginManager
+
+        // A disabled engine is not usable, but it is still installed, and its own page is where it gets re-enabled.
+        XCTAssertNil(pluginManager.loadedTranscriptionPlugin(for: "disabled-engine"))
+        XCTAssertEqual(pluginManager.installedTranscriptionPlugin(for: "disabled-engine")?.id, FileTranscriptionModelListPlugin.pluginId)
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(
+                forTranscriptionError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil),
+                providerId: "disabled-engine"
+            ),
+            .installedPlugin(pluginId: FileTranscriptionModelListPlugin.pluginId)
         )
     }
 

@@ -168,17 +168,17 @@ final class AudioRecorderViewModel: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .noSourceEnabled:
-                "At least one audio source must be enabled."
+                String(localized: "At least one audio source must be enabled.")
             case .alreadyRecording:
-                "Already recording"
+                String(localized: "Already recording")
             case .finalizing:
-                "Recorder is finalizing"
+                String(localized: "Recorder is finalizing")
             case .retranscribing:
-                "Recorder is transcribing an existing recording"
+                String(localized: "Recorder is transcribing an existing recording")
             case .notRecording:
-                "Not recording"
+                String(localized: "Not recording")
             case .calendarRecordingHandleMismatch:
-                "The calendar-started recording is no longer active."
+                String(localized: "The calendar-started recording is no longer active.")
             }
         }
     }

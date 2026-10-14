@@ -1015,6 +1015,48 @@ final class MenuBarGroupingTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testDictationShortcutsListEveryConfiguredSlotWithItsMode() {
+        let shortcuts = MenuBarStatusFormatting.dictationShortcuts { slot in
+            switch slot {
+            case .hybrid: ["Fn", "Fn F13"]
+            case .toggle: ["⌥⌘A"]
+            default: []
+            }
+        }
+
+        XCTAssertEqual(
+            shortcuts.map(\.title),
+            ["Fn (\(String(localized: "Hybrid")))", "Fn F13 (\(String(localized: "Hybrid")))", "⌥⌘A (\(String(localized: "Toggle")))"]
+        )
+        XCTAssertTrue(MenuBarStatusFormatting.dictationShortcuts { _ in [] }.isEmpty)
+    }
+
+    func testErrorStatusTextKeepsShortMessagesAndCutsLongOnes() {
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText("  Microphone permission required. \n"),
+            "Microphone permission required."
+        )
+
+        let long = String(repeating: "word ", count: 40)
+        let cut = MenuBarStatusFormatting.errorStatusText(long, limit: 20)
+        XCTAssertEqual(cut, "word word word word…")
+
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText(
+                "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins."
+            ),
+            "No transcription engine selected."
+        )
+        // Japanese sentences end in "。", which counts as a sentence end as well.
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText(
+                "文字起こしエンジンが選択されていません。設定 > ディクテーションで選択するか、プラグインを見つけるからインストールしてください。"
+            ),
+            "文字起こしエンジンが選択されていません。"
+        )
+    }
+
     func testMenuBarSectionsContainExpectedItems() {
         XCTAssertEqual(
             MenuBarMenuSection.general.items,
@@ -1195,6 +1237,30 @@ final class IndicatorPresentationStateTests: XCTestCase {
             visibility: .never,
             presentation: recorderPresentation
         ))
+    }
+
+    func testErrorFeedbackStillShowsWhenIndicatorIsSetToNever() {
+        let errorFeedback = IndicatorPresentationState.resolve(
+            dictationState: .inserting,
+            recorderState: .idle,
+            isErrorFeedback: true
+        )
+        let successFeedback = IndicatorPresentationState.resolve(
+            dictationState: .inserting,
+            recorderState: .idle,
+            isErrorFeedback: false
+        )
+        let recordingWithStaleFlag = IndicatorPresentationState.resolve(
+            dictationState: .recording,
+            recorderState: .idle,
+            isErrorFeedback: true
+        )
+
+        XCTAssertTrue(errorFeedback.isErrorFeedback)
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(visibility: .never, presentation: errorFeedback))
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(visibility: .never, presentation: successFeedback))
+        XCTAssertFalse(recordingWithStaleFlag.isErrorFeedback)
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(visibility: .never, presentation: recordingWithStaleFlag))
     }
 
     func testPreviewFillsInOnlyWhileIdleAndIgnoresVisibility() {
@@ -2164,6 +2230,19 @@ final class MenuBarLogoMarkImageTests: XCTestCase {
         XCTAssertEqual(recordingImage.size, MenuBarLogoMarkImage.size)
         XCTAssertTrue(idleImage.isTemplate)
         XCTAssertFalse(recordingImage.isTemplate)
+    }
+
+    @MainActor
+    func testCachedImagesAreReusedAcrossStateChanges() {
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: false)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: false)
+        )
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: true)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: true)
+        )
+        XCTAssertFalse(MenuBarLogoMarkImage.cachedImage(isRecordingActive: true).isTemplate)
     }
 }
 

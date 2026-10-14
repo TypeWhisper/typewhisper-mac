@@ -4198,7 +4198,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let stopJSON = try Self.jsonObject(stopResponse)
         XCTAssertEqual(stopResponse.status, 409)
-        XCTAssertEqual((stopJSON["error"] as? [String: Any])?["message"] as? String, "Not recording")
+        XCTAssertEqual((stopJSON["error"] as? [String: Any])?["message"] as? String, String(localized: "Not recording"))
 
         let transcriptionResponse = await router.route(
             HTTPRequest(
@@ -4260,7 +4260,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let json = try Self.jsonObject(response)
 
         XCTAssertEqual(response.status, 400)
-        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "At least one audio source must be enabled.")
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, String(localized: "At least one audio source must be enabled."))
     }
 
     func testRecorderStopWithoutRecordingReturnsConflict() async throws {
@@ -4280,7 +4280,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let json = try Self.jsonObject(response)
 
         XCTAssertEqual(response.status, 409)
-        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "Not recording")
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, String(localized: "Not recording"))
     }
 
     func testRecorderEndpointsReturnSessionIDAndCompletedTranscript() async throws {
@@ -4503,7 +4503,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(stopResponse.status, 200)
 
         XCTAssertEqual(secondStartResponse.status, 409)
-        XCTAssertEqual((secondStart["error"] as? [String: Any])?["message"] as? String, "Already recording")
+        XCTAssertEqual((secondStart["error"] as? [String: Any])?["message"] as? String, String(localized: "Already recording"))
     }
 
     func testRecorderSessionRejectsInvalidID() async throws {
@@ -13310,9 +13310,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
-            "Microphone permission required."
+            String(localized: "Microphone permission required.")
         )
         XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
+
+        // The menu bar keeps the error after the indicator feedback is gone.
+        XCTAssertEqual(
+            context.dictationViewModel.lastDictationError,
+            DictationViewModel.ErrorSummary(
+                message: String(localized: "Microphone permission required."),
+                settingsTab: .home
+            )
+        )
+        // Taking the indicator's action (here: Open Settings) clears it as well.
+        context.dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
+        XCTAssertNil(context.dictationViewModel.lastDictationError)
     }
 
     @MainActor

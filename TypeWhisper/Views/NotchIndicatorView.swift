@@ -14,6 +14,7 @@ struct NotchIndicatorView: View {
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
     @State private var dotPulse = false
+    @State private var transcriptContentHeight: CGFloat = 0
 
     private let contentPadding: CGFloat = 28
     private let sizing: IndicatorSizing = .notch
@@ -138,7 +139,12 @@ struct NotchIndicatorView: View {
     }
 
     private var transcriptBodyHeight: CGFloat {
-        hasTranscriptSection && textExpanded ? viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch) : 0
+        IndicatorExpandableText.visibleHeight(
+            contentHeight: transcriptContentHeight,
+            expanded: hasTranscriptSection && textExpanded,
+            maximum: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
+            fontSize: transcriptFontSize
+        )
     }
 
     private var transcriptFontSize: CGFloat {
@@ -408,7 +414,8 @@ struct NotchIndicatorView: View {
             fontSize: transcriptFontSize,
             expandedHeight: viewModel.indicatorTranscriptPreviewExpandedHeight(for: .notch),
             expanded: true,
-            contentPadding: 34
+            contentPadding: 34,
+            onContentHeightChange: { transcriptContentHeight = $0 }
         )
         .opacity(textExpanded ? 1 : 0.72)
     }

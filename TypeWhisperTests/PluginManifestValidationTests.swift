@@ -847,7 +847,7 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
             return XCTFail("Expected the engine to be reported as unavailable")
         }
         XCTAssertEqual(engineName, "Mock Local Engine")
-        XCTAssertEqual(reason, "It has no downloaded model.")
+        XCTAssertEqual(reason, String(localized: "It has no downloaded model."))
     }
 
     func testTranscriptionWithModellessEngineFailsBeforePreparation() async throws {
@@ -881,8 +881,11 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         } catch {
             XCTAssertEqual(
                 error.localizedDescription,
-                "Mock Local Engine is not available. It has no downloaded model. "
-                    + "Check its setup in Integrations or choose another engine in Settings > Dictation."
+                [
+                    String(localized: "\("Mock Local Engine") is not available."),
+                    String(localized: "It has no downloaded model."),
+                    String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation."),
+                ].joined(separator: " ")
             )
         }
 
@@ -895,7 +898,7 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
             )
             XCTFail("Expected the missing model to stop the live session")
         } catch let TranscriptionEngineError.engineUnavailable(_, reason) {
-            XCTAssertEqual(reason, "It has no downloaded model.")
+            XCTAssertEqual(reason, String(localized: "It has no downloaded model."))
         }
 
         XCTAssertEqual(local.restoreRequests, 0)

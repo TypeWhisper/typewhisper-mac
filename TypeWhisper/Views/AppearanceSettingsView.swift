@@ -166,6 +166,12 @@ struct AppearanceSettingsView: View {
                         Text(String(localized: "Never")).tag(NotchIndicatorVisibility.never)
                     }
 
+                    if dictation.notchIndicatorVisibility == .never {
+                        Text(String(localized: "Errors still appear briefly so you can react to them."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Picker(String(localized: "Display"), selection: $dictation.notchIndicatorDisplay) {
                         Text(String(localized: "Active Screen")).tag(NotchIndicatorDisplay.activeScreen)
                         Text(String(localized: "Primary Screen")).tag(NotchIndicatorDisplay.primaryScreen)

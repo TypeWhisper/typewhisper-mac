@@ -213,6 +213,13 @@ final class DictationViewModel: ObservableObject {
         case error(String)
     }
 
+    /// A failed dictation as the menu bar shows it: the message and, for setup
+    /// problems, the Settings page that fixes them.
+    struct ErrorSummary: Equatable {
+        let message: String
+        let settingsTab: SettingsTab?
+    }
+
     private enum CancelWarningTarget {
         case recording
         case processing
@@ -223,6 +230,18 @@ final class DictationViewModel: ObservableObject {
         case openDictationRecovery
         case openSettings(SettingsTab)
         case insertUndeliveredTranscript(UndeliveredTranscript)
+
+        /// The Settings page the menu bar offers for this error, if the action opens one.
+        var settingsTab: SettingsTab? {
+            switch self {
+            case .openSettings(let tab):
+                tab
+            case .openDictationRecovery:
+                .dictationRecovery
+            case .undoLearnedCorrections, .insertUndeliveredTranscript:
+                nil
+            }
+        }
 
         var title: String {
             switch self {
@@ -380,6 +399,9 @@ final class DictationViewModel: ObservableObject {
     @Published private(set) var actionFeedbackActionTitle: String?
     @Published private(set) var actionFeedbackRemainingFraction: Double = 0
     @Published private(set) var actionFeedbackIsPaused = false
+    /// Kept after the indicator feedback has faded, until the next dictation starts
+    /// or the user acts on it from the menu bar.
+    @Published private(set) var lastDictationError: ErrorSummary?
     @Published private var isProcessingStandaloneWorkflow = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
@@ -1903,7 +1925,10 @@ final class DictationViewModel: ObservableObject {
             showError(
                 errorMessage,
                 category: "recording",
-                settingsTab: Self.settingsTab(forTranscriptionError: readinessError)
+                settingsTab: Self.settingsTab(
+                    forTranscriptionError: readinessError,
+                    providerId: modelManager.selectedProviderId
+                )
             )
             // Resync the hotkey toggle: HotkeyService already flipped isActive=true
             // before invoking onDictationStart. Without this, a rejected start leaves
@@ -1914,10 +1939,11 @@ final class DictationViewModel: ObservableObject {
         }
 
         guard audioRecordingService.hasMicrophonePermission else {
-            let errorMessage = "Microphone permission required."
+            let errorMessage = String(localized: "Microphone permission required.")
             logger.warning("startRecording rejected: microphone permission missing; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
-            showError(errorMessage, category: "recording")
+            // Home shows the permission card with "Grant Access"; this is not a transient failure.
+            showError(errorMessage, category: "recording", settingsTab: .home)
             hotkeyService.cancelDictation()
             return
         }
@@ -2113,6 +2139,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func beginRecordingPreparation() {
+        lastDictationError = nil
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
         modelManager.cancelAutoUnloadTimer()
@@ -3287,15 +3314,20 @@ final class DictationViewModel: ObservableObject {
                 lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
+                    let fallbackMessage = localizedAppText(
+                        "AI post-processing failed — raw transcription inserted",
+                        de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
+                        ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
+                    )
                     showNotchFeedback(
-                        message: localizedAppText(
-                            "AI post-processing failed — raw transcription inserted",
-                            de: "KI-Nachbearbeitung fehlgeschlagen – Rohtext eingefügt",
-                            ja: "AI後処理に失敗しました — 未処理の文字起こしを挿入しました"
-                        ),
+                        message: fallbackMessage,
                         icon: "exclamationmark.triangle.fill",
                         duration: 4.0
                     )
+                    // The text was delivered, so this stays a warning banner (the failure is
+                    // already in the Error Log above), but the menu bar keeps it with a way to
+                    // the LLM fallbacks on the Workflows page.
+                    lastDictationError = ErrorSummary(message: fallbackMessage, settingsTab: .workflows)
                 }
                 // Shown last so it is not replaced: the transcript still needs a text field.
                 if let undeliveredTranscript {
@@ -3352,7 +3384,10 @@ final class DictationViewModel: ObservableObject {
                     error.localizedDescription,
                     category: "transcription",
                     recoveryPreservation: recoveryPreservation,
-                    settingsTab: Self.settingsTab(forTranscriptionError: error)
+                    settingsTab: Self.settingsTab(
+                        forTranscriptionError: error,
+                        providerId: effectiveEngineOverrideId ?? modelManager.selectedProviderId
+                    )
                 )
                 clearActiveRuleState()
                 capturedActiveApp = nil
@@ -5029,6 +5064,10 @@ final class DictationViewModel: ObservableObject {
     func performActionFeedbackAction(openRecoverySettingsWindow: Bool = true) {
         guard let actionFeedbackAction else { return }
 
+        // The user took the offered way out, so the menu bar stops showing the error.
+        // A failing retry sets a fresh summary through its own error feedback.
+        lastDictationError = nil
+
         switch actionFeedbackAction {
         case .undoLearnedCorrections(let learnedCorrections):
             dictionaryService.undoLearnedCorrections(learnedCorrections)
@@ -5068,6 +5107,8 @@ final class DictationViewModel: ObservableObject {
 
         if isError {
             errorLogService.addEntry(message: message, category: errorCategory)
+            // Every error banner, not only those from showError, stays visible in the menu bar.
+            lastDictationError = ErrorSummary(message: message, settingsTab: action?.settingsTab)
         }
 
         startActionFeedbackLifetime(duration: duration)
@@ -5173,6 +5214,10 @@ final class DictationViewModel: ObservableObject {
         max(baseDuration, min(12.0, Double(message.count) / 25.0))
     }
 
+    func clearLastDictationError() {
+        lastDictationError = nil
+    }
+
     private func showError(
         _ message: String,
         category: String = "general",
@@ -5210,9 +5255,11 @@ final class DictationViewModel: ObservableObject {
     }
 
     /// Settings page where the user can fix a transcription setup error, or nil for transient failures.
-    static func settingsTab(forTranscriptionError error: Error) -> SettingsTab? {
+    /// With the provider known, engine setup errors open that engine's own settings page, which is
+    /// what the message points to; Discover plugins stays the target when the engine is not installed.
+    static func settingsTab(forTranscriptionError error: Error, providerId: String? = nil) -> SettingsTab? {
         if let failure = error as? AutomaticRecoveryFallbackFailure {
-            return settingsTab(forTranscriptionError: failure.primaryError)
+            return settingsTab(forTranscriptionError: failure.primaryError, providerId: providerId)
         }
 
         if let transcriptionError = error as? TranscriptionEngineError {
@@ -5220,7 +5267,7 @@ final class DictationViewModel: ObservableObject {
             case .noEngineSelected, .modelNotLoaded, .modelLoadFailed(_):
                 return .dictation
             case .engineUnavailable(_, _), .appleSpeechModelNotLoaded:
-                return .integrations
+                return engineSettingsTab(providerId: providerId)
             case .transcriptionFailed(_), .modelDownloadFailed(_):
                 return nil
             }
@@ -5229,7 +5276,7 @@ final class DictationViewModel: ObservableObject {
         if let pluginError = error as? PluginTranscriptionError {
             switch pluginError {
             case .notConfigured, .invalidApiKey:
-                return .integrations
+                return engineSettingsTab(providerId: providerId)
             case .noModelSelected:
                 return .dictation
             case .rateLimited, .fileTooLarge, .apiError(_), .networkError(_):
@@ -5238,6 +5285,14 @@ final class DictationViewModel: ObservableObject {
         }
 
         return nil
+    }
+
+    private static func engineSettingsTab(providerId: String?) -> SettingsTab {
+        guard let providerId,
+              let plugin = PluginManager.shared?.installedTranscriptionPlugin(for: providerId) else {
+            return .integrations
+        }
+        return .installedPlugin(pluginId: plugin.id)
     }
 
     private func startRecordingTimer() {
