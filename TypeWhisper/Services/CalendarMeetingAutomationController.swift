@@ -418,7 +418,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     func setConfirmSoloEvents(_ enabled: Bool) {
         guard enabled != confirmSoloEvents else { return }
-        invalidatePendingRecordingStart()
+        // An in-flight start stays valid here: the consent check after the recorder start
+        // cancels it only if the event now needs confirmation, and keeps it armable.
         confirmSoloEvents = enabled
         defaults.set(enabled, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
         applyPolicyConfiguration(now: nowProvider())

@@ -23150,8 +23150,39 @@ extension TypeWhisperIntegrationTests {
 
     @MainActor
     func testCalendarRefreshDuringRecorderStartWithdrawsConsentForNowSoloEvent() async throws {
+        try await exerciseConsentWithdrawnDuringRecorderStart(
+            confirmSoloEventsAtStart: true,
+            startsWithColleague: true
+        ) { controller, events, privateBlock in
+            await events.replace([privateBlock])
+            await controller.testingRefresh()
+        }
+    }
+
+    @MainActor
+    func testEnablingSoloConfirmationDuringRecorderStartKeepsEventArmable() async throws {
+        try await exerciseConsentWithdrawnDuringRecorderStart(
+            confirmSoloEventsAtStart: false,
+            startsWithColleague: false
+        ) { controller, _, _ in
+            controller.setConfirmSoloEvents(true)
+        }
+    }
+
+    /// Starts recording an event under automatic consent, withdraws that consent while the
+    /// recorder start is suspended, and checks that the start is cancelled but stays armable.
+    @MainActor
+    private func exerciseConsentWithdrawnDuringRecorderStart(
+        confirmSoloEventsAtStart: Bool,
+        startsWithColleague: Bool,
+        withdrawConsent: @escaping @MainActor (
+            CalendarMeetingAutomationController,
+            MeetingRuntimeEventProvider,
+            CalendarMeetingOccurrence
+        ) async -> Void
+    ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
-        let suite = "MeetingSoloRefreshDuringStart-\(UUID().uuidString)"
+        let suite = "MeetingConsentWithdrawnDuringStart-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer {
             defaults.removePersistentDomain(forName: suite)
@@ -23159,7 +23190,7 @@ extension TypeWhisperIntegrationTests {
             MockTranscriptionPlugin.reset()
         }
         defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
-        defaults.set(true, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
+        defaults.set(confirmSoloEventsAtStart, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
         let context = Self.makeDictationContext(appSupportDirectory: directory)
         let recorderService = AudioRecorderService()
         recorderService.recordingsDirectoryOverride = directory
@@ -23188,8 +23219,8 @@ extension TypeWhisperIntegrationTests {
                 hasOtherParticipants: !attendees.isEmpty
             )
         }
-        let teamMeeting = occurrence(attendees: [colleague])
-        let events = MeetingRuntimeEventProvider(occurrences: [teamMeeting])
+        let startOccurrence = occurrence(attendees: startsWithColleague ? [colleague] : [])
+        let events = MeetingRuntimeEventProvider(occurrences: [startOccurrence])
         let notifications = MeetingRuntimeNotifications(authorization: .authorized)
         let controller = CalendarMeetingAutomationController(
             licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
@@ -23207,11 +23238,11 @@ extension TypeWhisperIntegrationTests {
         )
         defer { controller.shutdown() }
         let privateBlock = occurrence(attendees: [])
-        // The colleague is removed from the event while the recorder is starting.
         recorderService.startRecordingOverride = { [weak controller] _, _, _, proposedURL, _ in
             try Data("recording".utf8).write(to: proposedURL)
-            await events.replace([privateBlock])
-            await controller?.testingRefresh()
+            if let controller {
+                await withdrawConsent(controller, events, privateBlock)
+            }
             return proposedURL
         }
         await controller.testingRefresh()
@@ -23229,7 +23260,7 @@ extension TypeWhisperIntegrationTests {
         for _ in 0..<100 where recorder.state != .idle {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(recorder.state, .idle, "The now solo event was never armed, so the started recording must stop")
+        XCTAssertEqual(recorder.state, .idle, "The solo event was never armed, so the started recording must stop")
 
         // The withdrawn start must not block consent: the detected-meeting prompt follows,
         // and Start Recording records the event.
