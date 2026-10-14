@@ -26,7 +26,7 @@ final class AudioFileService: Sendable {
     }
 
     static let supportedExtensions: Set<String> = [
-        "wav", "mp3", "m4a", "flac", "aac", "ogg", "wma",
+        "wav", "mp3", "m4a", "flac", "aac", "ogg", "opus", "wma",
         "mp4", "mov", "mkv", "avi"
     ]
 
