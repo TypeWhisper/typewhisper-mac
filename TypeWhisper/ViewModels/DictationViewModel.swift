@@ -5064,6 +5064,10 @@ final class DictationViewModel: ObservableObject {
     func performActionFeedbackAction(openRecoverySettingsWindow: Bool = true) {
         guard let actionFeedbackAction else { return }
 
+        // The user took the offered way out, so the menu bar stops showing the error.
+        // A failing retry sets a fresh summary through its own error feedback.
+        lastDictationError = nil
+
         switch actionFeedbackAction {
         case .undoLearnedCorrections(let learnedCorrections):
             dictionaryService.undoLearnedCorrections(learnedCorrections)

@@ -13322,7 +13322,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 settingsTab: .home
             )
         )
-        context.dictationViewModel.clearLastDictationError()
+        // Taking the indicator's action (here: Open Settings) clears it as well.
+        context.dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
         XCTAssertNil(context.dictationViewModel.lastDictationError)
     }
 
