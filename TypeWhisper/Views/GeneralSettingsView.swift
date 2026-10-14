@@ -33,18 +33,8 @@ struct GeneralSettingsView: View {
             Divider()
 
             Form {
-                Section(String(localized: "Spoken Language")) {
-                LanguageSelectionEditor(
-                    selection: $settings.languageSelection,
-                    availableLanguages: settings.availableLanguages,
-                    hintBehavior: LanguageSelectionHintBehavior(engine: settings.activeTranscriptionEngine)
-                )
-
-                Text(String(localized: "Controls push-to-talk dictation, workflows that inherit the global spoken language, and CLI/API defaults when they use app defaults. Recorder and Recovery have separate language settings."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
+                // The spoken language lives on the Dictation page next to the engine
+                // it applies to; this page keeps the app language.
                 #if canImport(Translation)
                 if #available(macOS 15, *) {
                     Section(String(localized: "Translation")) {
