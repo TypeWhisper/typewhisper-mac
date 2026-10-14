@@ -119,7 +119,9 @@ ASC_API_KEY_PATH=<key.json> bundle exec fastlane mac appstore_screenshots_upload
 The first lane writes raw window captures to `fastlane/screenshots/appstore/`.
 The second composes the states listed in `APPSTORE_STORE_SCREENSHOT_STATES`
 into 2880 x 1800 images with `scripts/appstore/compose_store_screenshots.swift`,
-replaces the desktop screenshots of en-US and de-DE and reads them back. French,
+replaces the desktop screenshots of en-US and de-DE and reads them back
+(`appstore_screenshots_verify` only compares). Apple accepts screenshot changes
+only before submission or after a rejection, not while waiting for review. French,
 Italian and Spanish show the en-US screenshots because the app is not localized
 into those languages.
 

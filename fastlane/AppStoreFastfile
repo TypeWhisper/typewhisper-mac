@@ -162,6 +162,9 @@ APPSTORE_EDITABLE_VERSION_STATES = %w[
   WAITING_FOR_REVIEW
   INVALID_BINARY
 ].freeze
+# Apple accepts screenshot changes only before submission or after a rejection.
+APPSTORE_SCREENSHOT_EDITABLE_VERSION_STATES = (APPSTORE_EDITABLE_VERSION_STATES - %w[WAITING_FOR_REVIEW]).freeze
+APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT = 600
 
 def appstore_metadata_value(locale, field, version_string)
   path = File.join(APPSTORE_METADATA_PATH, locale, "#{field}.txt")
@@ -234,10 +237,10 @@ def mac_store_version!(version_string)
   version
 end
 
-def editable_mac_store_version!(version_string)
+def editable_mac_store_version!(version_string, states: APPSTORE_EDITABLE_VERSION_STATES)
   version = mac_store_version!(version_string)
   state = version.app_version_state || version.app_store_state
-  unless APPSTORE_EDITABLE_VERSION_STATES.include?(state)
+  unless states.include?(state)
     UI.user_error!("macOS App Store version #{version_string} is not editable (state: #{state || 'unknown'})")
   end
   version
@@ -311,7 +314,8 @@ def upload_mac_store_screenshots!(version)
     set = localization.create_app_screenshot_set(attributes: { screenshotDisplayType: display_type })
     composed_mac_store_screenshots(locale).each do |path|
       UI.message("Uploading #{locale} #{File.basename(path)}")
-      set.upload_screenshot(path: path, wait_for_processing: true)
+      # Processing is awaited with a deadline in verify_mac_store_screenshots!.
+      set.upload_screenshot(path: path, wait_for_processing: false)
     end
   end
 end
@@ -319,13 +323,23 @@ end
 def verify_mac_store_screenshots!(version)
   localizations = version.get_app_store_version_localizations.to_h { |entry| [entry.locale, entry] }
   display_type = Spaceship::ConnectAPI::AppScreenshotSet::DisplayType::APP_DESKTOP
+  deadline = Time.now + APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT
   APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
-    set = localizations[locale]&.get_app_screenshot_sets&.find { |candidate| candidate.screenshot_display_type == display_type }
-    UI.user_error!("#{locale} has no desktop screenshots in App Store Connect") unless set
     expected = composed_mac_store_screenshots(locale).map { |path| File.basename(path) }
-    actual = set.app_screenshots.to_a
-    failed = actual.reject(&:complete?)
-    UI.user_error!("#{locale}: #{failed.count} screenshots are not processed") unless failed.empty?
+    actual = nil
+    loop do
+      set = localizations[locale]&.get_app_screenshot_sets&.find { |candidate| candidate.screenshot_display_type == display_type }
+      UI.user_error!("#{locale} has no desktop screenshots in App Store Connect") unless set
+      actual = set.app_screenshots.to_a
+      failed = actual.select(&:error?)
+      UI.user_error!("#{locale}: processing failed for #{failed.map(&:file_name).join(', ')}") unless failed.empty?
+      break if actual.all?(&:complete?)
+
+      pending = actual.reject(&:complete?).count
+      UI.user_error!("#{locale}: #{pending} screenshots are still processing after #{APPSTORE_SCREENSHOT_PROCESSING_TIMEOUT} seconds") if Time.now > deadline
+      UI.message("Waiting for #{pending} #{locale} screenshots to finish processing")
+      sleep(5)
+    end
     unless actual.map(&:file_name) == expected
       UI.user_error!("#{locale} screenshots differ in App Store Connect: #{actual.map(&:file_name).join(', ')}")
     end
@@ -374,7 +388,17 @@ platform :mac do
     UI.user_error!("Pass version:<version>") if version_string.empty?
     compose_mac_store_screenshots!
     appstore_api_key!
-    upload_mac_store_screenshots!(editable_mac_store_version!(version_string))
+    upload_mac_store_screenshots!(
+      editable_mac_store_version!(version_string, states: APPSTORE_SCREENSHOT_EDITABLE_VERSION_STATES)
+    )
+    verify_mac_store_screenshots!(mac_store_version!(version_string))
+  end
+
+  desc "Compare the macOS screenshots in App Store Connect with the composed images (version:<version>)"
+  lane :appstore_screenshots_verify do |options|
+    version_string = options[:version].to_s
+    UI.user_error!("Pass version:<version>") if version_string.empty?
+    appstore_api_key!
     verify_mac_store_screenshots!(mac_store_version!(version_string))
   end
 end
