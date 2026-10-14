@@ -1392,17 +1392,30 @@ final class FileTranscriptionViewModelTests: XCTestCase {
 
         XCTAssertEqual(Set(messages).count, messages.count)
         XCTAssertTrue(messages.allSatisfy { $0.contains("Settings") || $0.contains("try again") })
+        // The texts are localized, so expectations go through the same catalog lookups.
+        let unavailableHint = String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation.")
         XCTAssertEqual(
             TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "API key missing").localizedDescription,
-            "Cloud is not available. API key missing. Check its setup in Integrations or choose another engine in Settings > Dictation."
+            [String(localized: "\("Cloud") is not available."), "API key missing.", unavailableHint].joined(separator: " ")
         )
         XCTAssertEqual(
             TranscriptionEngineError.modelLoadFailed("Downloaded model is missing.").localizedDescription,
-            "Failed to load the selected model. Downloaded model is missing. Try again, or choose another model in Settings > Dictation."
+            [
+                String(localized: "Failed to load the selected model."),
+                "Downloaded model is missing.",
+                String(localized: "Try again, or choose another model under Settings > Dictation."),
+            ].joined(separator: " ")
         )
         XCTAssertEqual(
             TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil).localizedDescription,
-            "The selected transcription engine is not available. Check its setup in Integrations or choose another engine in Settings > Dictation."
+            [
+                String(localized: "\(String(localized: "The selected transcription engine")) is not available."),
+                unavailableHint,
+            ].joined(separator: " ")
+        )
+        XCTAssertFalse(
+            TranscriptionEngineError.noEngineSelected.localizedDescription.contains("Integrations"),
+            "The sidebar has no Integrations page; errors must name Discover plugins instead."
         )
     }
 

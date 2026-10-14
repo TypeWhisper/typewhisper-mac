@@ -1924,7 +1924,7 @@ final class DictationViewModel: ObservableObject {
         }
 
         guard audioRecordingService.hasMicrophonePermission else {
-            let errorMessage = "Microphone permission required."
+            let errorMessage = String(localized: "Microphone permission required.")
             logger.warning("startRecording rejected: microphone permission missing; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
             showError(errorMessage, category: "recording")

@@ -547,15 +547,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         var errorDescription: String? {
             switch self {
             case .microphonePermissionDenied:
-                "Microphone permission denied."
+                String(localized: "Microphone permission denied.")
             case .noSourceEnabled:
-                "At least one audio source must be enabled."
+                String(localized: "At least one audio source must be enabled.")
             case .engineStartFailed(let detail):
-                "Failed to start audio engine: \(detail)"
+                String(localized: "Failed to start audio engine: \(detail)")
             case .screenCaptureNotAvailable:
-                "Screen recording permission is required for system audio capture."
+                String(localized: "Screen recording permission is required for system audio capture.")
             case .outputDirectoryFailed:
-                "Could not create recordings directory."
+                String(localized: "Could not create recordings directory.")
             }
         }
     }

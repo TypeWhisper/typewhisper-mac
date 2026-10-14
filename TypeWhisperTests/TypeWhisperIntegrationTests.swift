@@ -4260,7 +4260,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let json = try Self.jsonObject(response)
 
         XCTAssertEqual(response.status, 400)
-        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, "At least one audio source must be enabled.")
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, String(localized: "At least one audio source must be enabled."))
     }
 
     func testRecorderStopWithoutRecordingReturnsConflict() async throws {

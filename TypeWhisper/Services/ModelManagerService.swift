@@ -11,33 +11,40 @@ enum TranscriptionEngineError: LocalizedError {
     case modelLoadFailed(String)
     case modelDownloadFailed(String)
 
+    // These reach the indicator and the menu bar, so they are localized and name the
+    // pages as the sidebar does: "Dictation" and "Discover plugins", plus each engine's
+    // own settings page.
     var errorDescription: String? {
         switch self {
         case .noEngineSelected:
-            "No transcription engine selected. Choose one in Settings > Dictation > Engine, or install one in Integrations."
+            String(localized: "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins.")
         case .engineUnavailable(let engineName, let reason):
             [
-                "\(engineName ?? "The selected transcription engine") is not available.",
+                String(localized: "\(engineName ?? Self.defaultEngineName) is not available."),
                 Self.sentence(reason),
-                "Check its setup in Integrations or choose another engine in Settings > Dictation.",
+                String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation."),
             ].compactMap { $0 }.joined(separator: " ")
         case .modelNotLoaded:
-            "The selected model is not ready yet. Download or load it in Integrations, or choose another model in Settings > Dictation."
+            String(localized: "The selected model is not ready yet. Download or load it on the engine's settings page, or choose another model under Settings > Dictation.")
         case .appleSpeechModelNotLoaded:
-            "Apple Speech needs a language model. Open Integrations > Apple Speech and select a language model, or choose a specific transcription language."
+            String(localized: "Apple Speech needs a language model. Open Apple Speech in the settings sidebar and select a language model, or choose a specific transcription language.")
         case .transcriptionFailed(let detail):
-            ["Transcription failed.", Self.sentence(detail), "Please try again."]
+            [String(localized: "Transcription failed."), Self.sentence(detail), String(localized: "Please try again.")]
                 .compactMap { $0 }.joined(separator: " ")
         case .modelLoadFailed(let detail):
             [
-                "Failed to load the selected model.",
+                String(localized: "Failed to load the selected model."),
                 Self.sentence(detail),
-                "Try again, or choose another model in Settings > Dictation.",
+                String(localized: "Try again, or choose another model under Settings > Dictation."),
             ].compactMap { $0 }.joined(separator: " ")
         case .modelDownloadFailed(let detail):
-            ["Failed to download the model.", Self.sentence(detail), "Check your connection and try again."]
+            [String(localized: "Failed to download the model."), Self.sentence(detail), String(localized: "Check your connection and try again.")]
                 .compactMap { $0 }.joined(separator: " ")
         }
+    }
+
+    private static var defaultEngineName: String {
+        String(localized: "The selected transcription engine")
     }
 
     private static func sentence(_ text: String?) -> String? {
