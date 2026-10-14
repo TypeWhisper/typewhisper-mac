@@ -1232,6 +1232,30 @@ final class IndicatorPresentationStateTests: XCTestCase {
         ))
     }
 
+    func testErrorFeedbackStillShowsWhenIndicatorIsSetToNever() {
+        let errorFeedback = IndicatorPresentationState.resolve(
+            dictationState: .inserting,
+            recorderState: .idle,
+            isErrorFeedback: true
+        )
+        let successFeedback = IndicatorPresentationState.resolve(
+            dictationState: .inserting,
+            recorderState: .idle,
+            isErrorFeedback: false
+        )
+        let recordingWithStaleFlag = IndicatorPresentationState.resolve(
+            dictationState: .recording,
+            recorderState: .idle,
+            isErrorFeedback: true
+        )
+
+        XCTAssertTrue(errorFeedback.isErrorFeedback)
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(visibility: .never, presentation: errorFeedback))
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(visibility: .never, presentation: successFeedback))
+        XCTAssertFalse(recordingWithStaleFlag.isErrorFeedback)
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(visibility: .never, presentation: recordingWithStaleFlag))
+    }
+
     func testPreviewFillsInOnlyWhileIdleAndIgnoresVisibility() {
         let idle = IndicatorPresentationState.resolve(
             dictationState: .idle,

@@ -148,6 +148,9 @@ struct IndicatorPresentationState: Equatable {
 
     let source: Source
     let state: DictationViewModel.State
+    /// An error banner is up. It is shown even when the indicator is set to Never,
+    /// since otherwise a failed dictation leaves nothing but an error sound.
+    var isErrorFeedback: Bool = false
 
     var isActiveDuringActivity: Bool {
         switch state {
@@ -161,11 +164,16 @@ struct IndicatorPresentationState: Equatable {
     static func resolve(
         dictationState: DictationViewModel.State,
         recorderState: AudioRecorderViewModel.RecorderState,
-        previewActive: Bool = false
+        previewActive: Bool = false,
+        isErrorFeedback: Bool = false
     ) -> IndicatorPresentationState {
         switch dictationState {
         case .recording, .processing, .inserting, .error:
-            return IndicatorPresentationState(source: .dictation, state: dictationState)
+            return IndicatorPresentationState(
+                source: .dictation,
+                state: dictationState,
+                isErrorFeedback: isErrorFeedback && dictationState == .inserting
+            )
         case .idle, .promptSelection, .promptProcessing:
             if recorderState == .recording {
                 return IndicatorPresentationState(source: .recorder, state: .recording)
@@ -191,7 +199,7 @@ struct IndicatorPresentationState: Equatable {
         case .duringActivity:
             return presentation.isActiveDuringActivity
         case .never:
-            return false
+            return presentation.isErrorFeedback
         }
     }
 }

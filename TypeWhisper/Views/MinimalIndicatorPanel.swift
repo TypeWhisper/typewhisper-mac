@@ -216,7 +216,8 @@ class MinimalIndicatorPanel: NSPanel {
         let presentation = IndicatorPresentationState.resolve(
             dictationState: vm.state,
             recorderState: recorder.state,
-            previewActive: IndicatorPreviewSession.shared.isActive
+            previewActive: IndicatorPreviewSession.shared.isActive,
+            isErrorFeedback: vm.actionFeedbackIsError && vm.actionFeedbackMessage != nil
         )
         let normallyVisible = IndicatorPresentationState.shouldShow(
             visibility: vm.notchIndicatorVisibility,
