@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
@@ -8,12 +9,14 @@ import XCTest
 final class FileTranscriptionViewModelTests: XCTestCase {
     func testFinderTranscriptionServiceFiltersAndRoutesSupportedFiles() {
         let audioURL = makeTemporaryFile(named: "meeting.MP3")
+        let opusURL = makeTemporaryFile(named: "voice-message.OPUS")
         let videoURL = makeTemporaryFile(named: "recording.mov")
         let unsupportedURL = makeTemporaryFile(named: "notes.txt")
         let pasteboard = NSPasteboard.withUniqueName()
         pasteboard.clearContents()
         pasteboard.writeObjects([
             audioURL as NSURL,
+            opusURL as NSURL,
             unsupportedURL as NSURL,
             videoURL as NSURL,
             audioURL as NSURL,
@@ -29,8 +32,84 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let error = service.handle(pasteboard)
 
         XCTAssertNil(error)
-        XCTAssertEqual(enqueuedURLs, [audioURL, videoURL].map { $0.standardizedFileURL })
+        XCTAssertEqual(enqueuedURLs, [audioURL, opusURL, videoURL].map { $0.standardizedFileURL })
         XCTAssertEqual(presentationCount, 1)
+    }
+
+    func testOpusFileIsAllowedByFilePicker() throws {
+        let url = try makeOpusFile()
+        let type = try XCTUnwrap(url.resourceValues(forKeys: [.contentTypeKey]).contentType)
+        XCTAssertTrue(FileTranscriptionViewModel.allowedContentTypes.contains { type.conforms(to: $0) })
+    }
+
+    func testOpusFileIsDecodedAndPassedToTranscription() async throws {
+        let url = try makeOpusFile()
+        var receivedSamples: [Float] = []
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults(),
+            transcriptionRunner: { samples, _, _, _, _, _, _, _ in
+                receivedSamples = samples
+                return TranscriptionResult(
+                    text: "Decoded Opus audio",
+                    detectedLanguage: "en",
+                    duration: Double(samples.count) / 16000,
+                    processingTime: 0.1,
+                    engineUsed: "test",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([url, url])
+        XCTAssertEqual(viewModel.files.count, 1)
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        // Two seconds at 16 kHz, allowing for codec priming and resampling.
+        XCTAssertEqual(Double(receivedSamples.count), 32000, accuracy: 320)
+        XCTAssertTrue(receivedSamples.allSatisfy(\.isFinite))
+        XCTAssertGreaterThan(receivedSamples.map { abs($0) }.max() ?? 0, 0.05)
+        XCTAssertEqual(viewModel.files.first?.result?.text, "Decoded Opus audio")
+    }
+
+    func testOpusDecodingHonorsProgressCancellation() async throws {
+        let url = try makeOpusFile()
+        do {
+            _ = try await AudioFileService().loadAudioSamples(from: url) { _ in false }
+            XCTFail("Opus decoding should stop when the progress handler cancels")
+        } catch is CancellationError {
+            // The existing conversion path must preserve cancellation.
+        }
+    }
+
+    func testInvalidOpusFileReportsDecodingError() async throws {
+        let url = makeTemporaryFile(named: "invalid.opus")
+        try Data("This is not an Opus stream".utf8).write(to: url)
+
+        do {
+            _ = try await AudioFileService().loadAudioSamples(from: url)
+            XCTFail("Invalid Opus data must fail conversion")
+        } catch AudioFileService.AudioFileError.unsupportedFormat {
+            XCTFail("The extension must be accepted before validating the audio")
+        } catch {
+            XCTAssertFalse(error.localizedDescription.isEmpty)
+        }
+    }
+
+    private func makeOpusFile() throws -> URL {
+        guard #available(macOS 15.4, *) else {
+            throw XCTSkip("Native Ogg Opus decoding requires macOS 15.4 or later")
+        }
+        let fixture = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/Audio/tone.opus")
+        let url = makeTemporaryDirectory().appendingPathComponent("voice-message.OPUS")
+        try FileManager.default.copyItem(at: fixture, to: url)
+        return url
     }
 
     func testFinderTranscriptionServiceRejectsSelectionWithoutSupportedMedia() {
