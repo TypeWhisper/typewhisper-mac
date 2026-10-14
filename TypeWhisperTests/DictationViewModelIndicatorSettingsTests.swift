@@ -1015,6 +1015,41 @@ final class MenuBarGroupingTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testDictationShortcutsListEveryConfiguredSlotWithItsMode() {
+        let shortcuts = MenuBarStatusFormatting.dictationShortcuts { slot in
+            switch slot {
+            case .hybrid: ["Fn", "Fn F13"]
+            case .toggle: ["⌥⌘A"]
+            default: []
+            }
+        }
+
+        XCTAssertEqual(
+            shortcuts.map(\.title),
+            ["Fn (\(String(localized: "Hybrid")))", "Fn F13 (\(String(localized: "Hybrid")))", "⌥⌘A (\(String(localized: "Toggle")))"]
+        )
+        XCTAssertTrue(MenuBarStatusFormatting.dictationShortcuts { _ in [] }.isEmpty)
+    }
+
+    func testErrorStatusTextKeepsShortMessagesAndCutsLongOnes() {
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText("  Microphone permission required. \n"),
+            "Microphone permission required."
+        )
+
+        let long = String(repeating: "word ", count: 40)
+        let cut = MenuBarStatusFormatting.errorStatusText(long, limit: 20)
+        XCTAssertEqual(cut, "word word word word…")
+
+        XCTAssertEqual(
+            MenuBarStatusFormatting.errorStatusText(
+                "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins."
+            ),
+            "No transcription engine selected."
+        )
+    }
+
     func testMenuBarSectionsContainExpectedItems() {
         XCTAssertEqual(
             MenuBarMenuSection.general.items,

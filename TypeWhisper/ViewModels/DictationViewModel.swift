@@ -213,6 +213,13 @@ final class DictationViewModel: ObservableObject {
         case error(String)
     }
 
+    /// A failed dictation as the menu bar shows it: the message and, for setup
+    /// problems, the Settings page that fixes them.
+    struct ErrorSummary: Equatable {
+        let message: String
+        let settingsTab: SettingsTab?
+    }
+
     private enum CancelWarningTarget {
         case recording
         case processing
@@ -380,6 +387,9 @@ final class DictationViewModel: ObservableObject {
     @Published private(set) var actionFeedbackActionTitle: String?
     @Published private(set) var actionFeedbackRemainingFraction: Double = 0
     @Published private(set) var actionFeedbackIsPaused = false
+    /// Kept after the indicator feedback has faded, until the next dictation starts
+    /// or the user acts on it from the menu bar.
+    @Published private(set) var lastDictationError: ErrorSummary?
     @Published private var isProcessingStandaloneWorkflow = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
@@ -2113,6 +2123,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func beginRecordingPreparation() {
+        lastDictationError = nil
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
         modelManager.cancelAutoUnloadTimer()
@@ -5173,12 +5184,17 @@ final class DictationViewModel: ObservableObject {
         max(baseDuration, min(12.0, Double(message.count) / 25.0))
     }
 
+    func clearLastDictationError() {
+        lastDictationError = nil
+    }
+
     private func showError(
         _ message: String,
         category: String = "general",
         recoveryPreservation: DictationRecoveryPreservationResult? = nil,
         settingsTab: SettingsTab? = nil
     ) {
+        lastDictationError = ErrorSummary(message: message, settingsTab: settingsTab)
         soundService.play(.error, enabled: soundFeedbackEnabled)
         let settingsAction = settingsTab.map(ActionFeedbackAction.openSettings)
         // Setup errors need time to read and reach the button; transient errors stay brief.

@@ -13310,9 +13310,20 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
-            "Microphone permission required."
+            String(localized: "Microphone permission required.")
         )
         XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
+
+        // The menu bar keeps the error after the indicator feedback is gone.
+        XCTAssertEqual(
+            context.dictationViewModel.lastDictationError,
+            DictationViewModel.ErrorSummary(
+                message: String(localized: "Microphone permission required."),
+                settingsTab: nil
+            )
+        )
+        context.dictationViewModel.clearLastDictationError()
+        XCTAssertNil(context.dictationViewModel.lastDictationError)
     }
 
     @MainActor

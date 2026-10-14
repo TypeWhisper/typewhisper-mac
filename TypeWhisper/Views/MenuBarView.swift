@@ -24,6 +24,10 @@ private final class MenuBarState: ObservableObject {
     @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var undoLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    /// Configured dictation shortcuts with their mode, empty when none is set.
+    @Published var dictationShortcuts: [MenuBarStatusFormatting.DictationShortcut]
+    @Published var needsEngineSetup: Bool
+    @Published var lastDictationError: DictationViewModel.ErrorSummary?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -54,9 +58,17 @@ private final class MenuBarState: ObservableObject {
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         self.undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         self.restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
-        let modelStatus = Self.idleModelStatus(from: modelManager)
-        self.statusText = modelStatus.text
-        self.statusImage = modelStatus.image
+        self.dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
+        self.needsEngineSetup = modelManager.activeModelName == nil
+        self.lastDictationError = dictation.lastDictationError
+        if let error = dictation.lastDictationError {
+            self.statusText = MenuBarStatusFormatting.errorStatusText(error.message)
+            self.statusImage = "exclamationmark.triangle.fill"
+        } else {
+            let modelStatus = Self.idleModelStatus(from: modelManager)
+            self.statusText = modelStatus.text
+            self.statusImage = modelStatus.image
+        }
 
         // React to dictation state changes (not audioLevel/duration/partialText)
         dictation.$state
@@ -148,6 +160,15 @@ private final class MenuBarState: ObservableObject {
                 self?.update(state: dictation.state)
             }
             .store(in: &cancellables)
+
+        dictation.$lastDictationError
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] error in
+                self?.lastDictationError = error
+                self?.update(state: dictation.state)
+            }
+            .store(in: &cancellables)
     }
 
     private func update(state: DictationViewModel.State) {
@@ -167,11 +188,19 @@ private final class MenuBarState: ObservableObject {
             statusText = String(localized: "Transcribing...")
             statusImage = "arrow.triangle.2.circlepath"
         default:
-            let modelStatus = Self.idleModelStatus(from: modelManager)
-            statusText = modelStatus.text
-            statusImage = modelStatus.image
+            if let lastDictationError {
+                // Feedback in the indicator fades after seconds; the menu keeps the
+                // last error until the next dictation starts or the user acts on it.
+                statusText = MenuBarStatusFormatting.errorStatusText(lastDictationError.message)
+                statusImage = "exclamationmark.triangle.fill"
+            } else {
+                let modelStatus = Self.idleModelStatus(from: modelManager)
+                statusText = modelStatus.text
+                statusImage = modelStatus.image
+            }
         }
         isModelReady = modelManager.isModelReady
+        needsEngineSetup = modelManager.activeModelName == nil
     }
 
     private static func idleModelStatus(from modelManager: ModelManagerService) -> (text: String, image: String) {
@@ -215,6 +244,7 @@ private final class MenuBarState: ObservableObject {
         recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
+        dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
     }
 
     private func refreshUndoAvailability() {
@@ -224,11 +254,54 @@ private final class MenuBarState: ObservableObject {
     }
 }
 
+enum MenuBarStatusFormatting {
+    struct DictationShortcut: Equatable, Hashable {
+        let label: String
+        let mode: String
+
+        /// "Fn (Hybrid)"
+        var title: String {
+            "\(label) (\(mode))"
+        }
+    }
+
+    /// Every configured dictation shortcut with its mode, hybrid first, in the order
+    /// of the Hotkeys page. Empty when no dictation shortcut is set.
+    @MainActor
+    static func dictationShortcuts(
+        labels: @MainActor (HotkeySlotType) -> [String] = DictationSettingsHandler.loadHotkeyLabels
+    ) -> [DictationShortcut] {
+        let slots: [(HotkeySlotType, String)] = [
+            (.hybrid, String(localized: "Hybrid")),
+            (.pushToTalk, String(localized: "Push-to-Talk")),
+            (.toggle, String(localized: "Toggle")),
+        ]
+        return slots.flatMap { slot, mode in
+            labels(slot).map { DictationShortcut(label: $0, mode: mode) }
+        }
+    }
+
+    /// Menu rows do not wrap. Long messages keep their first sentence when it fits,
+    /// since the fix hint that follows is one click away in "Fix in Settings...".
+    nonisolated static func errorStatusText(_ message: String, limit: Int = 64) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > limit else { return trimmed }
+        if let end = trimmed.firstIndex(where: { ".!?".contains($0) }) {
+            let sentence = String(trimmed[...end])
+            if sentence.count <= limit { return sentence }
+        }
+        return String(trimmed.prefix(limit)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+}
+
 enum MenuBarMenuItem: Hashable {
     case settings
     case history
     case errorLog
     case toggleRecorder
+    case dictationShortcut
+    case chooseEngine
+    case fixLastError
     case toggleDictationHotkeysPause
     case transcribeFile
     case recoverLastRecording
@@ -359,8 +432,16 @@ struct MenuBarView: View {
 
             Divider()
 
-            // Primary action, promoted above the grouped sections so it is
-            // always the first actionable item under the status line.
+            // The way out of a failed dictation, or to a working engine, comes first.
+            if status.lastDictationError != nil {
+                menuItem(for: .fixLastError)
+            } else if status.needsEngineSetup {
+                menuItem(for: .chooseEngine)
+            }
+
+            // Dictation starts with its shortcut. Showing it here keeps the Recorder
+            // entry below from reading as the way to dictate.
+            menuItem(for: .dictationShortcut)
             menuItem(for: .toggleRecorder)
 
             Divider()
@@ -455,6 +536,50 @@ struct MenuBarView: View {
             }
             .keyboardShortcut(keyboardShortcut(from: status.recorderToggleMenuShortcut))
             .disabled(!status.canToggleRecorder)
+
+        case .dictationShortcut:
+            if let primary = status.dictationShortcuts.first {
+                // The row names the first shortcut; the submenu lists the rest, so the
+                // menu stays narrow with several shortcuts configured.
+                Menu {
+                    ForEach(status.dictationShortcuts, id: \.self) { shortcut in
+                        Text(verbatim: shortcut.title)
+                    }
+                    Divider()
+                    Button(String(localized: "Hotkey Settings...")) {
+                        openSettingsTab(.hotkeys)
+                    }
+                } label: {
+                    Label(
+                        String(localized: "Dictation shortcut: \(primary.title)"),
+                        systemImage: "keyboard"
+                    )
+                }
+            } else {
+                Button {
+                    openSettingsTab(.hotkeys)
+                } label: {
+                    Label(String(localized: "Set a dictation shortcut..."), systemImage: "keyboard")
+                }
+            }
+
+        case .chooseEngine:
+            Button {
+                quickSelection.openDictationSettings()
+            } label: {
+                Label(String(localized: "Choose Engine..."), systemImage: "waveform")
+            }
+
+        case .fixLastError:
+            Button {
+                let error = status.lastDictationError
+                DictationViewModel.shared.clearLastDictationError()
+                if let tab = error?.settingsTab {
+                    openSettingsTab(tab)
+                }
+            } label: {
+                Label(fixLastErrorTitle, systemImage: "wrench.and.screwdriver")
+            }
 
         case .toggleDictationHotkeysPause:
             Button {
@@ -728,14 +853,27 @@ struct MenuBarView: View {
         .disabled(!status.canRestoreRawTranscript)
     }
 
+
+    private var fixLastErrorTitle: String {
+        status.lastDictationError?.settingsTab == nil
+            ? String(localized: "Dismiss Error")
+            : String(localized: "Fix in Settings...")
+    }
+
+    private func openSettingsTab(_ tab: SettingsTab) {
+        SettingsNavigationCoordinator.shared?.navigate(to: tab)
+        openManagedWindow("settings")
+    }
+
+    // Named after the feature so the entry is not mistaken for starting a dictation.
     private var recorderToggleTitle: String {
         switch status.recorderState {
         case .idle:
-            String(localized: "recorder.startRecording")
+            String(localized: "Start Recorder")
         case .recording:
-            String(localized: "recorder.stopRecording")
+            String(localized: "Stop Recorder")
         case .finalizing:
-            String(localized: "recorder.transcribing")
+            String(localized: "Recorder: Transcribing...")
         }
     }
 
