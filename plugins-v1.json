@@ -264,6 +264,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/parakeet/",
       "releases": [
         {
+          "version": "1.4.1",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 20892482,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-parakeet-v1.4.1/ParakeetPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.4.0",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
