@@ -1,6 +1,7 @@
 import XCTest
 @preconcurrency import AVFoundation
 import CryptoKit
+import FluidAudio
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import ParakeetPlugin
@@ -100,6 +101,259 @@ final class ParakeetPluginTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
         return directory
+    }
+
+    /// Models the important Core ML state: the manager stays loaded while the
+    /// device-specific cache disappears. Both real and warmup inference use it.
+    private actor PurgeableInference {
+        private var cachePresent = true
+        private var release: CheckedContinuation<Void, Never>?
+        private(set) var events: [String] = []
+        let warmupStarted: XCTestExpectation
+        var failsWarmup = false
+
+        init(warmupStarted: XCTestExpectation) { self.warmupStarted = warmupStarted }
+
+        func purge(failWarmup: Bool = false) {
+            cachePresent = false
+            failsWarmup = failWarmup
+        }
+
+        func infer(_ samples: [Float]) async throws -> ASRResult {
+            let warmup = samples.count == 16_000 && samples.allSatisfy { $0 == 0 }
+            let kind = warmup ? "warmup" : "speech"
+            events.append(kind)
+            if !cachePresent {
+                events.append("compile-\(kind)")
+                if warmup {
+                    warmupStarted.fulfill()
+                    await withCheckedContinuation { release = $0 }
+                    if failsWarmup { throw URLError(.cannotLoadFromNetwork) }
+                }
+                cachePresent = true
+            }
+            return ASRResult(text: warmup ? "must not escape" : "actual transcript", confidence: 1,
+                             duration: Double(samples.count) / 16_000, processingTime: 0)
+        }
+
+        func finishWarmup() { release?.resume(); release = nil }
+    }
+
+    private func loadedPluginWithFakeInference(_ inference: PurgeableInference) async throws -> ParakeetPlugin {
+        let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-tdt-0.6b-v2"])
+        let plugin = makePlugin()
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        plugin.asrTranscriptionOverrideForTests = { try await inference.infer($0) }
+        plugin.activate(host: host)
+        await plugin.restoreLoadedModel()
+        XCTAssertTrue(plugin.isConfigured)
+        addTeardownBlock { plugin.deactivate() }
+        return plugin
+    }
+
+    private var fakeSpeech: AudioData {
+        AudioData(samples: [Float](repeating: 0.1, count: 16_000), wavData: Data(), duration: 1)
+    }
+
+    func testLoadedModelCachePurgeIsRepairedBeforeSpeechAndWarmupIsCoalesced() async throws {
+        let started = expectation(description: "cache recompilation during preparation")
+        let inference = PurgeableInference(warmupStarted: started)
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        _ = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+        await inference.purge()
+
+        let collector = PluginWordTimingCollector()
+        PluginWordTimings.$collector.withValue(collector) {
+            plugin.triggerPrewarmModel()
+        }
+        XCTAssertNotNil(plugin.currentSettingsActivity, "publish before scheduling the warmup task")
+        plugin.triggerPrewarmModel()
+        let audio = fakeSpeech
+        let speech = Task { try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil) }
+        await fulfillment(of: [started], timeout: 3)
+        let duringPreparation = await inference.events
+        XCTAssertEqual(duringPreparation, ["speech", "warmup", "compile-warmup"])
+        XCTAssertTrue(plugin.isConfigured)
+
+        await inference.finishWarmup()
+        let result = try await speech.value
+        XCTAssertEqual(result.text, "actual transcript")
+        XCTAssertTrue(collector.words.isEmpty)
+        XCTAssertNil(plugin.currentSettingsActivity)
+        let events = await inference.events
+        XCTAssertEqual(events, ["speech", "warmup", "compile-warmup", "speech"])
+    }
+
+    func testFailedCachePreparationAllowsRealTranscriptionToRetry() async throws {
+        let started = expectation(description: "failing preparation")
+        let inference = PurgeableInference(warmupStarted: started)
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        await inference.purge(failWarmup: true)
+        plugin.triggerPrewarmModel()
+        await fulfillment(of: [started], timeout: 3)
+        await inference.finishWarmup()
+        await plugin.waitForModelPrewarm()
+
+        XCTAssertNil(plugin.currentSettingsActivity)
+        XCTAssertTrue(plugin.isConfigured)
+        let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+        XCTAssertEqual(result.text, "actual transcript")
+        let events = await inference.events
+        XCTAssertEqual(events, ["warmup", "compile-warmup", "speech", "compile-speech"])
+    }
+
+    func testUnloadDuringCachePreparationDoesNotRestoreTheModel() async throws {
+        let started = expectation(description: "preparation")
+        let inference = PurgeableInference(warmupStarted: started)
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        await inference.purge()
+        plugin.triggerPrewarmModel()
+        await fulfillment(of: [started], timeout: 3)
+
+        plugin.unloadModel()
+        XCTAssertNil(plugin.currentSettingsActivity)
+        await inference.finishWarmup()
+        do {
+            _ = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+            XCTFail("an unloaded model must not transcribe")
+        } catch PluginTranscriptionError.notConfigured {
+            // Acquiring the transcription gate also drains the old inference.
+        }
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
+    func testPrewarmDoesNotLoadAnUnloadedModel() {
+        let plugin = makePlugin()
+        plugin.triggerPrewarmModel()
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(plugin.currentSettingsActivity)
+    }
+
+    func testCancelledQueuedPreparationNeverRunsInference() async throws {
+        let gate = AsyncTranscriptionGate()
+        let active = CtcDownloadRecorder(holdsFirstDownload: true)
+        let queued = CtcDownloadRecorder()
+        let transcription = Task { try await gate.withLock { await active.download(loadIntoMemory: true) } }
+        await active.waitForFirstStart()
+
+        let controller = ParakeetModelPrewarm()
+        controller.start {
+            try await gate.withLock { await queued.download(loadIntoMemory: true) }
+        }
+        let preparation = controller.task
+        let deadline = ContinuousClock.now + .seconds(3)
+        while await gate.waitingCount == 0, ContinuousClock.now < deadline { await Task.yield() }
+        let waiting = await gate.waitingCount
+        XCTAssertEqual(waiting, 1)
+        controller.cancel()
+        await active.releaseFirstDownload()
+        try await transcription.value
+        await preparation?.value
+
+        let events = await queued.events
+        XCTAssertTrue(events.isEmpty, "unload must invalidate warmup queued behind real transcription")
+        XCTAssertFalse(controller.isRunning)
+    }
+
+    func testOldPreparationCompletionCannotClearNewPreparation() async {
+        let controller = ParakeetModelPrewarm()
+        let first = CtcDownloadRecorder(holdsFirstDownload: true)
+        let second = CtcDownloadRecorder(holdsFirstDownload: true)
+        controller.start { await first.download(loadIntoMemory: true) }
+        await first.waitForFirstStart()
+        let oldTask = controller.task
+        controller.cancel()
+        controller.start { await second.download(loadIntoMemory: true) }
+        await second.waitForFirstStart()
+        await first.releaseFirstDownload()
+        await oldTask?.value
+        // The second preparation remains active regardless of the first completion.
+        XCTAssertTrue(controller.isRunning)
+        await second.releaseFirstDownload()
+        await controller.wait()
+        XCTAssertFalse(controller.isRunning)
+    }
+
+    /// Opt-in hardware smoke test. CFFIXED_USER_HOME must point to a disposable
+    /// test home with installed models linked into Library/Application Support.
+    /// Only that home's Core ML cache can be purged, never the user's app cache.
+    /// Core ML may retain live execution resources after unlinking the files, so
+    /// disk deletion does not guarantee the slow recompilation from #1605. The
+    /// deterministic purge fixture above covers that blocking interleaving.
+    func testInstalledModelsPreserveTranscriptAfterCoreMLCachePurge() async throws {
+        guard ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_CACHE_PURGE"] == "1",
+              let homePath = ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"] else {
+            throw XCTSkip("Requires TYPEWHISPER_PARAKEET_CACHE_PURGE=1 and an isolated CFFIXED_USER_HOME")
+        }
+        let home = URL(fileURLWithPath: homePath).resolvingSymlinksInPath()
+        guard home.lastPathComponent.hasPrefix("typewhisper-coreml-1605-"),
+              URL(fileURLWithPath: NSHomeDirectory()).resolvingSymlinksInPath() == home else {
+            XCTFail("Refusing to purge outside the dedicated regression home")
+            return
+        }
+        let caches = try XCTUnwrap(FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first)
+        guard caches.resolvingSymlinksInPath().path.hasPrefix(home.path + "/") else {
+            XCTFail("Core ML caches are not isolated")
+            return
+        }
+        func cacheBundles() throws -> [URL] {
+            let enumerator = try XCTUnwrap(FileManager.default.enumerator(at: caches, includingPropertiesForKeys: nil))
+            var paths: [URL] = []
+            for case let url as URL in enumerator where url.lastPathComponent == "com.apple.e5rt.e5bundlecache" {
+                guard url.resolvingSymlinksInPath().path.hasPrefix(home.path + "/") else {
+                    throw NSError(domain: "UnsafeCachePath", code: 1)
+                }
+                paths.append(url)
+                enumerator.skipDescendants()
+            }
+            return paths
+        }
+        func purge() throws {
+            let paths = try cacheBundles()
+            XCTAssertFalse(paths.isEmpty, "No isolated E5 cache was created; no purge was performed")
+            for path in paths { try FileManager.default.removeItem(at: path) }
+        }
+
+        let audio = try regressionAudio()
+        for version in ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3"] {
+            let host = try PluginTestHostServices(defaults: ["loadedModel": version])
+            let plugin = makePlugin()
+            plugin.activate(host: host)
+            defer { plugin.deactivate() }
+            await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+            guard plugin.isConfigured else { XCTFail("Installed \(version) failed to load"); return }
+            let baseline = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            XCTAssertFalse(baseline.text.isEmpty)
+
+            // Core ML may keep an already-created execution stream alive even
+            // after unlinking its cache. Also exercise a fresh model instance
+            // whose first prediction occurs after the purge.
+            plugin.unloadModel(clearPersistence: false)
+            await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+            XCTAssertTrue(plugin.isConfigured)
+            try purge()
+            let coldStart = ContinuousClock.now
+            let cold = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            let coldDuration = ContinuousClock.now - coldStart
+            XCTAssertEqual(cold.text, baseline.text)
+
+            plugin.unloadModel(clearPersistence: false)
+            await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+            XCTAssertTrue(plugin.isConfigured)
+            try purge()
+            let warmupStart = ContinuousClock.now
+            plugin.triggerPrewarmModel()
+            await plugin.waitForModelPrewarm()
+            let warmupDuration = ContinuousClock.now - warmupStart
+            let cacheDirectoryRecreated = !(try cacheBundles()).isEmpty
+            XCTAssertNil(plugin.currentSettingsActivity)
+            let speechStart = ContinuousClock.now
+            let recovered = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            let speechDuration = ContinuousClock.now - speechStart
+            XCTAssertEqual(recovered.text, baseline.text)
+            print("Core ML purge smoke \(version): unprepared speech=\(coldDuration), preparation=\(warmupDuration), prepared speech=\(speechDuration), cache directory recreated=\(cacheDirectoryRecreated)")
+        }
     }
 
     /// Opt-in Core ML regression using FluidAudio 0.15.7's published fixture:

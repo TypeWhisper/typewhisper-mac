@@ -1,6 +1,13 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Preparing model": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Modell wird vorbereitet" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "モデルを準備中" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在准备模型" } }
+      }
+    },
     "Load": {
       "localizations": {
         "ja": {
