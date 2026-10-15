@@ -9492,6 +9492,87 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(outcome.engineCalls, 1)
     }
 
+    /// #1606: a dead or muted input used to stay unnoticed until the stop. The indicator now
+    /// warns once the running recording has delivered only digital silence for a second.
+    @MainActor
+    func testRecordingWarnsWhileInputDeliversOnlyDigitalSilence() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+        let expectedWarning = String(localized: "No sound from the microphone. Is it muted?")
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        XCTAssertTrue(viewModel.isRecordingInputReady)
+        context.audioRecordingService.testingProcessConvertedSamples([Float](repeating: 0, count: 1_600))
+
+        viewModel.testingUpdateRecordingInputSilence(recordingDuration: 0.5)
+        XCTAssertFalse(viewModel.isRecordingInputSilent)
+        XCTAssertNil(viewModel.silentInputWarningMessage)
+
+        viewModel.testingUpdateRecordingInputSilence(recordingDuration: 1.0)
+        XCTAssertTrue(viewModel.isRecordingInputSilent)
+        XCTAssertEqual(viewModel.silentInputWarningMessage, expectedWarning)
+
+        // Unmuting clears the warning for the rest of the recording.
+        context.audioRecordingService.testingProcessConvertedSamples([0, 0.0003, -0.0002])
+        viewModel.testingUpdateRecordingInputSilence(recordingDuration: 1.1)
+        XCTAssertFalse(viewModel.isRecordingInputSilent)
+        XCTAssertNil(viewModel.silentInputWarningMessage)
+
+        viewModel.testingUpdateRecordingInputSilence(recordingDuration: 30)
+        XCTAssertNil(viewModel.silentInputWarningMessage)
+
+        _ = viewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+        XCTAssertFalse(viewModel.isRecordingInputSilent)
+    }
+
+    @MainActor
+    func testRecordingWithInputSignalNeverWarnsAboutSilence() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        // A quiet room still has a noise floor of a few 16-bit steps.
+        context.audioRecordingService.testingProcessConvertedSamples([0.0001, -0.0001, 0.00005])
+
+        viewModel.testingUpdateRecordingInputSilence(recordingDuration: 5)
+        XCTAssertFalse(viewModel.isRecordingInputSilent)
+        XCTAssertNil(viewModel.silentInputWarningMessage)
+
+        _ = viewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+    }
+
     @MainActor
     func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

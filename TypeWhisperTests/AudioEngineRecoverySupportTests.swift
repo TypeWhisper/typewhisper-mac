@@ -3555,6 +3555,68 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertEqual(tracker.promoteCurrentGeneration()?.samples, [0])
     }
 
+    /// A prepared stream can go dead between dictations (#1606): the claim must not take it.
+    func testPreparedBluetoothInputClaimReportsDigitalSilenceAsSilentStream() throws {
+        let clock = FakeReadinessClock()
+        let tracker = BluetoothInputStartupTracker(now: { clock.now })
+        let oldGeneration = tracker.beginGeneration()
+        _ = tracker.consume(samples: [0.8], inputRMS: 0.8, generation: oldGeneration)
+        tracker.disarm(generation: oldGeneration)
+        let generation = try XCTUnwrap(tracker.armExistingGeneration(oldGeneration))
+        let checker = BluetoothInputReadinessChecker(
+            silentFallback: AudioRecordingService.preparedBluetoothSilentStreamFallback,
+            requiredSignalBufferCount: 1,
+            now: { clock.now },
+            sleep: { delay in
+                clock.now += delay
+                _ = tracker.consume(samples: [0, 0], inputRMS: 0, generation: generation)
+            }
+        )
+
+        let readiness = try checker.waitForInitialInput(
+            label: "prepared-test",
+            deadline: nil,
+            readinessSnapshot: { tracker.snapshot(for: generation) },
+            isEngineRunning: { true },
+            shouldCancel: { false }
+        )
+
+        XCTAssertEqual(readiness, .silentStream)
+        XCTAssertGreaterThanOrEqual(clock.now, AudioRecordingService.preparedBluetoothSilentStreamFallback)
+        XCTAssertLessThan(clock.now, 0.5)
+    }
+
+    func testPreparedBluetoothInputClaimAcceptsSignalAfterSilentBuffer() throws {
+        let clock = FakeReadinessClock()
+        let tracker = BluetoothInputStartupTracker(now: { clock.now })
+        let oldGeneration = tracker.beginGeneration()
+        tracker.disarm(generation: oldGeneration)
+        let generation = try XCTUnwrap(tracker.armExistingGeneration(oldGeneration))
+        var buffers: [[Float]] = [[0, 0], [0, 0.0003]]
+        let checker = BluetoothInputReadinessChecker(
+            silentFallback: AudioRecordingService.preparedBluetoothSilentStreamFallback,
+            requiredSignalBufferCount: 1,
+            now: { clock.now },
+            sleep: { delay in
+                clock.now += delay
+                guard !buffers.isEmpty else { return }
+                let samples = buffers.removeFirst()
+                _ = tracker.consume(samples: samples, inputRMS: samples.max() ?? 0, generation: generation)
+            }
+        )
+
+        let readiness = try checker.waitForInitialInput(
+            label: "prepared-test",
+            deadline: nil,
+            readinessSnapshot: { tracker.snapshot(for: generation) },
+            isEngineRunning: { true },
+            shouldCancel: { false }
+        )
+
+        XCTAssertEqual(readiness, .signal)
+        XCTAssertEqual(clock.now, 0.02, accuracy: 0.001)
+    }
+
     func testBluetoothInputReadinessRejectsReadyCandidateAfterRouteChange() {
         let checker = BluetoothInputReadinessChecker()
 
@@ -3611,7 +3673,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertLessThan(clock.now, 2)
     }
 
-    func testBluetoothInputReadinessAcceptsImmediateStableSignal() {
+    func testBluetoothInputReadinessAcceptsImmediateStableSignal() throws {
         let clock = FakeReadinessClock()
         let checker = BluetoothInputReadinessChecker(
             timeout: 5,
@@ -3619,7 +3681,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             sleep: { clock.now += $0 }
         )
 
-        XCTAssertNoThrow(try checker.waitForInitialInput(
+        let readiness = try checker.waitForInitialInput(
             label: "test",
             deadline: nil,
             readinessSnapshot: {
@@ -3633,11 +3695,12 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             },
             isEngineRunning: nil,
             shouldCancel: { false }
-        ))
+        )
+        XCTAssertEqual(readiness, .signal)
         XCTAssertEqual(clock.now, 0)
     }
 
-    func testBluetoothInputReadinessUsesThreeSecondSilentStreamFallback() {
+    func testBluetoothInputReadinessUsesThreeSecondSilentStreamFallback() throws {
         let clock = FakeReadinessClock()
         let checker = BluetoothInputReadinessChecker(
             timeout: 5,
@@ -3647,7 +3710,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             sleep: { clock.now += $0 }
         )
 
-        XCTAssertNoThrow(try checker.waitForInitialInput(
+        let readiness = try checker.waitForInitialInput(
             label: "test",
             deadline: nil,
             readinessSnapshot: {
@@ -3661,9 +3724,41 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             },
             isEngineRunning: nil,
             shouldCancel: { false }
-        ))
+        )
+        XCTAssertEqual(readiness, .silentStream)
         XCTAssertGreaterThanOrEqual(clock.now, 3)
         XCTAssertLessThan(clock.now, 3.2)
+    }
+
+    func testBluetoothInputReadinessUsesSilentFallbackOfTheCall() throws {
+        let clock = FakeReadinessClock()
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            silentFallback: 3,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
+        )
+
+        let readiness = try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            silentFallback: AudioRecordingService.bluetoothSilentStreamFallbackAfterRebuild,
+            readinessSnapshot: {
+                AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: max(3, Int(clock.now / 0.1)),
+                    buffersSinceSignal: 0,
+                    continuousDuration: clock.now,
+                    lastBufferTimestamp: clock.now
+                )
+            },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        )
+        XCTAssertEqual(readiness, .silentStream)
+        XCTAssertGreaterThanOrEqual(clock.now, 1)
+        XCTAssertLessThan(clock.now, 1.2)
     }
 
     func testBluetoothInputReadinessTreatsStagnatingBuffersAsRetryable() {
@@ -3928,6 +4023,88 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(generation: 1))
         XCTAssertTrue(readinessChecker.waitCalls.isEmpty)
+    }
+
+    /// #1606: a Bluetooth stream of exact zeros can be dead, so the start rebuilds the engine
+    /// instead of recording a minute of silence.
+    func testBluetoothSilentStreamRebuildsEngineInsteadOfStartingRecording() {
+        let readinessChecker = FakeAudioInputReadinessChecker()
+        readinessChecker.readiness = .silentStream
+        let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        let generation = service.testingBeginBluetoothInputGeneration()
+
+        XCTAssertThrowsError(try service.testingWaitForInitialInputReadinessIfNeeded(
+            generation: generation,
+            silentStreamHandling: .rebuild
+        )) { error in
+            XCTAssertTrue(error is AudioRecordingService.BluetoothSilentStreamError, "Got \(error)")
+        }
+        XCTAssertEqual(readinessChecker.waitCalls, [.init(label: "test", silentFallback: nil)])
+    }
+
+    func testBluetoothSignalStartsRecordingWithoutRebuild() {
+        let readinessChecker = FakeAudioInputReadinessChecker()
+        readinessChecker.readiness = .signal
+        let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        let generation = service.testingBeginBluetoothInputGeneration()
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(
+            generation: generation,
+            silentStreamHandling: .rebuild
+        ))
+    }
+
+    /// A muted headset stays silent after the rebuild. The recording still starts, after a
+    /// shorter wait, so unmuting during the dictation works.
+    func testBluetoothSilentStreamAfterRebuildStartsRecordingAfterShorterWait() {
+        let readinessChecker = FakeAudioInputReadinessChecker()
+        readinessChecker.readiness = .silentStream
+        let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        let generation = service.testingBeginBluetoothInputGeneration()
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(
+            generation: generation,
+            silentStreamHandling: .acceptAfterRebuild
+        ))
+        XCTAssertEqual(readinessChecker.waitCalls, [
+            .init(label: "test", silentFallback: AudioRecordingService.bluetoothSilentStreamFallbackAfterRebuild)
+        ])
+        XCTAssertLessThan(AudioRecordingService.bluetoothSilentStreamFallbackAfterRebuild, 3)
+    }
+
+    func testBluetoothPreparationKeepsSilentStreamForTheClaimToCheck() {
+        let readinessChecker = FakeAudioInputReadinessChecker()
+        readinessChecker.readiness = .silentStream
+        let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        let generation = service.testingBeginBluetoothInputGeneration()
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(generation: generation))
+        XCTAssertEqual(readinessChecker.waitCalls, [.init(label: "test", silentFallback: nil)])
+    }
+
+    /// The silent stream used most of the five-second deadline, which would leave the rebuilt
+    /// stream too little time to deliver audio or prove it is silent too.
+    func testSilentStreamRebuildGetsItsOwnReadinessBudget() {
+        let budget = AudioRecordingService.bluetoothSilentStreamRebuildBudget
+
+        XCTAssertEqual(
+            AudioRecordingService.readinessDeadlineForSilentStreamRebuild(5, now: 4.2),
+            4.2 + budget,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            AudioRecordingService.readinessDeadlineForSilentStreamRebuild(30, now: 4.2),
+            30,
+            accuracy: 0.0001
+        )
+        XCTAssertGreaterThan(
+            budget,
+            AudioRecordingService.bluetoothSilentStreamFallbackAfterRebuild + 1
+        )
     }
 
     func testInputActivatorActivateIfNeededPinsBluetoothInput() {
@@ -6004,18 +6181,22 @@ private final class FakeReadinessClock: @unchecked Sendable {
 private final class FakeAudioInputReadinessChecker: AudioInputReadinessChecking {
     struct WaitCall: Equatable {
         let label: String
+        var silentFallback: TimeInterval?
     }
 
+    var readiness = AudioInputReadiness.signal
     private(set) var waitCalls: [WaitCall] = []
 
     func waitForInitialInput(
         label: String,
         deadline: TimeInterval?,
+        silentFallback: TimeInterval?,
         readinessSnapshot: () -> AudioInputReadinessSnapshot?,
         isEngineRunning: (() -> Bool)?,
         shouldCancel: () -> Bool
-    ) throws {
-        waitCalls.append(.init(label: label))
+    ) throws -> AudioInputReadiness {
+        waitCalls.append(.init(label: label, silentFallback: silentFallback))
+        return readiness
     }
 }
 

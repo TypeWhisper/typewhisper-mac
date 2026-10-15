@@ -214,7 +214,8 @@ struct IndicatorPresentationData {
     let activeAppIcon: NSImage?
     let isRecordingInputReady: Bool
     let isModelLoading: Bool
-    let cancelWarningMessage: String?
+    /// Esc confirmation or a silent microphone, shown in place of the regular status.
+    let warningMessage: String?
     let processingPhase: String?
     let actionFeedbackMessage: String?
     let actionFeedbackIcon: String?
@@ -272,7 +273,7 @@ struct IndicatorPresentationData {
                 activeAppIcon: preview.appIcon,
                 isRecordingInputReady: true,
                 isModelLoading: false,
-                cancelWarningMessage: nil,
+                warningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,
@@ -294,7 +295,7 @@ struct IndicatorPresentationData {
                 isRecordingInputReady: dictation.isRecordingInputReady,
                 isModelLoading: dictation.isModelLoading
                     && (presentation.state == .recording || presentation.state == .processing),
-                cancelWarningMessage: dictation.cancelWarningMessage,
+                warningMessage: dictation.cancelWarningMessage ?? dictation.silentInputWarningMessage,
                 // The transcription waits for the load, so say that instead of "Transcribing".
                 processingPhase: presentation.state == .processing
                     && dictation.isModelLoading
@@ -323,7 +324,7 @@ struct IndicatorPresentationData {
                 activeAppIcon: nil,
                 isRecordingInputReady: true,
                 isModelLoading: false,
-                cancelWarningMessage: nil,
+                warningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,

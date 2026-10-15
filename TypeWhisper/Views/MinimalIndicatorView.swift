@@ -86,8 +86,8 @@ struct MinimalIndicatorView: View {
         return presentation.actionFeedbackMessage
     }
 
-    private var cancelWarningMessage: String? {
-        presentation.cancelWarningMessage
+    private var warningMessage: String? {
+        presentation.warningMessage
     }
 
     private var errorMessage: String? {
@@ -97,7 +97,7 @@ struct MinimalIndicatorView: View {
 
     private var showsExpandedMessage: Bool {
         countdownPresentation != nil
-            || cancelWarningMessage != nil
+            || warningMessage != nil
             || actionFeedbackMessage != nil
             || errorMessage != nil
     }
@@ -176,7 +176,7 @@ struct MinimalIndicatorView: View {
         if let countdownPresentation {
             return countdownPresentation.kind.headline
         }
-        if let message = cancelWarningMessage {
+        if let message = warningMessage {
             return message
         }
 
@@ -250,7 +250,7 @@ struct MinimalIndicatorView: View {
                         icon: "xmark.circle.fill",
                         iconColor: .red
                     )
-                } else if let message = cancelWarningMessage {
+                } else if let message = warningMessage {
                     compactMessage(
                         text: message,
                         icon: "exclamationmark.triangle.fill",

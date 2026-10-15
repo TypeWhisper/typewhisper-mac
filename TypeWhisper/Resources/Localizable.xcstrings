@@ -51202,6 +51202,29 @@
           }
         }
       }
+    },
+    "No sound from the microphone. Is it muted?" : {
+      "comment" : "Indicator warning while a dictation records only digital silence, e.g. from a muted or dead microphone.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Ton vom Mikrofon. Ist es stummgeschaltet?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクから音が届いていません。ミュートになっていませんか？"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风没有声音。是否已静音？"
+          }
+        }
+      }
     }
   },
   "version" : "1.1"
