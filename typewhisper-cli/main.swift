@@ -137,8 +137,8 @@ do {
             print(OutputFormatter.formatModels(data, json: jsonOutput))
             break
         }
-        let engine = engineOverride?.trimmingCharacters(in: .whitespaces) ?? ""
-        let model = modelOverride?.trimmingCharacters(in: .whitespaces) ?? ""
+        let engine = engineOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = modelOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if action == "unload" {
             // The unload endpoint always unloads the engine's active model.
             guard !engine.isEmpty, modelOverride == nil else {
