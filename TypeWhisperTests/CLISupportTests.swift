@@ -252,6 +252,74 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(request.httpBody, changes)
     }
 
+    func testCLIClientLoadsUnloadsAndDeletesModels() async throws {
+        let recorder = RequestRecorder()
+        let client = CLIClient(
+            port: 9876,
+            apiToken: "cli-token",
+            transport: { request in
+                recorder.record(request)
+                return (Data(#"{"engine":"parakeet","status":"ready"}"#.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+        func body(_ request: URLRequest) throws -> [String: String]? {
+            try JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String]
+        }
+
+        _ = try await client.loadModel(engine: "parakeet", model: "parakeet-tdt-0.6b-v3")
+        var request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/models/load")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.timeoutInterval, 660)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+        XCTAssertEqual(try body(request), ["engine": "parakeet", "model": "parakeet-tdt-0.6b-v3"])
+
+        _ = try await client.unloadModel(engine: "parakeet")
+        request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/models/unload")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.timeoutInterval, 10)
+        XCTAssertEqual(try body(request), ["engine": "parakeet"])
+
+        _ = try await client.deleteModel(engine: "parakeet", model: "parakeet tdt&v2")
+        request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.httpMethod, "DELETE")
+        XCTAssertEqual(request.url?.path, "/v1/models")
+        XCTAssertEqual(request.url?.query, "engine=parakeet&model=parakeet%20tdt%26v2")
+        XCTAssertNil(request.httpBody)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+    }
+
+    func testCLIClientSurfacesUnsupportedUnloadAsServerError() async {
+        let client = CLIClient(
+            port: 9876,
+            transport: { request in
+                let body = Data(#"{"error":{"message":"Engine 'groq' does not support unloading"}}"#.utf8)
+                return (body, Self.httpResponse(url: request.url!, statusCode: 409))
+            }
+        )
+
+        do {
+            _ = try await client.unloadModel(engine: "groq")
+            XCTFail("Expected a server error")
+        } catch let error as CLIError {
+            XCTAssertEqual(error.exitCode, 3)
+            XCTAssertEqual(error.message, "Error: Server returned 409 - Engine 'groq' does not support unloading")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testOutputFormatterRendersModelActions() {
+        let loaded = Data(#"{"engine":"parakeet","model":"parakeet-tdt-0.6b-v3","status":"ready"}"#.utf8)
+        let unloadedWithoutModel = Data(#"{"engine":"parakeet","model":null,"status":"unloaded"}"#.utf8)
+
+        XCTAssertEqual(OutputFormatter.formatModelAction(loaded, json: false), "ready: parakeet parakeet-tdt-0.6b-v3")
+        XCTAssertEqual(OutputFormatter.formatModelAction(unloadedWithoutModel, json: false), "unloaded: parakeet")
+        XCTAssertTrue(OutputFormatter.formatModelAction(loaded, json: true).contains("\"status\" : \"ready\""))
+    }
+
     func testOutputFormatterRendersAudioSettings() {
         let state = Data("""
             {"input_devices":[{"id":"bh","name":"BlackHole 2ch","is_system_default":false},

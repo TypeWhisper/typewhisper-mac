@@ -805,6 +805,9 @@ Install via Settings > Advanced > CLI Tool > Install. This places the `typewhisp
 ```bash
 typewhisper status              # Show server status
 typewhisper models              # List available models
+typewhisper models load --engine parakeet --model parakeet-tdt-0.6b-v3 # Load and select a model
+typewhisper models unload --engine parakeet # Unload it, keeping its files
+typewhisper models delete --engine whisper --model openai_whisper-large-v3_turbo # Delete downloaded files
 typewhisper transcribe file.wav # Transcribe an audio file
 typewhisper export settings.json # Export all supported settings
 typewhisper import settings.json # Import all categories in a backup
@@ -823,6 +826,7 @@ typewhisper audio set changes.json # Change audio settings (see Audio Settings a
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 | `--no-corrections` | Return raw transcription text without Dictionary Corrections |
+| `--engine <id>`, `--model <id>` | `transcribe`: use this engine or model for the request; `models load\|delete`: the engine and model to act on; `models unload`: `--engine` only |
 | `--replace` | `import` only: overwrite workflows, profiles, and prompt actions with the same name and replace hotkeys |
 
 ### Examples

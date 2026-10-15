@@ -127,8 +127,38 @@ do {
         print(OutputFormatter.formatStatus(data, json: jsonOutput))
 
     case "models":
-        let data = try await client.models()
-        print(OutputFormatter.formatModels(data, json: jsonOutput))
+        let action = positionalArgs.first ?? "list"
+        guard positionalArgs.count <= 1, ["list", "load", "unload", "delete"].contains(action) else {
+            printError("Error: Use 'models [list]', 'models load|delete --engine <id> --model <id>' or 'models unload --engine <id>'.")
+            exit(1)
+        }
+        if action == "list" {
+            let data = try await client.models()
+            print(OutputFormatter.formatModels(data, json: jsonOutput))
+            break
+        }
+        let engine = engineOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let model = modelOverride?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if action == "unload" {
+            // The unload endpoint always unloads the engine's active model.
+            guard !engine.isEmpty, modelOverride == nil else {
+                printError("Error: models unload requires --engine and takes no --model.")
+                exit(1)
+            }
+        } else if engine.isEmpty || model.isEmpty {
+            printError("Error: models \(action) requires --engine and --model.")
+            exit(1)
+        }
+        let data: Data
+        switch action {
+        case "unload":
+            data = try await client.unloadModel(engine: engine)
+        case "load":
+            data = try await client.loadModel(engine: engine, model: model)
+        default:
+            data = try await client.deleteModel(engine: engine, model: model)
+        }
+        print(OutputFormatter.formatModelAction(data, json: jsonOutput))
 
     case "export":
         guard positionalArgs.count == 1 else {
@@ -231,7 +261,9 @@ func printUsage() {
         Commands:
           transcribe <file>    Transcribe an audio file (or - for stdin)
           status               Show server status
-          models               List available models
+          models [list]        List available models
+          models load|delete   Load and select, or delete a model (--engine <id> --model <id>)
+          models unload        Unload a model, keeping its files (--engine <id>)
           export <file>        Export a settings backup as JSON
           import <file>        Import all settings from a JSON backup
           audio                Show microphone priority, ducking and sound settings
@@ -261,6 +293,8 @@ func printUsage() {
 
         Examples:
           typewhisper status
+          typewhisper models load --engine parakeet --model parakeet-tdt-0.6b-v3
+          typewhisper models unload --engine parakeet
           typewhisper export typewhisper-settings.json
           typewhisper import typewhisper-settings.json
           typewhisper import typewhisper-settings.json --replace
