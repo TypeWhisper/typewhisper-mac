@@ -445,10 +445,18 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     // MARK: - Vocabulary Boosting
 
     /// Downloads and loads the CTC model, waiting for any CTC download in progress.
-    /// With `onlyIfDownloaded`, missing model files are not downloaded.
-    func downloadCtcModel(onlyIfDownloaded: Bool = false) async {
+    func downloadCtcModel() async {
         _ = try? await ctcDownloadGate.withLock { [self] in
-            await performCtcModelDownload(loadIntoMemory: true, onlyIfDownloaded: onlyIfDownloaded)
+            await performCtcModelDownload(loadIntoMemory: true)
+        }
+    }
+
+    /// Loads already downloaded CTC files after a model load. Skipped when the
+    /// model was unloaded while waiting for a CTC download in progress.
+    private func loadDownloadedCtcModel() async {
+        _ = try? await ctcDownloadGate.withLock { [self] in
+            guard isConfigured else { return ctcModelState }
+            return await performCtcModelDownload(loadIntoMemory: true, onlyIfDownloaded: true)
         }
     }
 
@@ -725,8 +733,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         // FluidAudio's CTC loader may repair its cache by downloading assets.
         // It runs outside `modelLoadGate`, so switching models meanwhile does not
         // wait for it with no model loaded.
-        if didLoad, !passively, vocabularyBoostingEnabled, isConfigured {
-            await downloadCtcModel(onlyIfDownloaded: true)
+        if didLoad, !passively, vocabularyBoostingEnabled {
+            await loadDownloadedCtcModel()
         }
     }
 
