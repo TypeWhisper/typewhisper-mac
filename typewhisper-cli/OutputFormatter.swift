@@ -81,6 +81,19 @@ enum OutputFormatter {
         return lines.joined(separator: "\n")
     }
 
+    static func formatModelAction(_ data: Data, json: Bool) -> String {
+        if json {
+            return prettyJSON(data)
+        }
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let status = obj["status"] as? String,
+              let engine = obj["engine"] as? String else {
+            return prettyJSON(data)
+        }
+        let model = obj["model"] as? String ?? ""
+        return "\(status): \(engine) \(model)".trimmingCharacters(in: .whitespaces)
+    }
+
     static func formatSettingsExport(path: String, bytes: Int, json: Bool) -> String {
         guard json else {
             return "Exported settings to \(path)"

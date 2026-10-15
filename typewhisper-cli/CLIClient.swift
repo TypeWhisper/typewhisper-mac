@@ -85,6 +85,25 @@ struct CLIClient {
         try await get("/v1/models")
     }
 
+    func loadModel(engine: String, model: String) async throws -> Data {
+        try await postJSON("/v1/models/load", ["engine": engine, "model": model], timeout: 300)
+    }
+
+    func unloadModel(engine: String, model: String? = nil) async throws -> Data {
+        var payload = ["engine": engine]
+        payload["model"] = model
+        return try await postJSON("/v1/models/unload", payload)
+    }
+
+    func deleteModel(engine: String, model: String) async throws -> Data {
+        var components = URLComponents(string: "\(baseURL)/v1/models")!
+        components.queryItems = [URLQueryItem(name: "engine", value: engine), URLQueryItem(name: "model", value: model)]
+        var request = URLRequest(url: components.url!)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 60
+        return try await performRequest(request)
+    }
+
     func exportSettings() async throws -> Data {
         try await get("/v1/settings/export", timeout: 300)
     }
@@ -251,6 +270,16 @@ struct CLIClient {
     private func get(_ path: String, timeout: TimeInterval = 10) async throws -> Data {
         let url = URL(string: "\(baseURL)\(path)")!
         var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        return try await performRequest(request)
+    }
+
+    private func postJSON(_ path: String, _ payload: [String: String], timeout: TimeInterval = 10) async throws -> Data {
+        let url = URL(string: "\(baseURL)\(path)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         request.timeoutInterval = timeout
         return try await performRequest(request)
     }
