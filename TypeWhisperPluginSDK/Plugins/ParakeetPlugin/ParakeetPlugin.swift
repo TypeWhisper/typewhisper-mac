@@ -80,6 +80,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// Test hook replacing the CTC download I/O while keeping `ctcDownloadGate`.
     /// Receives whether the model would also be loaded into memory.
     var ctcModelDownloadOverrideForTests: (@Sendable (_ loadIntoMemory: Bool) async -> Void)?
+    /// Test hook replacing the Parakeet model download and Core ML load while
+    /// keeping `modelLoadGate` and the state updates around them.
+    var asrModelLoadOverrideForTests: (@Sendable (_ version: ParakeetVersion) async throws -> Void)?
     var lastConfiguredPrompt: String?
     var lastBoostingTermCount: Int = 0
 
@@ -442,9 +445,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     // MARK: - Vocabulary Boosting
 
     /// Downloads and loads the CTC model, waiting for any CTC download in progress.
-    func downloadCtcModel() async {
+    /// With `onlyIfDownloaded`, missing model files are not downloaded.
+    func downloadCtcModel(onlyIfDownloaded: Bool = false) async {
         _ = try? await ctcDownloadGate.withLock { [self] in
-            await performCtcModelDownload(loadIntoMemory: true)
+            await performCtcModelDownload(loadIntoMemory: true, onlyIfDownloaded: onlyIfDownloaded)
         }
     }
 
@@ -462,11 +466,16 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     /// Call only while holding `ctcDownloadGate`. Returns the resulting state.
-    private func performCtcModelDownload(loadIntoMemory: Bool) async -> CtcModelState {
+    private func performCtcModelDownload(loadIntoMemory: Bool, onlyIfDownloaded: Bool = false) async -> CtcModelState {
         guard ctcModels == nil else { return ctcModelState }
 
         if let ctcModelDownloadOverrideForTests {
             await ctcModelDownloadOverrideForTests(loadIntoMemory)
+            return ctcModelState
+        }
+
+        let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+        if onlyIfDownloaded, !CtcModels.modelsExist(at: cacheDir) {
             return ctcModelState
         }
 
@@ -475,7 +484,6 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             applyHuggingFaceTokenToEnvironment()
             let spaceReservation = try await reserveCtcDownloadSpace()
             defer { spaceReservation?.release() }
-            let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
             if loadIntoMemory {
                 let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
                 let tokenizer = try await CtcTokenizer.load(from: cacheDir)
@@ -700,28 +708,40 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     fileprivate func loadModel(version: ParakeetVersion? = nil, passively: Bool = false) async {
         let version = version ?? selectedVersion
-        try? await modelLoadGate.withLock { [self] in
-            guard host != nil else { return }
+        let didLoad = (try? await modelLoadGate.withLock { [self] () -> Bool in
+            guard host != nil else { return false }
             if passively {
                 let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
                     .appendingPathComponent(Self.vocabularyAssetFileName)
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured,
                       isModelDownloaded(version: version),
-                      Self.vocabularyAssetExists(at: vocabularyURL) else { return }
+                      Self.vocabularyAssetExists(at: vocabularyURL) else { return false }
             }
-            guard !(isConfigured && loadedModelId == version.modelDef.id) else { return }
-            await performModelLoad(version: version, allowDownloads: !passively)
+            guard !(isConfigured && loadedModelId == version.modelDef.id) else { return false }
+            return await performModelLoad(version: version, allowDownloads: !passively)
+        }) ?? false
+
+        // Optional vocabulary preparation remains on the explicit/first-use path;
+        // FluidAudio's CTC loader may repair its cache by downloading assets.
+        // It runs outside `modelLoadGate`, so switching models meanwhile does not
+        // wait for it with no model loaded.
+        if didLoad, !passively, vocabularyBoostingEnabled, isConfigured {
+            await downloadCtcModel(onlyIfDownloaded: true)
         }
     }
 
-    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool) async {
+    /// Returns whether the model was loaded.
+    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool) async -> Bool {
         modelState = .downloading
         downloadProgress = 0.1
 
         do {
             applyHuggingFaceTokenToEnvironment()
-            let models: AsrModels
-            if allowDownloads {
+            let models: AsrModels?
+            if let asrModelLoadOverrideForTests {
+                try await asrModelLoadOverrideForTests(version)
+                models = nil
+            } else if allowDownloads {
                 let spaceReservation = isModelDownloaded(version: version)
                     ? nil
                     : try await reserveDownloadSpace(for: version)
@@ -746,11 +766,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             // Keep the pre-0.15.7 chunk context: the new v3 default changes
             // punctuation at chunk boundaries in paired long-form recordings.
             let manager = AsrManager(config: ASRConfig(melChunkContext: true))
-            try await manager.loadModels(models)
+            if let models {
+                try await manager.loadModels(models)
+            }
             downloadProgress = 1.0
 
             try Task.checkCancellation()
-            guard host != nil else { return }
+            guard host != nil else { return false }
             selectedVersion = version
             asrManager = manager
             loadedAsrModels = models
@@ -762,21 +784,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             host?.setUserDefault(version.modelDef.id, forKey: "loadedModel")
             host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
             host?.notifyCapabilitiesChanged()
-
-            // Optional vocabulary preparation remains on the explicit/first-use path;
-            // FluidAudio's CTC loader may repair its cache by downloading assets.
-            if vocabularyBoostingEnabled, allowDownloads {
-                let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
-                if CtcModels.modelsExist(at: cacheDir) {
-                    await downloadCtcModel()
-                }
-            }
+            return true
         } catch is CancellationError {
             if host != nil { modelState = isConfigured ? .ready : .notLoaded }
-            return
+            return false
         } catch {
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
+            return false
         }
     }
 
