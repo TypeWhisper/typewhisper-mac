@@ -505,6 +505,23 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let bluetoothInputGeneration: UInt64?
     }
 
+    /// What a Bluetooth start does with a steady stream of digital silence. A muted headset
+    /// sends exact zeros, but so does a route that came up dead, and a fresh engine fixes that
+    /// (#1606).
+    enum BluetoothSilentStreamHandling: Equatable {
+        /// Preparation keeps the stream; the recording that claims it checks it again.
+        case accept
+        /// Rebuild the engine once.
+        case rebuild
+        /// The rebuilt stream is silent too, so the microphone is most likely muted. Start
+        /// after a shorter wait, since the first stream already waited.
+        case acceptAfterRebuild
+    }
+
+    struct BluetoothSilentStreamError: LocalizedError {
+        var errorDescription: String? { "Bluetooth input delivered only digital silence" }
+    }
+
     private var audioEngine: AVAudioEngine?
     private var inputCaptureSession: AudioInputCaptureSession?
     private var preparedBuiltInInput: PreparedBuiltInInput?
@@ -590,6 +607,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// An armed stream must have delivered audio this recently when a recording claims it.
     private static let prerollClaimFreshness: TimeInterval = 0.25
     private static let bluetoothInputReadinessTimeout: TimeInterval = 5.0
+    static let bluetoothSilentStreamFallbackAfterRebuild: TimeInterval = 1.0
+    /// The silent stream used most of the readiness deadline, so the rebuild gets its own time.
+    static let bluetoothSilentStreamRebuildBudget: TimeInterval = 3.0
+    /// A claimed prepared stream that sends only digital silence this long counts as stale.
+    static let preparedBluetoothSilentStreamFallback: TimeInterval = 0.3
     private static let captureTapFrames: AVAudioFrameCount = 256
     private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
     // AVAudioIOUnit dispatches its property-listener blocks asynchronously, and device
@@ -1985,6 +2007,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    static func readinessDeadlineForSilentStreamRebuild(
+        _ deadline: TimeInterval?,
+        now: TimeInterval
+    ) -> TimeInterval {
+        max(deadline ?? now, now + bluetoothSilentStreamRebuildBudget)
+    }
+
     private func throwIfRecordingStartExpired(_ deadline: TimeInterval?) throws {
         guard let deadline, CFAbsoluteTimeGetCurrent() >= deadline else { return }
         throw AudioRecordingError.noAudioData
@@ -2531,11 +2560,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ) throws {
         let explicitDeviceSelected = hasExplicitDeviceSelection
         let selectedBluetoothDevice = requiresInitialInputReadiness
-        let effectiveReadinessDeadline = readinessDeadline ?? (
+        var effectiveReadinessDeadline = readinessDeadline ?? (
             selectedBluetoothDevice
                 ? CFAbsoluteTimeGetCurrent() + Self.bluetoothInputReadinessTimeout
                 : nil
         )
+        var silentStreamHandling = BluetoothSilentStreamHandling.rebuild
         var currentEngine = engine
         // Main-thread callers (e.g. startRecording from hotkey) get a bounded
         // backoff to keep UI responsive; the observer-based recovery queue
@@ -2550,6 +2580,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     currentEngine,
                     label: label,
                     readinessDeadline: effectiveReadinessDeadline,
+                    silentStreamHandling: silentStreamHandling,
                     shouldCancel: shouldCancel
                 )
                 return
@@ -2560,14 +2591,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             } catch let error as AudioRecordingError {
                 throw error
             } catch {
-                guard AudioEngineRecoveryPolicy.isRetryable(error: error) else {
+                let isSilentStream = error is BluetoothSilentStreamError
+                guard isSilentStream || AudioEngineRecoveryPolicy.isRetryable(error: error) else {
                     if explicitDeviceSelected && !selectedBluetoothDevice {
                         throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
                     }
                     throw AudioRecordingError.engineStartFailed(error.localizedDescription)
                 }
 
-                if !selectedBluetoothDevice, retryCount >= backoff.count {
+                if isSilentStream {
+                    silentStreamHandling = .acceptAfterRebuild
+                    effectiveReadinessDeadline = Self.readinessDeadlineForSilentStreamRebuild(
+                        effectiveReadinessDeadline,
+                        now: CFAbsoluteTimeGetCurrent()
+                    )
+                    logger.warning("\(label, privacy: .public) Bluetooth input delivered only digital silence; rebuilding the audio engine once")
+                } else if !selectedBluetoothDevice, retryCount >= backoff.count {
                     if explicitDeviceSelected {
                         throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
                     }
@@ -2688,9 +2727,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             recoveryCoordinator.noteEngineStarted()
             // This stream was validated before the click. Require a fresh buffer
-            // from the new generation, including silence, before reporting ready.
-            try BluetoothInputReadinessChecker(
-                silentFallback: 0,
+            // from the new generation before reporting ready.
+            let readiness = try BluetoothInputReadinessChecker(
+                silentFallback: Self.preparedBluetoothSilentStreamFallback,
                 requiredSignalBufferCount: 1
             ).waitForInitialInput(
                 label: "\(label)-prepared-bluetooth",
@@ -2703,6 +2742,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 },
                 shouldCancel: shouldCancel
             )
+            // The stream may have gone dead between dictations (#1606). The cold start
+            // rebuilds it, and still starts when the microphone is muted.
+            guard readiness == .signal else {
+                throw BluetoothSilentStreamError()
+            }
             logger.warning("\(label, privacy: .public) claimed actively prewarmed Bluetooth audio engine")
             return
         } catch is CancellationError {
@@ -2890,6 +2934,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ engine: AVAudioEngine,
         label: String,
         readinessDeadline: TimeInterval?,
+        silentStreamHandling: BluetoothSilentStreamHandling,
         shouldCancel: @escaping () -> Bool
     ) throws {
         let configuredCapture = try configureEngineCapture(
@@ -2912,6 +2957,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 label: label,
                 generation: configuredCapture.bluetoothInputGeneration,
                 deadline: readinessDeadline,
+                silentStreamHandling: silentStreamHandling,
                 isEngineRunning: { [recoveryCoordinator] in
                     engine.isRunning && !recoveryCoordinator.hasPendingConfigurationChange
                 },
@@ -3010,20 +3056,27 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         label: String,
         generation: UInt64?,
         deadline: TimeInterval? = nil,
+        silentStreamHandling: BluetoothSilentStreamHandling = .accept,
         isEngineRunning: (() -> Bool)? = nil,
         shouldCancel: @escaping () -> Bool = { false }
     ) throws {
         guard requiresInitialInputReadiness, let generation else { return }
 
-        try inputReadinessChecker.waitForInitialInput(
+        let readiness = try inputReadinessChecker.waitForInitialInput(
             label: label,
             deadline: deadline,
+            silentFallback: silentStreamHandling == .acceptAfterRebuild
+                ? Self.bluetoothSilentStreamFallbackAfterRebuild
+                : nil,
             readinessSnapshot: { [weak self] in
                 self?.bluetoothInputStartupTracker.snapshot(for: generation)
             },
             isEngineRunning: isEngineRunning,
             shouldCancel: shouldCancel
         )
+        if readiness == .silentStream, silentStreamHandling == .rebuild {
+            throw BluetoothSilentStreamError()
+        }
     }
 
     private func finishBluetoothInputStartupIfNeeded() {
@@ -3948,14 +4001,23 @@ final class BluetoothInputStartupTracker: @unchecked Sendable {
     }
 }
 
+/// What a Bluetooth input delivered when it became ready.
+enum AudioInputReadiness: Equatable {
+    case signal
+    /// Steady buffers of digital silence: a muted microphone, or a route that came up dead.
+    case silentStream
+}
+
 protocol AudioInputReadinessChecking: AnyObject {
+    /// `silentFallback` overrides how long a steady silent stream has to run before it counts as ready.
     func waitForInitialInput(
         label: String,
         deadline: TimeInterval?,
+        silentFallback: TimeInterval?,
         readinessSnapshot: () -> AudioInputReadinessSnapshot?,
         isEngineRunning: (() -> Bool)?,
         shouldCancel: () -> Bool
-    ) throws
+    ) throws -> AudioInputReadiness
 }
 
 final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
@@ -3988,13 +4050,16 @@ final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
         self.sleep = sleep
     }
 
+    @discardableResult
     func waitForInitialInput(
         label: String,
         deadline: TimeInterval?,
+        silentFallback: TimeInterval? = nil,
         readinessSnapshot: () -> AudioInputReadinessSnapshot?,
         isEngineRunning: (() -> Bool)?,
         shouldCancel: () -> Bool
-    ) throws {
+    ) throws -> AudioInputReadiness {
+        let silentFallback = silentFallback ?? self.silentFallback
         let startedAt = now()
         let localDeadline = startedAt + timeout
         let effectiveDeadline = min(localDeadline, deadline ?? localDeadline)
@@ -4013,14 +4078,14 @@ final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
                     logger.info(
                         "\(label, privacy: .public) Bluetooth input delivered stable non-silent audio in generation \(snapshot.generation, privacy: .public)"
                     )
-                    return
+                    return .signal
                 }
                 if snapshot.consecutiveBufferCount >= requiredSignalBufferCount,
                    snapshot.continuousDuration >= silentFallback {
                     logger.info(
-                        "\(label, privacy: .public) Bluetooth input delivered a stable silent stream for \(self.silentFallback, privacy: .public)s in generation \(snapshot.generation, privacy: .public)"
+                        "\(label, privacy: .public) Bluetooth input delivered a stable silent stream for \(silentFallback, privacy: .public)s in generation \(snapshot.generation, privacy: .public)"
                     )
-                    return
+                    return .silentStream
                 }
                 if now() - snapshot.lastBufferTimestamp > maximumBufferGap {
                     throw makeStartupRouteChangeError(
@@ -4201,12 +4266,14 @@ extension AudioRecordingService {
 
     func testingWaitForInitialInputReadinessIfNeeded(
         generation: UInt64,
+        silentStreamHandling: BluetoothSilentStreamHandling = .accept,
         isEngineRunning: (() -> Bool)? = nil,
         shouldCancel: @escaping () -> Bool = { false }
     ) throws {
         try waitForInitialInputReadinessIfNeeded(
             label: "test",
             generation: generation,
+            silentStreamHandling: silentStreamHandling,
             isEngineRunning: isEngineRunning,
             shouldCancel: shouldCancel
         )

@@ -83,8 +83,8 @@ struct NotchIndicatorView: View {
         presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
-    private var hasCancelWarning: Bool {
-        presentation.cancelWarningMessage != nil
+    private var hasWarning: Bool {
+        presentation.warningMessage != nil
     }
 
     private var hasProcessingPhase: Bool {
@@ -112,7 +112,7 @@ struct NotchIndicatorView: View {
 
     private var expansionMode: NotchExpansionMode {
         if countdownPresentation != nil { return .feedback }
-        if hasCancelWarning { return .feedback }
+        if hasWarning { return .feedback }
         if transcriptBodyVisible { return .transcript }
         if hasActionFeedback { return .feedback }
         if hasProcessingPhase || hasModelLoadingStatus { return .processing }
@@ -121,7 +121,7 @@ struct NotchIndicatorView: View {
 
     private var currentWidth: CGFloat {
         let width = NotchIndicatorLayout.containerWidth(closedWidth: closedWidth, mode: expansionMode)
-        guard expansionMode == .feedback, hasActionFeedback, countdownPresentation == nil, !hasCancelWarning else {
+        guard expansionMode == .feedback, hasActionFeedback, countdownPresentation == nil, !hasWarning else {
             return width
         }
         return max(width, actionFeedbackBody.width)
@@ -155,7 +155,7 @@ struct NotchIndicatorView: View {
         if countdownPresentation != nil {
             return feedbackBodyHeight
         }
-        if hasCancelWarning {
+        if hasWarning {
             return feedbackBodyHeight
         }
         if hasModelLoadingStatus {
@@ -284,12 +284,12 @@ struct NotchIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if let warning = presentation.cancelWarningMessage {
+            if let warning = presentation.warningMessage {
                 return warning
             }
             return presentation.recordingStatusLabel
         case .processing:
-            if let warning = presentation.cancelWarningMessage {
+            if let warning = presentation.warningMessage {
                 return warning
             }
             return presentation.modelLoadingLabel ?? String(localized: "Processing transcription")
@@ -367,9 +367,9 @@ struct NotchIndicatorView: View {
                 presentation: countdownPresentation,
                 contentPadding: contentPadding
             )
-        } else if hasCancelWarning {
+        } else if hasWarning {
             IndicatorActionFeedback(
-                message: presentation.cancelWarningMessage ?? "",
+                message: presentation.warningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,

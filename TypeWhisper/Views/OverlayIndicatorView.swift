@@ -79,8 +79,8 @@ struct OverlayIndicatorView: View {
         presentation.state == .inserting && presentation.actionFeedbackMessage != nil
     }
 
-    private var hasCancelWarning: Bool {
-        presentation.cancelWarningMessage != nil
+    private var hasWarning: Bool {
+        presentation.warningMessage != nil
     }
 
     private var transcriptPreviewState: OverlayTranscriptPreviewState {
@@ -110,7 +110,7 @@ struct OverlayIndicatorView: View {
         if countdownPresentation != nil {
             return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth)
         }
-        if hasCancelWarning { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
+        if hasWarning { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
         if transcriptBodyVisible { return max(closedWidth, 400) }
         if hasActionFeedback { return max(closedWidth, actionFeedbackBody.width) }
         return closedWidth
@@ -245,7 +245,7 @@ struct OverlayIndicatorView: View {
         if let countdownPresentation {
             return countdownPresentation.kind.headline
         }
-        if let warning = presentation.cancelWarningMessage {
+        if let warning = presentation.warningMessage {
             return warning
         }
 
@@ -273,9 +273,9 @@ struct OverlayIndicatorView: View {
     private var expandableContent: some View {
         if let countdownPresentation {
             countdownIndicator(countdownPresentation)
-        } else if hasCancelWarning {
+        } else if hasWarning {
             IndicatorActionFeedback(
-                message: presentation.cancelWarningMessage ?? "",
+                message: presentation.warningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
                 isError: false,
                 iconColor: .yellow,

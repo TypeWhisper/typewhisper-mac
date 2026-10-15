@@ -393,6 +393,9 @@ final class DictationViewModel: ObservableObject {
     @Published var processingPhase: String?
     @Published private(set) var isModelLoading = false
     @Published private(set) var isRecordingInputReady = false
+    /// The running recording has delivered only digital silence so far: a muted microphone
+    /// or a dead input stream. Shown while recording instead of only after the stop (#1606).
+    @Published private(set) var isRecordingInputSilent = false
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
@@ -599,6 +602,11 @@ final class DictationViewModel: ObservableObject {
         default:
             return nil
         }
+    }
+
+    var silentInputWarningMessage: String? {
+        guard state == .recording, isRecordingInputSilent else { return nil }
+        return String(localized: "No sound from the microphone. Is it muted?")
     }
 
     init(
@@ -1103,6 +1111,11 @@ final class DictationViewModel: ObservableObject {
     func testingWaitForRecordingStart() async {
         let startTask = recordingStartTask
         await startTask?.value
+    }
+
+    func testingUpdateRecordingInputSilence(recordingDuration: TimeInterval) {
+        self.recordingDuration = recordingDuration
+        updateRecordingInputSilence()
     }
 
     func testingWaitForPostInsertionPersistence() async {
@@ -5297,10 +5310,12 @@ final class DictationViewModel: ObservableObject {
 
     private func startRecordingTimer() {
         recordingDuration = 0
+        isRecordingInputSilent = false
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let start = self.recordingStartTime else { return }
                 self.recordingDuration = Date().timeIntervalSince(start)
+                self.updateRecordingInputSilence()
             }
         }
     }
@@ -5309,6 +5324,19 @@ final class DictationViewModel: ObservableObject {
         recordingTimer?.invalidate()
         recordingTimer = nil
         recordingDuration = 0
+        isRecordingInputSilent = false
+    }
+
+    private func updateRecordingInputSilence() {
+        let isSilent = state == .recording
+            && isRecordingInputReady
+            && isRecordingInputSilentSoFar(
+                recordingDuration: recordingDuration,
+                peakLevel: audioRecordingService.peakRawAudioLevel
+            )
+        if isRecordingInputSilent != isSilent {
+            isRecordingInputSilent = isSilent
+        }
     }
 }
 
@@ -5744,6 +5772,11 @@ private let digitalSilenceMinimumDuration: TimeInterval = 1.0
 
 func isDigitalSilence(_ samples: [Float]) -> Bool {
     !samples.contains { $0 != 0 }
+}
+
+/// The peak is the loudest buffer RMS so far, which stays exactly zero only for digital silence.
+func isRecordingInputSilentSoFar(recordingDuration: TimeInterval, peakLevel: Float) -> Bool {
+    recordingDuration >= digitalSilenceMinimumDuration && peakLevel == 0
 }
 
 func classifyShortSpeech(
