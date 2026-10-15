@@ -799,6 +799,84 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(events, ["start files", "end files", "start load", "end load"])
     }
 
+    func testModelSwitchDoesNotWaitForPreviousModelsCtcLoad() async throws {
+        let host = try PluginTestHostServices(defaults: ["vocabularyBoostingEnabled": true])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        let recorder = CtcDownloadRecorder(holdsFirstDownload: true)
+        plugin.ctcModelDownloadOverrideForTests = { loadIntoMemory in
+            await recorder.download(loadIntoMemory: loadIntoMemory)
+        }
+
+        // Ultra is loaded and its CTC model is still loading.
+        plugin.triggerRestoreModel(forModel: "parakeet-ultra")
+        await recorder.waitForFirstStart()
+        XCTAssertEqual(plugin.modelState, .ready)
+
+        plugin.triggerRestoreModel(forModel: "parakeet-tdt-0.6b-v2")
+        XCTAssertFalse(plugin.isConfigured)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while !plugin.isConfigured, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertTrue(plugin.isConfigured, "The switch waited for the CTC model: \(plugin.modelState)")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "parakeet-tdt-0.6b-v2")
+        let eventsWhileHeld = await recorder.events
+        XCTAssertEqual(eventsWhileHeld, ["start load"])
+
+        // v2 then loads its CTC model after the held one.
+        await recorder.releaseFirstDownload()
+        while await recorder.events.count < 4, ContinuousClock.now < deadline.advanced(by: .seconds(5)) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let events = await recorder.events
+        XCTAssertEqual(events, ["start load", "end load", "start load", "end load"])
+    }
+
+    func testCtcLoadAfterModelLoadSkipsWhenModelUnloadsWhileWaiting() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        let recorder = CtcDownloadRecorder(holdsFirstDownload: true)
+        plugin.ctcModelDownloadOverrideForTests = { loadIntoMemory in
+            await recorder.download(loadIntoMemory: loadIntoMemory)
+        }
+
+        // Enabling while nothing is loaded downloads the files and holds the CTC gate.
+        let enabling = Task { try await plugin.enableDictionaryTermsSetting() }
+        await recorder.waitForFirstStart()
+
+        // The model load then waits for that download before loading the CTC model.
+        plugin.triggerRestoreModel(forModel: "parakeet-ultra")
+        try await waitForCtcGateWaiters(1, in: plugin)
+        XCTAssertTrue(plugin.isConfigured)
+
+        plugin.unloadModel()
+        // Queued behind the waiting step, so it returns once that step is done.
+        let afterWaitingStep = Task { try await plugin.ctcDownloadGate.withLock {} }
+        try await waitForCtcGateWaiters(2, in: plugin)
+        await recorder.releaseFirstDownload()
+        try await enabling.value
+        try await afterWaitingStep.value
+
+        let events = await recorder.events
+        XCTAssertEqual(events, ["start files", "end files"])
+    }
+
+    private func waitForCtcGateWaiters(_ count: Int, in plugin: ParakeetPlugin) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        while await plugin.ctcDownloadGate.waitingCount < count, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let waitingCount = await plugin.ctcDownloadGate.waitingCount
+        XCTAssertEqual(waitingCount, count)
+    }
+
     func testDisablingVocabularyBoostingPersistsClearsVocabularyAndHidesCtcActivity() throws {
         let host = try PluginTestHostServices(defaults: ["vocabularyBoostingEnabled": true])
         let plugin = makePlugin()
