@@ -1,10 +1,10 @@
 #!/bin/bash
-# Opt-in hardware smoke test for #1605. Requires installed Parakeet v2 and v3.
+# Opt-in hardware smoke test for #1605. Requires installed Parakeet v2/v3 and CTC 110M.
 # Usage: scripts/test-parakeet-coreml-cache-recovery.sh [--skip-build]
 # Model files are read from TYPEWHISPER_PARAKEET_MODEL_ROOT or FluidAudio's
 # normal Application Support directory. Only a disposable test cache is purged.
 # Core ML may retain live resources after deletion. Timings alone do not prove
-# the issue's slow recompilation was reproduced; deterministic tests cover it.
+# the issue's slow recompilation was reproduced; fixtures verify preparation ordering.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,6 +19,10 @@ for version in v2 v3; do
         exit 1
     fi
 done
+if [[ ! -d "$model_root/parakeet-ctc-110m-coreml" ]]; then
+    echo "Install the Parakeet vocabulary boosting model first: $model_root" >&2
+    exit 1
+fi
 
 if [[ "${1:-}" != "--skip-build" ]]; then
     swift test --package-path "$repo_root/TypeWhisperPluginSDK" --filter ParakeetPluginTests

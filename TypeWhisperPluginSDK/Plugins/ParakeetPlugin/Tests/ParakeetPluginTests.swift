@@ -109,10 +109,11 @@ final class ParakeetPluginTests: XCTestCase {
         private var cachePresent = true
         private var release: CheckedContinuation<Void, Never>?
         private(set) var events: [String] = []
-        let warmupStarted: XCTestExpectation
+        let warmupStarted: XCTestExpectation?
+        private(set) var sampleCounts: [Int] = []
         var failsWarmup = false
 
-        init(warmupStarted: XCTestExpectation) { self.warmupStarted = warmupStarted }
+        init(warmupStarted: XCTestExpectation? = nil) { self.warmupStarted = warmupStarted }
 
         func purge(failWarmup: Bool = false) {
             cachePresent = false
@@ -120,13 +121,14 @@ final class ParakeetPluginTests: XCTestCase {
         }
 
         func infer(_ samples: [Float]) async throws -> ASRResult {
-            let warmup = samples.count == 16_000 && samples.allSatisfy { $0 == 0 }
+            sampleCounts.append(samples.count)
+            let warmup = samples.allSatisfy { $0 == 0 }
             let kind = warmup ? "warmup" : "speech"
             events.append(kind)
             if !cachePresent {
                 events.append("compile-\(kind)")
                 if warmup {
-                    warmupStarted.fulfill()
+                    warmupStarted?.fulfill()
                     await withCheckedContinuation { release = $0 }
                     if failsWarmup { throw URLError(.cannotLoadFromNetwork) }
                 }
@@ -153,6 +155,86 @@ final class ParakeetPluginTests: XCTestCase {
 
     private var fakeSpeech: AudioData {
         AudioData(samples: [Float](repeating: 0.1, count: 16_000), wavData: Data(), duration: 1)
+    }
+
+    func testPrewarmExercisesParallelLongFormInference() async throws {
+        let inference = PurgeableInference()
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        plugin.triggerPrewarmModel()
+        await plugin.waitForModelPrewarm()
+        let counts = await inference.sampleCounts
+        XCTAssertEqual(counts.count, 1)
+        let sampleCount = try XCTUnwrap(counts.first)
+        XCTAssertGreaterThan(sampleCount, ASRConstants.maxModelSamples, "must enter ChunkProcessor")
+        XCTAssertGreaterThanOrEqual(sampleCount, ASRConstants.maxModelSamples * ASRConfig().parallelChunkConcurrency,
+                                    "must supply enough chunks for the whole worker pool")
+    }
+
+    func testCtcPreparationFinishesBeforeSpeechWithoutChangingVocabulary() async throws {
+        let inference = PurgeableInference()
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        let ctcStarted = expectation(description: "CTC preparation")
+        let ctc = CtcDownloadRecorder(holdsFirstDownload: true)
+        plugin.ctcPrewarmInference = { samples in
+            XCTAssertEqual(samples.count, 16_000)
+            XCTAssertTrue(samples.allSatisfy { $0 == 0 })
+            ctcStarted.fulfill()
+            await ctc.download(loadIntoMemory: true)
+        }
+        plugin.setBoostingEnabled(true)
+        plugin.lastConfiguredPrompt = "existing dictionary"
+        plugin.lastBoostingTermCount = 5
+        plugin.triggerPrewarmModel()
+        await fulfillment(of: [ctcStarted], timeout: 3)
+        XCTAssertNotNil(plugin.currentSettingsActivity)
+        XCTAssertEqual(plugin.lastConfiguredPrompt, "existing dictionary")
+        XCTAssertEqual(plugin.lastBoostingTermCount, 5)
+
+        let speechStarted = expectation(description: "speech requested while CTC is held")
+        let audio = fakeSpeech
+        let speech = Task {
+            speechStarted.fulfill()
+            return try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        }
+        await fulfillment(of: [speechStarted], timeout: 3)
+        let beforeRelease = await inference.events
+        XCTAssertEqual(beforeRelease, ["warmup"])
+        await ctc.releaseFirstDownload()
+        let result = try await speech.value
+        XCTAssertEqual(result.text, "actual transcript")
+        XCTAssertNil(plugin.currentSettingsActivity)
+    }
+
+    func testPrewarmSkipsDisabledOrUnloadedCtcWithoutDownloading() async throws {
+        let inference = PurgeableInference()
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        plugin.ctcModelDownloadOverrideForTests = { _ in XCTFail("prewarm must not download CTC") }
+        plugin.ctcPrewarmInference = { _ in XCTFail("disabled CTC must not run") }
+        plugin.triggerPrewarmModel()
+        await plugin.waitForModelPrewarm()
+
+        plugin.ctcPrewarmInference = nil
+        plugin.setBoostingEnabled(true)
+        plugin.triggerPrewarmModel()
+        await plugin.waitForModelPrewarm()
+        XCTAssertEqual(plugin.ctcModelState, .notDownloaded)
+    }
+
+    func testFailedCtcPreparationDoesNotBlockRealSpeech() async throws {
+        let inference = PurgeableInference()
+        let plugin = try await loadedPluginWithFakeInference(inference)
+        let ctcStarted = expectation(description: "failing CTC preparation")
+        plugin.setBoostingEnabled(true)
+        plugin.ctcPrewarmInference = { _ in
+            ctcStarted.fulfill()
+            throw URLError(.cannotDecodeContentData)
+        }
+        plugin.triggerPrewarmModel()
+        await plugin.waitForModelPrewarm()
+        await fulfillment(of: [ctcStarted], timeout: 3)
+        let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+        XCTAssertEqual(result.text, "actual transcript")
+        XCTAssertNil(plugin.currentSettingsActivity)
     }
 
     func testLoadedModelCachePurgeIsRepairedBeforeSpeechAndWarmupIsCoalesced() async throws {
@@ -206,6 +288,8 @@ final class ParakeetPluginTests: XCTestCase {
         let started = expectation(description: "preparation")
         let inference = PurgeableInference(warmupStarted: started)
         let plugin = try await loadedPluginWithFakeInference(inference)
+        plugin.setBoostingEnabled(true)
+        plugin.ctcPrewarmInference = { _ in XCTFail("unload must cancel the remaining CTC preparation") }
         await inference.purge()
         plugin.triggerPrewarmModel()
         await fulfillment(of: [started], timeout: 3)
@@ -315,16 +399,30 @@ final class ParakeetPluginTests: XCTestCase {
             for path in paths { try FileManager.default.removeItem(at: path) }
         }
 
-        let audio = try regressionAudio()
+        let fixture = try regressionAudio()
+        // Match the issue's ~59-second recording and exercise the full pool.
+        let audio = AudioData(samples: Array(repeating: fixture.samples, count: 3).flatMap { $0 },
+                              wavData: Data(), duration: fixture.duration * 3)
+        let ctcDirectory = CtcModels.defaultCacheDirectory(for: .ctc110m)
+        // Direct loading never repairs/downloads files in the linked model root.
+        let ctcModels = try await CtcModels.loadDirect(from: ctcDirectory)
+        let ctcTokenizer = try await CtcTokenizer.load(from: ctcDirectory)
         for version in ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3"] {
-            let host = try PluginTestHostServices(defaults: ["loadedModel": version])
+            let host = try PluginTestHostServices(defaults: ["loadedModel": version, "vocabularyBoostingEnabled": true])
             let plugin = makePlugin()
             plugin.activate(host: host)
             defer { plugin.deactivate() }
+            func installCtc() {
+                plugin.ctcModels = ctcModels
+                plugin.ctcTokenizer = ctcTokenizer
+                plugin.ctcModelState = .ready
+            }
             await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
             guard plugin.isConfigured else { XCTFail("Installed \(version) failed to load"); return }
-            let baseline = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            installCtc()
+            let baseline = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: "TypeWhisper")
             XCTAssertFalse(baseline.text.isEmpty)
+            XCTAssertEqual(plugin.lastBoostingTermCount, 1, "CTC rescoring must be configured")
 
             // Core ML may keep an already-created execution stream alive even
             // after unlinking its cache. Also exercise a fresh model instance
@@ -332,15 +430,27 @@ final class ParakeetPluginTests: XCTestCase {
             plugin.unloadModel(clearPersistence: false)
             await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
             XCTAssertTrue(plugin.isConfigured)
+            installCtc()
             try purge()
             let coldStart = ContinuousClock.now
-            let cold = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            let cold = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: "TypeWhisper")
             let coldDuration = ContinuousClock.now - coldStart
             XCTAssertEqual(cold.text, baseline.text)
 
             plugin.unloadModel(clearPersistence: false)
             await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
             XCTAssertTrue(plugin.isConfigured)
+            installCtc()
+            let prepareCtc = try XCTUnwrap(plugin.ctcPrewarmInference)
+            let ctcPrepared = expectation(description: "real CTC preparation for \(version)")
+            ctcPrepared.expectedFulfillmentCount = 3
+            plugin.ctcPrewarmInference = { samples in
+                let start = ContinuousClock.now
+                do { try await prepareCtc(samples) }
+                catch { XCTFail("Real CTC preparation failed: \(error)"); throw error }
+                print("Core ML CTC preparation \(version): \(ContinuousClock.now - start)")
+                ctcPrepared.fulfill()
+            }
             try purge()
             let warmupStart = ContinuousClock.now
             plugin.triggerPrewarmModel()
@@ -349,10 +459,22 @@ final class ParakeetPluginTests: XCTestCase {
             let cacheDirectoryRecreated = !(try cacheBundles()).isEmpty
             XCTAssertNil(plugin.currentSettingsActivity)
             let speechStart = ContinuousClock.now
-            let recovered = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            let recovered = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: "TypeWhisper")
             let speechDuration = ContinuousClock.now - speechStart
             XCTAssertEqual(recovered.text, baseline.text)
+            XCTAssertEqual(plugin.lastBoostingTermCount, 1)
             print("Core ML purge smoke \(version): unprepared speech=\(coldDuration), preparation=\(warmupDuration), prepared speech=\(speechDuration), cache directory recreated=\(cacheDirectoryRecreated)")
+            // Measure the ordinary per-recording cost with caches already warm.
+            for _ in 0..<2 {
+                let start = ContinuousClock.now
+                let signature = plugin.lastConfiguredPrompt
+                plugin.triggerPrewarmModel()
+                await plugin.waitForModelPrewarm()
+                XCTAssertEqual(plugin.lastConfiguredPrompt, signature)
+                XCTAssertEqual(plugin.lastBoostingTermCount, 1)
+                print("Core ML repeated preparation \(version): \(ContinuousClock.now - start)")
+            }
+            await fulfillment(of: [ctcPrepared], timeout: 3)
         }
     }
 

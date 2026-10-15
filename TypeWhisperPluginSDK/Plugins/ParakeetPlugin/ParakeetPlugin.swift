@@ -99,6 +99,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     private static let shortClipConfidenceThreshold: Float = 0.55
     private static let shortClipConfidenceGateDuration: TimeInterval = 1.0
     private static let fluidAudioProgressMinimumSampleCount = 240_000
+    // Share the configuration so warmup scales with the actual worker pool.
+    private static let asrConfiguration = ASRConfig(melChunkContext: true)
     typealias VocabularyAssetFetcher = @Sendable (_ url: URL, _ description: String) async throws -> Data
 
     fileprivate var host: HostServices?
@@ -113,8 +115,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var restoresModelOnActivate = true
 
     // Vocabulary Boosting
-    fileprivate var ctcModels: CtcModels?
-    fileprivate var ctcTokenizer: CtcTokenizer?
+    var ctcModels: CtcModels? {
+        didSet { ctcPrewarmInference = ctcModels.map(Self.makeCtcPrewarmInference) }
+    }
+    /// Captures only the loaded CTC models, independently of dictionary terms.
+    var ctcPrewarmInference: (@Sendable ([Float]) async throws -> Void)?
+    var ctcTokenizer: CtcTokenizer?
     fileprivate var ctcSpotter: CtcKeywordSpotter?
     fileprivate var customVocabulary: CustomVocabularyContext?
     fileprivate var vocabularyRescorer: VocabularyRescorer?
@@ -406,11 +412,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// on Apple's private cache layout or publishing a synthetic transcript.
     @objc func triggerPrewarmModel() {
         guard let manager = asrManager, isConfigured else { return }
+        let prepareCtc = vocabularyBoostingEnabled ? ctcPrewarmInference : nil
         modelPrewarm.start { [self] in
             try await transcriptionGate.withLock { [self] in
                 let started = ContinuousClock.now
                 do {
-                    _ = try await runInference([Float](repeating: 0, count: 16_000), manager: manager, language: nil)
+                    // A single short prediction may reuse a surviving execution
+                    // stream. Exercise ChunkProcessor and its full worker pool,
+                    // which share the loaded MLModels but predict concurrently.
+                    // All-silent input is kept in full by FluidAudio's chunker.
+                    let sampleCount = ASRConstants.maxModelSamples * max(2, Self.asrConfiguration.parallelChunkConcurrency)
+                    _ = try await runInference([Float](repeating: 0, count: sampleCount), manager: manager, language: nil)
+                    try Task.checkCancellation()
+                    if vocabularyBoostingEnabled, let prepareCtc {
+                        try await prepareCtc([Float](repeating: 0, count: ASRConstants.sampleRate))
+                    }
                     Self.logger.info("Model preparation finished in \(String(describing: ContinuousClock.now - started), privacy: .public)")
                 } catch {
                     Self.logger.notice("Model preparation did not finish; the next transcription will retry")
@@ -422,6 +438,18 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     func waitForModelPrewarm() async {
         await modelPrewarm.wait()
+    }
+
+    private static func makeCtcPrewarmInference(models: CtcModels) -> @Sendable ([Float]) async throws -> Void {
+        let spotter = CtcKeywordSpotter(models: models, blankId: models.vocabulary.count)
+        return { samples in
+            // Empty terms still run mel + encoder inference, without configuring
+            // vocabulary, rescoring synthetic text, or downloading any assets.
+            _ = try await spotter.spotKeywordsWithLogProbs(
+                audioSamples: samples,
+                customVocabulary: CustomVocabularyContext(terms: [])
+            )
+        }
     }
 
     static func sourceProgress(
@@ -859,7 +887,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             // Keep the pre-0.15.7 chunk context: the new v3 default changes
             // punctuation at chunk boundaries in paired long-form recordings.
-            let manager = AsrManager(config: ASRConfig(melChunkContext: true))
+            let manager = AsrManager(config: Self.asrConfiguration)
             if let models {
                 try await manager.loadModels(models)
             }
