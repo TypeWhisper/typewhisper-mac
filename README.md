@@ -826,7 +826,7 @@ typewhisper audio set changes.json # Change audio settings (see Audio Settings a
 | `--task <task>` | `transcribe` (default) or `translate` |
 | `--translate-to <code>` | Target language for translation |
 | `--no-corrections` | Return raw transcription text without Dictionary Corrections |
-| `--engine <id>`, `--model <id>` | `transcribe`: use this engine or model for the request; `models load\|unload\|delete`: the engine and model to act on |
+| `--engine <id>`, `--model <id>` | `transcribe`: use this engine or model for the request; `models load\|delete`: the engine and model to act on; `models unload`: `--engine` only |
 | `--replace` | `import` only: overwrite workflows, profiles, and prompt actions with the same name and replace hotkeys |
 
 ### Examples

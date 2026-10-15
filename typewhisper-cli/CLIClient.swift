@@ -85,14 +85,13 @@ struct CLIClient {
         try await get("/v1/models")
     }
 
+    /// The server waits up to about ten minutes for a download or restore to finish.
     func loadModel(engine: String, model: String) async throws -> Data {
-        try await postJSON("/v1/models/load", ["engine": engine, "model": model], timeout: 300)
+        try await postJSON("/v1/models/load", ["engine": engine, "model": model], timeout: 660)
     }
 
-    func unloadModel(engine: String, model: String? = nil) async throws -> Data {
-        var payload = ["engine": engine]
-        payload["model"] = model
-        return try await postJSON("/v1/models/unload", payload)
+    func unloadModel(engine: String) async throws -> Data {
+        try await postJSON("/v1/models/unload", ["engine": engine])
     }
 
     func deleteModel(engine: String, model: String) async throws -> Data {

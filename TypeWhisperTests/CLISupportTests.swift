@@ -270,7 +270,7 @@ final class CLISupportTests: XCTestCase {
         var request = try XCTUnwrap(recorder.recordedRequest)
         XCTAssertEqual(request.url?.path, "/v1/models/load")
         XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(request.timeoutInterval, 300)
+        XCTAssertEqual(request.timeoutInterval, 660)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
         XCTAssertEqual(try body(request), ["engine": "parakeet", "model": "parakeet-tdt-0.6b-v3"])
@@ -281,9 +281,6 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.timeoutInterval, 10)
         XCTAssertEqual(try body(request), ["engine": "parakeet"])
-
-        _ = try await client.unloadModel(engine: "parakeet", model: "parakeet-ultra")
-        XCTAssertEqual(try body(XCTUnwrap(recorder.recordedRequest)), ["engine": "parakeet", "model": "parakeet-ultra"])
 
         _ = try await client.deleteModel(engine: "parakeet", model: "parakeet tdt&v2")
         request = try XCTUnwrap(recorder.recordedRequest)

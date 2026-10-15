@@ -137,19 +137,26 @@ do {
             print(OutputFormatter.formatModels(data, json: jsonOutput))
             break
         }
-        let requiredFlags = action == "unload" ? "--engine" : "--engine and --model"
-        guard let engine = engineOverride, action == "unload" || modelOverride != nil else {
-            printError("Error: models \(action) requires \(requiredFlags).")
+        let engine = engineOverride?.trimmingCharacters(in: .whitespaces) ?? ""
+        let model = modelOverride?.trimmingCharacters(in: .whitespaces) ?? ""
+        if action == "unload" {
+            // The unload endpoint always unloads the engine's active model.
+            guard !engine.isEmpty, modelOverride == nil else {
+                printError("Error: models unload requires --engine and takes no --model.")
+                exit(1)
+            }
+        } else if engine.isEmpty || model.isEmpty {
+            printError("Error: models \(action) requires --engine and --model.")
             exit(1)
         }
         let data: Data
         switch action {
         case "unload":
-            data = try await client.unloadModel(engine: engine, model: modelOverride)
+            data = try await client.unloadModel(engine: engine)
         case "load":
-            data = try await client.loadModel(engine: engine, model: modelOverride ?? "")
+            data = try await client.loadModel(engine: engine, model: model)
         default:
-            data = try await client.deleteModel(engine: engine, model: modelOverride ?? "")
+            data = try await client.deleteModel(engine: engine, model: model)
         }
         print(OutputFormatter.formatModelAction(data, json: jsonOutput))
 
