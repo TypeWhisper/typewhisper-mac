@@ -1,6 +1,8 @@
+import Combine
 import Foundation
 import MLXLLM
 import os
+import SwiftUI
 import XCTest
 @testable import TypeWhisper
 import TypeWhisperPluginSDK
@@ -689,6 +691,97 @@ final class MLXPluginModelStorageTests: XCTestCase {
         }
     }
 
+    @MainActor
+    func testLocalLLMCachedLoadRestoreAndDeletionPublishOnMainThread() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let model = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let directory = fixture.legacyDirectory(repositoryID: model.repoId, usesMLXAudio: false)
+        try fixture.writeMinimalGemmaModel(at: directory)
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        let plugin = LocalLLMPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let publications = LocalLLMPublicationRecorder(plugin: plugin)
+
+        // Match Settings: an observed plugin loads an already downloaded model.
+        let settings = NSHostingView(rootView: LocalLLMSettingsView(plugin: plugin))
+        settings.frame = NSRect(x: 0, y: 0, width: 800, height: 900)
+        settings.layoutSubtreeIfNeeded()
+        defer { withExtendedLifetime(settings) {} }
+        XCTAssertTrue(plugin.isModelDownloaded(model))
+        try await plugin.loadModel(model)
+        XCTAssertEqual(plugin.modelState, .ready(model.id))
+        XCTAssertTrue(plugin.isAvailable)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, model.id)
+        XCTAssertEqual(publications.backgroundPublications, [])
+
+        plugin.unloadModel(clearPersistence: false)
+        await Task.detached {
+            await plugin.restoreLoadedModel(allowDownloads: false)
+        }.value
+        XCTAssertEqual(plugin.modelState, .ready(model.id))
+        XCTAssertTrue(plugin.isAvailable)
+        XCTAssertEqual(publications.backgroundPublications, [])
+
+        // The host can invoke the asynchronous SDK capability from any executor.
+        let manager: any PluginDownloadedModelManaging = plugin
+        try await Task.detached {
+            try await manager.deleteDownloadedModel(model.id)
+        }.value
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertFalse(plugin.isModelDownloaded(model))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(publications.backgroundPublications, [])
+        XCTAssertGreaterThan(publications.count, 0)
+    }
+
+    @MainActor
+    func testLocalLLMCachedLoadFailurePublishesOnMainThread() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let model = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e4b-it-4bit"))
+        let directory = fixture.legacyDirectory(repositoryID: model.repoId, usesMLXAudio: false)
+        try fixture.writeModel(at: directory, requiredFiles: ["config.json", "tokenizer.json"])
+        try fixture.write("invalid config", to: directory.appendingPathComponent("config.json"))
+        let plugin = LocalLLMPlugin()
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        defer { plugin.deactivate() }
+        let publications = LocalLLMPublicationRecorder(plugin: plugin)
+
+        XCTAssertTrue(plugin.isModelDownloaded(model))
+        do {
+            try await plugin.loadModel(model)
+            XCTFail("Invalid cached configuration must fail to load")
+        } catch {
+            guard case .error = plugin.modelState else {
+                return XCTFail("The load failure must be visible in Settings")
+            }
+        }
+        XCTAssertFalse(plugin.isAvailable)
+        XCTAssertEqual(publications.backgroundPublications, [])
+        XCTAssertGreaterThan(publications.count, 0)
+    }
+
+    @MainActor
+    func testLocalLLMLoadWatchdogPublishesOnMainThread() async throws {
+        let plugin = LocalLLMPlugin()
+        defer { plugin.deactivate() }
+        let publications = LocalLLMPublicationRecorder(plugin: plugin)
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(10))
+        plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+
+        let deadline = ContinuousClock.now + .seconds(2)
+        while plugin.modelState == .downloading, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        guard case .error = plugin.modelState else {
+            return XCTFail("The stalled load must time out")
+        }
+        XCTAssertEqual(publications.backgroundPublications, [])
+        XCTAssertGreaterThan(publications.count, 0)
+    }
+
     func testModelCatalogsRecognizeLegacyAndCanonicalLayouts() throws {
         try assertCatalogRecognizesBothLayouts(
             plugin: Qwen3Plugin(),
@@ -937,6 +1030,33 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 }
 
+/// Observe synchronously, like SwiftUI. Scheduling reception on main would hide
+/// the offending publication; Sendable sinks let us record it instead of trapping.
+private final class LocalLLMPublicationRecorder {
+    private let events = OSAllocatedUnfairLock(initialState: [(name: String, isMainThread: Bool)]())
+    private var subscriptions: [AnyCancellable] = []
+
+    init(plugin: LocalLLMPlugin) {
+        let events = self.events
+        subscriptions = [
+            plugin.objectWillChange.sink { @Sendable _ in
+                events.withLock { $0.append(("objectWillChange", Thread.isMainThread)) }
+            },
+            plugin.$modelState.dropFirst().sink { @Sendable state in
+                events.withLock { $0.append(("modelState: \(state)", Thread.isMainThread)) }
+            },
+            plugin.$downloadProgress.dropFirst().sink { @Sendable _ in
+                events.withLock { $0.append(("downloadProgress", Thread.isMainThread)) }
+            },
+        ]
+    }
+
+    var count: Int { events.withLock { $0.count } }
+    var backgroundPublications: [String] {
+        events.withLock { $0.filter { !$0.isMainThread }.map(\.name) }
+    }
+}
+
 private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
     func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
     func unsubscribe(id: UUID) {}
@@ -1030,6 +1150,36 @@ private final class Fixture {
             try write(file == "merges.txt" ? "#version: 0.2\na b" : "{}", to: directory.appendingPathComponent(file))
         }
         try write("weights", to: directory.appendingPathComponent("model.safetensors"))
+    }
+
+    /// Tiny native Gemma checkpoint: exercises the real loader without a download
+    /// or multi-gigabyte model. No transformer layers are needed to test loading.
+    func writeMinimalGemmaModel(at directory: URL) throws {
+        try write("""
+        {"model_type":"gemma4","vocab_size":16,"text_config":{
+          "hidden_size":16,"num_hidden_layers":0,"num_kv_shared_layers":0,
+          "hidden_size_per_layer_input":0,"vocab_size":16,"tie_word_embeddings":true
+        }}
+        """, to: directory.appendingPathComponent("config.json"))
+        try write("""
+        {"tokenizer_class":"PreTrainedTokenizerFast","unk_token":"<unk>"}
+        """, to: directory.appendingPathComponent("tokenizer_config.json"))
+        try write("""
+        {"model":{"type":"BPE","vocab":{"<unk>":0,"hello":1},"merges":[]},"added_tokens":[]}
+        """, to: directory.appendingPathComponent("tokenizer.json"))
+        let header = try JSONSerialization.data(withJSONObject: [
+            "language_model.model.embed_tokens.weight": [
+                "dtype": "F32", "shape": [16, 16], "data_offsets": [0, 1024],
+            ],
+            "language_model.model.norm.weight": [
+                "dtype": "F32", "shape": [16], "data_offsets": [1024, 1088],
+            ],
+        ])
+        var length = UInt64(header.count).littleEndian
+        var weights = withUnsafeBytes(of: &length) { Data($0) }
+        weights.append(header)
+        weights.append(Data(repeating: 0, count: 1088))
+        try weights.write(to: directory.appendingPathComponent("model.safetensors"))
     }
 
     /// An imported model whose files pass the catalog checks but fail in the native loader.
