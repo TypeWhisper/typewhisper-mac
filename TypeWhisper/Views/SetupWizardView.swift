@@ -18,6 +18,7 @@ struct SetupWizardView: View {
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
+    @State private var parakeetModelProgress: Double?
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
     @State private var isMovingForward = true
@@ -928,8 +929,14 @@ struct SetupWizardView: View {
         isSelected: Bool
     ) -> some View {
         if manifestId == SetupWizardParakeetRecommendation.manifestId, isActivatingParakeet {
-            ProgressView()
-                .controlSize(.small)
+            if case .downloading(let progress) = registryService.installStates[manifestId] {
+                setupProgressIndicator(progress)
+            } else if let parakeetModelProgress {
+                setupProgressIndicator(parakeetModelProgress)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
         } else {
             switch availability {
             case .ready:
@@ -949,8 +956,7 @@ struct SetupWizardView: View {
             case .installState(let installState):
                 switch installState {
                 case .downloading(let progress):
-                    ProgressView(value: progress)
-                        .frame(width: 70)
+                    setupProgressIndicator(progress)
                 case .extracting:
                     ProgressView()
                         .controlSize(.small)
@@ -968,6 +974,19 @@ struct SetupWizardView: View {
                 statusPill(reason.title, systemImage: "exclamationmark.triangle.fill", color: .orange)
                     .help(reason.message)
             }
+        }
+    }
+
+    private func setupProgressIndicator(_ progress: Double) -> some View {
+        let progress = progress.isFinite ? min(max(progress, 0), 1) : 0
+        return HStack(spacing: 6) {
+            ProgressView(value: progress)
+                .frame(width: 70)
+            Text("\(Int(progress * 100))%")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+                .frame(width: 32, alignment: .trailing)
         }
     }
 
@@ -1018,7 +1037,10 @@ struct SetupWizardView: View {
 
         manuallySelectedSetupProviderId = SetupWizardParakeetRecommendation.providerId
         isActivatingParakeet = true
-        defer { isActivatingParakeet = false }
+        defer {
+            isActivatingParakeet = false
+            parakeetModelProgress = nil
+        }
 
         if parakeetEngine == nil {
             if let registryPlugin,
@@ -1044,8 +1066,14 @@ struct SetupWizardView: View {
             }
         }
 
-        for _ in 0..<240 {
-            if Task.isCancelled || engine.isConfigured { return }
+        // Idle polls time out after 2 minutes; an active model download may take up to 30 minutes.
+        var idlePolls = 0
+        for _ in 0..<3_600 {
+            if Task.isCancelled || engine.isConfigured || idlePolls >= 240 { return }
+            let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            if activity?.isError == true { return }
+            parakeetModelProgress = activity?.progress
+            if activity == nil { idlePolls += 1 }
             try? await Task.sleep(for: .milliseconds(500))
         }
     }
