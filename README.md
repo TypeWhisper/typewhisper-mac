@@ -274,6 +274,7 @@ If a fresh install still crashes immediately after these steps, please open an i
 - macOS 14.0 (Sonoma) or later
 - Apple Silicon (M1 or later) recommended
 - 8 GB RAM minimum, 16 GB+ recommended for larger models
+- Free disk space for downloaded models and their runtime caches. Under storage pressure, macOS can purge Core ML caches; rebuilding them can temporarily slow local transcription.
 - Some features (Apple Translate, improved Settings UI) require macOS 15+. Apple Intelligence and SpeechAnalyzer require macOS 26+.
 
 ## Local LLM (MLX)

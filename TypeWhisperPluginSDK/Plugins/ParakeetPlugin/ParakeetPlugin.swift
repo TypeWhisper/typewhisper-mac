@@ -15,6 +15,7 @@ actor AsyncTranscriptionGate {
     func withLock<T: Sendable>(_ operation: @Sendable () async throws -> T) async throws -> T {
         await acquire()
         defer { release() }
+        try Task.checkCancellation()
         return try await operation()
     }
 
@@ -40,6 +41,53 @@ actor AsyncTranscriptionGate {
     }
 }
 
+/// Publishes preparation synchronously, joins repeated requests, and prevents an
+/// old model's completion from clearing a newer model's preparation activity.
+final class ParakeetModelPrewarm: @unchecked Sendable {
+    private let lock = NSLock()
+    private var pending: (id: UUID, task: Task<Void, Never>)?
+
+    var isRunning: Bool { lock.withLock { pending != nil } }
+    var task: Task<Void, Never>? { lock.withLock { pending?.task } }
+
+    func start(_ operation: @Sendable @escaping () async throws -> Void) {
+        lock.withLock {
+            guard pending == nil else { return }
+            let id = UUID()
+            let task = Task { [weak self] in
+                defer { self?.finish(id) }
+                do {
+                    try Task.checkCancellation()
+                    try await operation()
+                } catch {
+                    // Preparation is best-effort. A real transcription retries
+                    // inference and reports its own error if it still fails.
+                }
+            }
+            pending = (id, task)
+        }
+    }
+
+    func wait() async {
+        await task?.value
+    }
+
+    func cancel() {
+        let task = lock.withLock {
+            let task = pending?.task
+            pending = nil
+            return task
+        }
+        task?.cancel()
+    }
+
+    private func finish(_ id: UUID) {
+        lock.withLock {
+            if pending?.id == id { pending = nil }
+        }
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
@@ -51,6 +99,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     private static let shortClipConfidenceThreshold: Float = 0.55
     private static let shortClipConfidenceGateDuration: TimeInterval = 1.0
     private static let fluidAudioProgressMinimumSampleCount = 240_000
+    // Share the configuration so warmup scales with the actual worker pool.
+    private static let asrConfiguration = ASRConfig(melChunkContext: true)
     typealias VocabularyAssetFetcher = @Sendable (_ url: URL, _ description: String) async throws -> Data
 
     fileprivate var host: HostServices?
@@ -65,14 +115,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var restoresModelOnActivate = true
 
     // Vocabulary Boosting
-    fileprivate var ctcModels: CtcModels?
-    fileprivate var ctcTokenizer: CtcTokenizer?
+    var ctcModels: CtcModels? {
+        didSet { ctcPrewarmInference = ctcModels.map(Self.makeCtcPrewarmInference) }
+    }
+    /// Captures only the loaded CTC models, independently of dictionary terms.
+    var ctcPrewarmInference: (@Sendable ([Float]) async throws -> Void)?
+    var ctcTokenizer: CtcTokenizer?
     fileprivate var ctcSpotter: CtcKeywordSpotter?
     fileprivate var customVocabulary: CustomVocabularyContext?
     fileprivate var vocabularyRescorer: VocabularyRescorer?
     fileprivate var vocabSizeConfig: ContextBiasingConstants.VocabSizeConfig?
     fileprivate var vocabularyBoostingEnabled: Bool = false
     private let transcriptionGate = AsyncTranscriptionGate()
+    private let modelPrewarm = ParakeetModelPrewarm()
+    /// Replaces only inference, preserving preparation, serialization and result handling.
+    var asrTranscriptionOverrideForTests: (@Sendable ([Float]) async throws -> ASRResult)?
     /// Serializes every CTC model download, so file-only and in-memory downloads
     /// never overlap or overwrite each other's state.
     let ctcDownloadGate = AsyncTranscriptionGate()
@@ -127,6 +184,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     func deactivate() {
         passiveRestoreController.cancel()
+        modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedAsrModels = nil
@@ -233,7 +291,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        try await transcriptionGate.withLock {
+        // Join the synchronously published task before acquiring the gate: the
+        // warmup task may not have been scheduled yet when recording stops.
+        await modelPrewarm.wait()
+        return try await transcriptionGate.withLock {
             try await transcribeSerially(
                 audio: audio,
                 language: language,
@@ -273,7 +334,6 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             sampleRate: 16_000
         )
         let fluidLanguage = Self.fluidAudioLanguage(for: language)
-        var decoderState = TdtDecoderState.make(decoderLayers: await asrManager.decoderLayerCount)
         let progressTask: Task<Void, Never>? = if Self.shouldObserveSourceProgress(sampleCount: normalizedSamples.count) {
             Task { [asrManager, duration = audio.duration, onSourceProgress] in
                 let stream = await asrManager.transcriptionProgressStream
@@ -296,9 +356,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
         defer { progressTask?.cancel() }
 
-        let result = try await asrManager.transcribe(
+        let result = try await runInference(
             normalizedSamples,
-            decoderState: &decoderState,
+            manager: asrManager,
             language: fluidLanguage
         )
         let finalResult = await applyVocabularyRescoringIfNeeded(
@@ -336,6 +396,60 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         _ = onProgress(finalResult.text)
         return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+    }
+
+    private func runInference(_ samples: [Float], manager: AsrManager, language: Language?) async throws -> ASRResult {
+        if let asrTranscriptionOverrideForTests {
+            return try await asrTranscriptionOverrideForTests(samples)
+        }
+        var decoderState = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+        return try await manager.transcribe(samples, decoderState: &decoderState, language: language)
+    }
+
+    /// Optional host selector, so older hosts/plugins remain compatible. A loaded
+    /// MLModel can lose its device-specialized cache under disk pressure (#1605).
+    /// Exercise the real inference path while the user speaks, without depending
+    /// on Apple's private cache layout or publishing a synthetic transcript.
+    @objc func triggerPrewarmModel() {
+        guard let manager = asrManager, isConfigured else { return }
+        let prepareCtc = vocabularyBoostingEnabled ? ctcPrewarmInference : nil
+        modelPrewarm.start { [self] in
+            try await transcriptionGate.withLock { [self] in
+                let started = ContinuousClock.now
+                do {
+                    // A single short prediction may reuse a surviving execution
+                    // stream. Exercise ChunkProcessor and its full worker pool,
+                    // which share the loaded MLModels but predict concurrently.
+                    // All-silent input is kept in full by FluidAudio's chunker.
+                    let sampleCount = ASRConstants.maxModelSamples * max(2, Self.asrConfiguration.parallelChunkConcurrency)
+                    _ = try await runInference([Float](repeating: 0, count: sampleCount), manager: manager, language: nil)
+                    try Task.checkCancellation()
+                    if vocabularyBoostingEnabled, let prepareCtc {
+                        try await prepareCtc([Float](repeating: 0, count: ASRConstants.sampleRate))
+                    }
+                    Self.logger.info("Model preparation finished in \(String(describing: ContinuousClock.now - started), privacy: .public)")
+                } catch {
+                    Self.logger.notice("Model preparation did not finish; the next transcription will retry")
+                    throw error
+                }
+            }
+        }
+    }
+
+    func waitForModelPrewarm() async {
+        await modelPrewarm.wait()
+    }
+
+    private static func makeCtcPrewarmInference(models: CtcModels) -> @Sendable ([Float]) async throws -> Void {
+        let spotter = CtcKeywordSpotter(models: models, blankId: models.vocabulary.count)
+        return { samples in
+            // Empty terms still run mel + encoder inference, without configuring
+            // vocabulary, rescoring synthetic text, or downloading any assets.
+            _ = try await spotter.spotKeywordsWithLogProbs(
+                audioSamples: samples,
+                customVocabulary: CustomVocabularyContext(terms: [])
+            )
+        }
     }
 
     static func sourceProgress(
@@ -773,7 +887,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             // Keep the pre-0.15.7 chunk context: the new v3 default changes
             // punctuation at chunk boundaries in paired long-form recordings.
-            let manager = AsrManager(config: ASRConfig(melChunkContext: true))
+            let manager = AsrManager(config: Self.asrConfiguration)
             if let models {
                 try await manager.loadModels(models)
             }
@@ -1009,6 +1123,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedAsrModels = nil
@@ -1079,6 +1194,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             )
         case .error(let message):
             return PluginSettingsActivity(message: message, isError: true)
+        }
+
+        if modelPrewarm.isRunning {
+            return PluginSettingsActivity(message: String(localized: "Preparing model", bundle: Bundle(for: Self.self)))
         }
 
         guard vocabularyBoostingEnabled else { return nil }

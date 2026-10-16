@@ -1231,7 +1231,22 @@ final class ModelManagerService: ObservableObject {
             _ = nsPlugin.perform(restoreSelector)
         }
 
-        monitorDictationModelLoad(of: plugin, key: key, followsModelOverride: cloudModelOverride != nil)
+        // A loaded Core ML model can lose its device-specialized cache (#1605).
+        // Opt-in plugins exercise inference during recording, so recompilation
+        // can finish before stop. The selector preserves compatibility with
+        // installed plugins built against an older SDK.
+        let prewarmSelector = NSSelectorFromString("triggerPrewarmModel")
+        let preparesConfiguredModel = cloudModelOverride == nil
+            && plugin.isConfigured && nsPlugin.responds(to: prewarmSelector)
+        if preparesConfiguredModel {
+            _ = nsPlugin.perform(prewarmSelector)
+        }
+
+        monitorDictationModelLoad(
+            of: plugin, key: key,
+            followsModelOverride: cloudModelOverride != nil,
+            followsConfiguredPreparation: preparesConfiguredModel
+        )
     }
 
     func endDictationModelPrewarm() {
@@ -1252,15 +1267,17 @@ final class ModelManagerService: ObservableObject {
     private func monitorDictationModelLoad(
         of plugin: any TranscriptionEnginePlugin,
         key: ObjectIdentifier,
-        followsModelOverride: Bool
+        followsModelOverride: Bool,
+        followsConfiguredPreparation: Bool
     ) {
-        guard followsModelOverride || !plugin.isConfigured else { return }
+        guard followsModelOverride || followsConfiguredPreparation || !plugin.isConfigured else { return }
         dictationModelLoadMonitor = Task { @MainActor [weak self] in
             var loadingSince: ContinuousClock.Instant?
             while !Task.isCancelled {
                 guard let self, self.dictationPrewarm?.key == key else { return }
-                if self.isDictationPrewarmInFlight(for: plugin)
-                    && (followsModelOverride || !plugin.isConfigured) {
+                let isPreparing = self.isDictationPrewarmInFlight(for: plugin)
+                    && (followsModelOverride || followsConfiguredPreparation || !plugin.isConfigured)
+                if isPreparing {
                     loadingSince = loadingSince ?? .now
                 } else {
                     loadingSince = nil
@@ -1271,7 +1288,7 @@ final class ModelManagerService: ObservableObject {
                 if self.isDictationModelLoading != isLoading {
                     self.isDictationModelLoading = isLoading
                 }
-                if plugin.isConfigured && !followsModelOverride { return }
+                if plugin.isConfigured && !followsModelOverride && !isPreparing { return }
                 do {
                     try await Task.sleep(for: self.pluginConfiguredPollInterval)
                 } catch {

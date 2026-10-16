@@ -338,6 +338,53 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
         XCTAssertFalse(modelManager.isDictationModelLoading)
     }
 
+    /// #1605: a loaded model can lose its device-specific Core ML cache.
+    func testDictationPrewarmPreparesConfiguredEngineOncePerRecording() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let plugin = CachePrewarmMockPlugin()
+        let modelManager = installPlugin(plugin, appSupportDirectory: directory)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm()
+        modelManager.beginDictationModelPrewarm()
+        XCTAssertEqual(plugin.prewarmCount, 1)
+        XCTAssertEqual(plugin.restoreCount, 0)
+        XCTAssertTrue(plugin.isConfigured)
+
+        modelManager.endDictationModelPrewarm()
+        modelManager.beginDictationModelPrewarm()
+        XCTAssertEqual(plugin.prewarmCount, 2, "cache eviction can happen between recordings")
+    }
+
+    func testConfiguredEngineCachePreparationRemainsVisibleUntilItFinishes() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let plugin = CachePrewarmMockPlugin()
+        plugin.holdPrewarm = true
+        let modelManager = installPlugin(plugin, appSupportDirectory: directory)
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.zero)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm()
+        try await waitUntil { modelManager.isDictationModelLoading }
+        XCTAssertTrue(plugin.isConfigured, "preparing a cache does not unload the model")
+
+        plugin.setModelSwitchInFlight(false)
+        try await waitUntil { !modelManager.isDictationModelLoading }
+    }
+
+    func testConfiguredEnginePrewarmRespectsModelOverride() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let plugin = CachePrewarmMockPlugin()
+        let modelManager = installPlugin(plugin, appSupportDirectory: directory)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm(cloudModelOverride: "large")
+        XCTAssertEqual(plugin.prewarmCount, 0, "do not warm the model that will be replaced")
+    }
+
     func testDictationPrewarmSkipsEngineWithoutPersistedModel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -461,7 +508,7 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
     }
 }
 
-private final class RestoreAfterUnloadMockPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+private class RestoreAfterUnloadMockPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.restore-after-unload"
     static let pluginName = "Mock Restore After Unload"
 
@@ -576,5 +623,15 @@ private final class RestoreAfterUnloadMockPlugin: NSObject, TranscriptionEngineP
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
+    }
+}
+
+private final class CachePrewarmMockPlugin: RestoreAfterUnloadMockPlugin, @unchecked Sendable {
+    var prewarmCount = 0
+    var holdPrewarm = false
+
+    @objc func triggerPrewarmModel() {
+        prewarmCount += 1
+        setModelSwitchInFlight(holdPrewarm)
     }
 }
