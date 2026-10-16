@@ -416,6 +416,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             }
     }
 
+    @MainActor
     func deleteDownloadedModel(_ modelId: String) async throws {
         guard let modelDef = Self.modelDefinition(for: modelId) else { return }
 
@@ -647,6 +648,9 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
 
     // MARK: - Model Management
 
+    // Published changes synchronously reach SwiftUI's settings view, including
+    // after suspension and on failure. Keep the entire state transition on main.
+    @MainActor
     func loadModel(_ modelDef: LocalLLMModelDef) async throws {
         try Task.checkCancellation()
         let downloadedDirectory = usableModelDirectory(for: modelDef)
@@ -688,7 +692,8 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
                     extraEOSTokens: modelDef.extraEOSTokens
                 )
             }
-            let loadTask = Task<ModelContainer, Error> {
+            // Native model/tokenizer work must not inherit the UI executor.
+            let loadTask = Task.detached(priority: Task.currentPriority) {
                 // Download before entering MLX, so a load cancelled or failed
                 // during the download leaves runtime cleanup cold.
                 let resolved = try await MLXLMCommon.resolve(
@@ -819,6 +824,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         }
     }
 
+    @MainActor
     func restoreLoadedModel(allowDownloads: Bool = true) async {
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.modelDefinition(for: savedId) else {
@@ -946,7 +952,7 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
 
     private func startModelLoadTimeout(generation: Int, modelName: String) {
         modelLoadTimeoutTask?.cancel()
-        modelLoadTimeoutTask = Task { [weak self] in
+        modelLoadTimeoutTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self,
                       self.isCurrentModelLoad(generation),
