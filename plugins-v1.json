@@ -3616,6 +3616,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/",
       "releases": [
         {
+          "version": "1.0.2",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 17917904,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-local-llm-mlx-v1.0.2/LocalLLMPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.1",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
