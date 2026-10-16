@@ -978,7 +978,8 @@ struct SetupWizardView: View {
     }
 
     private func setupProgressIndicator(_ progress: Double) -> some View {
-        HStack(spacing: 6) {
+        let progress = progress.isFinite ? min(max(progress, 0), 1) : 0
+        return HStack(spacing: 6) {
             ProgressView(value: progress)
                 .frame(width: 70)
             Text("\(Int(progress * 100))%")
