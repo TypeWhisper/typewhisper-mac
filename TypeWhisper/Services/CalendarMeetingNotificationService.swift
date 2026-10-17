@@ -575,7 +575,14 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         _ occurrence: CalendarMeetingOccurrence,
         now: Date = Date()
     ) async {
-        removeStartNotifications(occurrenceDigest: occurrence.occurrenceDigest)
+        // Removal is asynchronous. Removing the detected identifier here could
+        // delete the replacement below; adding the same identifier replaces it.
+        let upcomingIdentifiers = [Self.requestIdentifier(
+            digest: occurrence.occurrenceDigest,
+            kind: .upcoming
+        )]
+        client.removePendingRequests(withIdentifiers: upcomingIdentifiers)
+        client.removeDeliveredNotifications(withIdentifiers: upcomingIdentifiers)
         let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = CalendarMeetingNotificationRequest(
             identifier: Self.requestIdentifier(

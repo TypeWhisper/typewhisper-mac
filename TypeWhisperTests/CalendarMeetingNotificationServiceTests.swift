@@ -10,6 +10,8 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
     var added: [CalendarMeetingNotificationRequest] = []
     var removed: [[String]] = []
     var removedDelivered: [[String]] = []
+    var defersPendingRemovals = false
+    private var deferredPendingRemovals: [String] = []
     var addError: Error?
     var registerCount = 0
     var requestCount = 0
@@ -31,8 +33,22 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
     func add(_ request: CalendarMeetingNotificationRequest) async throws {
         if let addError { throw addError }
         added.append(request)
+        if !pendingIdentifiers.contains(request.identifier) {
+            pendingIdentifiers.append(request.identifier)
+        }
     }
-    func removePendingRequests(withIdentifiers identifiers: [String]) { removed.append(identifiers) }
+    func removePendingRequests(withIdentifiers identifiers: [String]) {
+        removed.append(identifiers)
+        deferredPendingRemovals.append(contentsOf: identifiers)
+        if !defersPendingRemovals {
+            completePendingRemovals()
+        }
+    }
+    func completePendingRemovals() {
+        let identifiers = Set(deferredPendingRemovals)
+        pendingIdentifiers.removeAll { identifiers.contains($0) }
+        deferredPendingRemovals.removeAll()
+    }
     func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
         removedDelivered.append(identifiers)
     }
@@ -343,7 +359,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         XCTAssertEqual(client.added.map(\.fireDate), [now.addingTimeInterval(7 * 24 * 60 * 60)])
     }
 
-    func testDetectedNotificationReplacesPendingAndDeliveredStartNotifications() async throws {
+    func testDetectedNotificationReplacesPendingAndDeliveredUpcomingNotifications() async throws {
         let suiteName = "CalendarMeetingDetectedTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -354,17 +370,37 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
 
         await service.publishDetectedMeeting(occurrence, now: now)
 
-        let startIdentifiers = [CalendarMeetingNotificationKind.upcoming, .detected].map {
-            "\(CalendarMeetingNotificationService.requestIdentifierPrefix)\(occurrence.id).\($0.rawValue)"
-        }
-        XCTAssertEqual(client.removed, [startIdentifiers])
-        XCTAssertEqual(client.removedDelivered, [startIdentifiers])
+        let upcomingIdentifier = "\(CalendarMeetingNotificationService.requestIdentifierPrefix)"
+            + "\(occurrence.id).\(CalendarMeetingNotificationKind.upcoming.rawValue)"
+        XCTAssertEqual(client.removed, [[upcomingIdentifier]])
+        XCTAssertEqual(client.removedDelivered, [[upcomingIdentifier]])
         XCTAssertEqual(client.added.count, 1)
         XCTAssertEqual(client.added.first?.kind, .detected)
         XCTAssertEqual(client.added.first?.category, .detected)
         XCTAssertEqual(client.added.first?.occurrenceDigest, occurrence.id)
         XCTAssertEqual(client.added.first?.fireDate, now.addingTimeInterval(1))
         XCTAssertEqual(client.added.first?.delivery, .immediate)
+    }
+
+    func testDetectedNotificationSurvivesDelayedRemovalOfUpcomingReminder() async throws {
+        let suiteName = "CalendarMeetingDelayedRemovalTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        client.defersPendingRemovals = true
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let occurrence = makeCalendarMeetingTestOccurrence()
+        let prefix = "\(CalendarMeetingNotificationService.requestIdentifierPrefix)\(occurrence.id)."
+        let upcomingIdentifier = prefix + CalendarMeetingNotificationKind.upcoming.rawValue
+        let detectedIdentifier = prefix + CalendarMeetingNotificationKind.detected.rawValue
+        client.pendingIdentifiers = [upcomingIdentifier]
+
+        await service.publishDetectedMeeting(occurrence)
+        XCTAssertTrue(client.pendingIdentifiers.contains(detectedIdentifier))
+
+        client.completePendingRemovals()
+
+        XCTAssertEqual(client.pendingIdentifiers, [detectedIdentifier])
     }
 
     func testStartNotificationRemovalIsScopedToAcceptedOccurrenceAndLeavesAutoStopAlone() throws {

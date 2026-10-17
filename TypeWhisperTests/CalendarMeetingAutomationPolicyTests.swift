@@ -260,6 +260,71 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         XCTAssertTrue(startEffects.contains(.startRecording(occurrence, identity)))
     }
 
+    func testCalendarRefreshDoesNotRestoreReminderDuringAutomaticCountdown() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(8 * 60))
+        let laterOccurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "later-event",
+            start: now.addingTimeInterval(60 * 60)
+        )
+        let occurrences = [occurrence, laterOccurrence]
+        let automatic = configuration(mode: .automatic)
+        var policy = CalendarMeetingAutomationPolicy()
+        let configured = policy.reduce(.configure(automatic, occurrences: occurrences, now: now))
+        XCTAssertTrue(configured.contains(.replaceScheduledReminders(occurrences.map {
+            CalendarMeetingUpcomingReminder(occurrence: $0, startMode: .automatic)
+        })))
+
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        let countdown = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        XCTAssertTrue(countdown.contains(.dismissStartNotifications(occurrence.id)))
+        XCTAssertTrue(countdown.contains(.showStartCountdown(
+            occurrence,
+            deadline: now.addingTimeInterval(8)
+        )))
+
+        let refreshed = policy.reduce(.configure(
+            automatic,
+            occurrences: occurrences,
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertTrue(refreshed.contains(.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: laterOccurrence, startMode: .automatic)
+        ])), "A calendar refresh must keep the automatic countdown's reminder dismissed")
+    }
+
+    func testCalendarRefreshDoesNotRestoreReminderWhileAutomaticRecordingStartIsInFlight() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(8 * 60))
+        let automatic = configuration(mode: .automatic)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(automatic, occurrences: [occurrence], now: now))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains(
+            .startRecording(occurrence, identity)
+        ))
+
+        let refreshed = policy.reduce(.configure(
+            automatic,
+            occurrences: [occurrence],
+            now: now.addingTimeInterval(9)
+        ))
+        XCTAssertTrue(refreshed.contains(.replaceScheduledReminders([])),
+            "The countdown has ended, but recorder startup must still keep the reminder dismissed")
+
+        _ = policy.reduce(.recordingStartFailed(
+            occurrenceDigest: occurrence.id,
+            failure: .captureFailed
+        ))
+        let afterFailure = policy.reduce(.configure(
+            automatic,
+            occurrences: [occurrence],
+            now: now.addingTimeInterval(10)
+        ))
+        XCTAssertTrue(afterFailure.contains(.replaceScheduledReminders([])))
+    }
+
     func testCameraFallbackStartsUniqueEligibleOccurrenceAfterDwellAndCountdown() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)
@@ -604,6 +669,9 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
 
         XCTAssertTrue(changed.contains(.dismissStartCountdown))
+        XCTAssertTrue(changed.contains(.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: occurrence, startMode: .reminder)
+        ])), "Changing modes must restore reminders after clearing the automatic countdown")
         XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains {
             if case .startRecording = $0 { return true }
             return false

@@ -240,7 +240,6 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             self.configuration = configuration
             self.occurrences = occurrences.filter(configuration.permits)
             pruneArmedOccurrences(at: now)
-            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
 
             if !configuration.isOperational
                 || previousConfiguration.startMode != configuration.startMode
@@ -254,6 +253,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                     cameraActivityAvailable = false
                 }
             }
+            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
             if (wasOperational && !configuration.isOperational)
                 || !configuration.autoStopEnabled
                 || autoStopSettingsChangedDuringRecording {
@@ -400,13 +400,16 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private func upcomingReminders(at now: Date) -> [CalendarMeetingUpcomingReminder] {
         guard configuration.isOperational else { return [] }
         let horizon = now.addingTimeInterval(7 * 24 * 60 * 60)
-        return occurrences
+        let eligibleOccurrences = occurrences
             .filter { !$0.isAdHoc }
             .filter { $0.participationStatus.permitsReminder }
             .filter { !configuration.suppressedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !recordedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !armedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !permanentStartFailureDigests.contains($0.occurrenceDigest) }
+            .filter { $0.occurrenceDigest != pendingStart?.occurrenceDigest }
+            .filter { $0.occurrenceDigest != startRequestedDigest }
+        return eligibleOccurrences
             .filter {
                 $0.endDate.addingTimeInterval(30 * 60) >= now
                     && $0.startDate.addingTimeInterval(-5 * 60) <= horizon
