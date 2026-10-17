@@ -182,6 +182,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         let deadline: Date
     }
 
+    private struct PendingIdleCandidate: Sendable {
+        let digest: String
+        let identity: CalendarMeetingCanonicalLink
+        let reminderWasDismissed: Bool
+    }
+
     private struct ActiveRecording: Equatable, Sendable {
         let handle: CalendarMeetingRecordingHandle
         let occurrenceDigest: String
@@ -217,7 +223,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private var recordedOccurrenceDigests = Set<String>()
     private var idleRetryDigests = Set<String>()
     private var reminderRestorationDeadlines: [String: Date] = [:]
-    private var pendingIdleCandidate: (digest: String, identity: CalendarMeetingCanonicalLink)?
+    private var pendingIdleCandidate: PendingIdleCandidate?
     private var pendingStart: PendingStart?
     private var requestedStart: (digest: String, identity: CalendarMeetingCanonicalLink)?
     private var activeRecording: ActiveRecording?
@@ -231,7 +237,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             let previousConfiguration = self.configuration
             let wasOperational = previousConfiguration.isOperational
             let interruptedStart = pendingStart.map { (digest: $0.occurrenceDigest, identity: $0.identity) }
-                ?? requestedStart ?? pendingIdleCandidate
+                ?? requestedStart ?? pendingIdleCandidate.map { (digest: $0.digest, identity: $0.identity) }
+            let interruptedReminderWasDismissed = pendingStart != nil || requestedStart != nil
+                || pendingIdleCandidate?.reminderWasDismissed == true
             let interruptedOccurrence = interruptedStart.flatMap { occurrence(for: $0.digest) }
             let autoStopSettingsChangedDuringRecording = activeRecording != nil
                 && (
@@ -254,7 +262,8 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 || refreshedStartIsInvalid
                 || previousConfiguration.startMode != configuration.startMode
                 || previousConfiguration.confirmSoloEvents != configuration.confirmSoloEvents {
-                if let interruptedOccurrence, !interruptedOccurrence.isAdHoc {
+                if interruptedReminderWasDismissed,
+                   let interruptedOccurrence, !interruptedOccurrence.isAdHoc {
                     reminderRestorationDeadlines[interruptedOccurrence.id] =
                         interruptedOccurrence.endDate.addingTimeInterval(30 * 60)
                 }
@@ -410,7 +419,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             switch readiness {
             case .recorderBusy, .dictationBusy, .finalizing:
                 if !idleRetryDigests.contains(digest) {
-                    pendingIdleCandidate = (digest, identity)
+                    pendingIdleCandidate = PendingIdleCandidate(
+                        digest: digest, identity: identity, reminderWasDismissed: true
+                    )
                 }
             case .noAudioSource, .microphoneDenied:
                 armedOccurrenceDigests.remove(digest)
@@ -462,6 +473,10 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             .filter { !permanentStartFailureDigests.contains($0.occurrenceDigest) }
             .filter { $0.occurrenceDigest != pendingStart?.occurrenceDigest }
             .filter { $0.occurrenceDigest != requestedStart?.digest }
+            .filter {
+                $0.occurrenceDigest != pendingIdleCandidate?.digest
+                    || pendingIdleCandidate?.reminderWasDismissed != true
+            }
         return eligibleOccurrences
             .filter {
                 $0.endDate.addingTimeInterval(30 * 60) >= now
@@ -541,7 +556,10 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             }
             if now >= pendingStart.deadline, requestedStart == nil {
                 guard recorderReadiness.isIdle else {
-                    pendingIdleCandidate = (pendingStart.occurrenceDigest, pendingStart.identity)
+                    pendingIdleCandidate = PendingIdleCandidate(
+                        digest: pendingStart.occurrenceDigest, identity: pendingStart.identity,
+                        reminderWasDismissed: true
+                    )
                     clearPendingStart(effects: &effects)
                     return
                 }
@@ -756,7 +774,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             )
         case .recorderBusy, .dictationBusy, .finalizing:
             if !idleRetryDigests.contains(digest) {
-                pendingIdleCandidate = (digest, identity)
+                pendingIdleCandidate = PendingIdleCandidate(
+                    digest: digest, identity: identity,
+                    reminderWasDismissed: pendingIdleCandidate?.digest == digest
+                        && pendingIdleCandidate?.reminderWasDismissed == true
+                )
             }
         case .noAudioSource, .microphoneDenied:
             armedOccurrenceDigests.remove(digest)
