@@ -283,6 +283,7 @@ final class PostProcessingPipeline {
             ) else {
                 return text
             }
+            let text = speechPunctuationService.removeSpacesBeforeFullWidthPunctuation(in: text)
             switch resolvedStrategy.strategy {
             case .nativeOnly:
                 return text

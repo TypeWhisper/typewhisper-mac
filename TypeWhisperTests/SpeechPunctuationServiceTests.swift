@@ -334,6 +334,68 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testRemovesSpacesBeforeFullWidthPunctuationOnly() {
+        let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
+
+        XCTAssertEqual(service.removeSpacesBeforeFullWidthPunctuation(in: "明日は晴れますか ？"), "明日は晴れますか？")
+        XCTAssertEqual(service.removeSpacesBeforeFullWidthPunctuation(in: "すごい\t！ 本当です　。"), "すごい！ 本当です。")
+        XCTAssertEqual(service.removeSpacesBeforeFullWidthPunctuation(in: "メモ「重要 」"), "メモ「重要」")
+        XCTAssertEqual(service.removeSpacesBeforeFullWidthPunctuation(in: "確認？ next ?"), "確認？ next ?")
+        XCTAssertEqual(service.removeSpacesBeforeFullWidthPunctuation(in: "一行目\n？"), "一行目\n？")
+    }
+
+    @MainActor
+    func testPipelineRemovesAppleSpeechSpaceBeforeJapaneseQuestionMark() async throws {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer { defaults.removePersistentDomain(forName: #function) }
+        let profileStore = DictationPunctuationProfileStore(defaults: defaults, storageKey: #function)
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: profileStore)
+        )
+        let dictationContext = DictationRuntimeContext(
+            engineId: "speechAnalyzer",
+            modelId: "ja_JP",
+            configuredLanguage: "ja",
+            detectedLanguage: "ja"
+        )
+
+        for override in [nil, PunctuationStrategy.nativeOnly] {
+            profileStore.upsert(
+                DictationPunctuationProfile(
+                    engineId: "speechAnalyzer",
+                    modelId: "ja_JP",
+                    languageCode: "ja",
+                    defaultStrategy: .automatic,
+                    userOverride: override,
+                    verificationState: .unknown,
+                    lastVerifiedAt: nil
+                )
+            )
+
+            let result = try await pipeline.process(
+                text: "明日は晴れますか ？",
+                context: PostProcessingContext(language: "ja"),
+                dictationContext: dictationContext
+            )
+
+            XCTAssertEqual(result.text, "明日は晴れますか？", "strategy override: \(String(describing: override))")
+            XCTAssertEqual(result.appliedSteps, ["Speech Punctuation"])
+        }
+    }
+
+    @MainActor
     func testPipelineAppliesSpeechPunctuationBeforeDictionaryCorrections() async throws {
         let appSupportDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

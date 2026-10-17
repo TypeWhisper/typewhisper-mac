@@ -13,6 +13,10 @@ final class SpeechPunctuationService {
         let regex: NSRegularExpression
     }
     private var compiledRules: [String: [CompiledRule]] = [:]
+    // Engines such as Apple Speech emit "ですか ？": full-width punctuation never takes a leading space.
+    private let spaceBeforeFullWidthPunctuationRegex = try! NSRegularExpression(
+        pattern: #"(?<=\S)\h+(?=[、。，．？！：；）］｝」』】〉》])"#
+    )
 
     init(rulesLoader: PunctuationRulesLoader = PunctuationRulesLoader()) {
         self.rulesLoader = rulesLoader
@@ -65,6 +69,14 @@ final class SpeechPunctuationService {
         default:
             return normalizeSpacing(in: result)
         }
+    }
+
+    func removeSpacesBeforeFullWidthPunctuation(in text: String) -> String {
+        spaceBeforeFullWidthPunctuationRegex.stringByReplacingMatches(
+            in: text,
+            range: NSRange(text.startIndex..., in: text),
+            withTemplate: ""
+        )
     }
 
     private func replaceWholePhrase(
