@@ -345,12 +345,14 @@ final class IndicatorCoordinator {
     private let notchPanel: NotchIndicatorPanel
     private let overlayPanel: OverlayIndicatorPanel
     private let minimalPanel: MinimalIndicatorPanel
+    private let countdownModel: CalendarMeetingCountdownModel
     private var cancellables = Set<AnyCancellable>()
     private var globalMouseMonitor: Any?
     private var deferredRefreshTask: Task<Void, Never>?
     private var isObserving = false
 
     init(countdownModel: CalendarMeetingCountdownModel) {
+        self.countdownModel = countdownModel
         notchPanel = NotchIndicatorPanel(
             screenResolver: screenResolver,
             countdownModel: countdownModel
@@ -387,7 +389,10 @@ final class IndicatorCoordinator {
     }
 
     private func switchStyle(_ style: IndicatorStyle, vm: DictationViewModel) {
-        switch style {
+        switch CalendarMeetingCountdownIndicatorPolicy.activeStyle(
+            preferredStyle: style,
+            countdownPresented: countdownModel.presentation != nil
+        ) {
         case .notch:
             overlayPanel.dismiss()
             minimalPanel.dismiss()

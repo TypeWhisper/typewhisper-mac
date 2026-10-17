@@ -402,4 +402,88 @@ final class MeetingAutomationCountdownIndicatorTests: XCTestCase {
             XCTAssertTrue(hitView.acceptsFirstMouse(for: nil))
         }
     }
+
+    func testCountdownPanelUsesBottomAndRestoresPreferredPositionWithoutTakingFocus() async throws {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("Indicator panel tests require an available screen")
+        }
+        let model = CalendarMeetingCountdownModel()
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
+        let panel = OverlayIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            countdownModel: model,
+            content: { MeetingCountdownTestContent(model: model) }
+        )
+        defer { panel.dismiss() }
+        let originalKeyWindow = NSApp.keyWindow
+        let originalMainWindow = NSApp.mainWindow
+        let originalFrontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        let container = try XCTUnwrap(panel.contentView as? IndicatorHostingContainerView)
+
+        model.presentStart(title: "Planning", startedAt: .now, deadline: .now.addingTimeInterval(5)) {}
+        panel.show()
+
+        XCTAssertTrue(panel.isVisible)
+        XCTAssertEqual(panel.frame.midX, screen.visibleFrame.midX, accuracy: 0.5)
+        XCTAssertEqual(panel.frame.minY, screen.visibleFrame.minY + 20, accuracy: 0.5)
+        XCTAssertEqual(panel.frame.height, IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+        XCTAssertEqual(container.verticalAnchor, .bottom)
+        XCTAssertFalse(panel.ignoresMouseEvents)
+        XCTAssertTrue(NSApp.keyWindow === originalKeyWindow)
+        XCTAssertTrue(NSApp.mainWindow === originalMainWindow)
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, originalFrontmostPID)
+
+        try await Task.sleep(for: .milliseconds(200))
+        container.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(container.bitmapImageRepForCachingDisplay(in: container.bounds))
+        container.cacheDisplay(in: container.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
+        attachment.name = "Meeting start countdown"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+
+        model.presentAutoStop(startedAt: .now, deadline: .now.addingTimeInterval(15)) {}
+        panel.show()
+        XCTAssertEqual(panel.frame.minY, screen.visibleFrame.minY + 20, accuracy: 0.5)
+        XCTAssertEqual(panel.frame.height,
+            IndicatorFeedbackPanelLayout.feedbackBodyHeight + IndicatorFeedbackPanelLayout.overlayStatusHeight)
+
+        model.dismissAutoStop()
+        panel.show()
+        XCTAssertEqual(panel.frame.maxY, screen.visibleFrame.maxY - 20, accuracy: 0.5)
+        XCTAssertEqual(container.verticalAnchor, .top)
+        XCTAssertTrue(panel.ignoresMouseEvents)
+    }
+}
+
+private struct MeetingCountdownTestContent: View {
+    @ObservedObject var model: CalendarMeetingCountdownModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            if let presentation = model.presentation {
+                OverlayIndicatorSurface {
+                    MeetingAutomationCountdownIndicator(
+                        model: model,
+                        presentation: presentation,
+                        contentPadding: 20
+                    )
+                }
+                .frame(width: IndicatorFeedbackPanelLayout.feedbackWidth)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 }

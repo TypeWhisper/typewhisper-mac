@@ -125,7 +125,10 @@ struct OverlayIndicatorView: View {
     }
 
     private var isTop: Bool {
-        viewModel.overlayPosition == .top
+        CalendarMeetingCountdownIndicatorPolicy.overlayPosition(
+            preferredPosition: viewModel.overlayPosition,
+            countdownPresented: countdownPresentation != nil
+        ) == .top
     }
 
     private var transcriptFontSize: CGFloat {

@@ -237,7 +237,10 @@ class NotchIndicatorPanel: NSPanel {
         vm: DictationViewModel = DictationViewModel.shared,
         recorder: AudioRecorderViewModel = AudioRecorderViewModel.shared
     ) {
-        guard vm.indicatorStyle == .notch else {
+        guard CalendarMeetingCountdownIndicatorPolicy.activeStyle(
+            preferredStyle: vm.indicatorStyle,
+            countdownPresented: countdownModel.presentation != nil
+        ) == .notch else {
             dismiss()
             return
         }

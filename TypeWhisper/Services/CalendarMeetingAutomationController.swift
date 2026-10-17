@@ -128,7 +128,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             .armOccurrence(digest)
         case .suppress(let digest):
             .suppressOccurrence(digest)
-        case .continueRecording, .openPremiumSettings:
+        case .continueRecording, .openRecorder:
             nil
         }
     }
@@ -214,6 +214,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var policyTimerTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
+    private var notificationGeneration = 0
     private var calendarAccessRequestTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var environmentObserverTokens: [NSObjectProtocol] = []
@@ -591,6 +592,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         recordingStartTask?.cancel()
         recordingStartTask = nil
         notificationTask?.cancel()
+        notificationGeneration += 1
         notificationTask = nil
         calendarAccessRequestTask?.cancel()
         calendarAccessRequestTask = nil
@@ -799,6 +801,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 await service.replaceScheduledReminders(reminders, now: now)
             }
 
+        case .retainDetectedNotifications(let digests):
+            guard notificationService != nil || isAutomationActive else { return }
+            let service = notificationServiceInstance()
+            enqueueNotificationOperation {
+                await service.retainDetectedNotifications(eligibleDigests: digests)
+            }
+
         case .startActivityCollector:
             collectorShouldBeRunning = true
             startCollector()
@@ -823,6 +832,20 @@ final class CalendarMeetingAutomationController: ObservableObject {
             let now = nowProvider()
             enqueueNotificationOperation {
                 await service.publishDetectedMeeting(occurrence, now: now)
+            }
+
+        case .dismissStartNotifications(let digest):
+            let service = notificationServiceInstance()
+            // Run after pending publishes so a delayed add cannot restore the banner
+            // after the user has accepted it and the in-app countdown takes over.
+            enqueueNotificationOperation {
+                await service.removeStartNotifications(occurrenceDigest: digest)
+            }
+
+        case .allowReminderRestoration(let digest):
+            let service = notificationServiceInstance()
+            enqueueNotificationOperation {
+                service.allowReminderRestoration(occurrenceDigest: digest)
             }
 
         case .showStartCountdown(let occurrence, let deadline):
@@ -964,9 +987,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                       $0.occurrenceDigest == occurrence.occurrenceDigest
                           && $0.isInsideJoinWindow(at: self.nowProvider())
                   }) else {
-                self.applyPolicy(.recordingStartFailed(
-                    occurrenceDigest: occurrence.occurrenceDigest,
-                    failure: .captureFailed
+                self.applyPolicy(.recordingStartCancelled(
+                    occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                 ))
                 return
             }
@@ -976,7 +998,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 at: self.nowProvider()
             ) else {
                 self.applyPolicy(.recordingStartCancelled(
-                    occurrenceDigest: occurrence.occurrenceDigest
+                    occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                 ))
                 return
             }
@@ -1009,9 +1031,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                               && $0.isInsideJoinWindow(at: self.nowProvider())
                       }) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
-                    self.applyPolicy(.recordingStartFailed(
-                        occurrenceDigest: occurrence.occurrenceDigest,
-                        failure: .captureFailed
+                    self.applyPolicy(.recordingStartCancelled(
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                     ))
                     return
                 }
@@ -1024,7 +1045,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 ) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
                     self.applyPolicy(.recordingStartCancelled(
-                        occurrenceDigest: occurrence.occurrenceDigest
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                     ))
                     return
                 }
@@ -1047,6 +1068,17 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     now: self.nowProvider()
                 ))
             } catch {
+                guard generation == self.recordingStartGeneration,
+                      self.policy.permitsStart(
+                          of: occurrence.occurrenceDigest,
+                          identity: identity,
+                          at: self.nowProvider()
+                      ) else {
+                    self.applyPolicy(.recordingStartCancelled(
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
+                    ))
+                    return
+                }
                 let readiness = self.currentRecorderReadiness()
                 switch readiness {
                 case .recorderBusy, .dictationBusy, .finalizing:
@@ -1478,8 +1510,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private func handleNotificationResponse(_ response: CalendarMeetingNotificationResponse) {
         switch response {
-        case .openPremiumSettings:
-            SettingsNavigationCoordinator.shared.navigate(to: .premium)
+        case .openRecorder:
+            SettingsNavigationCoordinator.shared.recorderPart = .recorder
+            SettingsNavigationCoordinator.shared.navigate(to: .recorder)
             ManagedAppWindowOpener.shared.open(id: "settings")
         case .continueRecording(let digest):
             guard let activeCalendarRecording,
@@ -1570,6 +1603,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         await stopCameraCollector()
         countdownModel.dismissAll()
         let pendingNotificationTask = notificationTask
+        notificationGeneration += 1
         pendingNotificationTask?.cancel()
         await pendingNotificationTask?.value
         notificationTask = nil
@@ -1629,10 +1663,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
         _ operation: @escaping @MainActor () async -> Void
     ) {
         let previousTask = notificationTask
-        previousTask?.cancel()
-        notificationTask = Task { @MainActor in
+        let generation = notificationGeneration
+        notificationTask = Task { @MainActor [weak self] in
             await previousTask?.value
-            guard !Task.isCancelled else { return }
+            // Reconciliation, publication, and cleanup are ordered operations, not
+            // substitutes for one another. Only shutdown/deactivation invalidates them.
+            guard !Task.isCancelled, self?.notificationGeneration == generation else { return }
             await operation()
         }
     }
