@@ -35,6 +35,14 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
 
         let armed = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now))
+        XCTAssertTrue(armed.contains(.dismissStartNotifications(occurrence.id)))
+        XCTAssertTrue(armed.contains(.replaceScheduledReminders([])))
+        let refreshed = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        XCTAssertTrue(refreshed.contains(.replaceScheduledReminders([])))
         XCTAssertFalse(armed.contains {
             if case .showStartCountdown = $0 { return true }
             if case .startRecording = $0 { return true }
@@ -54,7 +62,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
     }
 
-    func testDetectedReminderActionUsesExistingStableDwellButStillShowsCountdown() {
+    func testDetectedReminderActionUsesExistingStableDwellButStillShowsCountdown() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)
         var policy = CalendarMeetingAutomationPolicy()
@@ -83,6 +91,15 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             if case .startRecording = $0 { return true }
             return false
         })
+        let dismissalIndex = try XCTUnwrap(armed.firstIndex(of: .dismissStartNotifications(occurrence.id)))
+        let countdownIndex = try XCTUnwrap(armed.firstIndex {
+            if case .showStartCountdown = $0 { return true }
+            return false
+        })
+        XCTAssertLessThan(dismissalIndex, countdownIndex)
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(4))).contains(
+            .publishDetectedMeeting(occurrence)
+        ))
     }
 
     func testArmedReminderSurvivesSignalLossAndRetriesAfterNewStableJoin() {
@@ -129,6 +146,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             now: now.addingTimeInterval(4)
         ))
         XCTAssertTrue(cancelled.contains(.persistSuppression(occurrence.id)))
+        XCTAssertTrue(cancelled.contains(.dismissStartNotifications(occurrence.id)))
         _ = policy.reduce(.activity([], now: now.addingTimeInterval(5)))
         _ = policy.reduce(.activity([signal(for: occurrence)], now: now.addingTimeInterval(6)))
         XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(20))).contains {
@@ -516,7 +534,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
                 .suppressOccurrence(suppressedOccurrence.id),
                 now: now.addingTimeInterval(3.5)
             )),
-            [.persistSuppression(suppressedOccurrence.id)]
+            [.dismissStartNotifications(suppressedOccurrence.id), .persistSuppression(suppressedOccurrence.id)]
         )
 
         let idle = policy.reduce(.recorderReadiness(.idle, now: now.addingTimeInterval(4)))
@@ -1268,6 +1286,7 @@ extension CalendarMeetingAutomationPolicyTests {
         _ = policy.reduce(.activity([signal], detectedOccurrences: [occurrence], now: now))
         XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(4))).isEmpty)
         XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(5))), [
+            .dismissStartNotifications(occurrence.id),
             .showStartCountdown(occurrence, deadline: now.addingTimeInterval(10))
         ])
         XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(10))).contains(
@@ -1290,6 +1309,7 @@ extension CalendarMeetingAutomationPolicyTests {
         _ = policy.reduce(.activity([input], now: now.addingTimeInterval(30)))
         XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(49))).isEmpty)
         XCTAssertEqual(policy.reduce(.timeAdvanced(now.addingTimeInterval(50))), [
+            .dismissStartNotifications(occurrence.id),
             .showStartCountdown(occurrence, deadline: now.addingTimeInterval(55))
         ])
         XCTAssertTrue(policy.reduce(.activity([], now: now.addingTimeInterval(51))).contains(.dismissStartCountdown))

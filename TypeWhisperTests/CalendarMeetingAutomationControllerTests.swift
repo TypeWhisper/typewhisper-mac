@@ -20,7 +20,7 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
             .suppressOccurrence(digest)
         )
         XCTAssertNil(CalendarMeetingAutomationController.automationUserAction(
-            for: .openPremiumSettings
+            for: .openRecorder
         ))
     }
 

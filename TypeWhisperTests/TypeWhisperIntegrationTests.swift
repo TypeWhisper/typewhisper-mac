@@ -23152,6 +23152,16 @@ extension TypeWhisperIntegrationTests {
 
     @MainActor
     func testConfirmedSoloCalendarEventRecordsOnlyAfterConsent() async throws {
+        try await exerciseMeetingNotificationHandoff(joinBeforeConsent: true)
+    }
+
+    @MainActor
+    func testUpcomingNotificationAcceptanceRemovesBannerBeforeJoining() async throws {
+        try await exerciseMeetingNotificationHandoff(joinBeforeConsent: false)
+    }
+
+    @MainActor
+    private func exerciseMeetingNotificationHandoff(joinBeforeConsent: Bool) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let suite = "MeetingSoloConsent-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -23212,25 +23222,47 @@ extension TypeWhisperIntegrationTests {
 
         let zoom = MeetingAudioProcess(audioObjectID: 1, processID: 123, bundleIdentifier: "us.zoom.xos",
             isRunningInput: true, isRunningOutput: true)
+        if !joinBeforeConsent {
+            notifications.respond(.armStart(privateBlock.occurrenceDigest))
+            for _ in 0..<100 where !notifications.removedStartDigests.contains(privateBlock.occurrenceDigest) {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            await controller.testingAdvanceTime()
+            XCTAssertTrue(notifications.removedStartDigests.contains(privateBlock.occurrenceDigest),
+                "Cleanup must survive the immediately queued reminder refresh")
+            XCTAssertTrue(notifications.scheduledReminders.isEmpty)
+            XCTAssertNil(countdown.presentation, "Start When I Join must wait for a stable meeting")
+            XCTAssertEqual(recorder.state, .idle)
+        }
         await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available,
             processes: [zoom]))
-        XCTAssertEqual(notifications.scheduledReminders, [
-            CalendarMeetingUpcomingReminder(occurrence: privateBlock, startMode: .reminder)
-        ])
+        if joinBeforeConsent {
+            XCTAssertEqual(notifications.scheduledReminders, [
+                CalendarMeetingUpcomingReminder(occurrence: privateBlock, startMode: .reminder)
+            ])
+        }
         now = now.addingTimeInterval(3)
         await controller.testingAdvanceTime()
-        XCTAssertNil(countdown.presentation)
-        XCTAssertEqual(notifications.detectedDigests, [privateBlock.occurrenceDigest])
-        now = now.addingTimeInterval(60)
-        await controller.testingAdvanceTime()
-        XCTAssertEqual(recorder.state, .idle, "Joining a solo event must not start a recording without consent")
+        if joinBeforeConsent {
+            XCTAssertNil(countdown.presentation)
+            XCTAssertEqual(notifications.detectedDigests, [privateBlock.occurrenceDigest])
+            now = now.addingTimeInterval(60)
+            await controller.testingAdvanceTime()
+            XCTAssertEqual(recorder.state, .idle, "Joining a solo event must not start a recording without consent")
 
-        // Start Recording in the detected-meeting notification is the consent.
-        notifications.respond(.armStart(privateBlock.occurrenceDigest))
-        for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
-            try await Task.sleep(for: .milliseconds(10))
+            // Start Recording in the detected-meeting notification is the consent.
+            notifications.respond(.armStart(privateBlock.occurrenceDigest))
+            for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
         XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        await controller.testingRefresh()
+        await controller.testingAdvanceTime()
+        XCTAssertTrue(notifications.removedStartDigests.contains(privateBlock.occurrenceDigest))
+        XCTAssertTrue(notifications.scheduledReminders.isEmpty,
+            "Refreshing the calendar must not bring back an accepted notification")
+        XCTAssertEqual(recorder.state, .idle)
         now = now.addingTimeInterval(5)
         await controller.testingAdvanceTime()
         XCTAssertEqual(recorder.state, .recording)
@@ -23419,6 +23451,7 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     private(set) var autoStopAttempts = 0
     private(set) var scheduledReminders: [CalendarMeetingUpcomingReminder] = []
     private(set) var detectedDigests: [String] = []
+    private(set) var removedStartDigests: [String] = []
     private var responseHandler: (@MainActor (CalendarMeetingNotificationResponse) -> Void)?
     init(authorization: CalendarMeetingNotificationAuthorization) { self.authorization = authorization }
     func respond(_ response: CalendarMeetingNotificationResponse) { responseHandler?(response) }
@@ -23432,6 +23465,9 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     }
     func publishDetectedMeeting(_ occurrence: CalendarMeetingOccurrence, now: Date) async {
         detectedDigests.append(occurrence.occurrenceDigest)
+    }
+    func removeStartNotifications(occurrenceDigest: String) {
+        removedStartDigests.append(occurrenceDigest)
     }
     func publishAutoStopWarning(occurrenceDigest: String, now: Date) async -> Bool {
         autoStopAttempts += 1

@@ -217,6 +217,20 @@ enum CalendarMeetingCountdownIndicatorAccessibility {
 }
 
 enum CalendarMeetingCountdownIndicatorPolicy {
+    static func activeStyle(
+        preferredStyle: IndicatorStyle,
+        countdownPresented: Bool
+    ) -> IndicatorStyle {
+        countdownPresented ? .overlay : preferredStyle
+    }
+
+    static func overlayPosition(
+        preferredPosition: OverlayPosition,
+        countdownPresented: Bool
+    ) -> OverlayPosition {
+        countdownPresented ? .bottom : preferredPosition
+    }
+
     static func shouldShow(
         normalVisibilityAllowsPresentation: Bool,
         countdownPresented: Bool

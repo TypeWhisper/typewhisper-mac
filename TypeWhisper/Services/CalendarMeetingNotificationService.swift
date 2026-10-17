@@ -90,13 +90,13 @@ enum CalendarMeetingNotificationResponse: Equatable, Sendable {
     case armStart(String)
     case suppress(String)
     case continueRecording(String)
-    case openPremiumSettings
+    case openRecorder
 
     var keepsApplicationInBackground: Bool {
         switch self {
         case .armStart, .suppress, .continueRecording:
             true
-        case .openPremiumSettings:
+        case .openRecorder:
             false
         }
     }
@@ -139,7 +139,7 @@ enum CalendarMeetingNotificationResponseMapper {
             if kind == .autoStop {
                 occurrenceDigest.map(CalendarMeetingNotificationResponse.continueRecording)
             } else {
-                .openPremiumSettings
+                .openRecorder
             }
         default:
             nil
@@ -403,6 +403,7 @@ protocol CalendarMeetingNotifying: AnyObject {
         _ occurrence: CalendarMeetingOccurrence,
         now: Date
     ) async
+    func removeStartNotifications(occurrenceDigest: String)
     func publishAutoStopWarning(
         occurrenceDigest: String,
         now: Date
@@ -574,9 +575,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         _ occurrence: CalendarMeetingOccurrence,
         now: Date = Date()
     ) async {
-        client.removePendingRequests(withIdentifiers: [
-            Self.requestIdentifier(digest: occurrence.occurrenceDigest, kind: .upcoming)
-        ])
+        removeStartNotifications(occurrenceDigest: occurrence.occurrenceDigest)
         let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = CalendarMeetingNotificationRequest(
             identifier: Self.requestIdentifier(
@@ -593,6 +592,14 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             fireDate: now.addingTimeInterval(1)
         )
         try? await client.add(request)
+    }
+
+    func removeStartNotifications(occurrenceDigest: String) {
+        let identifiers = [CalendarMeetingNotificationKind.upcoming, .detected].map {
+            Self.requestIdentifier(digest: occurrenceDigest, kind: $0)
+        }
+        client.removePendingRequests(withIdentifiers: identifiers)
+        client.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     func publishAutoStopWarning(

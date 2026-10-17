@@ -156,6 +156,7 @@ enum CalendarMeetingAutomationEffect: Equatable, Sendable {
     case startCameraActivityCollector
     case stopCameraActivityCollector
     case publishDetectedMeeting(CalendarMeetingOccurrence)
+    case dismissStartNotifications(String)
     case showStartCountdown(CalendarMeetingOccurrence, deadline: Date)
     case dismissStartCountdown
     case startRecording(CalendarMeetingOccurrence, CalendarMeetingCanonicalLink)
@@ -404,6 +405,8 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             .filter { $0.participationStatus.permitsReminder }
             .filter { !configuration.suppressedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !recordedOccurrenceDigests.contains($0.occurrenceDigest) }
+            .filter { !armedOccurrenceDigests.contains($0.occurrenceDigest) }
+            .filter { !permanentStartFailureDigests.contains($0.occurrenceDigest) }
             .filter {
                 $0.endDate.addingTimeInterval(30 * 60) >= now
                     && $0.startDate.addingTimeInterval(-5 * 60) <= horizon
@@ -721,6 +724,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             identity: identity,
             deadline: deadline
         )
+        effects.append(.dismissStartNotifications(digest))
         effects.append(.showStartCountdown(occurrence, deadline: deadline))
     }
 
@@ -745,6 +749,8 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 return
             }
             armedOccurrenceDigests.insert(digest)
+            effects.append(.dismissStartNotifications(digest))
+            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
             updateCollector(at: now, effects: &effects)
             evaluateStart(at: now, effects: &effects)
 
@@ -758,6 +764,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             if pendingIdleCandidate?.digest == digest {
                 pendingIdleCandidate = nil
             }
+            effects.append(.dismissStartNotifications(digest))
             effects.append(.persistSuppression(digest))
 
         case .continueRecording(let handle):

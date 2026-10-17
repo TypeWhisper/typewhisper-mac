@@ -128,7 +128,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             .armOccurrence(digest)
         case .suppress(let digest):
             .suppressOccurrence(digest)
-        case .continueRecording, .openPremiumSettings:
+        case .continueRecording, .openRecorder:
             nil
         }
     }
@@ -825,6 +825,14 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 await service.publishDetectedMeeting(occurrence, now: now)
             }
 
+        case .dismissStartNotifications(let digest):
+            let service = notificationServiceInstance()
+            // Run after pending publishes so a delayed add cannot restore the banner
+            // after the user has accepted it and the in-app countdown takes over.
+            enqueueNotificationOperation(canBeSuperseded: false) {
+                service.removeStartNotifications(occurrenceDigest: digest)
+            }
+
         case .showStartCountdown(let occurrence, let deadline):
             countdownModel.presentStart(
                 title: occurrence.title,
@@ -1478,8 +1486,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private func handleNotificationResponse(_ response: CalendarMeetingNotificationResponse) {
         switch response {
-        case .openPremiumSettings:
-            SettingsNavigationCoordinator.shared.navigate(to: .premium)
+        case .openRecorder:
+            SettingsNavigationCoordinator.shared.recorderPart = .recorder
+            SettingsNavigationCoordinator.shared.navigate(to: .recorder)
             ManagedAppWindowOpener.shared.open(id: "settings")
         case .continueRecording(let digest):
             guard let activeCalendarRecording,
@@ -1626,13 +1635,15 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func enqueueNotificationOperation(
+        canBeSuperseded: Bool = true,
         _ operation: @escaping @MainActor () async -> Void
     ) {
         let previousTask = notificationTask
         previousTask?.cancel()
         notificationTask = Task { @MainActor in
             await previousTask?.value
-            guard !Task.isCancelled else { return }
+            // Removing an accepted banner must survive a newer reminder refresh.
+            guard !Task.isCancelled || !canBeSuperseded else { return }
             await operation()
         }
     }

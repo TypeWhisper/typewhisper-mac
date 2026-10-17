@@ -208,7 +208,10 @@ class MinimalIndicatorPanel: NSPanel {
         vm: DictationViewModel = DictationViewModel.shared,
         recorder: AudioRecorderViewModel = AudioRecorderViewModel.shared
     ) {
-        guard vm.indicatorStyle == .minimal else {
+        guard CalendarMeetingCountdownIndicatorPolicy.activeStyle(
+            preferredStyle: vm.indicatorStyle,
+            countdownPresented: countdownModel.presentation != nil
+        ) == .minimal else {
             dismiss()
             return
         }
