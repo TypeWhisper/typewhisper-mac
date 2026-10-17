@@ -23339,13 +23339,23 @@ extension TypeWhisperIntegrationTests {
         }
     }
 
-    /// Starts recording an event under automatic consent, withdraws that consent while the
-    /// recorder start is suspended, and checks that the start is cancelled but stays armable.
+    @MainActor
+    func testDictationInvalidatesAutomaticRecorderStartAndRestoresReminder() async throws {
+        try await exerciseConsentWithdrawnDuringRecorderStart(
+            confirmSoloEventsAtStart: false,
+            startsWithColleague: true,
+            invalidateViaDictation: true
+        ) { _, _, _ in }
+    }
+
+    /// Invalidates an automatic start while the recorder is suspended, then checks
+    /// reminder restoration for lost readiness or renewed consent after withdrawal.
     @MainActor
     private func exerciseConsentWithdrawnDuringRecorderStart(
         confirmSoloEventsAtStart: Bool,
         startsWithColleague: Bool,
         failFirstStartAfterConsentChange: Bool = false,
+        invalidateViaDictation: Bool = false,
         withdrawConsent: @escaping @MainActor (
             CalendarMeetingAutomationController,
             MeetingRuntimeEventProvider,
@@ -23363,6 +23373,7 @@ extension TypeWhisperIntegrationTests {
         defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
         defaults.set(confirmSoloEventsAtStart, forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
         let context = Self.makeDictationContext(appSupportDirectory: directory)
+        defer { if invalidateViaDictation { context.dictationViewModel.state = .idle } }
         let recorderService = AudioRecorderService()
         recorderService.recordingsDirectoryOverride = directory
         recorderService.stopRecordingOverride = { $0 }
@@ -23378,12 +23389,13 @@ extension TypeWhisperIntegrationTests {
         recorder.systemAudioEnabled = true
         let countdown = CalendarMeetingCountdownModel()
         var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let eventStart = now.addingTimeInterval(invalidateViaDictation ? 600 : 0)
         let colleague = CalendarMeetingParticipant(name: "Colleague", emailAddress: "colleague@example.com",
             status: .accepted, isCurrentUser: false)
         func occurrence(attendees: [CalendarMeetingParticipant]) -> CalendarMeetingOccurrence {
             CalendarMeetingOccurrence(
-                eventIdentifier: "sync", occurrenceStart: now, startDate: now,
-                endDate: now.addingTimeInterval(3600), title: "Sync", calendarID: "calendar",
+                eventIdentifier: "sync", occurrenceStart: eventStart, startDate: eventStart,
+                endDate: eventStart.addingTimeInterval(3600), title: "Sync", calendarID: "calendar",
                 participationStatus: .noCurrentUser,
                 meetingLinks: [CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")],
                 attendees: attendees,
@@ -23408,12 +23420,19 @@ extension TypeWhisperIntegrationTests {
             premiumAccessProvider: { true }, nowProvider: { now }
         )
         defer { controller.shutdown() }
+        if invalidateViaDictation { controller.initialize() }
         let privateBlock = occurrence(attendees: [])
         var hasAttemptedStart = false
         recorderService.startRecordingOverride = { [weak controller] _, _, _, proposedURL, _ in
             let isFirstStart = !hasAttemptedStart
             hasAttemptedStart = true
             try Data("recording".utf8).write(to: proposedURL)
+            if invalidateViaDictation && isFirstStart {
+                context.dictationViewModel.state = .recording
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.main.async { continuation.resume() }
+                }
+            }
             if let controller {
                 await withdrawConsent(controller, events, privateBlock)
             }
@@ -23437,7 +23456,19 @@ extension TypeWhisperIntegrationTests {
         for _ in 0..<100 where recorder.state != .idle {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(recorder.state, .idle, "Withdrawn consent must stop or cancel the recording start")
+        XCTAssertEqual(recorder.state, .idle, "An invalidated recording start must return to idle")
+
+        if invalidateViaDictation {
+            XCTAssertTrue(notifications.restoredReminderDigests.contains(startOccurrence.id),
+                "A cancelled automatic start must restore its reminder without another calendar refresh")
+            now = now.addingTimeInterval(1)
+            await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now,
+                availability: .available, processes: []))
+            XCTAssertEqual(notifications.scheduledReminders, [
+                CalendarMeetingUpcomingReminder(occurrence: startOccurrence, startMode: .automatic)
+            ])
+            return
+        }
 
         // The withdrawn start must not block consent: the detected-meeting prompt follows,
         // and Start Recording records the event.
@@ -23504,6 +23535,7 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     private(set) var scheduledReminders: [CalendarMeetingUpcomingReminder] = []
     private(set) var detectedDigests: [String] = []
     private(set) var removedStartDigests: [String] = []
+    private(set) var restoredReminderDigests: [String] = []
     private var responseHandler: (@MainActor (CalendarMeetingNotificationResponse) -> Void)?
     init(authorization: CalendarMeetingNotificationAuthorization) { self.authorization = authorization }
     func respond(_ response: CalendarMeetingNotificationResponse) { responseHandler?(response) }
@@ -23524,7 +23556,9 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     func removeStartNotifications(occurrenceDigest: String) {
         removedStartDigests.append(occurrenceDigest)
     }
-    func allowReminderRestoration(occurrenceDigest: String) {}
+    func allowReminderRestoration(occurrenceDigest: String) {
+        restoredReminderDigests.append(occurrenceDigest)
+    }
     func publishAutoStopWarning(occurrenceDigest: String, now: Date) async -> Bool {
         autoStopAttempts += 1
         return false

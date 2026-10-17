@@ -137,9 +137,9 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
         occurrenceDigest: String,
         failure: CalendarMeetingRecordingStartFailure
     )
-    /// Consent was withdrawn while the start was in flight. Unlike a failure, the
-    /// occurrence can still be armed afterwards.
-    case recordingStartCancelled(occurrenceDigest: String)
+    /// Consent or recorder readiness changed while the start was in flight. Unlike
+    /// a failure, this permits a later retry and restores an eligible automatic reminder.
+    case recordingStartCancelled(occurrenceDigest: String, now: Date)
     case recordingStartDeferred(
         occurrenceDigest: String,
         identity: CalendarMeetingCanonicalLink,
@@ -222,6 +222,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private var permanentStartFailureDigests = Set<String>()
     private var recordedOccurrenceDigests = Set<String>()
     private var idleRetryDigests = Set<String>()
+    private var restoredAutomaticCatchUpDigests = Set<String>()
     private var reminderRestorationDeadlines: [String: Date] = [:]
     private var pendingIdleCandidate: PendingIdleCandidate?
     private var pendingStart: PendingStart?
@@ -391,11 +392,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             permanentStartFailureDigests.insert(digest)
             clearPendingStart(effects: &effects)
 
-        case .recordingStartCancelled(let digest):
-            if requestedStart?.digest == digest {
-                requestedStart = nil
-            }
+        case .recordingStartCancelled(let digest, let now):
+            guard requestedStart?.digest == digest else { break }
+            requestedStart = nil
             clearPendingStart(effects: &effects)
+            restoreAutomaticReminder(for: digest, at: now, effects: &effects)
 
         case .recordingStartDeferred(let digest, let identity, let readiness, _):
             guard requestedStart?.digest == digest else { break }
@@ -789,15 +790,20 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         }
     }
 
-    private func restoreAutomaticReminder(
+    private mutating func restoreAutomaticReminder(
         for digest: String,
         at now: Date,
         effects: inout [CalendarMeetingAutomationEffect]
     ) {
         let reminders = upcomingReminders(at: now)
-        guard reminders.contains(where: {
+        guard let reminder = reminders.first(where: {
             $0.occurrence.id == digest && $0.startMode == .automatic
         }) else { return }
+        if reminder.occurrence.startDate.addingTimeInterval(-5 * 60) <= now {
+            // Unstable evidence may repeatedly enter and abandon the countdown. Restore
+            // one immediate prompt, without another audible banner for every rejoin.
+            guard restoredAutomaticCatchUpDigests.insert(digest).inserted else { return }
+        }
         // Signal loss can abort the handoff without a calendar refresh. Restore the
         // automatic reminder now; explicit reminder consent stays armed and deduplicated.
         effects.append(.allowReminderRestoration(digest))
@@ -1004,5 +1010,6 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         permanentStartFailureDigests.formIntersection(retained)
         recordedOccurrenceDigests.formIntersection(retained)
         idleRetryDigests.formIntersection(retained)
+        restoredAutomaticCatchUpDigests.formIntersection(retained)
     }
 }

@@ -1222,7 +1222,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         // The refresh arrives while the recorder is starting.
         _ = policy.reduce(.configure(confirming, occurrences: [nowSolo], now: now.addingTimeInterval(8)))
         XCTAssertFalse(policy.permitsStart(of: team.id, identity: identity, at: now.addingTimeInterval(8)))
-        _ = policy.reduce(.recordingStartCancelled(occurrenceDigest: team.id))
+        _ = policy.reduce(.recordingStartCancelled(occurrenceDigest: team.id, now: now.addingTimeInterval(8)))
 
         _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(9)))
         XCTAssertEqual(

@@ -988,7 +988,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                           && $0.isInsideJoinWindow(at: self.nowProvider())
                   }) else {
                 self.applyPolicy(.recordingStartCancelled(
-                    occurrenceDigest: occurrence.occurrenceDigest
+                    occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                 ))
                 return
             }
@@ -998,7 +998,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 at: self.nowProvider()
             ) else {
                 self.applyPolicy(.recordingStartCancelled(
-                    occurrenceDigest: occurrence.occurrenceDigest
+                    occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                 ))
                 return
             }
@@ -1032,7 +1032,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                       }) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
                     self.applyPolicy(.recordingStartCancelled(
-                        occurrenceDigest: occurrence.occurrenceDigest
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                     ))
                     return
                 }
@@ -1045,7 +1045,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 ) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
                     self.applyPolicy(.recordingStartCancelled(
-                        occurrenceDigest: occurrence.occurrenceDigest
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                     ))
                     return
                 }
@@ -1075,7 +1075,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                           at: self.nowProvider()
                       ) else {
                     self.applyPolicy(.recordingStartCancelled(
-                        occurrenceDigest: occurrence.occurrenceDigest
+                        occurrenceDigest: occurrence.occurrenceDigest, now: self.nowProvider()
                     ))
                     return
                 }

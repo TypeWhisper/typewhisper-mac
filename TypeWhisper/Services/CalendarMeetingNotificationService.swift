@@ -171,6 +171,11 @@ enum CalendarMeetingNotificationPresentationPolicy {
     }
 }
 
+struct CalendarMeetingNotificationRequestSnapshot: Sendable {
+    let identifier: String
+    let categoryIdentifier: String
+}
+
 @MainActor
 protocol CalendarMeetingNotificationClient: AnyObject {
     func installResponseHandler(
@@ -179,11 +184,21 @@ protocol CalendarMeetingNotificationClient: AnyObject {
     func registerCategories()
     func authorizationStatus() async -> CalendarMeetingNotificationAuthorization
     func requestAuthorization() async throws -> Bool
-    func pendingRequestIdentifiers() async -> [String]
-    func deliveredRequestIdentifiers() async -> [String]
+    func pendingRequests() async -> [CalendarMeetingNotificationRequestSnapshot]
+    func deliveredRequests() async -> [CalendarMeetingNotificationRequestSnapshot]
     func add(_ request: CalendarMeetingNotificationRequest) async throws
     func removePendingRequests(withIdentifiers identifiers: [String])
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+}
+
+extension CalendarMeetingNotificationClient {
+    func pendingRequestIdentifiers() async -> [String] {
+        await pendingRequests().map(\.identifier)
+    }
+
+    func deliveredRequestIdentifiers() async -> [String] {
+        await deliveredRequests().map(\.identifier)
+    }
 }
 
 private final class CalendarMeetingNotificationDelegateBridge:
@@ -341,12 +356,21 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
         try await center.requestAuthorization(options: [.alert, .sound])
     }
 
-    func pendingRequestIdentifiers() async -> [String] {
-        await center.pendingNotificationRequests().map(\.identifier)
+    func pendingRequests() async -> [CalendarMeetingNotificationRequestSnapshot] {
+        await center.pendingNotificationRequests().map {
+            CalendarMeetingNotificationRequestSnapshot(
+                identifier: $0.identifier, categoryIdentifier: $0.content.categoryIdentifier
+            )
+        }
     }
 
-    func deliveredRequestIdentifiers() async -> [String] {
-        await center.deliveredNotifications().map { $0.request.identifier }
+    func deliveredRequests() async -> [CalendarMeetingNotificationRequestSnapshot] {
+        await center.deliveredNotifications().map {
+            CalendarMeetingNotificationRequestSnapshot(
+                identifier: $0.request.identifier,
+                categoryIdentifier: $0.request.content.categoryIdentifier
+            )
+        }
     }
 
     func add(_ request: CalendarMeetingNotificationRequest) async throws {
@@ -499,7 +523,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         // Detected prompts are reconciled separately against their own eligibility,
         // including ad-hoc calls that have no upcoming reminder.
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
-        let requestedDigests: Set<String> = Set(
+        let previouslyRequestedDigests: Set<String> = Set(
             defaults.stringArray(
                 forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
             ) ?? []
@@ -518,26 +542,32 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             candidate.fireDate <= upperBound
                 && candidate.reminder.occurrence.endDate.addingTimeInterval(30 * 60) >= now
         }
-        // Keep an already requested catch-up prompt pending until delivery. Its ledger
-        // prevents a duplicate add, so deleting it on refresh would lose the prompt.
-        await removePendingMeetingRequests(
-            kinds: [.upcoming],
-            retainingDigests: Set(activeCandidates.compactMap { candidate in
+        var categoriesByDigest: [String: CalendarMeetingNotificationCategory] = [:]
+        for (reminder, _) in activeCandidates {
+            switch reminder.startMode {
+            case .off: continue
+            case .reminder: categoriesByDigest[reminder.occurrence.id] = .upcomingReminder
+            case .automatic: categoriesByDigest[reminder.occurrence.id] = .upcomingAutomatic
+            }
+        }
+        // Keep catch-up prompts until delivery, but replace obsolete actions when the
+        // effective start mode changes. Read actual categories so this also works after
+        // relaunch, without storing notification content in the reminder ledger.
+        let categoryReplacements = await reconcileUpcomingRequests(
+            categoriesByDigest: categoriesByDigest,
+            retainingPendingDigests: Set(activeCandidates.compactMap { candidate in
                 guard candidate.fireDate <= now, candidate.reminder.startMode != .off,
-                      requestedDigests.contains(candidate.reminder.occurrence.id) else { return nil }
+                      previouslyRequestedDigests.contains(candidate.reminder.occurrence.id) else { return nil }
                 return candidate.reminder.occurrence.id
             })
         )
-        await removeDeliveredMeetingRequests(
-            kinds: [.upcoming],
-            retainingDigests: Set(activeCandidates.compactMap { candidate in
-                guard candidate.reminder.startMode != .off else { return nil }
-                return candidate.reminder.occurrence.occurrenceDigest
-            })
+        let requestedDigests = Set(
+            defaults.stringArray(forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests) ?? []
         )
         let pendingCandidates: [ReminderCandidate] = activeCandidates.filter { candidate in
             candidate.fireDate > now
                 || !requestedDigests.contains(candidate.reminder.occurrence.occurrenceDigest)
+                || categoryReplacements[candidate.reminder.occurrence.id] != nil
         }
         let sortedCandidates: [ReminderCandidate] = pendingCandidates.sorted { lhs, rhs in
             max(lhs.fireDate, now) < max(rhs.fireDate, now)
@@ -590,9 +620,22 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             )
             do {
                 try await client.add(request)
+                if let obsoleteIdentifiers = categoryReplacements[occurrence.id] {
+                    // A failed replacement leaves the original actionable prompt in
+                    // place. A successful replacement uses a fresh identifier, so delayed
+                    // cleanup cannot remove it or trigger another category replacement.
+                    handedOffRequestIdentifiers.formUnion(obsoleteIdentifiers)
+                    let identifiers = obsoleteIdentifiers.sorted()
+                    client.removePendingRequests(withIdentifiers: identifiers)
+                    client.removeDeliveredNotifications(withIdentifiers: identifiers)
+                }
                 persistReminderRequestDigest(occurrence.occurrenceDigest)
             } catch {
-                removeReminderRequestDigest(occurrence.occurrenceDigest)
+                // A category replacement keeps its fallback, which still owns the
+                // ledger entry. Its category mismatch permits another replacement try.
+                if categoryReplacements[occurrence.id] == nil {
+                    removeReminderRequestDigest(occurrence.occurrenceDigest)
+                }
                 continue
             }
         }
@@ -721,6 +764,59 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         await removeDeliveredMeetingRequests(kinds: [.upcoming, .detected])
     }
 
+    private func reconcileUpcomingRequests(
+        categoriesByDigest: [String: CalendarMeetingNotificationCategory],
+        retainingPendingDigests: Set<String>
+    ) async -> [String: Set<String>] {
+        let pending = await client.pendingRequests()
+        let delivered = await client.deliveredRequests()
+        let requests = pending + delivered
+        handedOffRequestIdentifiers.formIntersection(Set(requests.map(\.identifier)))
+
+        func upcomingDigest(_ request: CalendarMeetingNotificationRequestSnapshot) -> String? {
+            let prefix = Self.requestIdentifierPrefix
+            guard request.identifier.hasPrefix(prefix), request.identifier.hasSuffix(".upcoming") else {
+                return nil
+            }
+            return String(request.identifier.dropFirst(prefix.count).prefix { $0 != "." })
+        }
+        func hasCurrentCategory(_ request: CalendarMeetingNotificationRequestSnapshot) -> Bool {
+            guard let digest = upcomingDigest(request),
+                  !handedOffRequestIdentifiers.contains(request.identifier) else { return false }
+            return categoriesByDigest[digest]?.identifier == request.categoryIdentifier
+        }
+        let retained = delivered.filter(hasCurrentCategory) + pending.filter { request in
+            guard let digest = upcomingDigest(request) else { return false }
+            return retainingPendingDigests.contains(digest) && hasCurrentCategory(request)
+        }
+        let retainedIdentifiers = Set(retained.map(\.identifier))
+        let retainedDigests = Set(retained.compactMap(upcomingDigest))
+        var replacements: [String: Set<String>] = [:]
+        var removals = Set<String>()
+        for request in requests {
+            guard let digest = upcomingDigest(request),
+                  !retainedIdentifiers.contains(request.identifier) else { continue }
+            if let category = categoriesByDigest[digest],
+               category.identifier != request.categoryIdentifier,
+               !handedOffRequestIdentifiers.contains(request.identifier),
+               !retainedDigests.contains(digest) {
+                replacements[digest, default: []].insert(request.identifier)
+            } else {
+                removals.insert(request.identifier)
+            }
+        }
+        if !removals.isEmpty {
+            let identifiers = removals.sorted()
+            // A request can move from pending to delivered between the two snapshots.
+            client.removePendingRequests(withIdentifiers: identifiers)
+            client.removeDeliveredNotifications(withIdentifiers: identifiers)
+            allowRestorationOfRemovedReminders(
+                identifiers, retainingDigests: retainedDigests.union(replacements.keys)
+            )
+        }
+        return replacements
+    }
+
     private func removePendingMeetingRequests(
         kinds: [CalendarMeetingNotificationKind],
         retainingDigests: Set<String> = []
@@ -755,14 +851,18 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         allowRestorationOfRemovedReminders(identifiers)
     }
 
-    private func allowRestorationOfRemovedReminders(_ identifiers: [String]) {
+    private func allowRestorationOfRemovedReminders(
+        _ identifiers: [String],
+        retainingDigests: Set<String> = []
+    ) {
         let prefix = Self.requestIdentifierPrefix
         let digests = Set(identifiers.compactMap { identifier -> String? in
             // A detected prompt can be the only remaining replacement for a requested
             // calendar reminder. Removing it must release that reminder's ledger too.
             guard identifier.hasSuffix(".upcoming") || identifier.hasSuffix(".detected"),
                   !handedOffRequestIdentifiers.contains(identifier) else { return nil }
-            return String(identifier.dropFirst(prefix.count).prefix { $0 != "." })
+            let digest = String(identifier.dropFirst(prefix.count).prefix { $0 != "." })
+            return retainingDigests.contains(digest) ? nil : digest
         })
         for digest in digests {
             removeReminderRequestDigest(digest)
