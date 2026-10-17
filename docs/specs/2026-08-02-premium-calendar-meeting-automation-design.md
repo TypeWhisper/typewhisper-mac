@@ -41,6 +41,8 @@ The calendar title is used only in local settings UI, local notifications, and t
 
 Suppression and the reminder-delivery ledger each persist at most 256 SHA-256 occurrence digests. Calendar and provider selections remain local. Reminder requests are bounded to seven days and 48 occurrences. If an eligible event first appears after its five-minute fire time but before the end of its join window, TypeWhisper sends one immediate catch-up reminder. A rescheduled occurrence has a new digest and is evaluated independently.
 
+Removing a start notification preserves its delivery ledger entry, including when the user arms the occurrence. Restarting the app discards the arm without repeating that reminder. A configuration change that interrupts a countdown, an in-flight recording start, or a deferred start explicitly resets the entry only if the occurrence is eligible for a restored reminder; the next successful request records it again.
+
 ## Start semantics
 
 Upcoming notifications never start the recorder directly. In Reminder mode, the explicit “Start When I Join” action stores only the occurrence digest in the in-memory policy state. TypeWhisper must remain running after that action. The arm is discarded on process shutdown and is never written to defaults, sync, backup data, telemetry, or notification metadata.

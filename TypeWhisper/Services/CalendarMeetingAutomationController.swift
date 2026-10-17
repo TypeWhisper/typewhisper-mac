@@ -833,6 +833,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 service.removeStartNotifications(occurrenceDigest: digest)
             }
 
+        case .allowReminderRestoration(let digest):
+            let service = notificationServiceInstance()
+            // Preserve the intentional restoration if a newer refresh supersedes this one.
+            enqueueNotificationOperation(canBeSuperseded: false) {
+                service.allowReminderRestoration(occurrenceDigest: digest)
+            }
+
         case .showStartCountdown(let occurrence, let deadline):
             countdownModel.presentStart(
                 title: occurrence.title,

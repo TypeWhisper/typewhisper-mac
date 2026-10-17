@@ -23469,6 +23469,7 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     func removeStartNotifications(occurrenceDigest: String) {
         removedStartDigests.append(occurrenceDigest)
     }
+    func allowReminderRestoration(occurrenceDigest: String) {}
     func publishAutoStopWarning(occurrenceDigest: String, now: Date) async -> Bool {
         autoStopAttempts += 1
         return false

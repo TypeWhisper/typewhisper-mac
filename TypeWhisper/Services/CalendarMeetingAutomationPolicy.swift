@@ -157,6 +157,7 @@ enum CalendarMeetingAutomationEffect: Equatable, Sendable {
     case stopCameraActivityCollector
     case publishDetectedMeeting(CalendarMeetingOccurrence)
     case dismissStartNotifications(String)
+    case allowReminderRestoration(String)
     case showStartCountdown(CalendarMeetingOccurrence, deadline: Date)
     case dismissStartCountdown
     case startRecording(CalendarMeetingOccurrence, CalendarMeetingCanonicalLink)
@@ -241,9 +242,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             self.occurrences = occurrences.filter(configuration.permits)
             pruneArmedOccurrences(at: now)
 
+            var interruptedStartDigest: String?
             if !configuration.isOperational
                 || previousConfiguration.startMode != configuration.startMode
                 || previousConfiguration.confirmSoloEvents != configuration.confirmSoloEvents {
+                interruptedStartDigest = pendingStart?.occurrenceDigest
+                    ?? startRequestedDigest ?? pendingIdleCandidate?.digest
                 clearPendingStart(effects: &effects)
                 dwellStates.removeAll()
                 pendingIdleCandidate = nil
@@ -253,7 +257,12 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                     cameraActivityAvailable = false
                 }
             }
-            effects.append(.replaceScheduledReminders(upcomingReminders(at: now)))
+            let reminders = upcomingReminders(at: now)
+            if let interruptedStartDigest,
+               reminders.contains(where: { $0.occurrence.occurrenceDigest == interruptedStartDigest }) {
+                effects.append(.allowReminderRestoration(interruptedStartDigest))
+            }
+            effects.append(.replaceScheduledReminders(reminders))
             if (wasOperational && !configuration.isOperational)
                 || !configuration.autoStopEnabled
                 || autoStopSettingsChangedDuringRecording {

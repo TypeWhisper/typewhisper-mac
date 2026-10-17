@@ -404,6 +404,7 @@ protocol CalendarMeetingNotifying: AnyObject {
         now: Date
     ) async
     func removeStartNotifications(occurrenceDigest: String)
+    func allowReminderRestoration(occurrenceDigest: String)
     func publishAutoStopWarning(
         occurrenceDigest: String,
         now: Date
@@ -612,7 +613,11 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         }
         client.removePendingRequests(withIdentifiers: identifiers)
         client.removeDeliveredNotifications(withIdentifiers: identifiers)
-        // A settings change can clear the countdown and require a new catch-up reminder.
+    }
+
+    func allowReminderRestoration(occurrenceDigest: String) {
+        // Only an explicit restoration resets delivery history; accepting a reminder
+        // must keep it deduplicated even when the in-memory arm is lost on restart.
         removeReminderRequestDigest(occurrenceDigest)
     }
 
