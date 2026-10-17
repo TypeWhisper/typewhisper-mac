@@ -575,14 +575,6 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         _ occurrence: CalendarMeetingOccurrence,
         now: Date = Date()
     ) async {
-        // Removal is asynchronous. Removing the detected identifier here could
-        // delete the replacement below; adding the same identifier replaces it.
-        let upcomingIdentifiers = [Self.requestIdentifier(
-            digest: occurrence.occurrenceDigest,
-            kind: .upcoming
-        )]
-        client.removePendingRequests(withIdentifiers: upcomingIdentifiers)
-        client.removeDeliveredNotifications(withIdentifiers: upcomingIdentifiers)
         let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let request = CalendarMeetingNotificationRequest(
             identifier: Self.requestIdentifier(
@@ -598,7 +590,20 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
                 : title,
             fireDate: now.addingTimeInterval(1)
         )
-        try? await client.add(request)
+        do {
+            try await client.add(request)
+        } catch {
+            // Keep the existing consent prompt if its replacement cannot be added.
+            return
+        }
+        // Removal is asynchronous. Removing the detected identifier here could
+        // delete the replacement above; adding the same identifier replaces it.
+        let upcomingIdentifiers = [Self.requestIdentifier(
+            digest: occurrence.occurrenceDigest,
+            kind: .upcoming
+        )]
+        client.removePendingRequests(withIdentifiers: upcomingIdentifiers)
+        client.removeDeliveredNotifications(withIdentifiers: upcomingIdentifiers)
     }
 
     func removeStartNotifications(occurrenceDigest: String) {
@@ -607,6 +612,8 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         }
         client.removePendingRequests(withIdentifiers: identifiers)
         client.removeDeliveredNotifications(withIdentifiers: identifiers)
+        // A settings change can clear the countdown and require a new catch-up reminder.
+        removeReminderRequestDigest(occurrenceDigest)
     }
 
     func publishAutoStopWarning(
