@@ -214,6 +214,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var policyTimerTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
+    private var notificationGeneration = 0
     private var calendarAccessRequestTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var environmentObserverTokens: [NSObjectProtocol] = []
@@ -591,6 +592,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         recordingStartTask?.cancel()
         recordingStartTask = nil
         notificationTask?.cancel()
+        notificationGeneration += 1
         notificationTask = nil
         calendarAccessRequestTask?.cancel()
         calendarAccessRequestTask = nil
@@ -799,6 +801,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 await service.replaceScheduledReminders(reminders, now: now)
             }
 
+        case .retainDetectedNotifications(let digests):
+            guard notificationService != nil || isAutomationActive else { return }
+            let service = notificationServiceInstance()
+            enqueueNotificationOperation {
+                await service.retainDetectedNotifications(eligibleDigests: digests)
+            }
+
         case .startActivityCollector:
             collectorShouldBeRunning = true
             startCollector()
@@ -829,14 +838,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
             let service = notificationServiceInstance()
             // Run after pending publishes so a delayed add cannot restore the banner
             // after the user has accepted it and the in-app countdown takes over.
-            enqueueNotificationOperation(canBeSuperseded: false) {
+            enqueueNotificationOperation {
                 await service.removeStartNotifications(occurrenceDigest: digest)
             }
 
         case .allowReminderRestoration(let digest):
             let service = notificationServiceInstance()
-            // Preserve the intentional restoration if a newer refresh supersedes this one.
-            enqueueNotificationOperation(canBeSuperseded: false) {
+            enqueueNotificationOperation {
                 service.allowReminderRestoration(occurrenceDigest: digest)
             }
 
@@ -1595,6 +1603,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         await stopCameraCollector()
         countdownModel.dismissAll()
         let pendingNotificationTask = notificationTask
+        notificationGeneration += 1
         pendingNotificationTask?.cancel()
         await pendingNotificationTask?.value
         notificationTask = nil
@@ -1651,15 +1660,15 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func enqueueNotificationOperation(
-        canBeSuperseded: Bool = true,
         _ operation: @escaping @MainActor () async -> Void
     ) {
         let previousTask = notificationTask
-        previousTask?.cancel()
-        notificationTask = Task { @MainActor in
+        let generation = notificationGeneration
+        notificationTask = Task { @MainActor [weak self] in
             await previousTask?.value
-            // Removing an accepted banner must survive a newer reminder refresh.
-            guard !Task.isCancelled || !canBeSuperseded else { return }
+            // Reconciliation, publication, and cleanup are ordered operations, not
+            // substitutes for one another. Only shutdown/deactivation invalidates them.
+            guard !Task.isCancelled, self?.notificationGeneration == generation else { return }
             await operation()
         }
     }

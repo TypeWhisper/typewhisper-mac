@@ -1163,15 +1163,14 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             now: now.addingTimeInterval(4)
         ))
         XCTAssertTrue(refreshed.contains(.dismissStartCountdown))
-        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains {
-            if case .showStartCountdown = $0 { return true }
-            if case .startRecording = $0 { return true }
-            return false
-        })
+        XCTAssertTrue(refreshed.contains(.allowReminderRestoration(nowSolo.id)))
+        // The refreshed reminder can begin its fresh three-second detection dwell
+        // immediately after invalidating the automatic countdown.
         XCTAssertEqual(
-            policy.reduce(.timeAdvanced(now.addingTimeInterval(11))),
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(7))),
             [.publishDetectedMeeting(nowSolo)]
         )
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(11))).isEmpty)
     }
 
     func testCalendarRefreshThatMakesEventSoloDropsBusyRecorderRetry() {

@@ -151,6 +151,7 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
 
 enum CalendarMeetingAutomationEffect: Equatable, Sendable {
     case replaceScheduledReminders([CalendarMeetingUpcomingReminder])
+    case retainDetectedNotifications(Set<String>)
     case startActivityCollector
     case stopActivityCollector
     case startCameraActivityCollector
@@ -218,7 +219,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private var reminderRestorationDeadlines: [String: Date] = [:]
     private var pendingIdleCandidate: (digest: String, identity: CalendarMeetingCanonicalLink)?
     private var pendingStart: PendingStart?
-    private var startRequestedDigest: String?
+    private var requestedStart: (digest: String, identity: CalendarMeetingCanonicalLink)?
     private var activeRecording: ActiveRecording?
     private var collectorRequested = false
     private var cameraCollectorRequested = false
@@ -229,9 +230,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         case .configure(let configuration, let occurrences, let now):
             let previousConfiguration = self.configuration
             let wasOperational = previousConfiguration.isOperational
-            let interruptedStartDigest = pendingStart?.occurrenceDigest
-                ?? startRequestedDigest ?? pendingIdleCandidate?.digest
-            let interruptedOccurrence = interruptedStartDigest.flatMap { occurrence(for: $0) }
+            let interruptedStart = pendingStart.map { (digest: $0.occurrenceDigest, identity: $0.identity) }
+                ?? requestedStart ?? pendingIdleCandidate
+            let interruptedOccurrence = interruptedStart.flatMap { occurrence(for: $0.digest) }
             let autoStopSettingsChangedDuringRecording = activeRecording != nil
                 && (
                     previousConfiguration.hasPremiumAccess != configuration.hasPremiumAccess
@@ -246,7 +247,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             self.occurrences = occurrences.filter(configuration.permits)
             pruneArmedOccurrences(at: now)
 
+            let refreshedStartIsInvalid = interruptedStart.map {
+                consentedStartOccurrence(digest: $0.digest, identity: $0.identity, at: now) == nil
+            } ?? false
             if !configuration.isOperational
+                || refreshedStartIsInvalid
                 || previousConfiguration.startMode != configuration.startMode
                 || previousConfiguration.confirmSoloEvents != configuration.confirmSoloEvents {
                 if let interruptedOccurrence, !interruptedOccurrence.isAdHoc {
@@ -256,7 +261,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 clearPendingStart(effects: &effects)
                 dwellStates.removeAll()
                 pendingIdleCandidate = nil
-                startRequestedDigest = nil
+                requestedStart = nil
                 if !configuration.isOperational {
                     isCameraRunning = false
                     cameraActivityAvailable = false
@@ -273,6 +278,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                     effects.append(.allowReminderRestoration(digest))
                 }
             }
+            retainEligibleDetectedNotifications(at: now, alwaysEmit: true, effects: &effects)
             effects.append(.replaceScheduledReminders(reminders))
             if (wasOperational && !configuration.isOperational)
                 || !configuration.autoStopEnabled
@@ -289,6 +295,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 occurrences.removeAll(where: \.isAdHoc)
                 occurrences.append(contentsOf: detectedOccurrences.filter(configuration.permits))
                 pruneSessionState()
+                retainEligibleDetectedNotifications(at: now, alwaysEmit: true, effects: &effects)
             }
             if let candidate = pendingIdleCandidate,
                !startEvidenceIsPresent(
@@ -343,6 +350,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             evaluateStart(at: now, effects: &effects)
 
         case .timeAdvanced(let now):
+            retainEligibleDetectedNotifications(at: now, effects: &effects)
             updateCollector(at: now, effects: &effects)
             evaluateStart(at: now, effects: &effects)
             evaluateAutoStop(at: now, effects: &effects)
@@ -357,7 +365,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             let autoStopArmed,
             let now
         ):
-            startRequestedDigest = nil
+            requestedStart = nil
             clearPendingStart(effects: &effects)
             armedOccurrenceDigests.remove(occurrenceDigest)
             activeRecording = ActiveRecording(
@@ -377,22 +385,22 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             evaluateAutoStop(at: now, effects: &effects)
 
         case .recordingStartFailed(let digest, _):
-            if startRequestedDigest == digest {
-                startRequestedDigest = nil
+            if requestedStart?.digest == digest {
+                requestedStart = nil
             }
             armedOccurrenceDigests.remove(digest)
             permanentStartFailureDigests.insert(digest)
             clearPendingStart(effects: &effects)
 
         case .recordingStartCancelled(let digest):
-            if startRequestedDigest == digest {
-                startRequestedDigest = nil
+            if requestedStart?.digest == digest {
+                requestedStart = nil
             }
             clearPendingStart(effects: &effects)
 
         case .recordingStartDeferred(let digest, let identity, let readiness, _):
-            guard startRequestedDigest == digest else { break }
-            startRequestedDigest = nil
+            guard requestedStart?.digest == digest else { break }
+            requestedStart = nil
             recorderReadiness = readiness
             switch readiness {
             case .recorderBusy, .dictationBusy, .finalizing:
@@ -417,6 +425,26 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         return effects
     }
 
+    private mutating func retainEligibleDetectedNotifications(
+        at now: Date,
+        alwaysEmit: Bool = false,
+        effects: inout [CalendarMeetingAutomationEffect]
+    ) {
+        // This set includes ad-hoc calls and is independent of the 48 scheduled-reminder limit.
+        let eligibleDigests = Set(occurrences.filter { occurrence in
+            configuration.isOperational
+                && configuration.startMode(for: occurrence) == .reminder
+                && !armedOccurrenceDigests.contains(occurrence.id)
+                && occurrence.meetingLinks.contains { identity in
+                    eligibleStartOccurrence(digest: occurrence.id, identity: identity, at: now) != nil
+                }
+        }.map(\.id))
+        if alwaysEmit || !detectedNotificationDigests.isSubset(of: eligibleDigests) {
+            effects.append(.retainDetectedNotifications(eligibleDigests))
+        }
+        detectedNotificationDigests.formIntersection(eligibleDigests)
+    }
+
     private func upcomingReminders(at now: Date) -> [CalendarMeetingUpcomingReminder] {
         guard configuration.isOperational else { return [] }
         let horizon = now.addingTimeInterval(7 * 24 * 60 * 60)
@@ -428,7 +456,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             .filter { !armedOccurrenceDigests.contains($0.occurrenceDigest) }
             .filter { !permanentStartFailureDigests.contains($0.occurrenceDigest) }
             .filter { $0.occurrenceDigest != pendingStart?.occurrenceDigest }
-            .filter { $0.occurrenceDigest != startRequestedDigest }
+            .filter { $0.occurrenceDigest != requestedStart?.digest }
         return eligibleOccurrences
             .filter {
                 $0.endDate.addingTimeInterval(30 * 60) >= now
@@ -506,20 +534,20 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 clearPendingStart(effects: &effects)
                 return
             }
-            if now >= pendingStart.deadline, startRequestedDigest == nil {
+            if now >= pendingStart.deadline, requestedStart == nil {
                 guard recorderReadiness.isIdle else {
                     pendingIdleCandidate = (pendingStart.occurrenceDigest, pendingStart.identity)
                     clearPendingStart(effects: &effects)
                     return
                 }
-                startRequestedDigest = occurrence.occurrenceDigest
+                requestedStart = (occurrence.occurrenceDigest, pendingStart.identity)
                 effects.append(.startRecording(occurrence, pendingStart.identity))
                 clearPendingStart(effects: &effects)
             }
             return
         }
 
-        guard startRequestedDigest == nil,
+        guard requestedStart == nil,
               let candidate = uniqueAutomaticCandidate(at: now) else {
             dwellStates.removeAll()
             return
@@ -647,6 +675,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         guard let occurrence = occurrence(for: digest),
               occurrence.isInsideJoinWindow(at: now),
               occurrence.meetingLinks.contains(identity),
+              configuration.enabledProviders.contains(identity.provider),
               configuration.startMode(for: occurrence) == .automatic
                 ? occurrence.participationStatus.permitsAutomaticStart
                 : occurrence.participationStatus.permitsReminder,

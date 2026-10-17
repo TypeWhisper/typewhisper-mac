@@ -23161,7 +23161,14 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
-    private func exerciseMeetingNotificationHandoff(joinBeforeConsent: Bool) async throws {
+    func testNotificationAcceptanceReconcilesOtherCalendarChangesBeforeCountdown() async throws {
+        try await exerciseMeetingNotificationHandoff(joinBeforeConsent: true, refreshOtherEvents: true)
+    }
+
+    @MainActor
+    private func exerciseMeetingNotificationHandoff(
+        joinBeforeConsent: Bool, refreshOtherEvents: Bool = false
+    ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let suite = "MeetingSoloConsent-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
@@ -23200,6 +23207,10 @@ extension TypeWhisperIntegrationTests {
             hasOtherParticipants: false
         )
         let notifications = MeetingRuntimeNotifications(authorization: .authorized)
+        let events = MeetingRuntimeEventProvider(occurrences: [privateBlock])
+        let laterMeeting = makeCalendarMeetingTestOccurrence(
+            eventID: "later-meeting", start: now.addingTimeInterval(7200), calendarID: "calendar"
+        )
         let controller = CalendarMeetingAutomationController(
             licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
                 keychainCopyMatching: { _, _ in errSecItemNotFound }),
@@ -23207,7 +23218,7 @@ extension TypeWhisperIntegrationTests {
                 isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
             recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
             countdownModel: countdown, defaults: defaults,
-            eventProviderFactory: { MeetingRuntimeEventProvider(occurrences: [privateBlock]) },
+            eventProviderFactory: { events },
             audioCollectorFactory: { MeetingRuntimeAudioCollector() },
             cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
             browserResolverFactory: { MeetingRuntimeBrowserResolver() },
@@ -23251,16 +23262,25 @@ extension TypeWhisperIntegrationTests {
             XCTAssertEqual(recorder.state, .idle, "Joining a solo event must not start a recording without consent")
 
             // Start Recording in the detected-meeting notification is the consent.
+            if refreshOtherEvents {
+                await events.replace([privateBlock, laterMeeting])
+            }
             notifications.respond(.armStart(privateBlock.occurrenceDigest))
             for _ in 0..<100 where countdown.presentation?.kind.isStart != true {
                 try await Task.sleep(for: .milliseconds(10))
             }
         }
         XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        // Drain notification work without an extra calendar refresh hiding a lost reconciliation.
+        await controller.testingAdvanceTime()
+        let expectedReminders = refreshOtherEvents
+            ? [CalendarMeetingUpcomingReminder(occurrence: laterMeeting, startMode: .automatic)] : []
+        XCTAssertEqual(notifications.scheduledReminders, expectedReminders,
+            "Accepting the current meeting must still schedule unrelated refreshed occurrences")
         await controller.testingRefresh()
         await controller.testingAdvanceTime()
         XCTAssertTrue(notifications.removedStartDigests.contains(privateBlock.occurrenceDigest))
-        XCTAssertTrue(notifications.scheduledReminders.isEmpty,
+        XCTAssertEqual(notifications.scheduledReminders, expectedReminders,
             "Refreshing the calendar must not bring back an accepted notification")
         XCTAssertEqual(recorder.state, .idle)
         now = now.addingTimeInterval(5)
@@ -23494,6 +23514,9 @@ private final class MeetingRuntimeNotifications: CalendarMeetingNotifying {
     func refreshAuthorizationStatus() async {}
     func replaceScheduledReminders(_ reminders: [CalendarMeetingUpcomingReminder], now: Date) async {
         scheduledReminders = reminders
+    }
+    func retainDetectedNotifications(eligibleDigests: Set<String>) async {
+        detectedDigests.removeAll { !eligibleDigests.contains($0) }
     }
     func publishDetectedMeeting(_ occurrence: CalendarMeetingOccurrence, now: Date) async {
         detectedDigests.append(occurrence.occurrenceDigest)

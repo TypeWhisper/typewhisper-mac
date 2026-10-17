@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 
-Last updated: 2026-10-04
+Last updated: 2026-10-17
 
 ## Scope
 
@@ -32,7 +32,7 @@ The previous TypeWhisper experiment remains untouched at `/Users/marco/.codex/wo
 - `CalendarMeetingAutomationController` is the MainActor coordinator and guards asynchronous work with generations and single-flight state.
 - `CalendarMeetingNotificationService` stores only occurrence digests in notification metadata and owns both scheduled meeting reminders and the immediate auto-stop warning.
 - `CalendarMeetingCountdownModel` exposes one generation-guarded start-or-stop presentation to the existing recording indicators. Start presentations may contain the local event title; stop presentations remain title-free. Neither presentation contains URLs, participants, recorder handles, or output paths.
-- The selected Notch, Overlay, or Minimal indicator is the only five-second start-countdown surface. No separate AppKit countdown panel or start-countdown notification is created.
+- The bottom overlay is the only five-second start-countdown surface, independent of the preferred Notch, Overlay, or Minimal style. No separate AppKit countdown panel or start-countdown notification is created.
 - `AudioRecorderViewModel` exposes one narrow calendar handle while preserving the existing capture, finalization, transcription, plugin-event, and API paths.
 
 ## Privacy and persistence
@@ -79,7 +79,7 @@ For calendar recordings, the first snapshot without input or output for the matc
 
 Countdown buttons and background notification actions suppress the corresponding transient AppKit reopen event. They perform their calendar action without opening or flashing the Settings window; an explicit notification default click for non-auto-stop reminders opens Recorder without arming or starting a recording.
 
-When macOS allows it, TypeWhisper also publishes the same warning as a time-sensitive native notification. macOS can still suppress its banner while the display is shared, so this notification is an additional surface and the recording indicator is the reliable warning surface. The indicator button, notification action, and notification default click all enter the same validated sticky-veto path. Explicitly dismissing the notification does not veto the stop. A returned meeting signal must remain present for three uninterrupted seconds before both warning surfaces are removed. This prevents brief post-call CoreAudio activity from dismissing and immediately restarting the countdown, while a genuine rejoin still cancels the stop. Continue responses are accepted only while the occurrence digest and calendar recording handle match the currently presented warning; the presentation model rejects actions from replaced generations.
+When macOS allows it, TypeWhisper also publishes the same warning as a time-sensitive native notification. macOS can still suppress its banner while the display is shared, so this notification is an additional surface and the bottom countdown overlay is the reliable warning surface. The indicator button, notification action, and notification default click all enter the same validated sticky-veto path. Explicitly dismissing the notification does not veto the stop. A returned meeting signal must remain present for three uninterrupted seconds before both warning surfaces are removed. This prevents brief post-call CoreAudio activity from dismissing and immediately restarting the countdown, while a genuine rejoin still cancels the stop. Continue responses are accepted only while the occurrence digest and calendar recording handle match the currently presented warning; the presentation model rejects actions from replaced generations.
 
 Without a veto, the existing pure policy requests exactly one stop when the same 15-second warning deadline passes. The indicator and notification are presentation only and do not own or pause the timer; hover and focus do not extend it. Focus modes, display sharing, and other system policy may delay or hide the native notification. Calendar end is never a stop signal. Gate or setting loss removes both warning surfaces, lets the recording continue, and permanently detaches auto-stop for that recording.
 
@@ -100,7 +100,7 @@ The meeting automation window explains that notifications are optional for autom
 - Notification categories include a dedicated auto-stop category and a non-foreground “Continue recording” action.
 - Only the auto-stop notification uses the time-sensitive interruption level; foreground presentation requests banner, list, and sound.
 - The notification payload contains only the occurrence digest and action kind; it contains no title, URL, participant, recorder path, or public handle.
-- Notch, Overlay, and Minimal reuse one warning view and one MainActor presentation model. Only the selected style is shown.
+- Start and stop countdowns share one warning view and one MainActor presentation model in the bottom overlay. The preferred Notch, Overlay, or Minimal style resumes afterward.
 - The warning temporarily overrides Never visibility and fullscreen suppression, accepts first-mouse interaction, and remains a nonactivating panel that cannot become key or main.
 - Default click and “Continue recording” veto only the matching active occurrence.
 - Dismissal leaves the 15-second stop deadline active.
