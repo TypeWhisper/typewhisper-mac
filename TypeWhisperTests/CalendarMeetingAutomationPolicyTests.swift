@@ -459,7 +459,13 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             policy.reduce(.activity([], now: now.addingTimeInterval(4))),
-            [.dismissStartCountdown]
+            [
+                .dismissStartCountdown,
+                .allowReminderRestoration(occurrence.id),
+                .replaceScheduledReminders([
+                    CalendarMeetingUpcomingReminder(occurrence: occurrence, startMode: .automatic)
+                ])
+            ]
         )
         _ = policy.reduce(.activity([signal(for: occurrence)], now: now.addingTimeInterval(5)))
         let retried = policy.reduce(.timeAdvanced(now.addingTimeInterval(8)))

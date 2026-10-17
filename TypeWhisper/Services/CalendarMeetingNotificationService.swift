@@ -644,6 +644,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         guard !identifiers.isEmpty else { return }
         client.removePendingRequests(withIdentifiers: identifiers)
         client.removeDeliveredNotifications(withIdentifiers: identifiers)
+        allowRestorationOfRemovedReminders(identifiers)
     }
 
     func removeStartNotifications(occurrenceDigest: String) async {
@@ -757,7 +758,9 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
     private func allowRestorationOfRemovedReminders(_ identifiers: [String]) {
         let prefix = Self.requestIdentifierPrefix
         let digests = Set(identifiers.compactMap { identifier -> String? in
-            guard identifier.hasSuffix(".upcoming"),
+            // A detected prompt can be the only remaining replacement for a requested
+            // calendar reminder. Removing it must release that reminder's ledger too.
+            guard identifier.hasSuffix(".upcoming") || identifier.hasSuffix(".detected"),
                   !handedOffRequestIdentifiers.contains(identifier) else { return nil }
             return String(identifier.dropFirst(prefix.count).prefix { $0 != "." })
         })

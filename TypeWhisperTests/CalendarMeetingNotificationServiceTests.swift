@@ -115,6 +115,205 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         case beforeCountdown, atDeadline, afterStartRequest
     }
 
+    func testAutomaticCountdownSignalLossRestoresFutureReminderWithoutCalendarRefresh() async throws {
+        try await assertCountdownSignalLossRestoresReminder()
+    }
+
+    func testAutomaticCountdownSignalLossRestoresCatchUpReminderOnce() async throws {
+        try await assertCountdownSignalLossRestoresReminder(startDelay: 120)
+    }
+
+    func testArmedCountdownSignalLossKeepsReminderDismissed() async throws {
+        try await assertCountdownSignalLossRestoresReminder(startMode: .reminder)
+    }
+
+    func testDeferredAutomaticStartSignalLossRestoresReminder() async throws {
+        try await assertCountdownSignalLossRestoresReminder(deferred: true)
+    }
+
+    func testAutomaticCameraCountdownLossRestoresFutureReminder() async throws {
+        try await assertCountdownSignalLossRestoresReminder(cameraEvidence: true)
+    }
+
+    func testDeferredAutomaticStartRestoresReminderWhenActivityBecomesUnavailable() async throws {
+        try await assertCountdownSignalLossRestoresReminder(deferred: true, activityUnavailable: true)
+    }
+
+    private func assertCountdownSignalLossRestoresReminder(
+        startMode: CalendarMeetingStartMode = .automatic,
+        startDelay: TimeInterval = 600,
+        cameraEvidence: Bool = false,
+        deferred: Bool = false,
+        activityUnavailable: Bool = false
+    ) async throws {
+        let suiteName = "CalendarMeetingSignalLossTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(startDelay))
+        let configuration = CalendarMeetingAutomationConfiguration(
+            hasPremiumAccess: true, startMode: startMode, autoStopEnabled: false,
+            calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
+            enabledProviders: [.zoom], suppressedOccurrenceDigests: []
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        await service.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: now)), at: now
+        )
+        let original = try XCTUnwrap(client.added.last)
+        if startDelay <= 300 {
+            client.deliveredIdentifiers = client.pendingIdentifiers
+            client.pendingIdentifiers.removeAll()
+        }
+        client.added.removeAll()
+        if startMode == .reminder {
+            await service.applyNotificationEffects(
+                policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now)), at: now
+            )
+        }
+        let signal = CalendarMeetingJoinSignal(
+            occurrenceDigest: occurrence.id, meetingIdentity: try XCTUnwrap(occurrence.meetingLinks.first),
+            quality: .nativeProvider, isRunningInput: true, isRunningOutput: false
+        )
+        _ = policy.reduce(cameraEvidence ? .cameraActivity(isRunning: true, now: now) : .activity([signal], now: now))
+        let countdown = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        XCTAssertTrue(countdown.contains(.showStartCountdown(occurrence, deadline: now.addingTimeInterval(8))))
+        await service.applyNotificationEffects(countdown, at: now.addingTimeInterval(3))
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty)
+        if deferred {
+            _ = policy.reduce(.recorderReadiness(.recorderBusy, now: now.addingTimeInterval(4)))
+            await service.applyNotificationEffects(
+                policy.reduce(.timeAdvanced(now.addingTimeInterval(8))), at: now.addingTimeInterval(8)
+            )
+        }
+        let lostAt = now.addingTimeInterval(deferred ? 9 : 4)
+        let loss: CalendarMeetingAutomationEvent = cameraEvidence
+            ? .cameraActivityUnavailable(now: lostAt)
+            : activityUnavailable ? .activityUnavailable(now: lostAt) : .activity([], now: lostAt)
+        let lostEffects = policy.reduce(loss)
+        if !deferred { XCTAssertTrue(lostEffects.contains(.dismissStartCountdown)) }
+        await service.applyNotificationEffects(lostEffects, at: lostAt)
+        XCTAssertEqual(client.added.count, startMode == .automatic ? 1 : 0)
+        if startMode == .automatic {
+            let restored = try XCTUnwrap(client.added.last)
+            XCTAssertNotEqual(restored.identifier, original.identifier)
+            XCTAssertEqual(restored.kind, .upcoming)
+            XCTAssertEqual(restored.delivery, startDelay > 300
+                ? .scheduled(occurrence.startDate.addingTimeInterval(-300)) : .immediate)
+            XCTAssertEqual(client.pendingIdentifiers, [restored.identifier])
+        }
+        await service.applyNotificationEffects(
+            policy.reduce(.timeAdvanced(lostAt.addingTimeInterval(1))), at: lostAt.addingTimeInterval(1)
+        )
+        XCTAssertEqual(client.added.count, startMode == .automatic ? 1 : 0,
+            "Repeated signal-free ticks must not repeat the restored reminder")
+        _ = policy.reduce(.recorderReadiness(.idle, now: lostAt.addingTimeInterval(1)))
+        let rejoinedAt = lostAt.addingTimeInterval(2)
+        _ = policy.reduce(cameraEvidence
+            ? .cameraActivity(isRunning: true, now: rejoinedAt) : .activity([signal], now: rejoinedAt))
+        let retryAt = rejoinedAt.addingTimeInterval(3)
+        let retry = policy.reduce(.timeAdvanced(retryAt))
+        XCTAssertTrue(retry.contains(.showStartCountdown(occurrence, deadline: retryAt.addingTimeInterval(5))))
+        await service.applyNotificationEffects(retry, at: retryAt)
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
+    }
+
+    private enum DetectedReminderRemoval {
+        case missing, declined, shutdown, accepted
+    }
+
+    func testMissingDetectedReplacementRestoresReminderWithoutJoinEvidence() async throws {
+        try await assertDetectedReplacementRestoresReminder(removal: .missing)
+    }
+
+    func testDeclinedDetectedReplacementRestoresReminderWithoutJoinEvidence() async throws {
+        try await assertDetectedReplacementRestoresReminder(removal: .declined)
+    }
+
+    func testDeliveredDetectedReplacementRestoresReminderAfterShutdown() async throws {
+        try await assertDetectedReplacementRestoresReminder(removal: .shutdown)
+    }
+
+    func testAcceptedDetectedReplacementKeepsLedgerDuringDelayedCleanup() async throws {
+        try await assertDetectedReplacementRestoresReminder(removal: .accepted)
+    }
+
+    private func assertDetectedReplacementRestoresReminder(removal: DetectedReminderRemoval) async throws {
+        let suiteName = "CalendarMeetingDetectedRestorationTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(120))
+        let configuration = CalendarMeetingAutomationConfiguration(
+            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
+            enabledProviders: [.zoom], suppressedOccurrenceDigests: []
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        await service.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: now)), at: now
+        )
+        client.deliveredIdentifiers = client.pendingIdentifiers
+        client.pendingIdentifiers.removeAll()
+        let signal = CalendarMeetingJoinSignal(
+            occurrenceDigest: occurrence.id, meetingIdentity: try XCTUnwrap(occurrence.meetingLinks.first),
+            quality: .nativeProvider, isRunningInput: true, isRunningOutput: false
+        )
+        _ = policy.reduce(.activity([signal], now: now))
+        await service.applyNotificationEffects(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(3))), at: now.addingTimeInterval(3)
+        )
+        let detected = try XCTUnwrap(client.added.last)
+        XCTAssertEqual(detected.kind, .detected)
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty)
+        if removal != .missing {
+            client.deliveredIdentifiers = client.pendingIdentifiers
+            client.pendingIdentifiers.removeAll()
+        }
+        client.added.removeAll()
+        _ = policy.reduce(.activity([], now: now.addingTimeInterval(4)))
+        let removedAt = now.addingTimeInterval(5)
+        if removal == .accepted {
+            client.defersDeliveredRemovals = true
+            await service.applyNotificationEffects(
+                policy.reduce(.userAction(.armOccurrence(occurrence.id), now: removedAt)), at: removedAt
+            )
+        }
+        if removal == .shutdown {
+            await service.removeScheduledMeetingRequests()
+        } else {
+            let declined = makeCalendarMeetingTestOccurrence(start: occurrence.startDate, participation: .declined)
+            await service.applyNotificationEffects(
+                policy.reduce(.configure(configuration,
+                    occurrences: removal == .declined ? [declined] : [], now: removedAt)), at: removedAt
+            )
+        }
+        client.completeDeliveredRemovals()
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty)
+        let restarted = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        if removal == .accepted { policy = CalendarMeetingAutomationPolicy() }
+        let returnedAt = now.addingTimeInterval(6)
+        await restarted.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: returnedAt)), at: returnedAt
+        )
+        XCTAssertEqual(client.added.count, removal == .accepted ? 0 : 1)
+        guard removal != .accepted else { return }
+        let restored = try XCTUnwrap(client.added.last)
+        XCTAssertEqual(restored.category, .upcomingReminder)
+        XCTAssertEqual(restored.delivery, .immediate)
+        await restarted.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: returnedAt)), at: returnedAt
+        )
+        XCTAssertEqual(client.added.count, 1)
+        XCTAssertEqual(client.pendingIdentifiers, [restored.identifier])
+    }
+
     func testBusyAtCountdownDeadlineDoesNotRestoreFutureReminder() async throws {
         try await assertBusyRecorderReminderRefresh(timing: .atDeadline)
     }
