@@ -830,7 +830,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             // Run after pending publishes so a delayed add cannot restore the banner
             // after the user has accepted it and the in-app countdown takes over.
             enqueueNotificationOperation(canBeSuperseded: false) {
-                service.removeStartNotifications(occurrenceDigest: digest)
+                await service.removeStartNotifications(occurrenceDigest: digest)
             }
 
         case .allowReminderRestoration(let digest):
@@ -979,9 +979,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                       $0.occurrenceDigest == occurrence.occurrenceDigest
                           && $0.isInsideJoinWindow(at: self.nowProvider())
                   }) else {
-                self.applyPolicy(.recordingStartFailed(
-                    occurrenceDigest: occurrence.occurrenceDigest,
-                    failure: .captureFailed
+                self.applyPolicy(.recordingStartCancelled(
+                    occurrenceDigest: occurrence.occurrenceDigest
                 ))
                 return
             }
@@ -1024,9 +1023,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
                               && $0.isInsideJoinWindow(at: self.nowProvider())
                       }) else {
                     try? self.recorderViewModel.stopCalendarMeetingRecording(handle: handle)
-                    self.applyPolicy(.recordingStartFailed(
-                        occurrenceDigest: occurrence.occurrenceDigest,
-                        failure: .captureFailed
+                    self.applyPolicy(.recordingStartCancelled(
+                        occurrenceDigest: occurrence.occurrenceDigest
                     ))
                     return
                 }
@@ -1062,6 +1060,17 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     now: self.nowProvider()
                 ))
             } catch {
+                guard generation == self.recordingStartGeneration,
+                      self.policy.permitsStart(
+                          of: occurrence.occurrenceDigest,
+                          identity: identity,
+                          at: self.nowProvider()
+                      ) else {
+                    self.applyPolicy(.recordingStartCancelled(
+                        occurrenceDigest: occurrence.occurrenceDigest
+                    ))
+                    return
+                }
                 let readiness = self.currentRecorderReadiness()
                 switch readiness {
                 case .recorderBusy, .dictationBusy, .finalizing:

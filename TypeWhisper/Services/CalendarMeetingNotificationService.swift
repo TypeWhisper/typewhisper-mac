@@ -180,6 +180,7 @@ protocol CalendarMeetingNotificationClient: AnyObject {
     func authorizationStatus() async -> CalendarMeetingNotificationAuthorization
     func requestAuthorization() async throws -> Bool
     func pendingRequestIdentifiers() async -> [String]
+    func deliveredRequestIdentifiers() async -> [String]
     func add(_ request: CalendarMeetingNotificationRequest) async throws
     func removePendingRequests(withIdentifiers identifiers: [String])
     func removeDeliveredNotifications(withIdentifiers identifiers: [String])
@@ -344,6 +345,10 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
         await center.pendingNotificationRequests().map(\.identifier)
     }
 
+    func deliveredRequestIdentifiers() async -> [String] {
+        await center.deliveredNotifications().map { $0.request.identifier }
+    }
+
     func add(_ request: CalendarMeetingNotificationRequest) async throws {
         let content = UNMutableNotificationContent()
         content.title = request.title
@@ -403,7 +408,7 @@ protocol CalendarMeetingNotifying: AnyObject {
         _ occurrence: CalendarMeetingOccurrence,
         now: Date
     ) async
-    func removeStartNotifications(occurrenceDigest: String)
+    func removeStartNotifications(occurrenceDigest: String) async
     func allowReminderRestoration(occurrenceDigest: String)
     func publishAutoStopWarning(
         occurrenceDigest: String,
@@ -489,7 +494,9 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         _ reminders: [CalendarMeetingUpcomingReminder],
         now: Date = Date()
     ) async {
-        await removeScheduledMeetingRequests()
+        // Detected prompts are already deduplicated by the policy. Keep them
+        // pending until delivery; a calendar refresh must not erase the handoff.
+        await removePendingMeetingRequests(kinds: [.upcoming])
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
         let requestedDigests: Set<String> = Set(
             defaults.stringArray(
@@ -552,7 +559,8 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             let request = CalendarMeetingNotificationRequest(
                 identifier: Self.requestIdentifier(
                     digest: occurrence.occurrenceDigest,
-                    kind: .upcoming
+                    kind: .upcoming,
+                    generation: UUID().uuidString
                 ),
                 occurrenceDigest: occurrence.occurrenceDigest,
                 kind: .upcoming,
@@ -599,18 +607,29 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         }
         // Removal is asynchronous. Removing the detected identifier here could
         // delete the replacement above; adding the same identifier replaces it.
-        let upcomingIdentifiers = [Self.requestIdentifier(
-            digest: occurrence.occurrenceDigest,
-            kind: .upcoming
-        )]
-        client.removePendingRequests(withIdentifiers: upcomingIdentifiers)
-        client.removeDeliveredNotifications(withIdentifiers: upcomingIdentifiers)
+        await removeStartNotifications(occurrenceDigest: occurrence.occurrenceDigest, kinds: [.upcoming])
     }
 
-    func removeStartNotifications(occurrenceDigest: String) {
-        let identifiers = [CalendarMeetingNotificationKind.upcoming, .detected].map {
-            Self.requestIdentifier(digest: occurrenceDigest, kind: $0)
-        }
+    func removeStartNotifications(occurrenceDigest: String) async {
+        await removeStartNotifications(occurrenceDigest: occurrenceDigest, kinds: [.upcoming, .detected])
+    }
+
+    private func removeStartNotifications(
+        occurrenceDigest: String,
+        kinds: [CalendarMeetingNotificationKind]
+    ) async {
+        let pending = await client.pendingRequestIdentifiers()
+        let delivered = await client.deliveredRequestIdentifiers()
+        let prefix = "\(Self.requestIdentifierPrefix)\(occurrenceDigest)."
+        // Query the notification center so restored generations can also be cleared
+        // after a relaunch, without persisting request identifiers in app defaults.
+        // Remove only existing copies, including legacy identifiers. A removal for
+        // an absent detected prompt could otherwise delete a later publication.
+        let identifiers = Set((pending + delivered).filter { identifier in
+            identifier.hasPrefix(prefix)
+                && kinds.contains { identifier.hasSuffix(".\($0.rawValue)") }
+        }).sorted()
+        guard !identifiers.isEmpty else { return }
         client.removePendingRequests(withIdentifiers: identifiers)
         client.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
@@ -655,10 +674,13 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
     }
 
     func removeScheduledMeetingRequests() async {
-        let identifiers = await client.pendingRequestIdentifiers().filter {
-            $0.hasPrefix(Self.requestIdentifierPrefix)
-                && ($0.hasSuffix(".\(CalendarMeetingNotificationKind.upcoming.rawValue)")
-                    || $0.hasSuffix(".\(CalendarMeetingNotificationKind.detected.rawValue)"))
+        await removePendingMeetingRequests(kinds: [.upcoming, .detected])
+    }
+
+    private func removePendingMeetingRequests(kinds: [CalendarMeetingNotificationKind]) async {
+        let identifiers = await client.pendingRequestIdentifiers().filter { identifier in
+            identifier.hasPrefix(Self.requestIdentifierPrefix)
+                && kinds.contains { identifier.hasSuffix(".\($0.rawValue)") }
         }
         guard !identifiers.isEmpty else { return }
         client.removePendingRequests(withIdentifiers: identifiers)
@@ -666,9 +688,13 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
 
     private static func requestIdentifier(
         digest: String,
-        kind: CalendarMeetingNotificationKind
+        kind: CalendarMeetingNotificationKind,
+        generation: String? = nil
     ) -> String {
-        "\(requestIdentifierPrefix)\(digest).\(kind.rawValue)"
+        // Every scheduled reminder gets a fresh identifier so an asynchronous removal
+        // of an earlier generation cannot delete a restored or refreshed request.
+        let generationComponent = generation.map { ".\($0)" } ?? ""
+        return "\(requestIdentifierPrefix)\(digest)\(generationComponent).\(kind.rawValue)"
     }
 
     private func persistReminderRequestDigest(_ digest: String) {

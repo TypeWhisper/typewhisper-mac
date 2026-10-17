@@ -23294,12 +23294,38 @@ extension TypeWhisperIntegrationTests {
         }
     }
 
+    @MainActor
+    func testSwitchingToReminderDuringRecorderStartKeepsEventArmable() async throws {
+        try await exerciseConsentWithdrawnDuringRecorderStart(
+            confirmSoloEventsAtStart: false,
+            startsWithColleague: true
+        ) { controller, _, _ in
+            if controller.startMode != .reminder {
+                controller.setStartMode(.reminder)
+                await controller.testingRefresh()
+            }
+        }
+    }
+
+    @MainActor
+    func testFailedInvalidatedRecorderStartKeepsEventArmable() async throws {
+        try await exerciseConsentWithdrawnDuringRecorderStart(
+            confirmSoloEventsAtStart: false,
+            startsWithColleague: true,
+            failFirstStartAfterConsentChange: true
+        ) { controller, _, _ in
+            controller.setStartMode(.reminder)
+            await controller.testingRefresh()
+        }
+    }
+
     /// Starts recording an event under automatic consent, withdraws that consent while the
     /// recorder start is suspended, and checks that the start is cancelled but stays armable.
     @MainActor
     private func exerciseConsentWithdrawnDuringRecorderStart(
         confirmSoloEventsAtStart: Bool,
         startsWithColleague: Bool,
+        failFirstStartAfterConsentChange: Bool = false,
         withdrawConsent: @escaping @MainActor (
             CalendarMeetingAutomationController,
             MeetingRuntimeEventProvider,
@@ -23363,10 +23389,16 @@ extension TypeWhisperIntegrationTests {
         )
         defer { controller.shutdown() }
         let privateBlock = occurrence(attendees: [])
+        var hasAttemptedStart = false
         recorderService.startRecordingOverride = { [weak controller] _, _, _, proposedURL, _ in
+            let isFirstStart = !hasAttemptedStart
+            hasAttemptedStart = true
             try Data("recording".utf8).write(to: proposedURL)
             if let controller {
                 await withdrawConsent(controller, events, privateBlock)
+            }
+            if failFirstStartAfterConsentChange && isFirstStart {
+                throw NSError(domain: "InvalidatedRecorderStart", code: 1)
             }
             return proposedURL
         }
@@ -23385,7 +23417,7 @@ extension TypeWhisperIntegrationTests {
         for _ in 0..<100 where recorder.state != .idle {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(recorder.state, .idle, "The solo event was never armed, so the started recording must stop")
+        XCTAssertEqual(recorder.state, .idle, "Withdrawn consent must stop or cancel the recording start")
 
         // The withdrawn start must not block consent: the detected-meeting prompt follows,
         // and Start Recording records the event.

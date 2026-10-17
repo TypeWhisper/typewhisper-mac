@@ -31,6 +31,7 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
         return true
     }
     func pendingRequestIdentifiers() async -> [String] { pendingIdentifiers }
+    func deliveredRequestIdentifiers() async -> [String] { deliveredIdentifiers }
     func add(_ request: CalendarMeetingNotificationRequest) async throws {
         if let addError { throw addError }
         added.append(request)
@@ -63,9 +64,11 @@ private extension CalendarMeetingNotificationService {
             case .replaceScheduledReminders(let reminders):
                 await replaceScheduledReminders(reminders, now: date)
             case .dismissStartNotifications(let digest):
-                removeStartNotifications(occurrenceDigest: digest)
+                await removeStartNotifications(occurrenceDigest: digest)
             case .allowReminderRestoration(let digest):
                 allowReminderRestoration(occurrenceDigest: digest)
+            case .publishDetectedMeeting(let occurrence):
+                await publishDetectedMeeting(occurrence, now: date)
             default:
                 break
             }
@@ -258,11 +261,25 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         )
     }
 
+    func testInterruptedCountdownRestoresReminderAfterSwitchingOffAndBackOn() async throws {
+        try await assertCountdownConfigurationChangeRestoresReminder(
+            startMode: .reminder, confirmSoloEvents: false, switchOffFirst: true
+        )
+    }
+
+    func testRestoredReminderSurvivesDelayedCountdownDismissal() async throws {
+        try await assertCountdownConfigurationChangeRestoresReminder(
+            startMode: .reminder, confirmSoloEvents: false, deferRemovals: true
+        )
+    }
+
     private func assertCountdownConfigurationChangeRestoresReminder(
         startMode: CalendarMeetingStartMode,
         confirmSoloEvents: Bool,
         startRequested: Bool = false,
-        deferStartup: Bool = false
+        deferStartup: Bool = false,
+        switchOffFirst: Bool = false,
+        deferRemovals: Bool = false
     ) async throws {
         let suiteName = "CalendarMeetingRestoredReminderTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -295,6 +312,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         client.pendingIdentifiers.removeAll()
         client.deliveredIdentifiers = [original.identifier]
         client.added.removeAll()
+        client.defersPendingRemovals = deferRemovals
 
         let signal = CalendarMeetingJoinSignal(
             occurrenceDigest: occurrence.id,
@@ -322,19 +340,39 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
                 ))
             }
         }
-        let changedAt = now.addingTimeInterval(startRequested ? 9 : 4)
+        var changedAt = now.addingTimeInterval(startRequested ? 9 : 4)
+        if switchOffFirst {
+            let off = CalendarMeetingAutomationConfiguration(
+                hasPremiumAccess: true, startMode: .off, autoStopEnabled: false,
+                calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
+                enabledProviders: [.zoom], suppressedOccurrenceDigests: []
+            )
+            await service.applyNotificationEffects(
+                policy.reduce(.configure(off, occurrences: [], now: changedAt)), at: changedAt
+            )
+            XCTAssertTrue(client.added.isEmpty, "Switching off must not restore any reminder")
+            changedAt = changedAt.addingTimeInterval(1)
+            await service.applyNotificationEffects(
+                policy.reduce(.configure(changed, occurrences: [], now: changedAt)), at: changedAt
+            )
+            XCTAssertTrue(client.added.isEmpty, "Wait until the occurrence is fetched again")
+            changedAt = changedAt.addingTimeInterval(1)
+        }
         let effects = policy.reduce(.configure(changed, occurrences: [occurrence], now: changedAt))
-        if !startRequested {
+        if !startRequested && !switchOffFirst {
             XCTAssertTrue(effects.contains(.dismissStartCountdown))
         }
         await service.applyNotificationEffects(effects, at: changedAt)
 
         XCTAssertEqual(client.added.count, 1, "Clearing the countdown must restore the consent prompt")
         let restored = try XCTUnwrap(client.added.first)
-        XCTAssertEqual(restored.identifier, original.identifier)
+        XCTAssertNotEqual(restored.identifier, original.identifier)
         XCTAssertEqual(restored.category, .upcomingReminder)
         XCTAssertEqual(restored.delivery, .immediate)
         XCTAssertEqual(restored.fireDate, changedAt)
+        client.completePendingRemovals()
+        XCTAssertEqual(client.pendingIdentifiers, [restored.identifier],
+            "An earlier countdown dismissal must not delete the restored reminder")
 
         // Delivery followed by another refresh must not repeat the catch-up prompt.
         client.pendingIdentifiers.removeAll()
@@ -346,6 +384,13 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         )
         XCTAssertTrue(client.added.isEmpty)
         XCTAssertEqual(client.deliveredIdentifiers, [restored.identifier])
+
+        let restartedService = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        await restartedService.removeStartNotifications(occurrenceDigest: occurrence.id)
+        client.completePendingRemovals()
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty,
+            "A fresh service must find and clear the restored request's generation")
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
     }
 
     func testExplicitRestorationDoesNotRepeatAnotherOccurrencesReminder() async throws {
@@ -567,11 +612,13 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
         let occurrence = makeCalendarMeetingTestOccurrence()
         let now = Date(timeIntervalSince1970: 2_000_000_010)
+        let upcomingIdentifier = "\(CalendarMeetingNotificationService.requestIdentifierPrefix)"
+            + "\(occurrence.id).\(CalendarMeetingNotificationKind.upcoming.rawValue)"
+        client.pendingIdentifiers = [upcomingIdentifier]
+        client.deliveredIdentifiers = [upcomingIdentifier]
 
         await service.publishDetectedMeeting(occurrence, now: now)
 
-        let upcomingIdentifier = "\(CalendarMeetingNotificationService.requestIdentifierPrefix)"
-            + "\(occurrence.id).\(CalendarMeetingNotificationKind.upcoming.rawValue)"
         XCTAssertEqual(client.removed, [[upcomingIdentifier]])
         XCTAssertEqual(client.removedDelivered, [[upcomingIdentifier]])
         XCTAssertEqual(client.added.count, 1)
@@ -605,6 +652,115 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
 
     func testFailedDetectedNotificationPreservesDeliveredReminder() async throws {
         try await assertFailedDetectedNotificationPreservesReminder(delivered: true)
+    }
+
+    func testDetectedPromptAfterRestorationSurvivesEarlierCountdownDismissal() async throws {
+        let suiteName = "CalendarMeetingRestoredDetectedTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        await service.replaceScheduledReminders([occurrence], now: now)
+        let upcoming = try XCTUnwrap(client.added.last)
+        client.deliveredIdentifiers = [upcoming.identifier]
+        client.pendingIdentifiers.removeAll()
+        client.defersPendingRemovals = true
+
+        await service.removeStartNotifications(occurrenceDigest: occurrence.id)
+        service.allowReminderRestoration(occurrenceDigest: occurrence.id)
+        await service.replaceScheduledReminders([occurrence], now: now.addingTimeInterval(1))
+        await service.publishDetectedMeeting(occurrence, now: now.addingTimeInterval(2))
+        let detected = try XCTUnwrap(client.added.last)
+        XCTAssertEqual(detected.kind, .detected)
+        client.completePendingRemovals()
+
+        XCTAssertEqual(client.pendingIdentifiers, [detected.identifier],
+            "Dismissing an earlier countdown must not remove a later detected prompt")
+    }
+
+    func testCalendarRefreshKeepsDetectedPromptUntilDeliveryAfterUpcomingReminder() async throws {
+        try await assertCalendarRefreshKeepsDetectedPromptUntilDelivery(isAdHoc: false)
+    }
+
+    func testCalendarRefreshKeepsAdHocDetectedPromptUntilDelivery() async throws {
+        try await assertCalendarRefreshKeepsDetectedPromptUntilDelivery(isAdHoc: true)
+    }
+
+    private func assertCalendarRefreshKeepsDetectedPromptUntilDelivery(isAdHoc: Bool) async throws {
+        let suiteName = "CalendarMeetingDetectedRefreshTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let identity = CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
+        let occurrence = CalendarMeetingOccurrence(
+            eventIdentifier: "detected-refresh", occurrenceStart: now,
+            startDate: now, endDate: now.addingTimeInterval(30 * 60),
+            title: "Meeting", calendarID: "calendar", participationStatus: .accepted,
+            meetingLinks: [identity], isAdHoc: isAdHoc
+        )
+        let configuration = CalendarMeetingAutomationConfiguration(
+            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
+            enabledProviders: [.zoom], suppressedOccurrenceDigests: [],
+            detectAdHocMeetings: isAdHoc
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        await service.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: now)),
+            at: now
+        )
+        if !isAdHoc {
+            let upcoming = try XCTUnwrap(client.added.first)
+            XCTAssertEqual(upcoming.kind, .upcoming)
+            client.deliveredIdentifiers = [upcoming.identifier]
+            client.pendingIdentifiers.removeAll()
+        } else {
+            XCTAssertTrue(client.added.isEmpty)
+        }
+        client.added.removeAll()
+        let signal = CalendarMeetingJoinSignal(
+            occurrenceDigest: occurrence.id, meetingIdentity: identity,
+            quality: .nativeProvider, isRunningInput: true, isRunningOutput: false
+        )
+        _ = policy.reduce(.activity([signal], now: now))
+        let detectedAt = now.addingTimeInterval(isAdHoc ? 5 : 3)
+        await service.applyNotificationEffects(
+            policy.reduce(.timeAdvanced(detectedAt)), at: detectedAt
+        )
+        let detected = try XCTUnwrap(client.added.last)
+        XCTAssertEqual(detected.kind, .detected)
+        XCTAssertEqual(client.pendingIdentifiers, [detected.identifier])
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty)
+
+        // Refresh before the one-second notification trigger fires. The policy has
+        // already deduplicated this detected prompt and will not publish it again.
+        let refreshedAt = detectedAt.addingTimeInterval(0.5)
+        await service.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: [occurrence], now: refreshedAt)),
+            at: refreshedAt
+        )
+        client.completePendingRemovals()
+        XCTAssertEqual(client.pendingIdentifiers, [detected.identifier],
+            "A calendar refresh must leave the pending consent prompt available for delivery")
+        XCTAssertEqual(client.added.map(\.identifier), [detected.identifier],
+            "The refresh must retain the original request without posting a duplicate")
+
+        // Model delivery, then accept it through the policy to verify handoff cleanup.
+        client.deliveredIdentifiers = client.pendingIdentifiers
+        client.pendingIdentifiers.removeAll()
+        XCTAssertEqual(client.deliveredIdentifiers, [detected.identifier])
+        let acceptedAt = detectedAt.addingTimeInterval(1)
+        let accepted = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: acceptedAt))
+        XCTAssertTrue(accepted.contains(.showStartCountdown(
+            occurrence, deadline: acceptedAt.addingTimeInterval(5)
+        )))
+        await service.applyNotificationEffects(accepted, at: acceptedAt)
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
+        XCTAssertTrue(client.deliveredIdentifiers.isEmpty)
     }
 
     func testFailedDetectedNotificationPreservesPendingReminder() async throws {
@@ -644,7 +800,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         )
     }
 
-    func testStartNotificationRemovalIsScopedToAcceptedOccurrenceAndLeavesAutoStopAlone() throws {
+    func testStartNotificationRemovalIsScopedToAcceptedOccurrenceAndLeavesAutoStopAlone() async throws {
         let suiteName = "CalendarMeetingStartRemovalTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -656,11 +812,19 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let expected = [CalendarMeetingNotificationKind.upcoming, .detected].map {
             "\(CalendarMeetingNotificationService.requestIdentifierPrefix)\(digest).\($0.rawValue)"
         }
+        let untouched = [
+            "\(CalendarMeetingNotificationService.requestIdentifierPrefix)\(otherDigest).upcoming",
+            "\(CalendarMeetingNotificationService.requestIdentifierPrefix)\(digest).autoStop"
+        ]
+        client.pendingIdentifiers = expected + untouched
+        client.deliveredIdentifiers = expected + untouched
 
-        service.removeStartNotifications(occurrenceDigest: digest)
+        await service.removeStartNotifications(occurrenceDigest: digest)
 
-        XCTAssertEqual(client.removed, [expected])
-        XCTAssertEqual(client.removedDelivered, [expected])
+        XCTAssertEqual(client.removed, [expected.sorted()])
+        XCTAssertEqual(client.removedDelivered, [expected.sorted()])
+        XCTAssertEqual(client.pendingIdentifiers, untouched)
+        XCTAssertEqual(client.deliveredIdentifiers, untouched)
         XCTAssertTrue(client.added.isEmpty)
         XCTAssertEqual(
             defaults.stringArray(forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests),
