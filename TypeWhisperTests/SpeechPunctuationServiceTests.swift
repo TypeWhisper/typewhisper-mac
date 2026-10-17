@@ -393,6 +393,19 @@ final class SpeechPunctuationServiceTests: XCTestCase {
             XCTAssertEqual(result.text, "明日は晴れますか？", "strategy override: \(String(describing: override))")
             XCTAssertEqual(result.appliedSteps, ["Speech Punctuation"])
         }
+
+        // Auto language detection can leave no language to resolve a strategy for.
+        let unresolvedResult = try await pipeline.process(
+            text: "明日は晴れますか ？",
+            context: PostProcessingContext(language: nil),
+            dictationContext: DictationRuntimeContext(
+                engineId: "speechAnalyzer",
+                modelId: "ja_JP",
+                configuredLanguage: nil,
+                detectedLanguage: nil
+            )
+        )
+        XCTAssertEqual(unresolvedResult.text, "明日は晴れますか？")
     }
 
     @MainActor

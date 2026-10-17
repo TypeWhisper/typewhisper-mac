@@ -275,6 +275,7 @@ final class PostProcessingPipeline {
                 outputFormat: outputFormat
             )
         case -5:
+            let text = speechPunctuationService.removeSpacesBeforeFullWidthPunctuation(in: text)
             guard let resolvedStrategy = punctuationStrategyResolver.resolve(
                 engineId: dictationContext?.engineId,
                 modelId: dictationContext?.modelId,
@@ -283,7 +284,6 @@ final class PostProcessingPipeline {
             ) else {
                 return text
             }
-            let text = speechPunctuationService.removeSpacesBeforeFullWidthPunctuation(in: text)
             switch resolvedStrategy.strategy {
             case .nativeOnly:
                 return text
