@@ -16,6 +16,8 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
     var addError: Error?
     var registerCount = 0
     var requestCount = 0
+    var pendingQueryCount = 0
+    var deliveredQueryCount = 0
     var responseHandler: (@MainActor (CalendarMeetingNotificationResponse) -> Void)?
 
     func installResponseHandler(
@@ -30,8 +32,14 @@ private final class FakeCalendarMeetingNotificationClient: CalendarMeetingNotifi
         requestCount += 1
         return true
     }
-    func pendingRequestIdentifiers() async -> [String] { pendingIdentifiers }
-    func deliveredRequestIdentifiers() async -> [String] { deliveredIdentifiers }
+    func pendingRequestIdentifiers() async -> [String] {
+        pendingQueryCount += 1
+        return pendingIdentifiers
+    }
+    func deliveredRequestIdentifiers() async -> [String] {
+        deliveredQueryCount += 1
+        return deliveredIdentifiers
+    }
     func add(_ request: CalendarMeetingNotificationRequest) async throws {
         if let addError { throw addError }
         added.append(request)
@@ -618,17 +626,131 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         client.pendingIdentifiers = [
             "external.notification",
             CalendarMeetingNotificationService.requestIdentifierPrefix + "one.upcoming",
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "one.generation.upcoming",
             CalendarMeetingNotificationService.requestIdentifierPrefix + "two.detected",
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "two.generation.detected",
             CalendarMeetingNotificationService.requestIdentifierPrefix + "three.autoStop"
         ]
+        client.deliveredIdentifiers = client.pendingIdentifiers
         let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
 
         await service.removeScheduledMeetingRequests()
 
         XCTAssertEqual(client.removed, [[
             CalendarMeetingNotificationService.requestIdentifierPrefix + "one.upcoming",
-            CalendarMeetingNotificationService.requestIdentifierPrefix + "two.detected"
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "one.generation.upcoming",
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "two.detected",
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "two.generation.detected"
         ]])
+        XCTAssertEqual(client.removedDelivered, client.removed)
+        let retained = ["external.notification",
+            CalendarMeetingNotificationService.requestIdentifierPrefix + "three.autoStop"]
+        XCTAssertEqual(client.pendingIdentifiers, retained)
+        XCTAssertEqual(client.deliveredIdentifiers, retained)
+    }
+
+    func testRefreshRemovesOnlyIneligibleDeliveredUpcomingPrompts() async throws {
+        let suiteName = "CalendarMeetingDeliveredRefreshTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let eligible = makeCalendarMeetingTestOccurrence(eventID: "eligible", start: now)
+        let automatic = makeCalendarMeetingTestOccurrence(eventID: "automatic", start: now)
+        let removed = makeCalendarMeetingTestOccurrence(eventID: "removed", start: now)
+        let off = makeCalendarMeetingTestOccurrence(eventID: "off", start: now)
+        let expired = makeCalendarMeetingTestOccurrence(eventID: "expired", start: now.addingTimeInterval(-7200))
+        let beyondHorizon = makeCalendarMeetingTestOccurrence(eventID: "later", start: now.addingTimeInterval(8 * 86400))
+        let prefix = CalendarMeetingNotificationService.requestIdentifierPrefix
+        func identifiers(_ occurrence: CalendarMeetingOccurrence) -> [String] {
+            ["\(prefix)\(occurrence.id).upcoming", "\(prefix)\(occurrence.id).generation.upcoming"]
+        }
+        let unrelated = ["external.notification", "\(prefix)other.detected", "\(prefix)other.autoStop"]
+        let occurrences = [eligible, automatic, removed, off, expired, beyondHorizon]
+        client.deliveredIdentifiers = occurrences.flatMap(identifiers) + unrelated
+        defaults.set(occurrences.map(\.id), forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests)
+
+        await service.replaceScheduledReminders([
+            CalendarMeetingUpcomingReminder(occurrence: eligible, startMode: .reminder),
+            CalendarMeetingUpcomingReminder(occurrence: automatic, startMode: .automatic),
+            CalendarMeetingUpcomingReminder(occurrence: off, startMode: .off),
+            CalendarMeetingUpcomingReminder(occurrence: expired, startMode: .reminder),
+            CalendarMeetingUpcomingReminder(occurrence: beyondHorizon, startMode: .reminder)
+        ], now: now)
+
+        XCTAssertEqual(Set(client.deliveredIdentifiers),
+            Set(identifiers(eligible) + identifiers(automatic) + unrelated))
+        XCTAssertTrue(client.added.isEmpty, "Delivered eligible reminders remain deduplicated")
+    }
+
+    func testUnchangedCalendarActivityDoesNotQueryNotificationCenter() async throws {
+        try await assertUnchangedActivityDoesNotQueryNotificationCenter(isAdHoc: false)
+    }
+
+    func testUnchangedAdHocActivityDoesNotQueryNotificationCenterButVanishedSessionDoes() async throws {
+        try await assertUnchangedActivityDoesNotQueryNotificationCenter(isAdHoc: true)
+    }
+
+    private func assertUnchangedActivityDoesNotQueryNotificationCenter(isAdHoc: Bool) async throws {
+        let suiteName = "CalendarMeetingActivityQueriesTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let identity = CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
+        let occurrence = CalendarMeetingOccurrence(
+            eventIdentifier: "activity-queries", occurrenceStart: now,
+            startDate: now, endDate: now.addingTimeInterval(1800), title: "Meeting",
+            calendarID: "calendar", participationStatus: .accepted,
+            meetingLinks: [identity], isAdHoc: isAdHoc
+        )
+        let configuration = CalendarMeetingAutomationConfiguration(
+            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
+            enabledProviders: [.zoom], suppressedOccurrenceDigests: [], detectAdHocMeetings: isAdHoc
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        await service.applyNotificationEffects(
+            policy.reduce(.configure(configuration, occurrences: isAdHoc ? [] : [occurrence], now: now)),
+            at: now
+        )
+        let signal = CalendarMeetingJoinSignal(occurrenceDigest: occurrence.id, meetingIdentity: identity,
+            quality: .nativeProvider, isRunningInput: true, isRunningOutput: true)
+        let detectedOccurrences = isAdHoc ? [occurrence] : []
+        await service.applyNotificationEffects(
+            policy.reduce(.activity([signal], detectedOccurrences: detectedOccurrences, now: now)), at: now
+        )
+        let publishedAt = now.addingTimeInterval(5)
+        await service.applyNotificationEffects(policy.reduce(.timeAdvanced(publishedAt)), at: publishedAt)
+        let prompt = try XCTUnwrap(client.added.last)
+        XCTAssertEqual(prompt.kind, .detected)
+        client.pendingQueryCount = 0
+        client.deliveredQueryCount = 0
+
+        for second in 1...60 {
+            let tick = publishedAt.addingTimeInterval(Double(second))
+            await service.applyNotificationEffects(
+                policy.reduce(.activity([signal], detectedOccurrences: detectedOccurrences, now: tick)), at: tick
+            )
+            await service.applyNotificationEffects(policy.reduce(.timeAdvanced(tick)), at: tick)
+        }
+        XCTAssertEqual(client.pendingQueryCount, 0)
+        XCTAssertEqual(client.deliveredQueryCount, 0)
+        XCTAssertEqual(client.pendingIdentifiers, [prompt.identifier])
+
+        // A vanished ad-hoc session or expired calendar occurrence still triggers cleanup.
+        client.pendingQueryCount = 0
+        client.deliveredQueryCount = 0
+        let invalidatedAt = isAdHoc ? publishedAt.addingTimeInterval(61) : occurrence.endDate.addingTimeInterval(1801)
+        let invalidated = isAdHoc
+            ? policy.reduce(.activity([], detectedOccurrences: [], now: invalidatedAt))
+            : policy.reduce(.timeAdvanced(invalidatedAt))
+        await service.applyNotificationEffects(invalidated, at: invalidatedAt)
+        XCTAssertEqual(client.pendingQueryCount, 1)
+        XCTAssertEqual(client.deliveredQueryCount, 1)
+        XCTAssertTrue(client.pendingIdentifiers.isEmpty)
     }
 
     func testOccurrenceFiveMinutesBeyondFetchHorizonStillFiresWithinSevenDays() async throws {

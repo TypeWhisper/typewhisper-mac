@@ -518,6 +518,13 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             candidate.fireDate <= upperBound
                 && candidate.reminder.occurrence.endDate.addingTimeInterval(30 * 60) >= now
         }
+        await removeDeliveredMeetingRequests(
+            kinds: [.upcoming],
+            retainingDigests: Set(activeCandidates.compactMap { candidate in
+                guard candidate.reminder.startMode != .off else { return nil }
+                return candidate.reminder.occurrence.occurrenceDigest
+            })
+        )
         let pendingCandidates: [ReminderCandidate] = activeCandidates.filter { candidate in
             candidate.fireDate > now
                 || !requestedDigests.contains(candidate.reminder.occurrence.occurrenceDigest)
@@ -696,6 +703,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
 
     func removeScheduledMeetingRequests() async {
         await removePendingMeetingRequests(kinds: [.upcoming, .detected])
+        await removeDeliveredMeetingRequests(kinds: [.upcoming, .detected])
     }
 
     private func removePendingMeetingRequests(kinds: [CalendarMeetingNotificationKind]) async {
@@ -705,6 +713,23 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         }
         guard !identifiers.isEmpty else { return }
         client.removePendingRequests(withIdentifiers: identifiers)
+    }
+
+    private func removeDeliveredMeetingRequests(
+        kinds: [CalendarMeetingNotificationKind],
+        retainingDigests: Set<String> = []
+    ) async {
+        let prefix = Self.requestIdentifierPrefix
+        let identifiers = await client.deliveredRequestIdentifiers().filter { identifier in
+            guard identifier.hasPrefix(prefix),
+                  kinds.contains(where: { identifier.hasSuffix(".\($0.rawValue)") }) else {
+                return false
+            }
+            // Match both legacy identifiers and requests with a generation component.
+            return !retainingDigests.contains { identifier.hasPrefix("\(prefix)\($0).") }
+        }
+        guard !identifiers.isEmpty else { return }
+        client.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 
     private static func requestIdentifier(

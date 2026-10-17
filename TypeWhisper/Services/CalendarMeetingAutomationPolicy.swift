@@ -292,10 +292,15 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         case .activity(let signals, let detectedOccurrences, let now):
             self.signals = signals
             if let detectedOccurrences {
+                let previousAdHocDigests = Set(occurrences.filter(\.isAdHoc).map(\.id))
                 occurrences.removeAll(where: \.isAdHoc)
                 occurrences.append(contentsOf: detectedOccurrences.filter(configuration.permits))
+                let adHocDigestsChanged =
+                    previousAdHocDigests != Set(occurrences.filter(\.isAdHoc).map(\.id))
                 pruneSessionState()
-                retainEligibleDetectedNotifications(at: now, alwaysEmit: true, effects: &effects)
+                retainEligibleDetectedNotifications(
+                    at: now, alwaysEmit: adHocDigestsChanged, effects: &effects
+                )
             }
             if let candidate = pendingIdleCandidate,
                !startEvidenceIsPresent(
