@@ -206,7 +206,8 @@ final class StreamingHandler: @unchecked Sendable {
 
             guard self.modelManager.allowsTranscriptPreviewFallback(
                 engineOverrideId: engineOverrideId,
-                selectedProviderId: selectedProviderId
+                selectedProviderId: selectedProviderId,
+                cloudModelOverride: cloudModelOverride
             ) else {
                 logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=policy-opt-out")
                 await MainActor.run { [weak self] in

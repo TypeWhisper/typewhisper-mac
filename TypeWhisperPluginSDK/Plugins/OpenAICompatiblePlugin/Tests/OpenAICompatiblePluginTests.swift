@@ -1418,6 +1418,71 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertFalse(engine.supportsStreaming)
     }
 
+    // MARK: - Transcript Preview Fallback Policy
+
+    func testDefaultProfilePreviewFallbackPolicyFollowsResolvedTransport() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let engine: any TranscriptionEnginePlugin = plugin
+        let policy = try XCTUnwrap(engine as? any TranscriptPreviewFallbackPolicyProviding)
+        let cases: [(OpenAICompatibleTranscriptTransport, String, Bool)] = [
+            (.batch, "Qwen3-ASR", false),
+            (.batch, "gpt-live-transcribe", false),
+            (.auto, "Qwen3-ASR", false),
+            (.auto, "whisper-1", false),
+            (.auto, "gpt-live-transcribe", true),
+            (.realtime, "custom-realtime-deployment", true),
+            (.auto, "custom-realtime-deployment", false),
+        ]
+
+        for (transport, modelId, allowsFallback) in cases {
+            plugin.setTranscriptionTransport(transport, for: plugin.providerId)
+            plugin.selectModel(modelId)
+
+            XCTAssertEqual(
+                policy.allowsTranscriptPreviewFallback,
+                allowsFallback,
+                "Unexpected preview policy for \(transport.rawValue) with \(modelId)"
+            )
+        }
+    }
+
+    func testAdditionalProfilePreviewFallbackPolicyIsIndependentFromDefaultProfile() throws {
+        let host = try PluginTestHostServices(
+            defaults: ["baseURL": "https://example.test", "selectedModel": "gpt-live-transcribe"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let profile = plugin.addProfile(named: "Qwen3 ASR")
+        plugin.setBaseURL("https://qwen.test", for: profile.id)
+        plugin.selectModel("Qwen3-ASR", for: profile.id)
+        let defaultEngine: any TranscriptionEnginePlugin = plugin
+        let defaultPolicy = try XCTUnwrap(defaultEngine as? any TranscriptPreviewFallbackPolicyProviding)
+        let engine = try XCTUnwrap(plugin.additionalTranscriptionEngines.first)
+        let policy = try XCTUnwrap(engine as? any TranscriptPreviewFallbackPolicyProviding)
+
+        XCTAssertTrue(defaultPolicy.allowsTranscriptPreviewFallback)
+        XCTAssertFalse(policy.allowsTranscriptPreviewFallback)
+
+        plugin.setTranscriptionTransport(.batch, for: profile.id)
+        plugin.selectModel("gpt-live-transcribe", for: profile.id)
+        XCTAssertFalse(policy.allowsTranscriptPreviewFallback)
+
+        // Retain the same role while both profiles change transport.
+        plugin.setTranscriptionTransport(.batch, for: plugin.providerId)
+        plugin.setTranscriptionTransport(.realtime, for: profile.id)
+        XCTAssertFalse(defaultPolicy.allowsTranscriptPreviewFallback)
+        XCTAssertTrue(policy.allowsTranscriptPreviewFallback)
+        XCTAssertTrue(engine.supportsStreaming)
+
+        plugin.setTranscriptionTransport(.auto, for: profile.id)
+        XCTAssertTrue(policy.allowsTranscriptPreviewFallback)
+        engine.selectModel("Qwen3-ASR")
+        XCTAssertFalse(policy.allowsTranscriptPreviewFallback)
+        XCTAssertFalse(engine.supportsStreaming)
+    }
+
     // MARK: - Realtime URL Construction
 
     func testRealtimeURLConvertsHTTPSToWSSAndAppendsRealtimePathAndIntent() throws {
@@ -1524,7 +1589,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
     // MARK: - Live Session: Batch/Translate Guardrails
 
-    func testCreateLiveTranscriptionSessionThrowsForBatchResolvedModelSoHostCanFallBack() async throws {
+    func testCreateLiveTranscriptionSessionThrowsForBatchResolvedModel() async throws {
         let host = try PluginTestHostServices(
             defaults: ["baseURL": "https://example.test", "selectedModel": "whisper-1"]
         )
@@ -1538,7 +1603,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
                 prompt: nil,
                 onProgress: { _ in true }
             )
-            XCTFail("Expected batch-routed models to throw so the host preview-loop fallback engages")
+            XCTFail("Expected batch-routed models to reject live transcription")
         } catch let error as PluginTranscriptionError {
             guard case .apiError = error else {
                 return XCTFail("Unexpected error: \(error)")

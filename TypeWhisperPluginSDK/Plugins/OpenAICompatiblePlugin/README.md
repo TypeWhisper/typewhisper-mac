@@ -14,6 +14,13 @@ provider-specific deployment-scoped batch transcription routes.
 The selected transcription model is included in the multipart `model` field.
 The plugin keeps Standard v1 as the default for existing profiles.
 
+## Transcript previews
+
+Batch profiles submit transcription after recording stops, without repeatedly
+uploading audio for interim previews. This also applies when Auto selects a
+batch model, and each additional profile uses its own transport setting.
+Realtime profiles continue to support native live transcript previews.
+
 ## Azure OpenAI and Microsoft Foundry
 
 Some Azure offline transcription deployments require the deployment-scoped
