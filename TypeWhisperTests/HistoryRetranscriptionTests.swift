@@ -987,6 +987,33 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(version.finalText, "the Dr.")
     }
 
+    func testHistoryWorkflowPreservesCorrectionComposition() async throws {
+        let engine = HistoryComparisonTestEngine()
+        let raw = (0..<75).map { "Sentence \($0) keeps seed foo and source together." }.joined(separator: " ")
+        engine.resultOverride = PluginTranscriptionResult(text: raw)
+        let llm = HistoryComparisonLLM()
+        llm.handler = { $0.replacingOccurrences(of: "source", with: "teh") }
+        let environment = try makeEnvironment(plugins: [engine, llm])
+        environment.dictionary.addEntry(type: .correction, original: "seed", replacement: "Seeded")
+        environment.dictionary.addEntry(type: .correction, original: #"\bfoo\b"#, replacement: "teh", isRegex: true)
+        environment.dictionary.addEntry(type: .correction, original: "teh", replacement: "the")
+        for segmented in [false, true] {
+            let workflow = Workflow(name: "Cleanup", template: .cleanedText, trigger: .manual(),
+                behavior: WorkflowBehavior(providerId: llm.providerName, cloudModel: "test", segmentedPostProcessingEnabled: segmented),
+                output: WorkflowOutput(format: "plaintext"))
+            let plan = try HistoryRetranscriptionEnvironment.plan(.init(engineID: engine.providerId, workflowID: workflow.id),
+                manager: environment.manager, dictionary: environment.dictionary, workflows: [workflow], promptProcessing: environment.promptProcessing)
+            let before = llm.inputs.count
+            let version = try await plan.run([0.1])
+            let inputs = Array(llm.inputs.dropFirst(before))
+            XCTAssertTrue(inputs.allSatisfy { $0.contains("foo") && !$0.contains("seed") && !$0.contains("teh") })
+            XCTAssertEqual(version.finalText, raw.replacingOccurrences(of: "seed", with: "Seeded")
+                .replacingOccurrences(of: "foo", with: "the").replacingOccurrences(of: "source", with: "the"))
+            if segmented { XCTAssertGreaterThan(inputs.count, 1) }
+            XCTAssertTrue(environment.dictionary.entries.allSatisfy { $0.usageCount == 0 })
+        }
+    }
+
     func testComparisonHonorsSegmentedWorkflowSettingsAndOutputEligibility() async throws {
         let engine = HistoryComparisonTestEngine()
         let text = (0..<75).map { "Sentence \($0) keeps TypeWhisper vocabulary and the original order." }.joined(separator: " ")

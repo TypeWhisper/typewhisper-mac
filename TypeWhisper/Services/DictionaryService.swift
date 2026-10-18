@@ -841,19 +841,19 @@ final class DictionaryService: ObservableObject {
 
     /// Applies all enabled corrections without touching usage counters, for text that is
     /// prepared repeatedly while recording and will be corrected again when dictation stops.
-    func previewCorrections(to text: String, includeRegex: Bool = true, includeLiteral: Bool = true) -> String {
+    func previewCorrections(to text: String, includeRegex: Bool = true) -> String {
         var appliedCorrectionIDs = Set<UUID>()
-        return previewCorrections(to: text, appliedCorrectionIDs: &appliedCorrectionIDs, includeRegex: includeRegex, includeLiteral: includeLiteral)
+        return previewCorrections(to: text, appliedCorrectionIDs: &appliedCorrectionIDs, includeRegex: includeRegex)
     }
 
     /// Like `previewCorrections(to:)`, and adds the id of every correction that changed the
     /// text to `appliedCorrectionIDs`, so a caller can count their usage later with
     /// `recordUsage(ofCorrectionIDs:deferUsageCountSave:)` once the result is actually used.
-    func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true, includeLiteral: Bool = true) -> String {
+    func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true) -> String {
         var result = text
         var regexBudget = RegexCorrectionBudget()
         for correction in correctionsForApplication {
-            guard correction.isRegex ? includeRegex : includeLiteral else { continue }
+            guard includeRegex || !correction.isRegex else { continue }
             guard let replacement = correction.replacement else { continue }
             let before = result
             guard let corrected = applyCorrection(

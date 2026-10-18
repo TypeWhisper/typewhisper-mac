@@ -214,9 +214,9 @@ enum HistoryRetranscriptionEnvironment {
                         )
                     }
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
-                    let beforeRegex = final
-                    final = dictionary.previewCorrections(to: final, includeLiteral: false)
-                    if final != beforeRegex { steps.append("Corrections") }
+                    let beforeCorrections = final
+                    final = dictionary.previewCorrections(to: final)
+                    if final != beforeCorrections { steps.append("Corrections") }
                 }
                 try Task.checkCancellation()
                 final = final.trimmingCharacters(in: .whitespacesAndNewlines)
