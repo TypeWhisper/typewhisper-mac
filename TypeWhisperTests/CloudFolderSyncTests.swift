@@ -2276,7 +2276,7 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
-    func testFutureSchemaIsDiagnosedBeforeFullOperationDecoding() async throws {
+    func testIncompleteSchemaEnvelopeIsDiagnosedAsMalformed() async throws {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncFutureSchema")
         defer { TestSupport.remove(folder) }
 
@@ -2297,7 +2297,7 @@ final class CloudFolderSyncTests: XCTestCase {
             now: Self.date(20)
         )
 
-        XCTAssertEqual(result.diagnostics.map(\.kind), [.unsupportedSchema])
+        XCTAssertEqual(result.diagnostics.map(\.kind), [.malformedOperation])
     }
 
     func testMissingOperationsDirectoryThrowsInsteadOfReportingEmptySync() throws {
@@ -4643,6 +4643,116 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testIncompleteIgnoredEnvelopesBlockRecoveryUntilLegacyHistoryArrives() async throws {
+        for category in ["history", "future"] {
+            let defects = ["minimal", "schemaVersion", "operationId", "deviceId", "itemId", "collection", "kind", "updatedAt",
+                "invalidSchema", "invalidDate", "blankId", "blankCollection", "blankKind", "invalidKind", "invalidCollection"]
+                + (category == "history" ? ["unknownKind"] : [])
+            for defect in defects {
+                for deleted in [false, true] {
+                    let context = "\(category)/\(defect)/deleted=\(deleted)"
+                    let folder = try TestSupport.makeTemporaryDirectory()
+                    defer { TestSupport.remove(folder) }
+                    let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+                    let entry = try XCTUnwrap(legacy.dictionary)
+                    let directory = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/peer")
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    var object = Self.ignoredOperationEnvelope(category: category)
+                    switch defect {
+                    case "minimal":
+                        object = category == "history"
+                            ? ["schemaVersion": 1, "collection": "history", "historyComponent": "summary"]
+                            : ["schemaVersion": 3]
+                    case "invalidSchema": object["schemaVersion"] = 0
+                    case "invalidDate": object["updatedAt"] = "not-a-date"
+                    case "blankId": object["operationId"] = " \n"
+                    case "blankCollection": object["collection"] = " "
+                    case "blankKind": object["kind"] = " "
+                    case "invalidKind": object["kind"] = [String]()
+                    case "invalidCollection": object["collection"] = [String]()
+                    case "unknownKind": object["kind"] = "futureKind"
+                    default: object.removeValue(forKey: defect)
+                    }
+                    try JSONSerialization.data(withJSONObject: object).write(to: directory.appendingPathComponent("partial.json"))
+                    let store = InMemoryUserDataSyncStore(dictionaryEntries: deleted ? [] : [Self.dictionaryEntry(
+                        entryType: .correction, original: entry.original, replacement: "literal", updatedAt: Self.date(20))])
+                    let snapshot = store.dictionaryEntries
+                    var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
+                        exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
+                        appliedOperationIDs: [legacy.operationId])
+                    let previousState = state
+                    let cache = CloudFolderSyncCache()
+                    let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                    do {
+                        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                            entitlements: entitlement, now: Self.date(30), cache: cache)
+                        XCTFail("Incomplete envelope must postpone migration: \(context)")
+                    } catch CloudFolderSyncError.incompleteMigrationHistory {
+                        // The pending deletion or mode change still needs the legacy pattern identity.
+                    }
+                    XCTAssertEqual(state, previousState, context)
+                    XCTAssertEqual(store.dictionaryEntries, snapshot, context)
+                    XCTAssertTrue(store.appliedMutations.isEmpty, context)
+                    XCTAssertTrue(Self.operationFiles(folder: folder, deviceId: "mac").isEmpty, context)
+
+                    // Unrelated malformed files must not block once the required history arrives.
+                    try Self.writeLegacyOperation(legacy, to: folder)
+                    let recovered = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                        entitlements: entitlement, now: Self.date(40), cache: cache)
+                    XCTAssertEqual(recovered.diagnostics.map(\.kind), [.malformedOperation], context)
+                    let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                        try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+                    }
+                    let regexID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: true)
+                    XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.kind == .delete && $0.itemId == regexID }, context)
+                    XCTAssertEqual(store.dictionaryEntries, snapshot, context)
+                    XCTAssertFalse(state.appliedOperationIDs.contains("ignored"), context)
+                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                        entitlements: entitlement, now: Self.date(50), cache: cache)
+                    XCTAssertEqual(repeated.operationsWritten, 0, context)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testCompleteIgnoredEnvelopesAllowPackageRecovery() async throws {
+        for category in ["history", "future", "future-unknown", "future-numeric"] {
+            for updatedAt in ["2023-11-14T22:13:25Z", "2023-11-14T22:13:25.000Z"] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+                let entry = try XCTUnwrap(legacy.dictionary)
+                let directory = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/peer")
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                var object = Self.ignoredOperationEnvelope(category: category)
+                object["updatedAt"] = updatedAt
+                try JSONSerialization.data(withJSONObject: object).write(to: directory.appendingPathComponent("ignored.json"))
+                let store = InMemoryUserDataSyncStore(dictionaryEntries: [entry])
+                var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
+                    exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
+                    appliedOperationIDs: [legacy.operationId])
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                let recovered = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                    entitlements: entitlement, now: Self.date(30))
+                XCTAssertEqual(recovered.operationsWritten, 1, category)
+                XCTAssertEqual(recovered.diagnostics.map(\.kind), category == "history" ? [] : [.unsupportedSchema], category)
+                let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                    try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+                }
+                XCTAssertEqual(published.count, 1, category)
+                XCTAssertEqual(published.first?.schemaVersion, 2, category)
+                XCTAssertEqual(published.first?.kind, .upsert, category)
+                XCTAssertEqual(store.dictionaryEntries, [entry], category)
+                XCTAssertFalse(state.appliedOperationIDs.contains("ignored"), category)
+                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                    entitlements: entitlement, now: Self.date(40))
+                XCTAssertEqual(repeated.operationsWritten, 0, category)
+            }
+        }
+    }
+
+    @MainActor
     func testRegexUpgradeWaitsForAppliedLegacyFilesBeforeChangingDataOrState() async throws {
         for mode in ["regex", "deleted", "misimportedLiteral", "missingFile", "onlyPartial"] {
             let folder = try TestSupport.makeTemporaryDirectory()
@@ -5022,6 +5132,28 @@ final class CloudFolderSyncTests: XCTestCase {
             createdAt: date(1),
             updatedAt: updatedAt
         )
+    }
+
+    private static func ignoredOperationEnvelope(category: String) -> [String: Any] {
+        let history = category == "history"
+        var object: [String: Any] = [
+            "schemaVersion": history ? 1 : 3,
+            "operationId": "ignored", "deviceId": "peer", "itemId": "history:00000000-0000-0000-0000-000000000001",
+            "collection": history ? "history" : "dictionary", "kind": "upsert", "updatedAt": "2023-11-14T22:13:25Z",
+        ]
+        if history {
+            object["historyPayloadVersion"] = 1
+            object["historyGeneration"] = "history-v1"
+            object["historyComponent"] = "summary"
+            object["historySummary"] = ["recordID": "00000000-0000-0000-0000-000000000001", "text": "Summary"]
+        } else if category == "future-unknown" {
+            object["collection"] = "futureCollection"
+            object["kind"] = "futureKind"
+        } else if category == "future-numeric" {
+            object["collection"] = 17
+            object["kind"] = 23
+        }
+        return object
     }
 
     private static func writeLegacyOperation(

@@ -1488,16 +1488,22 @@ enum CloudFolderSyncEngine {
             return .unreadable
         }
         if let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) {
+            guard operation.schemaVersion >= 1,
+                  [operation.operationId, operation.deviceId, operation.itemId].allSatisfy({
+                      !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                  }) else { return .malformed }
             cache?.storeOperation(operation, atPath: file.path, stamp: stamp, byteCount: data.count)
             return .operation(operation)
         }
-        // The schema envelope only distinguishes future schemas and history
-        // components this version does not know from malformed files.
-        guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data) else {
+        // Ignored future formats still need complete common metadata. Otherwise a
+        // partially downloaded file could be mistaken for a replaced sync package.
+        guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data),
+              envelope.isReadable else {
             return .malformed
         }
-        guard envelope.schemaVersion == 1 else { return .unsupportedSchema }
-        if envelope.collection == UserDataSyncCollection.history.rawValue,
+        if envelope.schemaVersion > 2 { return .unsupportedSchema }
+        if envelope.schemaVersion == 1,
+           envelope.collection == .string(UserDataSyncCollection.history.rawValue),
            let component = envelope.historyComponent,
            UserDataSyncHistoryComponent(rawValue: component) == nil {
             return .unknownHistoryComponent
@@ -1758,8 +1764,45 @@ enum CloudFolderSyncEngine {
 
 private struct CloudFolderSyncSchemaEnvelope: Decodable {
     let schemaVersion: Int
-    let collection: String?
+    let operationId: String
+    let deviceId: String
+    let itemId: String
+    let collection: EnumValue
+    let kind: EnumValue
+    let updatedAt: Date
     let historyComponent: String?
+
+    var isReadable: Bool {
+        schemaVersion >= 1 &&
+            [operationId, deviceId, itemId].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } &&
+            (schemaVersion > 2 || kind.isKnownOperationKind)
+    }
+
+    // Match Windows' string and integer enum encodings without interpreting
+    // future collection names, operation kinds, or payloads.
+    enum EnumValue: Decodable, Equatable {
+        case string(String)
+        case integer(Int32)
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let value = try? container.decode(String.self) {
+                guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw DecodingError.dataCorruptedError(in: container, debugDescription: "Empty sync enum value")
+                }
+                self = .string(value)
+            } else {
+                self = .integer(try container.decode(Int32.self))
+            }
+        }
+
+        var isKnownOperationKind: Bool {
+            switch self {
+            case .string(let value): CloudFolderSyncOperation.Kind(rawValue: value) != nil
+            case .integer(let value): value == 0 || value == 1
+            }
+        }
+    }
 }
 
 /// Shared ISO 8601 formatters for sync payloads. Creating a formatter per date dominated
