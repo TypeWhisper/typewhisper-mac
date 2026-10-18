@@ -12,7 +12,6 @@ final class HomeViewModel: ObservableObject {
     }
 
     @Published var recentTranscriptions: [TranscriptionRecord] = []
-    @Published var navigateToHistory = false
     @Published var navigateToStatistics = false
     @Published var hasAnyTranscriptions = false
     @Published var showSetupWizard: Bool {

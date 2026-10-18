@@ -26958,6 +26958,28 @@
         }
       }
     },
+    "Open in History" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Verlauf öffnen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "履歴で開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在历史记录中打开"
+          }
+        }
+      }
+    },
     "Open in Raycast" : {
       "localizations" : {
         "de" : {

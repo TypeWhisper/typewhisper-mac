@@ -6,6 +6,183 @@ import TypeWhisperPluginSDK
 
 final class HistoryServiceTests: XCTestCase {
     @MainActor
+    func testOpeningRecentRecordClearsFiltersThatHideIt() async throws {
+        let fixture = try makeRecordNavigationFixture()
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let target = fixture.records[1]
+        viewModel.requestNavigationSelection(.smartMailbox(.failed))
+        viewModel.searchQuery = "does not match"
+        viewModel.requestAppFilter("com.apple.Safari")
+        viewModel.requestTimeRange(.sevenDays)
+        viewModel.collapsedGroups = Set(HistoryDateGroup.allCases)
+
+        viewModel.requestOpenRecord(withID: target.id)
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertEqual(viewModel.searchQuery, "")
+        XCTAssertNil(viewModel.selectedAppFilter)
+        XCTAssertEqual(viewModel.selectedTimeRange, .all)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [target.id])
+        XCTAssertEqual(viewModel.editedText, target.finalText)
+        XCTAssertEqual(viewModel.recordScrollRequest?.recordID, target.id)
+        let section = try XCTUnwrap(viewModel.groupedSections.first { $0.records.contains { $0.id == target.id } })
+        XCTAssertFalse(viewModel.collapsedGroups.contains(section.group))
+    }
+
+    @MainActor
+    func testOpeningRecentRecordLeavesUnrelatedDeviceMailbox() async throws {
+        let fixture = try makeRecordNavigationFixture()
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        viewModel.activate()
+        viewModel.requestNavigationSelection(.deviceSource(deviceID: "another-device", source: .iPhone))
+
+        viewModel.requestOpenRecord(withID: fixture.records[1].id)
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertEqual(viewModel.selectedRecordIDs, [fixture.records[1].id])
+    }
+
+    @MainActor
+    func testOpeningRecentRecordPreservesMatchingFiltersAndLoadsLaterPages() async throws {
+        let fixture = try makeRecordNavigationFixture(recordCount: 125)
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let target = try XCTUnwrap(fixture.records.last)
+        let navigation = HistoryNavigationSelection.deviceSource(deviceID: "platform:macos", source: .mac)
+        viewModel.requestNavigationSelection(navigation)
+        viewModel.searchQuery = "Transcript"
+        viewModel.requestAppFilter("com.apple.Notes")
+        viewModel.requestTimeRange(.sevenDays)
+        viewModel.requestSortOrder(.oldest)
+
+        // Open while the window is inactive and the matching search is still running.
+        viewModel.requestOpenRecord(withID: target.id)
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(viewModel.navigationSelection, navigation)
+        XCTAssertEqual(viewModel.searchQuery, "Transcript")
+        XCTAssertEqual(viewModel.selectedAppFilter, "com.apple.Notes")
+        XCTAssertEqual(viewModel.selectedTimeRange, .sevenDays)
+        XCTAssertEqual(viewModel.selectedSortOrder, .oldest)
+        XCTAssertEqual(viewModel.records.count, 125)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [target.id])
+        XCTAssertEqual(viewModel.recordScrollRequest?.recordID, target.id)
+
+        // The search debounce must not reload page one after the reveal already finished.
+        try await Task.sleep(for: .milliseconds(200))
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.records.count, 125)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [target.id])
+        viewModel.deactivate()
+    }
+
+    @MainActor
+    func testOpeningRecentRecordHonorsUnsavedDraftCancellationAndDiscard() async throws {
+        let fixture = try makeRecordNavigationFixture()
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let original = fixture.records[0]
+        let target = fixture.records[1]
+        viewModel.activate()
+        viewModel.searchQuery = original.finalText
+        viewModel.requestAppFilter("com.apple.Notes")
+        await viewModel.waitForPendingWork()
+        viewModel.requestRecordSelection([original.id])
+        viewModel.editedText = "Unsaved correction"
+
+        viewModel.requestOpenRecord(withID: target.id)
+        XCTAssertTrue(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [original.id])
+        XCTAssertEqual(viewModel.searchQuery, original.finalText)
+        XCTAssertEqual(viewModel.editedText, "Unsaved correction")
+        XCTAssertNil(viewModel.recordScrollRequest)
+
+        viewModel.cancelPendingTransition()
+        XCTAssertFalse(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [original.id])
+        XCTAssertEqual(viewModel.editedText, "Unsaved correction")
+
+        viewModel.requestOpenRecord(withID: target.id)
+        viewModel.discardAndContinue()
+        await viewModel.waitForPendingWork()
+        XCTAssertFalse(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [target.id])
+        XCTAssertEqual(viewModel.editedText, target.finalText)
+        XCTAssertEqual(viewModel.searchQuery, "")
+        XCTAssertNil(viewModel.selectedAppFilter)
+        XCTAssertEqual(original.finalText, "Transcript 0")
+        viewModel.deactivate()
+    }
+
+    @MainActor
+    func testOpeningSelectedRecordAgainPreservesItsDraftAndRequestsAnotherScroll() throws {
+        let fixture = try makeRecordNavigationFixture()
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let target = fixture.records[1]
+        viewModel.requestOpenRecord(withID: target.id)
+        let firstScroll = try XCTUnwrap(viewModel.recordScrollRequest)
+        viewModel.editedText = "Still editing"
+
+        viewModel.requestOpenRecord(withID: target.id)
+
+        XCTAssertFalse(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertEqual(viewModel.selectedRecordIDs, [target.id])
+        XCTAssertEqual(viewModel.editedText, "Still editing")
+        XCTAssertEqual(viewModel.recordScrollRequest?.recordID, target.id)
+        XCTAssertNotEqual(viewModel.recordScrollRequest?.id, firstScroll.id)
+        viewModel.deactivate()
+    }
+
+    @MainActor
+    func testOpeningMissingRecordDoesNotChangeSelectionOrFilters() throws {
+        let fixture = try makeRecordNavigationFixture()
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let original = fixture.records[0]
+        viewModel.requestRecordSelection([original.id])
+        viewModel.editedText = "Still editing"
+
+        viewModel.requestOpenRecord(withID: UUID())
+
+        XCTAssertEqual(viewModel.selectedRecordIDs, [original.id])
+        XCTAssertEqual(viewModel.editedText, "Still editing")
+        XCTAssertFalse(viewModel.showsUnsavedChangesPrompt)
+        XCTAssertNil(viewModel.recordScrollRequest)
+    }
+
+    @MainActor
+    private func makeRecordNavigationFixture(recordCount: Int = 2) throws -> (
+        directory: URL, viewModel: HistoryViewModel, records: [TranscriptionRecord]
+    ) {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryRecordNavigation")
+        let service = HistoryService(appSupportDirectory: directory)
+        let start = Date().addingTimeInterval(-3_600)
+        for index in 0..<recordCount {
+            service.addRecord(
+                timestamp: start.addingTimeInterval(Double(index)),
+                rawText: "Transcript \(index)",
+                finalText: "Transcript \(index)",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let viewModel = HistoryViewModel(
+            historyService: service,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: directory)
+        )
+        return (directory, viewModel, Array(service.allRecords().reversed()))
+    }
+
+    @MainActor
     func testAudioWrittenInBackgroundIsStoredWithRecordOrRemovedWithRejectedRecord() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
