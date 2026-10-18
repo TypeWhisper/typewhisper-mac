@@ -79,9 +79,49 @@ final class DictionaryExporterTests: XCTestCase {
         let items = try DictionaryExporter.parseJSON(Data(json.utf8))
         XCTAssertEqual(items.count, 1)
         XCTAssertFalse(items[0].caseSensitive)
+        XCTAssertFalse(items[0].isRegex)
         XCTAssertTrue(items[0].isEnabled)
         XCTAssertNil(items[0].replacement)
         XCTAssertNil(items[0].ctcMinSimilarity)
+    }
+
+    @MainActor
+    func testRegexDictionaryRoundTripPreservesPatternModeAndEnabledState() throws {
+        let sourceDirectory = try TestSupport.makeTemporaryDirectory()
+        let destinationDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            TestSupport.remove(sourceDirectory)
+            TestSupport.remove(destinationDirectory)
+        }
+        let source = DictionaryService(appSupportDirectory: sourceDirectory)
+        source.addEntry(type: .correction, original: #"\s+new line\s+"#, replacement: #"\n"#, caseSensitive: true, isRegex: true)
+        source.setEntryEnabled(try XCTUnwrap(source.corrections.first), enabled: false)
+        let exported = DictionaryExporter.exportJSON(source.entries)
+        let parsed = try DictionaryExporter.parseJSON(Data(exported.utf8))
+        let entry = try XCTUnwrap(parsed.first)
+        XCTAssertTrue(entry.isRegex)
+        XCTAssertTrue(entry.caseSensitive)
+        XCTAssertFalse(entry.isEnabled)
+        XCTAssertEqual(entry.original, #"\s+new line\s+"#)
+        XCTAssertEqual(entry.replacement, #"\n"#)
+
+        let destination = DictionaryService(appSupportDirectory: destinationDirectory)
+        XCTAssertEqual(DictionaryExporter.importEntries(parsed, into: destination).imported, 1)
+        XCTAssertTrue(try XCTUnwrap(destination.entries.first).isRegex)
+        destination.setEntryEnabled(try XCTUnwrap(destination.entries.first), enabled: true)
+        XCTAssertEqual(destination.applyCorrections(to: "First new line Second"), "First\nSecond")
+    }
+
+    @MainActor
+    func testLegacyDictionaryImportDefaultsToLiteralAndTermsIgnoreRegexFlag() throws {
+        let json = #"[{"type":"correction","original":"command","replacement":"\\n"},{"type":"term","original":"Term","isRegex":true}]"#
+        let entries = try DictionaryExporter.parseJSON(Data(json.utf8))
+        XCTAssertTrue(entries.allSatisfy { !$0.isRegex })
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        XCTAssertEqual(DictionaryExporter.importEntries(entries, into: service).imported, 2)
+        XCTAssertEqual(service.applyCorrections(to: "command"), #"\n"#)
     }
 
     @MainActor

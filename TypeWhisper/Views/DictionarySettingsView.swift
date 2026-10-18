@@ -1371,7 +1371,8 @@ private struct DictionaryCardView: View {
             if row.type == .correction, let replacement = row.replacementDisplayText {
                 Text(row.original)
                     .font(.callout)
-                    .strikethrough()
+                    .monospaced(row.isRegex)
+                    .strikethrough(!row.isRegex)
                     .foregroundStyle(.secondary)
 
                 Image(systemName: "arrow.right")
@@ -1390,6 +1391,10 @@ private struct DictionaryCardView: View {
                     label: row.termBoostingLabel,
                     value: row.formattedCtcMinSimilarity
                 )
+            }
+
+            if row.isRegex {
+                DictionaryRegexBadge()
             }
 
             if row.caseSensitive {
@@ -1558,8 +1563,13 @@ private struct DictionaryCorrectionAliasRow: View {
 
             Text(row.original)
                 .font(.callout)
-                .strikethrough()
+                .monospaced(row.isRegex)
+                .strikethrough(!row.isRegex)
                 .foregroundStyle(row.isEnabled ? .primary : .secondary)
+
+            if row.isRegex {
+                DictionaryRegexBadge()
+            }
 
             if row.caseSensitive {
                 Text("Aa")
@@ -1601,6 +1611,20 @@ private struct DictionaryCorrectionAliasRow: View {
                 deleteEntry()
             }
         }
+    }
+}
+
+private struct DictionaryRegexBadge: View {
+    var body: some View {
+        Text(".*")
+            .font(.caption2.monospaced())
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.12))
+            .foregroundStyle(.secondary)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .help(String(localized: "Regular expression"))
+            .accessibilityLabel(String(localized: "Regular expression"))
     }
 }
 
@@ -1684,17 +1708,29 @@ private struct DictionaryEditorSheet: View {
                 GroupBox(viewModel.editType == .term ? String(localized: "Term") : String(localized: "Correction")) {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(viewModel.editType == .term ? String(localized: "Term") : String(localized: "Wrong Text"))
+                            Text(viewModel.editType == .term
+                                 ? String(localized: "Term")
+                                 : viewModel.editIsRegex
+                                    ? String(localized: "Regex pattern")
+                                    : String(localized: "Wrong Text"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             TextField(
                                 viewModel.editType == .term
                                     ? String(localized: "e.g. Kubernetes")
+                                    : viewModel.editIsRegex
+                                    ? #"\s+colon\b"#
                                     : String(localized: "e.g. kubernetees"),
                                 text: $viewModel.editOriginal
                             )
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .original)
+
+                            if let error = viewModel.editRegexError {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                            }
                         }
 
                         if viewModel.editType == .correction {
@@ -1715,6 +1751,17 @@ private struct DictionaryEditorSheet: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                                 }
+                            }
+                        }
+
+                        if viewModel.editType == .correction {
+                            Toggle(String(localized: "Regular expression"), isOn: $viewModel.editIsRegex)
+
+                            if viewModel.editIsRegex {
+                                Text(String(localized: #"Replaces every regex match. Use \n for a new line, \t for a tab, \s for a space, or \\ for a backslash. $1 stays literal."#))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
 
@@ -1774,16 +1821,18 @@ private struct DictionaryEditorSheet: View {
 
                 Button(String(localized: "Save")) {
                     viewModel.saveEditing()
-                    dismiss()
+                    if !viewModel.isEditing {
+                        dismiss()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
-                .disabled(viewModel.editOriginal.isEmpty)
+                .disabled(!viewModel.canSaveEditing)
             }
             .padding()
             .background(Color(NSColor.windowBackgroundColor))
         }
-        .frame(width: 430, height: viewModel.editType == .term ? 455 : 340)
+        .frame(width: 430, height: viewModel.editType == .term ? 455 : viewModel.editIsRegex ? 490 : 380)
         .onAppear {
             focusedField = .original
         }

@@ -133,6 +133,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
         source.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
+        source.dictionaryService.addEntry(type: .correction, original: #"\d+"#, replacement: "#", isRegex: true)
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
 
         let backup = try SettingsBackupExporter.buildBackup(
@@ -167,12 +168,21 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(result.workflowsImported, 1)
-        XCTAssertEqual(result.dictionaryImported, 2)
+        XCTAssertEqual(result.dictionaryImported, 3)
         XCTAssertEqual(result.snippetsImported, 1)
         XCTAssertEqual(destination.workflowService.workflows.first?.name, "Cleanup")
         XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnterMode, .duringDictation)
         XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnter, false)
         XCTAssertEqual(destination.snippetService.snippets.first?.trigger, ";sig")
+        XCTAssertTrue(try XCTUnwrap(destination.dictionaryService.entries.first { $0.original == #"\d+"# }).isRegex)
+        XCTAssertEqual(destination.dictionaryService.applyCorrections(to: "teh 123"), "the #")
+    }
+
+    func testLegacyDictionaryBackupWithoutRegexFlagDecodesAsLiteral() throws {
+        let json = #"{"type":"correction","original":"command","replacement":"\\n","caseSensitive":false,"isEnabled":true,"source":"manual"}"#
+        let entry = try JSONDecoder().decode(SettingsBackupExporter.DictionaryEntryDTO.self, from: Data(json.utf8))
+        XCTAssertFalse(entry.isRegex ?? false)
+        XCTAssertEqual(entry.replacement, #"\n"#)
     }
 
     func testRoundTripPreservesSegmentedPostProcessingFlag() async throws {

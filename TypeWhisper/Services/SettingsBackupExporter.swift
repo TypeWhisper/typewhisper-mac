@@ -63,6 +63,7 @@ enum SettingsBackupExporter {
         let original: String
         let replacement: String?
         let caseSensitive: Bool
+        let isRegex: Bool?
         let isEnabled: Bool
         let ctcMinSimilarity: Float?
         let source: DictionaryEntrySource
@@ -480,6 +481,7 @@ enum SettingsBackupExporter {
                 original: entry.original,
                 replacement: entry.replacement,
                 caseSensitive: entry.caseSensitive,
+                isRegex: entry.isRegex,
                 isEnabled: entry.isEnabled,
                 ctcMinSimilarity: entry.ctcMinSimilarity,
                 source: entry.source
@@ -689,7 +691,7 @@ enum SettingsBackupExporter {
 
         let dictionaryItems = backup.dictionaryEntries.map {
             (type: $0.type, original: $0.original, replacement: $0.replacement,
-             caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled,
+             caseSensitive: $0.caseSensitive, isRegex: $0.isRegex ?? false, isEnabled: $0.isEnabled,
              ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
         }
         let beforeDictionaryCount = dictionaryService.entries.count

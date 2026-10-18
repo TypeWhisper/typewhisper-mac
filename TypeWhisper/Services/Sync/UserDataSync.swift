@@ -25,6 +25,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let replacement: String?
     let caseSensitive: Bool
     let isEnabled: Bool
+    let isRegex: Bool
     let source: DictionaryEntrySource?
     let ctcMinSimilarity: Float?
     let ctcMinSimilarityFieldPresent: Bool
@@ -37,6 +38,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         replacement: String?,
         caseSensitive: Bool,
         isEnabled: Bool,
+        isRegex: Bool = false,
         source: DictionaryEntrySource? = nil,
         ctcMinSimilarity: Float? = nil,
         ctcMinSimilarityFieldPresent: Bool? = nil,
@@ -48,6 +50,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         self.replacement = replacement
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
+        self.isRegex = entryType == .correction && isRegex
         self.source = source
         self.ctcMinSimilarity = entryType == .term
             ? Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
@@ -65,6 +68,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         case replacement
         case caseSensitive
         case isEnabled
+        case isRegex
         case source
         case ctcMinSimilarity
         case createdAt
@@ -78,6 +82,8 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         replacement = try container.decodeIfPresent(String.self, forKey: .replacement)
         caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        let decodedIsRegex = try container.decodeIfPresent(Bool.self, forKey: .isRegex) ?? false
+        isRegex = entryType == .correction && decodedIsRegex
         let sourceRawValue = try container.decodeIfPresent(String.self, forKey: .source)
         source = sourceRawValue.flatMap(DictionaryEntrySource.init(rawValue:))
         ctcMinSimilarityFieldPresent =
@@ -101,6 +107,9 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         try container.encodeIfPresent(replacement, forKey: .replacement)
         try container.encode(caseSensitive, forKey: .caseSensitive)
         try container.encode(isEnabled, forKey: .isEnabled)
+        if entryType == .correction {
+            try container.encode(isRegex, forKey: .isRegex)
+        }
         try container.encodeIfPresent(source?.rawValue, forKey: .source)
         if entryType == .term {
             try container.encode(ctcMinSimilarity, forKey: .ctcMinSimilarity)

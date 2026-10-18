@@ -8,6 +8,7 @@ enum DictionaryExporter {
         let original: String
         let replacement: String?
         let caseSensitive: Bool
+        let isRegex: Bool
         let isEnabled: Bool
         let ctcMinSimilarity: Float?
         let source: DictionaryEntrySource
@@ -30,6 +31,9 @@ enum DictionaryExporter {
             ]
             if let replacement = entry.replacement {
                 dict["replacement"] = replacement
+            }
+            if entry.type == .correction {
+                dict["isRegex"] = entry.isRegex
             }
             if entry.type == .term, let ctcMinSimilarity = entry.ctcMinSimilarity {
                 dict["ctcMinSimilarity"] = ctcMinSimilarity
@@ -92,6 +96,7 @@ enum DictionaryExporter {
                 original: original,
                 replacement: replacement,
                 caseSensitive: dict["caseSensitive"] as? Bool ?? false,
+                isRegex: type == .correction && (dict["isRegex"] as? Bool ?? false),
                 isEnabled: dict["isEnabled"] as? Bool ?? true,
                 ctcMinSimilarity: type == .term ? parseOptionalFloat(
                     dict["ctcMinSimilarity"] ?? dict["ctc_min_similarity"]
@@ -109,7 +114,7 @@ enum DictionaryExporter {
 
         let items = parsed.map {
             (type: $0.type, original: $0.original, replacement: $0.replacement,
-             caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled,
+             caseSensitive: $0.caseSensitive, isRegex: $0.isRegex, isEnabled: $0.isEnabled,
              ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
         }
         service.importEntries(items)

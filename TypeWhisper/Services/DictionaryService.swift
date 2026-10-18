@@ -50,6 +50,7 @@ final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
     private var hasDeferredUsageCountChanges = false
+    private var regexCorrections: [UUID: NSRegularExpression] = [:]
 
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var terms: [DictionaryEntry] = []
@@ -126,6 +127,14 @@ final class DictionaryService: ObservableObject {
             terms = newTerms
             corrections = newCorrections
             correctionsForApplication = Self.orderedForApplication(newCorrections)
+            regexCorrections = Dictionary(uniqueKeysWithValues: newCorrections.compactMap { correction in
+                guard correction.isRegex,
+                      let regex = try? NSRegularExpression(
+                        pattern: correction.original,
+                        options: correction.caseSensitive ? [] : [.caseInsensitive]
+                      ) else { return nil }
+                return (correction.id, regex)
+            })
             termsCount = newTermsCount
             correctionsCount = newCorrectionsCount
             enabledTermsCount = newEnabledTermsCount
@@ -186,6 +195,7 @@ final class DictionaryService: ObservableObject {
         original: String,
         replacement: String? = nil,
         caseSensitive: Bool = false,
+        isRegex: Bool = false,
         ctcMinSimilarity: Float? = nil,
         source: DictionaryEntrySource = .manual
     ) {
@@ -202,6 +212,7 @@ final class DictionaryService: ObservableObject {
             original: original,
             replacement: replacement,
             caseSensitive: caseSensitive,
+            isRegex: isRegex,
             ctcMinSimilarity: Self.normalizedCtcMinSimilarity(type == .term ? ctcMinSimilarity : nil),
             source: source,
             createdAt: now,
@@ -223,6 +234,7 @@ final class DictionaryService: ObservableObject {
         original: String,
         replacement: String?,
         caseSensitive: Bool,
+        isRegex: Bool? = nil,
         ctcMinSimilarity: Float? = nil
     ) {
         guard let context = modelContext else { return }
@@ -230,6 +242,7 @@ final class DictionaryService: ObservableObject {
         entry.original = original
         entry.replacement = replacement
         entry.caseSensitive = caseSensitive
+        entry.isRegex = entry.type == .correction && (isRegex ?? entry.isRegex)
         entry.ctcMinSimilarity = Self.normalizedCtcMinSimilarity(entry.type == .term ? ctcMinSimilarity : nil)
         entry.updatedAt = Date()
 
@@ -356,6 +369,14 @@ final class DictionaryService: ObservableObject {
 
     /// Import entries preserving all fields including isEnabled state
     func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isEnabled: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
+        importEntries(items.map {
+            (type: $0.type, original: $0.original, replacement: $0.replacement,
+             caseSensitive: $0.caseSensitive, isRegex: false, isEnabled: $0.isEnabled,
+             ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
+        })
+    }
+
+    func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isRegex: Bool, isEnabled: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
         var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
@@ -370,6 +391,7 @@ final class DictionaryService: ObservableObject {
                 original: item.original,
                 replacement: item.replacement,
                 caseSensitive: item.caseSensitive,
+                isRegex: item.isRegex,
                 isEnabled: item.isEnabled,
                 ctcMinSimilarity: Self.normalizedCtcMinSimilarity(item.type == .term ? item.ctcMinSimilarity : nil),
                 source: item.source,
@@ -698,7 +720,11 @@ final class DictionaryService: ObservableObject {
     func vocabularyForPrompt(limit: Int = 400) -> [String] {
         var seenKeys = Set<String>()
         var result: [String] = []
-        let candidates = terms.map(\.original) + corrections.compactMap(\.replacement)
+        let candidates = terms.map(\.original) + corrections.compactMap { correction in
+            correction.replacement.map {
+                correction.isRegex ? Self.expandedRegexReplacement($0) : $0
+            }
+        }
         for candidate in candidates {
             let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else { continue }
@@ -813,6 +839,11 @@ final class DictionaryService: ObservableObject {
     }
 
     private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
+        if correction.isRegex {
+            guard let regex = regexCorrections[correction.id] else { return text }
+            return Self.replacingRegexMatches(regex, in: text, with: replacement)
+        }
+
         switch matchPolicy(for: correction) {
         case .exact:
             return textMatches(text, correction.original, caseSensitive: correction.caseSensitive) ? replacement : text
@@ -854,6 +885,59 @@ final class DictionaryService: ObservableObject {
             result += text[searchStart..<text.endIndex]
             return result
         }
+    }
+
+    /// Windows uses literal replacement text (including $1), with a small set of
+    /// whitespace escapes. Keep this opt-in so existing literal corrections stay unchanged.
+    private static func expandedRegexReplacement(_ replacement: String) -> String {
+        var result = ""
+        var characters = replacement.makeIterator()
+        while let character = characters.next() {
+            guard character == "\\", let escaped = characters.next() else {
+                result.append(character)
+                continue
+            }
+            switch escaped {
+            case "s": result.append(" ")
+            case "n": result.append("\n")
+            case "r": result.append("\r")
+            case "t": result.append("\t")
+            case "\\": result.append("\\")
+            default:
+                result.append("\\")
+                result.append(escaped)
+            }
+        }
+        return result
+    }
+
+    private static func replacingRegexMatches(_ regex: NSRegularExpression, in text: String, with replacement: String) -> String {
+        // Match Windows' 250 ms budget. Progress callbacks also interrupt a single
+        // pathological match; discard partial results if matching is interrupted.
+        let deadline = ContinuousClock.now + .milliseconds(250)
+        let source = text as NSString
+        let replacement = expandedRegexReplacement(replacement)
+        var result = ""
+        var endOfLastMatch = 0
+        var interrupted = false
+        regex.enumerateMatches(
+            in: text,
+            options: [.reportProgress, .reportCompletion],
+            range: NSRange(location: 0, length: source.length)
+        ) { match, flags, stop in
+            guard ContinuousClock.now < deadline, !flags.contains(.internalError) else {
+                interrupted = true
+                stop.pointee = true
+                return
+            }
+            guard let match else { return }
+            result += source.substring(with: NSRange(location: endOfLastMatch, length: match.range.location - endOfLastMatch))
+            result += replacement
+            endOfLastMatch = NSMaxRange(match.range)
+        }
+        guard !interrupted else { return text }
+        result += source.substring(from: endOfLastMatch)
+        return result
     }
 
     /// Where the original re-matches inside its own replacement: the replacement text before
@@ -1396,6 +1480,7 @@ final class DictionaryService: ObservableObject {
                 replacement: entry.type == .correction ? (entry.replacement ?? "") : nil,
                 caseSensitive: entry.caseSensitive,
                 isEnabled: entry.isEnabled,
+                isRegex: entry.isRegex,
                 source: entry.source == .manual ? nil : entry.source,
                 ctcMinSimilarity: entry.type == .term
                     ? entry.ctcMinSimilarity
@@ -1451,6 +1536,7 @@ final class DictionaryService: ObservableObject {
             entry.original = synced.original
             entry.replacement = replacement
             entry.caseSensitive = synced.caseSensitive
+            entry.isRegex = targetType == .correction && synced.isRegex
             entry.isEnabled = synced.isEnabled
             entry.source = synced.source ?? .manual
             if targetType == .correction {
@@ -1467,6 +1553,7 @@ final class DictionaryService: ObservableObject {
             original: synced.original,
             replacement: replacement,
             caseSensitive: synced.caseSensitive,
+            isRegex: synced.isRegex,
             isEnabled: synced.isEnabled,
             ctcMinSimilarity: targetType == .term
                 ? synced.ctcMinSimilarity

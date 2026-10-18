@@ -1,6 +1,94 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Regular expression" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regulärer Ausdruck"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正規表現"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正则表达式"
+          }
+        }
+      }
+    },
+    "Regex pattern" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Regex-Muster"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正規表現パターン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正则表达式模式"
+          }
+        }
+      }
+    },
+    "Invalid regular expression." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiger regulärer Ausdruck."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正規表現が無効です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正则表达式无效。"
+          }
+        }
+      }
+    },
+    "Replaces every regex match. Use \\n for a new line, \\t for a tab, \\s for a space, or \\\\ for a backslash. $1 stays literal." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ersetzt jeden Regex-Treffer. Verwende \\n für einen Zeilenumbruch, \\t für einen Tabulator, \\s für ein Leerzeichen oder \\\\ für einen Backslash. $1 bleibt wörtlich."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正規表現に一致する箇所をすべて置換します。改行は \\n、タブは \\t、スペースは \\s、バックスラッシュは \\\\ を使います。$1 はそのまま挿入されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "替换所有正则表达式匹配项。使用 \\n 换行、\\t 插入制表符、\\s 插入空格、\\\\ 插入反斜杠。$1 按原样插入。"
+          }
+        }
+      }
+    },
     "Dismiss notification" : {
       "localizations" : {
         "de" : {

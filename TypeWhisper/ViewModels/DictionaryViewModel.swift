@@ -31,6 +31,7 @@ struct DictionaryEntryRow: Identifiable, Equatable {
     let original: String
     let replacement: String?
     let caseSensitive: Bool
+    let isRegex: Bool
     let isEnabled: Bool
     let source: DictionaryEntrySource
     let termBoostingLabel: String
@@ -205,6 +206,7 @@ class DictionaryViewModel: ObservableObject {
     @Published var editOriginal = ""
     @Published var editReplacement = ""
     @Published var editCaseSensitive = false
+    @Published var editIsRegex = false
     @Published var editTermBoostingMode: TermBoostingMode = .automatic
     @Published var editAdvancedCtcMinSimilarity: Double = 0.65
     @Published private(set) var lockedCorrectionReplacement: String?
@@ -378,6 +380,16 @@ class DictionaryViewModel: ObservableObject {
 
     // MARK: - Editor Actions
 
+    var editRegexError: String? {
+        guard editType == .correction, editIsRegex, !editOriginal.isEmpty else { return nil }
+        guard (try? NSRegularExpression(pattern: editOriginal)) == nil else { return nil }
+        return String(localized: "Invalid regular expression.")
+    }
+
+    var canSaveEditing: Bool {
+        !editOriginal.isEmpty && editRegexError == nil
+    }
+
     func startCreating(type: DictionaryEntryType = .term) {
         selectedEntry = nil
         isCreatingNew = true
@@ -387,6 +399,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        editIsRegex = false
         resetTermBoostingEditor()
     }
 
@@ -406,6 +419,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = entry.original
         editReplacement = entry.replacement ?? ""
         editCaseSensitive = entry.caseSensitive
+        editIsRegex = entry.isRegex
         setTermBoostingEditor(to: entry.type == .term ? entry.ctcMinSimilarity : nil)
     }
 
@@ -422,6 +436,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        editIsRegex = false
         lockedCorrectionReplacement = nil
         resetTermBoostingEditor()
     }
@@ -429,6 +444,10 @@ class DictionaryViewModel: ObservableObject {
     func saveEditing() {
         guard !editOriginal.isEmpty else {
             error = String(localized: "Original text cannot be empty")
+            return
+        }
+        if let editRegexError {
+            error = editRegexError
             return
         }
 
@@ -443,6 +462,7 @@ class DictionaryViewModel: ObservableObject {
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
+                isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
             )
             suggestTermsSettingIfNeeded(afterAdding: editType)
@@ -452,6 +472,7 @@ class DictionaryViewModel: ObservableObject {
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
+                isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
             )
         }
@@ -592,6 +613,7 @@ class DictionaryViewModel: ObservableObject {
             original: entry.original,
             replacement: entry.replacement,
             caseSensitive: entry.caseSensitive,
+            isRegex: entry.isRegex,
             isEnabled: entry.isEnabled,
             source: entry.source,
             termBoostingLabel: termBoostingLabel(for: entry.ctcMinSimilarity),
