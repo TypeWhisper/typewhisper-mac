@@ -1886,6 +1886,7 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         guard HistoryRetranscriptionActivity.recordID == nil else {
             hotkeyService.cancelDictation()
             showNotchFeedback(message: HistoryRetranscriptionError.busy.localizedDescription, icon: "hourglass", duration: 2)

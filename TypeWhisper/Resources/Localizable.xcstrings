@@ -1,6 +1,204 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "New in TypeWhisper" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu in TypeWhisper"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperの新機能"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 新功能"
+          }
+        }
+      }
+    },
+    "A few improvements for your everyday dictation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbesserungen für dein tägliches Diktieren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毎日の音声入力をより快適に。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让日常语音输入更便捷。"
+          }
+        }
+      }
+    },
+    "Give your vocabulary a boost" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehr Präzision für deinen Wortschatz"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "専門用語の認識を向上"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提升专用词汇识别效果"
+          }
+        }
+      }
+    },
+    "Add a term in Dictionary to enable Vocabulary Boosting for Parakeet. Term packs now use precise matching to keep everyday words intact." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge im Wörterbuch einen Begriff hinzu, um Vocabulary Boosting für Parakeet zu aktivieren. Begriffspakete nutzen jetzt präzise Zuordnung, damit alltägliche Wörter unverändert bleiben."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辞書に用語を追加すると、ParakeetのVocabulary Boostingを有効にできます。用語パックは精密な照合を使い、一般的な単語の誤変換を防ぎます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在词典中添加词条，即可为 Parakeet 启用 Vocabulary Boosting。术语包现采用精确匹配，避免误改日常用词。"
+          }
+        }
+      }
+    },
+    "More control over meeting recordings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehr Kontrolle über Meeting-Aufnahmen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会議の録音をさらに細かく設定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更灵活地控制会议录音"
+          }
+        }
+      }
+    },
+    "Using automatic recording with Premium? Calendars can now ask before recording events without other attendees." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Du nutzt automatische Aufnahmen mit Premium? Unter Kalender kannst du jetzt festlegen, dass vor Terminen ohne weitere Teilnehmer nachgefragt wird."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Premiumの自動録音をお使いですか？「カレンダー」で、他の参加者がいない予定を録音する前に確認するよう設定できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在使用 Premium 自动录音？现在可在“日历”中设置：录制没有其他参与者的日程前先询问。"
+          }
+        }
+      }
+    },
+    "Bring settings back without duplicates" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen ohne Duplikate importieren"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を重複なしで復元"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入设置，不再重复"
+          }
+        }
+      }
+    },
+    "Importing a backup skips unchanged items. Choose Replace existing items when you want to update matching workflows, profiles and prompt actions." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Import einer Sicherung werden unveränderte Einträge übersprungen. Wähle „Vorhandene Einträge ersetzen“, um gleichnamige Workflows, Profile und Prompt-Aktionen zu aktualisieren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バックアップの読み込みでは、変更のない項目をスキップします。同名のワークフロー、プロファイル、プロンプトアクションを更新するには「既存の項目を置き換える」を選びます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入备份时会跳过未更改的项目。选择“替换现有项目”，即可更新同名的工作流、配置文件和提示词操作。"
+          }
+        }
+      }
+    },
+    "Skip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スキップ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过"
+          }
+        }
+      }
+    },
     "Dismiss notification" : {
       "localizations" : {
         "de" : {
@@ -14467,6 +14665,12 @@
     },
     "Continue" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",

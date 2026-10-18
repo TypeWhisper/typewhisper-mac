@@ -58,6 +58,10 @@ struct AboutSettingsView: View {
                         .font(.caption)
                     }
 
+                    if let coordinator = WhatsNewCoordinator.shared {
+                        WhatsNewButton(coordinator: coordinator)
+                    }
+
                     Text(String(localized: "Fast, private speech-to-text for your Mac. Transcribe with local or cloud engines, process text with AI prompts, and insert directly into any app."))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
@@ -138,6 +142,17 @@ struct AboutSettingsView: View {
         UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
         NotificationCenter.default.post(name: .resetSetupWizardWindow, object: nil)
         ManagedAppWindowOpener.shared.open(id: "setup")
+    }
+}
+
+private struct WhatsNewButton: View {
+    @ObservedObject var coordinator: WhatsNewCoordinator
+
+    var body: some View {
+        Button("New in TypeWhisper") {
+            NotificationCenter.default.post(name: .whatsNewRequested, object: nil)
+        }
+        .disabled(coordinator.operationInProgress)
     }
 }
 

@@ -215,6 +215,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     var onDictationStart: ((UInt64) -> Void)?
+    /// Delivered on the main thread for an accepted shortcut, before any hold delay.
+    var onHotkeyAction: (() -> Void)?
     var onDictationStop: (() -> Void)?
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
@@ -3023,6 +3025,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         hotkey: UnifiedHotkey,
         requestTimestamp: UInt64 = HotkeyService.requestTimestamp()
     ) {
+        // A modifier-only hybrid shortcut waits before starting the recorder.
+        // Cancel startup content on the press, before that hold delay or focus capture.
+        onHotkeyAction?()
         if slotType == .promptPalette {
             onPromptPaletteToggle?()
             return
@@ -3139,6 +3144,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - Key Down / Up (Profile Slots)
 
     private func handleProfileKeyDown(profileId: UUID) {
+        onHotkeyAction?()
         if isActive {
             // Any hotkey stops active recording
             isActive = false
@@ -3190,6 +3196,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - Key Down / Up (Workflow Slots)
 
     private func handleWorkflowKeyDown(workflowId: UUID, hotkey: UnifiedHotkey, behavior: WorkflowHotkeyBehavior) {
+        onHotkeyAction?()
         guard behavior == .startDictation else {
             guard !isActive else {
                 isActive = false

@@ -22,6 +22,7 @@ extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
     static let iOSCompanionPromoRequested = Notification.Name("iOSCompanionPromoRequested")
+    static let whatsNewRequested = Notification.Name("whatsNewRequested")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -258,6 +259,7 @@ final class FinderTranscriptionService: NSObject {
 
     @discardableResult
     func handle(_ pasteboard: NSPasteboard) -> String? {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         let urls = Self.fileURLs(from: pasteboard)
         guard !urls.isEmpty else {
             return "No supported audio or video files were selected."
@@ -532,10 +534,14 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         guard !AppConstants.isRunningTests else { return }
 
         LaunchSignposts.beginLaunch()
+        WhatsNewCoordinator.shared = WhatsNewCoordinator()
 
         // Trigger ServiceContainer initialization
         let serviceContainer = LaunchSignposts.signposter.withIntervalSignpost("Launch.serviceContainer") {
             ServiceContainer.shared
+        }
+        serviceContainer.hotkeyService.onHotkeyAction = {
+            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         }
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
@@ -568,11 +574,19 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             return
         }
 
+        let manualIOSCompanionRequest = iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
+        if !manualIOSCompanionRequest, let whatsNew = WhatsNewCoordinator.shared,
+           whatsNew.shouldDeferAutomaticSheets {
+            startupSheet = nil
+            return
+        }
+
         let nextRoute: StartupSheetRoute?
-        if LicenseService.shared.needsWelcomeSheet {
+        if manualIOSCompanionRequest {
+            nextRoute = .iOSCompanion
+        } else if LicenseService.shared.needsWelcomeSheet {
             nextRoute = .welcome
-        } else if iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
-                    || iOSCompanionPromoCoordinator.shouldPresentPrompt {
+        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt {
             nextRoute = .iOSCompanion
         } else {
             nextRoute = postUpdatePromptCoordinator.activeSheetRoute
@@ -688,6 +702,7 @@ final class ManagedAppWindowOpener {
     var openWindow: OpenWindowAction?
 
     func open(id: String) {
+        WhatsNewCoordinator.shared?.handleWindowRequest()
         open(id: id, remainingAttempts: 10)
     }
 
@@ -780,6 +795,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
+    private var whatsNewWindowController: WhatsNewWindowController?
+    private var startupActivitySubscriptions = Set<AnyCancellable>()
     private let finderTranscriptionService = FinderTranscriptionService()
     #if !APPSTORE
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
@@ -833,6 +850,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !AppConstants.isRunningTests else {
             return
         }
+
+        observeStartupActivity()
+        NotificationCenter.default.publisher(for: .whatsNewRequested)
+            .sink { [weak self] _ in self?.presentWhatsNewManually() }
+            .store(in: &startupActivitySubscriptions)
 
         if AppConstants.isScreenshotAutomation {
             NSApp.setActivationPolicy(.regular)
@@ -898,30 +920,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        let initialWindowPresentation = InitialWindowPresentationPolicy.presentation(
-            setupWizardRequired: HomeViewModel.shared.showSetupWizard,
-            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
-            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt
-        )
-
-        switch initialWindowPresentation {
-        case .setup:
-            UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
-            HomeViewModel.shared.showSetupWizard = true
-            NSApp.setActivationPolicy(.regular)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-                    self.openSetupWindow()
-                }
-            }
-        case .settings:
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-                    self.openSettingsWindow()
-                }
-            }
-        case .none:
-            break
+        let isNormalLaunch = Self.isNormalLaunch(notification)
+        if !isNormalLaunch {
+            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
+        }
+        // Allow launch URLs and Services to arrive first; recheck all priorities
+        // at presentation time, not when scheduling the window.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.presentInitialWindow(isNormalLaunch: isNormalLaunch)
         }
 
         // Observe appearance preference changes
@@ -1022,6 +1028,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard !AppConstants.isRunningTests else { return }
+        WhatsNewCoordinator.shared?.acknowledgePresentation()
         DictationViewModel._shared?.flushPendingPostInsertionPersistence()
         ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
@@ -1031,6 +1038,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        WhatsNewCoordinator.shared?.handleWindowRequest()
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
             return true
         }
@@ -1045,6 +1053,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         for url in urls {
             handleIncomingURL(url)
         }
@@ -1052,6 +1061,83 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openSettingsWindow() {
         ManagedAppWindowOpener.shared.open(id: "settings")
+    }
+
+    static func isNormalLaunch(_ notification: Notification) -> Bool {
+        notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
+            && notification.userInfo?[NSApplication.launchUserNotificationUserInfoKey] == nil
+    }
+
+    private func observeStartupActivity() {
+        let container = ServiceContainer.shared
+        let activities = [
+            container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
+            container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
+            container.audioRecorderViewModel.$retranscribingRecordingURL.map { $0 != nil }.eraseToAnyPublisher(),
+            container.fileTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
+            container.speakerTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
+            HistoryRetranscriptionActivity.recordIDPublisher.map { $0 != nil }.eraseToAnyPublisher()
+        ]
+        // The About button becomes available only after every operation is idle.
+        // A single operation finishing must not hide another one's busy state.
+        activities.dropFirst().reduce(activities[0]) { combined, activity in
+            combined.combineLatest(activity).map { $0 || $1 }.eraseToAnyPublisher()
+        }
+            .removeDuplicates()
+            .sink { WhatsNewCoordinator.shared?.updateOperationInProgress($0) }
+            .store(in: &startupActivitySubscriptions)
+    }
+
+    private var operationInProgress: Bool {
+        let container = ServiceContainer.shared
+        return container.dictationViewModel.state != .idle
+            || container.audioRecorderViewModel.state != .idle
+            || container.audioRecorderViewModel.retranscribingRecordingURL != nil
+            || container.fileTranscriptionViewModel.batchState == .processing
+            || container.speakerTranscriptionViewModel.batchState == .processing
+            || HistoryRetranscriptionActivity.recordID != nil
+            || NSApp.modalWindow != nil
+            || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
+    }
+
+    private func presentWhatsNewManually() {
+        guard let whatsNew = WhatsNewCoordinator.shared,
+              whatsNew.beginManualPresentation() else { return }
+        // Use the same activity state as the About button. A sheet attached to
+        // another window only blocks automatic presentation, not this explicit request.
+        showWhatsNew(coordinator: whatsNew)
+    }
+
+    private func showWhatsNew(coordinator: WhatsNewCoordinator) {
+        if whatsNewWindowController == nil {
+            whatsNewWindowController = WhatsNewWindowController(coordinator: coordinator)
+        }
+        whatsNewWindowController?.showWindow(nil)
+    }
+
+    private func presentInitialWindow(isNormalLaunch: Bool) {
+        guard let whatsNew = WhatsNewCoordinator.shared else { return }
+        let presentation = whatsNew.presentationForLaunch(
+            isNormalLaunch: isNormalLaunch,
+            setupWizardRequired: HomeViewModel.shared.showSetupWizard,
+            operationInProgress: operationInProgress,
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
+            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt
+        )
+
+        LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
+            switch presentation {
+            case .setup:
+                NSApp.setActivationPolicy(.regular)
+                openSetupWindow()
+            case .whatsNew:
+                showWhatsNew(coordinator: whatsNew)
+            case .settings:
+                openSettingsWindow()
+            case .none:
+                break
+            }
+        }
     }
 
     private var screenshotPremiumDestination: PremiumSettingsDestination? {
