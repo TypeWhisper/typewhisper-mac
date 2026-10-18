@@ -212,6 +212,71 @@ final class DictionaryTrainingServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testTrainingReviewAllowsLiteralCandidatesBesideRegexRules() async throws {
+        for replacement in ["TypeWhisper", "Other"] {
+            for enabled in [false, true] {
+                let directory = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(directory) }
+                let dictionary = DictionaryService(appSupportDirectory: directory)
+                XCTAssertTrue(dictionary.addEntry(type: .correction, original: "TypeWisper", replacement: replacement, isRegex: true))
+                let regex = try XCTUnwrap(dictionary.corrections.first)
+                dictionary.setEntryEnabled(regex, enabled: enabled)
+                XCTAssertTrue(dictionary.addEntry(type: .correction, original: "TypeWhispr", replacement: "TypeWhisper"))
+                XCTAssertTrue(dictionary.addEntry(type: .correction, original: "TypeWhispper", replacement: "Other"))
+                let snapshot = makeSnapshot()
+                var transcriptIndex = 0
+                let transcripts = [
+                    "Today I want to say TypeWisper clearly.",
+                    "Please write TypeWhispr in this sentence.",
+                    "The important word today is TypeWhispper."
+                ]
+                let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+                    engineSnapshot: { snapshot },
+                    canTranscribe: { true },
+                    requestMicrophonePermission: { true },
+                    startRecording: {},
+                    stopRecording: { [0.1] },
+                    discardActiveRecording: {},
+                    transcribe: { _ in
+                        defer { transcriptIndex += 1 }
+                        return transcripts[transcriptIndex]
+                    },
+                    dictionaryEntries: { dictionary.entries },
+                    commit: { try dictionary.applyDictionaryTraining(canonicalWord: $0, approvedCandidates: $1) }
+                ))
+                service.canonicalWord = "TypeWhisper"
+                service.beginTraining(localeIdentifier: "en_US")
+                for sample in service.samples {
+                    await service.startRecording(sampleID: sample.id)
+                    await service.stopRecordingAndTranscribe(sampleID: sample.id)
+                }
+                service.proceedToReview()
+                XCTAssertEqual(service.candidates.map(\.disposition), [.available, .duplicate, .conflict(existingReplacement: "Other")])
+                XCTAssertEqual(service.candidates.map(\.isSelected), [true, false, false])
+                let candidate = try XCTUnwrap(service.candidates.first)
+                service.updateCandidate(id: candidate.id, original: " TYPEWÍSPER ")
+                XCTAssertEqual(service.candidates.first?.disposition, .available)
+                XCTAssertEqual(service.selectedCandidateCount, 1)
+                service.updateCandidate(id: candidate.id, original: "TypeWisper")
+                service.confirm()
+
+                XCTAssertEqual(service.stage, .summary)
+                XCTAssertEqual(service.summary?.addedCorrections, ["TypeWisper"])
+                let reloaded = DictionaryService(appSupportDirectory: directory)
+                let retainedRegex = try XCTUnwrap(reloaded.entries.first { $0.id == regex.id })
+                XCTAssertTrue(retainedRegex.isRegex)
+                XCTAssertEqual(retainedRegex.replacement, replacement)
+                XCTAssertEqual(retainedRegex.isEnabled, enabled)
+                XCTAssertEqual(reloaded.entries.filter { $0.original == "TypeWisper" }.count, 2)
+                XCTAssertTrue(reloaded.entries.contains {
+                    $0.type == .correction && !$0.isRegex && $0.original == "TypeWisper" && $0.replacement == "TypeWhisper"
+                })
+                XCTAssertEqual(reloaded.entries.count, 5)
+            }
+        }
+    }
+
+    @MainActor
     func testFailedSampleCanRetryWithoutLosingCompletedSamples() async {
         let snapshot = makeSnapshot()
         var shouldFail = false

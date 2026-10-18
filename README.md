@@ -561,6 +561,8 @@ curl -X DELETE http://localhost:8978/v1/dictionary/corrections \
   -d '{"original":"teh"}'
 ```
 
+Correction responses include `isRegex`. Set `isRegex: true` in PUT or DELETE to address a regular expression; omitting it addresses a literal correction. Regex patterns are identified by their exact text, including case and spaces, so `\d` and `\D` are separate rules and a literal entry can coexist with a regex entry. To change modes through the API, delete the old entry using its mode and PUT the new one. Invalid regex patterns return HTTP 400. Replacements are literal except for `\n`, `\r`, `\t`, `\s`, and `\\` escapes; `$1` is not a capture reference.
+
 ### Settings Backup
 
 The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup. These examples include the bearer token from the discovery file (see [Authentication](#authentication)):

@@ -25,11 +25,17 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let replacement: String?
     let caseSensitive: Bool
     let isEnabled: Bool
+    let isRegex: Bool
+    let isRegexFieldPresent: Bool
     let source: DictionaryEntrySource?
     let ctcMinSimilarity: Float?
     let ctcMinSimilarityFieldPresent: Bool
     let createdAt: Date
     let updatedAt: Date
+
+    var isRegexPatternSupported: Bool {
+        !isRegex || (try? NSRegularExpression(pattern: original, options: caseSensitive ? [] : [.caseInsensitive])) != nil
+    }
 
     init(
         entryType: UserDataSyncDictionaryEntryType,
@@ -37,6 +43,8 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         replacement: String?,
         caseSensitive: Bool,
         isEnabled: Bool,
+        isRegex: Bool = false,
+        isRegexFieldPresent: Bool? = nil,
         source: DictionaryEntrySource? = nil,
         ctcMinSimilarity: Float? = nil,
         ctcMinSimilarityFieldPresent: Bool? = nil,
@@ -48,6 +56,8 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         self.replacement = replacement
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
+        self.isRegex = entryType == .correction && isRegex
+        self.isRegexFieldPresent = entryType == .correction && (isRegexFieldPresent ?? true)
         self.source = source
         self.ctcMinSimilarity = entryType == .term
             ? Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
@@ -65,6 +75,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         case replacement
         case caseSensitive
         case isEnabled
+        case isRegex
         case source
         case ctcMinSimilarity
         case createdAt
@@ -78,6 +89,9 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         replacement = try container.decodeIfPresent(String.self, forKey: .replacement)
         caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        let decodedIsRegex = try container.decodeIfPresent(Bool.self, forKey: .isRegex) ?? false
+        isRegex = entryType == .correction && decodedIsRegex
+        isRegexFieldPresent = entryType == .correction && container.contains(.isRegex)
         let sourceRawValue = try container.decodeIfPresent(String.self, forKey: .source)
         source = sourceRawValue.flatMap(DictionaryEntrySource.init(rawValue:))
         ctcMinSimilarityFieldPresent =
@@ -101,6 +115,9 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         try container.encodeIfPresent(replacement, forKey: .replacement)
         try container.encode(caseSensitive, forKey: .caseSensitive)
         try container.encode(isEnabled, forKey: .isEnabled)
+        if isRegexFieldPresent {
+            try container.encode(isRegex, forKey: .isRegex)
+        }
         try container.encodeIfPresent(source?.rawValue, forKey: .source)
         if entryType == .term {
             try container.encode(ctcMinSimilarity, forKey: .ctcMinSimilarity)
@@ -112,6 +129,26 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     private static func normalizedCtcMinSimilarity(_ value: Float?) -> Float? {
         guard let value, value.isFinite else { return nil }
         return min(max(value, 0), 1)
+    }
+
+    func preservingRegexMode(_ isRegex: Bool) -> Self {
+        Self(
+            entryType: entryType, original: original, replacement: replacement,
+            caseSensitive: caseSensitive, isEnabled: isEnabled,
+            isRegex: isRegex, isRegexFieldPresent: isRegexFieldPresent,
+            source: source, ctcMinSimilarity: ctcMinSimilarity,
+            ctcMinSimilarityFieldPresent: ctcMinSimilarityFieldPresent,
+            createdAt: createdAt, updatedAt: updatedAt
+        )
+    }
+
+    /// Old macOS versions retained these fields when importing a Windows regex,
+    /// but dropped its mode. Edited literals must not be repaired as old copies.
+    func isLegacyLiteralCopy(of regex: Self) -> Bool {
+        entryType == .correction && !isRegex && regex.isRegex
+            && original.utf8.elementsEqual(regex.original.utf8)
+            && replacement == regex.replacement && updatedAt == regex.updatedAt
+            && caseSensitive == regex.caseSensitive && isEnabled == regex.isEnabled
     }
 }
 
@@ -179,6 +216,7 @@ struct UserDataSyncSnapshot: Codable, Equatable, Sendable {
 
 enum UserDataSyncMutation: Equatable, Sendable {
     case upsertDictionary(UserDataSyncDictionaryEntry)
+    case restoreLegacyDictionaryRegex(UserDataSyncDictionaryEntry)
     case deleteDictionary(itemID: String)
     case upsertSnippet(UserDataSyncSnippet)
     case deleteSnippet(itemID: String)

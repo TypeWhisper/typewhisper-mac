@@ -1,0 +1,42 @@
+[
+  {
+    "pattern": "\\d",
+    "itemId": "dictionary:correction:regex:XGQ"
+  },
+  {
+    "pattern": "\\D",
+    "itemId": "dictionary:correction:regex:XEQ"
+  },
+  {
+    "pattern": "\\s",
+    "itemId": "dictionary:correction:regex:XHM"
+  },
+  {
+    "pattern": "\\S",
+    "itemId": "dictionary:correction:regex:XFM"
+  },
+  {
+    "pattern": "é",
+    "itemId": "dictionary:correction:regex:w6k"
+  },
+  {
+    "pattern": "e",
+    "itemId": "dictionary:correction:regex:ZQ"
+  },
+  {
+    "pattern": "é",
+    "itemId": "dictionary:correction:regex:ZcyB"
+  },
+  {
+    "pattern": " word ",
+    "itemId": "dictionary:correction:regex:IHdvcmQg"
+  },
+  {
+    "pattern": "word",
+    "itemId": "dictionary:correction:regex:d29yZA"
+  },
+  {
+    "pattern": "😀",
+    "itemId": "dictionary:correction:regex:8J-YgA"
+  }
+]

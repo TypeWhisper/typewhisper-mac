@@ -549,6 +549,7 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     private func makeCorrectionPipeline(
         original: String,
         replacement: String,
+        isRegex: Bool = false,
         function: String = #function
     ) throws -> (pipeline: PostProcessingPipeline, dictionaryService: DictionaryService, cleanup: () -> Void) {
         let appSupportDirectory = FileManager.default.temporaryDirectory
@@ -558,7 +559,7 @@ final class SpeechPunctuationServiceTests: XCTestCase {
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: function)!, storageKey: function)
-        dictionaryService.addEntry(type: .correction, original: original, replacement: replacement)
+        dictionaryService.addEntry(type: .correction, original: original, replacement: replacement, isRegex: isRegex)
 
         let pipeline = PostProcessingPipeline(
             snippetService: SnippetService(),
@@ -568,6 +569,49 @@ final class SpeechPunctuationServiceTests: XCTestCase {
             punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: profileStore)
         )
         return (pipeline, dictionaryService, { try? FileManager.default.removeItem(at: appSupportDirectory) })
+    }
+
+    @MainActor
+    func testRegexCorrectionsRunOnlyInFinalPassIncludingSegmentPreparation() async throws {
+        for (pattern, replacement, input, expected) in [
+            ("github", "GitHub.com", "visit github", "visit GitHub.com"),
+            (#"\bDr\b"#, "Dr.", "Dr Smith", "Dr. Smith"),
+            ("$", ".", "hello", "hello.")
+        ] {
+            let setup = try makeCorrectionPipeline(original: pattern, replacement: replacement, isRegex: true)
+            defer { setup.cleanup() }
+            let context = PostProcessingContext(language: "en")
+            let prepared = setup.pipeline.textBeforeLLMStep(
+                input, context: context, dictationContext: nil, outputFormat: nil, normalizeNumbers: false
+            )
+            XCTAssertEqual(prepared, input, pattern)
+            var llmInput: String?
+            let result = try await setup.pipeline.process(
+                text: input, context: context,
+                llmHandler: { llmInput = $0; return $0 }, normalizeNumbers: false
+            )
+            XCTAssertEqual(llmInput, prepared, pattern)
+            XCTAssertEqual(result.text, expected, pattern)
+            XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 1)
+            let direct = try await setup.pipeline.process(text: input, context: context, normalizeNumbers: false)
+            XCTAssertEqual(direct.text, expected, pattern)
+        }
+    }
+
+    @MainActor
+    func testFinalRegexPassAlsoCorrectsMatchesIntroducedByLLM() async throws {
+        let setup = try makeCorrectionPipeline(original: "github", replacement: "GitHub.com", isRegex: true)
+        defer { setup.cleanup() }
+        setup.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
+        let result = try await setup.pipeline.process(
+            text: "teh site", context: PostProcessingContext(language: "en"),
+            llmHandler: { input in
+                XCTAssertEqual(input, "the site")
+                return input + " github"
+            }, normalizeNumbers: false
+        )
+        XCTAssertEqual(result.text, "the site GitHub.com")
+        XCTAssertTrue(setup.dictionaryService.corrections.allSatisfy { $0.usageCount == 1 })
     }
 
     @MainActor

@@ -31,6 +31,7 @@ struct DictionaryEntryRow: Identifiable, Equatable {
     let original: String
     let replacement: String?
     let caseSensitive: Bool
+    let isRegex: Bool
     let isEnabled: Bool
     let source: DictionaryEntrySource
     let termBoostingLabel: String
@@ -205,6 +206,7 @@ class DictionaryViewModel: ObservableObject {
     @Published var editOriginal = ""
     @Published var editReplacement = ""
     @Published var editCaseSensitive = false
+    @Published var editIsRegex = false
     @Published var editTermBoostingMode: TermBoostingMode = .automatic
     @Published var editAdvancedCtcMinSimilarity: Double = 0.65
     @Published private(set) var lockedCorrectionReplacement: String?
@@ -378,6 +380,27 @@ class DictionaryViewModel: ObservableObject {
 
     // MARK: - Editor Actions
 
+    var editRegexError: String? {
+        guard editType == .correction, editIsRegex, !editOriginal.isEmpty else { return nil }
+        guard (try? NSRegularExpression(pattern: editOriginal)) == nil else { return nil }
+        return String(localized: "Invalid regular expression.")
+    }
+
+    var canSaveEditing: Bool {
+        !editOriginal.isEmpty && editValidationError == nil
+    }
+
+    var editValidationError: String? {
+        if let editRegexError { return editRegexError }
+        if dictionaryService.duplicateEntry(
+            type: editType, original: editOriginal, isRegex: editIsRegex,
+            excluding: isCreatingNew ? nil : selectedEntry?.id
+        ) != nil {
+            return String(localized: "An entry with this original and matching mode already exists.")
+        }
+        return nil
+    }
+
     func startCreating(type: DictionaryEntryType = .term) {
         selectedEntry = nil
         isCreatingNew = true
@@ -387,6 +410,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        editIsRegex = false
         resetTermBoostingEditor()
     }
 
@@ -406,6 +430,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = entry.original
         editReplacement = entry.replacement ?? ""
         editCaseSensitive = entry.caseSensitive
+        editIsRegex = entry.isRegex
         setTermBoostingEditor(to: entry.type == .term ? entry.ctcMinSimilarity : nil)
     }
 
@@ -422,6 +447,7 @@ class DictionaryViewModel: ObservableObject {
         editOriginal = ""
         editReplacement = ""
         editCaseSensitive = false
+        editIsRegex = false
         lockedCorrectionReplacement = nil
         resetTermBoostingEditor()
     }
@@ -431,6 +457,10 @@ class DictionaryViewModel: ObservableObject {
             error = String(localized: "Original text cannot be empty")
             return
         }
+        if let editValidationError {
+            error = editValidationError
+            return
+        }
 
         let replacement = editType == .correction
             ? (lockedCorrectionReplacement ?? editReplacement)
@@ -438,22 +468,30 @@ class DictionaryViewModel: ObservableObject {
         let ctcMinSimilarity = editType == .term ? editCtcMinSimilarity : nil
 
         if isCreatingNew {
-            dictionaryService.addEntry(
+            guard dictionaryService.addEntry(
                 type: editType,
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
+                isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
-            )
+            ) else {
+                error = String(localized: "Could not save the dictionary entry.")
+                return
+            }
             suggestTermsSettingIfNeeded(afterAdding: editType)
         } else if let entry = selectedEntry {
-            dictionaryService.updateEntry(
+            guard dictionaryService.updateEntry(
                 entry,
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
+                isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
-            )
+            ) else {
+                error = String(localized: "Could not save the dictionary entry.")
+                return
+            }
         }
 
         cancelEditing()
@@ -592,6 +630,7 @@ class DictionaryViewModel: ObservableObject {
             original: entry.original,
             replacement: entry.replacement,
             caseSensitive: entry.caseSensitive,
+            isRegex: entry.isRegex,
             isEnabled: entry.isEnabled,
             source: entry.source,
             termBoostingLabel: termBoostingLabel(for: entry.ctcMinSimilarity),
@@ -1058,7 +1097,7 @@ class DictionaryViewModel: ObservableObject {
         case .term:
             return termKey(entry.original)
         case .correction:
-            guard let replacement = entry.replacement else { return nil }
+            guard !entry.isRegex, let replacement = entry.replacement else { return nil }
             return correctionKey(original: entry.original, replacement: replacement)
         }
     }

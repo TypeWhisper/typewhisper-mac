@@ -8,6 +8,7 @@ enum DictionaryExporter {
         let original: String
         let replacement: String?
         let caseSensitive: Bool
+        let isRegex: Bool
         let isEnabled: Bool
         let ctcMinSimilarity: Float?
         let source: DictionaryEntrySource
@@ -30,6 +31,9 @@ enum DictionaryExporter {
             ]
             if let replacement = entry.replacement {
                 dict["replacement"] = replacement
+            }
+            if entry.type == .correction, entry.isRegex {
+                dict["isRegex"] = true
             }
             if entry.type == .term, let ctcMinSimilarity = entry.ctcMinSimilarity {
                 dict["ctcMinSimilarity"] = ctcMinSimilarity
@@ -87,11 +91,17 @@ enum DictionaryExporter {
                 replacement = nil
             }
 
+            let isRegex = type == .correction && (dict["isRegex"] as? Bool ?? false)
+            let caseSensitive = dict["caseSensitive"] as? Bool ?? false
+            if isRegex, (try? NSRegularExpression(pattern: original, options: caseSensitive ? [] : [.caseInsensitive])) == nil {
+                throw DictionaryImportError.invalidRegex
+            }
             return ParsedEntry(
                 type: type,
                 original: original,
                 replacement: replacement,
-                caseSensitive: dict["caseSensitive"] as? Bool ?? false,
+                caseSensitive: caseSensitive,
+                isRegex: isRegex,
                 isEnabled: dict["isEnabled"] as? Bool ?? true,
                 ctcMinSimilarity: type == .term ? parseOptionalFloat(
                     dict["ctcMinSimilarity"] ?? dict["ctc_min_similarity"]
@@ -109,7 +119,7 @@ enum DictionaryExporter {
 
         let items = parsed.map {
             (type: $0.type, original: $0.original, replacement: $0.replacement,
-             caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled,
+             caseSensitive: $0.caseSensitive, isRegex: $0.isRegex, isEnabled: $0.isEnabled,
              ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
         }
         service.importEntries(items)
@@ -136,6 +146,7 @@ enum DictionaryExporter {
 
 enum DictionaryImportError: LocalizedError {
     case invalidFormat
+    case invalidRegex
     case missingRequiredField(String)
     case emptyFile
 
@@ -143,6 +154,8 @@ enum DictionaryImportError: LocalizedError {
         switch self {
         case .invalidFormat:
             return String(localized: "The file is not a valid dictionary JSON file.")
+        case .invalidRegex:
+            return String(localized: "Invalid regular expression.")
         case .missingRequiredField(let field):
             return String(localized: "Missing required field: \(field)")
         case .emptyFile:

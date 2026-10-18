@@ -172,7 +172,7 @@ enum HistoryRetranscriptionEnvironment {
                 try Task.checkCancellation()
                 let raw = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !raw.isEmpty else { throw HistoryRetranscriptionError.emptyResult }
-                var final = dictionary.previewCorrections(to: raw)
+                var final = dictionary.previewCorrections(to: raw, includeRegex: frozenWorkflow == nil)
                 var steps = final == raw ? [] : ["Corrections"]
                 if let frozenWorkflow {
                     let beforeWorkflow = final
@@ -214,6 +214,9 @@ enum HistoryRetranscriptionEnvironment {
                         )
                     }
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
+                    let beforeCorrections = final
+                    final = dictionary.previewCorrections(to: final)
+                    if final != beforeCorrections { steps.append("Corrections") }
                 }
                 try Task.checkCancellation()
                 final = final.trimmingCharacters(in: .whitespacesAndNewlines)

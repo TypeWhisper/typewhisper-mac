@@ -303,9 +303,12 @@ final class PostProcessingPipeline {
         case -2:
             return snippetService.applySnippets(to: text, deferUsageCountSave: deferUsageCountSave)
         case -8:
+            // Regex replacements can match their own output (including zero-width matches).
+            // Apply them only in the final correction pass, also for segmented workflows.
             return dictionaryService.previewCorrections(
                 to: text,
-                appliedCorrectionIDs: &correctionUsage.provisionalIDs
+                appliedCorrectionIDs: &correctionUsage.provisionalIDs,
+                includeRegex: false
             )
         case -3:
             return dictionaryService.applyCorrections(

@@ -539,7 +539,7 @@ final class DictionaryTrainingService: ObservableObject {
         }
 
         guard let existing = dependencies.dictionaryEntries().first(where: {
-            $0.type == .correction && normalizedKey($0.original) == normalizedKey(candidate)
+            $0.type == .correction && !$0.isRegex && normalizedKey($0.original) == normalizedKey(candidate)
         }) else {
             return .available
         }

@@ -37,6 +37,7 @@ final class DictionaryEntry {
     var original: String
     var replacement: String?
     var caseSensitive: Bool
+    var isRegex: Bool = false
     var isEnabled: Bool
     var ctcMinSimilarity: Float?
     var createdAt: Date
@@ -60,6 +61,7 @@ final class DictionaryEntry {
         original: String,
         replacement: String? = nil,
         caseSensitive: Bool = false,
+        isRegex: Bool = false,
         isEnabled: Bool = true,
         ctcMinSimilarity: Float? = nil,
         source: DictionaryEntrySource = .manual,
@@ -72,6 +74,7 @@ final class DictionaryEntry {
         self.original = original
         self.replacement = replacement
         self.caseSensitive = caseSensitive
+        self.isRegex = type == .correction && isRegex
         self.isEnabled = isEnabled
         self.ctcMinSimilarity = type == .term ? ctcMinSimilarity : nil
         self.createdAt = createdAt

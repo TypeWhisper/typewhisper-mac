@@ -1,4 +1,5 @@
 import Combine
+import SwiftData
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -297,6 +298,352 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testExistingDictionaryStoreMigratesToLiteralCorrectionsWithoutLosingEntries() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let originalID = UUID()
+        try autoreleasepool {
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [DictionarySchemaBeforeRegex.DictionaryEntry.self],
+                storeName: "dictionary",
+                in: directory
+            )
+            context.insert(DictionarySchemaBeforeRegex.DictionaryEntry(id: originalID))
+            try context.save()
+        }
+
+        let service = DictionaryService(appSupportDirectory: directory)
+        let entry = try XCTUnwrap(service.entries.first)
+        XCTAssertEqual(entry.id, originalID)
+        XCTAssertFalse(entry.isRegex)
+        XCTAssertEqual(entry.usageCount, 7)
+        XCTAssertEqual(service.applyCorrections(to: "teh"), "the")
+    }
+
+    @MainActor
+    func testRegexCorrectionsMatchWindowsExamples() throws {
+        let cases: [(String, String, String, String)] = [
+            (#"\s+Doppelpunkt\b"#, ":", "Text  Doppelpunkt Beispiel", "Text: Beispiel"),
+            (#"\s+Neue Zeile\s+"#, #"\n"#, "Erste Neue Zeile Zweite", "Erste\nZweite"),
+            (#"\d{2,}"#, "#", "Code 123 und 456 Ende", "Code # und # Ende"),
+            ("new line", #"\n"#, "Hello new line.", "Hello \n."),
+            ("(command)", "$1 $&", "before command after", "before $1 $& after"),
+            ("colon", ":", "Semicolon COLON", "Semi: :"),
+            (#"\s+ähm\b"#, "", "👋 schön ähm heute", "👋 schön heute"),
+            (#"(?=x)|$"#, ".", "x", ".x.")
+        ]
+        for (pattern, replacement, input, expected) in cases {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            service.addEntry(type: .correction, original: pattern, replacement: replacement, isRegex: true)
+
+            XCTAssertEqual(service.previewCorrections(to: input), expected, pattern)
+            XCTAssertEqual(service.corrections.first?.usageCount, 0)
+            XCTAssertEqual(service.applyCorrections(to: input), expected, pattern)
+            XCTAssertEqual(service.corrections.first?.usageCount, 1)
+        }
+    }
+
+    @MainActor
+    func testRegexReplacementEscapesPreserveUnknownEscapesAndLiteralTokens() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        let replacement = #"\s\n\r\t\\n\x$1$&\"#
+        service.addEntry(type: .correction, original: "command", replacement: replacement, isRegex: true)
+
+        XCTAssertEqual(service.applyCorrections(to: "command"), " \n\r\t\\n\\x$1$&\\")
+    }
+
+    @MainActor
+    func testLiteralCorrectionsKeepRegexSyntaxAndReplacementEscapesLiteral() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: #"\s+colon\b"#, replacement: ":")
+        service.addEntry(type: .correction, original: "command", replacement: #"\n$1"#)
+
+        XCTAssertFalse(try XCTUnwrap(service.corrections.first).isRegex)
+        XCTAssertEqual(service.applyCorrections(to: "before colon command"), #"before colon \n$1"#)
+    }
+
+    @MainActor
+    func testRegexFlagCaseSensitivityAndUsagePersistAndRefreshAfterEditing() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "word[0-9]", replacement: "#", caseSensitive: true, isRegex: true)
+        let entry = try XCTUnwrap(service.corrections.first)
+
+        XCTAssertEqual(service.applyCorrections(to: ["word1 WORD2", "word3"]), ["# WORD2", "#"])
+        XCTAssertEqual(entry.usageCount, 1)
+        let reloaded = DictionaryService(appSupportDirectory: directory)
+        XCTAssertTrue(try XCTUnwrap(reloaded.corrections.first).isRegex)
+        XCTAssertEqual(reloaded.applyCorrections(to: "word4 WORD5"), "# WORD5")
+
+        service.updateEntry(entry, original: "word[0-9]", replacement: "!", caseSensitive: false, isRegex: true)
+        XCTAssertEqual(service.applyCorrections(to: "WORD6"), "!")
+        service.setEntryEnabled(entry, enabled: false)
+        XCTAssertEqual(service.applyCorrections(to: "word1"), "word1")
+        service.setEntryEnabled(entry, enabled: true)
+        service.updateEntry(entry, original: "word[0-9]", replacement: "!", caseSensitive: false, isRegex: false)
+        XCTAssertEqual(service.applyCorrections(to: "word1"), "word1")
+    }
+
+    @MainActor
+    func testFailedCorrectionEditRestoresRuntimeAndPreservesDeferredUsage() throws {
+        for wasRegex in [false, true] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            XCTAssertTrue(service.addEntry(type: .correction, original: "word", replacement: "#", caseSensitive: true, isRegex: wasRegex))
+            XCTAssertTrue(service.addEntry(type: .correction, original: "teh", replacement: "the"))
+            let entry = try XCTUnwrap(service.corrections.first { $0.original == "word" })
+            let other = try XCTUnwrap(service.corrections.first { $0.original == "teh" })
+            let viewModel = DictionaryViewModel(dictionaryService: service)
+            let previousUpdatedAt = entry.updatedAt
+            let previousOrder = service.correctionsForApplication.map(\.id)
+            let expected = service.previewCorrections(to: "word WORD word1 teh")
+            XCTAssertEqual(service.applyCorrections(to: "word teh", deferUsageCountSave: true), "# the")
+            service.updateEntrySaveOverride = { throw NSError(domain: "DictionaryEditTest", code: 1) }
+
+            viewModel.startEditing(entry)
+            viewModel.editOriginal = "changed[0-9]"
+            viewModel.editReplacement = "@"
+            viewModel.editCaseSensitive = false
+            viewModel.editIsRegex = !wasRegex
+            viewModel.saveEditing()
+
+            XCTAssertTrue(viewModel.isEditing)
+            XCTAssertEqual(entry.original, "word")
+            XCTAssertEqual(entry.replacement, "#")
+            XCTAssertTrue(entry.caseSensitive)
+            XCTAssertEqual(entry.isRegex, wasRegex)
+            XCTAssertEqual(entry.updatedAt, previousUpdatedAt)
+            XCTAssertEqual(entry.usageCount, 1)
+            XCTAssertEqual(other.usageCount, 1)
+            XCTAssertEqual(service.correctionsForApplication.map(\.id), previousOrder)
+            XCTAssertEqual(service.previewCorrections(to: "word WORD word1 teh"), expected)
+            viewModel.cancelEditing()
+            XCTAssertFalse(viewModel.isEditing)
+            XCTAssertEqual(service.previewCorrections(to: "word WORD word1 teh"), expected)
+
+            let beforeFlush = DictionaryService(appSupportDirectory: directory)
+            XCTAssertEqual(beforeFlush.previewCorrections(to: "word WORD word1 teh"), expected)
+            XCTAssertTrue(beforeFlush.corrections.allSatisfy { $0.usageCount == 0 })
+            service.saveDeferredUsageCounts()
+            let reloaded = DictionaryService(appSupportDirectory: directory)
+            let persisted = try XCTUnwrap(reloaded.corrections.first { $0.id == entry.id })
+            XCTAssertEqual(persisted.original, "word")
+            XCTAssertEqual(persisted.replacement, "#")
+            XCTAssertTrue(persisted.caseSensitive)
+            XCTAssertEqual(persisted.isRegex, wasRegex)
+            XCTAssertEqual(persisted.updatedAt, previousUpdatedAt)
+            XCTAssertTrue(reloaded.corrections.allSatisfy { $0.usageCount == 1 })
+            XCTAssertEqual(reloaded.previewCorrections(to: "word WORD word1 teh"), expected)
+
+            service.updateEntrySaveOverride = nil
+            viewModel.startEditing(entry)
+            viewModel.editOriginal = "changed[0-9]"
+            viewModel.editReplacement = "@"
+            viewModel.editCaseSensitive = false
+            viewModel.editIsRegex = !wasRegex
+            viewModel.saveEditing()
+            XCTAssertFalse(viewModel.isEditing)
+            XCTAssertEqual(entry.isRegex, !wasRegex)
+            XCTAssertEqual(service.previewCorrections(to: wasRegex ? "changed[0-9]" : "CHANGED5"), "@")
+        }
+    }
+
+    @MainActor
+    func testFailedTermEditRestoresThresholdAndMetadata() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        XCTAssertTrue(service.addEntry(type: .term, original: "Word", caseSensitive: true, ctcMinSimilarity: 0.7))
+        let entry = try XCTUnwrap(service.terms.first)
+        let previousUpdatedAt = entry.updatedAt
+        service.updateEntrySaveOverride = { throw NSError(domain: "DictionaryEditTest", code: 1) }
+
+        XCTAssertFalse(service.updateEntry(entry, original: "Changed", replacement: nil, caseSensitive: false, ctcMinSimilarity: 0.9))
+        XCTAssertEqual(entry.original, "Word")
+        XCTAssertTrue(entry.caseSensitive)
+        XCTAssertEqual(entry.ctcMinSimilarity, 0.7)
+        XCTAssertEqual(entry.updatedAt, previousUpdatedAt)
+        XCTAssertEqual(service.enabledTermHints(), [PluginDictionaryTermHint(text: "Word", ctcMinSimilarity: 0.7)])
+    }
+
+    @MainActor
+    func testInvalidAndSlowRegexCorrectionsAreSkippedWithoutPartialReplacement() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "[", replacement: "invalid", isRegex: true)
+        service.addEntry(type: .correction, original: #"ok|(a+)+$"#, replacement: "slow", isRegex: true)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        let suffix = String(repeating: "a", count: 100) + "!"
+        let input = "[ ok teh " + suffix
+        let start = ContinuousClock.now
+
+        XCTAssertEqual(service.applyCorrections(to: input), "[ ok the " + suffix)
+        XCTAssertLessThan(start.duration(to: .now), .seconds(3))
+        XCTAssertTrue(service.corrections.filter(\.isRegex).allSatisfy { $0.usageCount == 0 })
+        XCTAssertEqual(service.corrections.first { !$0.isRegex }?.usageCount, 1)
+    }
+
+    @MainActor
+    func testRegexBudgetExcludesTimeBetweenMatchesButSharesMatchingTime() {
+        var time = ContinuousClock.now
+        var budget = RegexCorrectionBudget(now: { time })
+        time += .seconds(2) // Literal corrections before the first regex.
+        XCTAssertEqual(budget.perform { deadline in
+            XCTAssertEqual(time.duration(to: deadline), .milliseconds(250))
+            time += .milliseconds(100)
+            return "first"
+        }, "first")
+        time += .seconds(2) // Literal corrections interleaved between regex rules.
+        XCTAssertEqual(budget.perform { deadline in
+            XCTAssertEqual(time.duration(to: deadline), .milliseconds(150))
+            time += .milliseconds(150)
+            return "second"
+        }, "second")
+        XCTAssertNil(budget.perform { _ in
+            XCTFail("An exhausted budget must not run another match")
+            return "unexpected"
+        })
+    }
+
+    @MainActor
+    func testRegexBudgetIsSharedAcrossRulesAndRelatedTextFields() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "ok|(a+)+$", replacement: "slow", isRegex: true)
+        service.addEntry(type: .correction, original: "(a+)+$", replacement: "slow", isRegex: true)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        let slowText = "ok teh " + String(repeating: "a", count: 100) + "!"
+        let inputs = ["ok teh"] + Array(repeating: slowText, count: 12)
+        let start = ContinuousClock.now
+        let results = service.applyCorrections(to: inputs)
+        XCTAssertLessThan(start.duration(to: .now), .seconds(1.5))
+        // The fast first field is rolled back when the same rule times out on a later field.
+        XCTAssertEqual(results, inputs.map { $0.replacingOccurrences(of: "teh", with: "the") })
+        XCTAssertTrue(service.corrections.filter(\.isRegex).allSatisfy { $0.usageCount == 0 })
+    }
+
+    @MainActor
+    func testRegexIdentityPreservesPatternCaseAndModeInEditorAndImport() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        for pattern in [#"\d"#, #"\D"#] {
+            viewModel.startCreating(type: .correction)
+            viewModel.editOriginal = pattern
+            viewModel.editReplacement = "#"
+            viewModel.editIsRegex = true
+            XCTAssertTrue(viewModel.canSaveEditing)
+            viewModel.saveEditing()
+            XCTAssertFalse(viewModel.isEditing)
+        }
+        XCTAssertEqual(service.entries.count, 2)
+        XCTAssertTrue(service.appImportSnapshot.isEmpty)
+        viewModel.startCreating(type: .correction)
+        viewModel.editOriginal = #"\d"#
+        viewModel.editIsRegex = true
+        XCTAssertFalse(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        XCTAssertTrue(viewModel.isEditing)
+        XCTAssertNotNil(viewModel.error)
+        viewModel.editIsRegex = false
+        XCTAssertTrue(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        XCTAssertEqual(service.entries.count, 3)
+        let encoded = Data(DictionaryExporter.exportJSON(service.entries).utf8)
+        let importedDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(importedDirectory) }
+        let imported = DictionaryService(appSupportDirectory: importedDirectory)
+        let parsed = try DictionaryExporter.parseJSON(encoded)
+        imported.importEntries(parsed.map {
+            (type: $0.type, original: $0.original, replacement: $0.replacement, caseSensitive: $0.caseSensitive,
+             isRegex: $0.isRegex, isEnabled: $0.isEnabled, ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
+        })
+        XCTAssertEqual(imported.entries.count, 3)
+        XCTAssertEqual(imported.entries.filter(\.isRegex).count, 2)
+    }
+
+    @MainActor
+    func testRegexEditorValidatesPatternsAndPreservesMode() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        viewModel.startCreating(type: .correction)
+        viewModel.editOriginal = "["
+        XCTAssertTrue(viewModel.canSaveEditing)
+        viewModel.editIsRegex = true
+        XCTAssertFalse(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        XCTAssertTrue(viewModel.isEditing)
+        XCTAssertTrue(service.entries.isEmpty)
+
+        viewModel.editOriginal = #"\d+"#
+        viewModel.editReplacement = "#"
+        XCTAssertTrue(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        let entry = try XCTUnwrap(service.corrections.first)
+        XCTAssertTrue(entry.isRegex)
+        viewModel.startEditing(entry)
+        XCTAssertTrue(viewModel.editIsRegex)
+        let reloadedViewModel = DictionaryViewModel(dictionaryService: service)
+        XCTAssertTrue(try XCTUnwrap(reloadedViewModel.filteredListRows.first?.entryRows.first).isRegex)
+        viewModel.editIsRegex = false
+        viewModel.saveEditing()
+        XCTAssertFalse(entry.isRegex)
+        viewModel.startCreating(type: .term)
+        XCTAssertFalse(viewModel.editIsRegex)
+    }
+
+    @MainActor
+    func testSyncRoundTripPreservesRegexAndDecodesLegacyEntriesAsLiteral() throws {
+        let sourceDirectory = try TestSupport.makeTemporaryDirectory()
+        let destinationDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            TestSupport.remove(sourceDirectory)
+            TestSupport.remove(destinationDirectory)
+        }
+        let source = DictionaryService(appSupportDirectory: sourceDirectory)
+        source.addEntry(type: .correction, original: #"\d+"#, replacement: "#", isRegex: true)
+        let data = try JSONEncoder().encode(source.userDataSyncEntries())
+        let entries = try JSONDecoder().decode([UserDataSyncDictionaryEntry].self, from: data)
+        XCTAssertTrue(try XCTUnwrap(entries.first).isRegex)
+
+        let destination = DictionaryService(appSupportDirectory: destinationDirectory)
+        try destination.applyUserDataSyncMutations(entries.map(UserDataSyncMutation.upsertDictionary))
+        XCTAssertEqual(destination.applyCorrections(to: "Code 123"), "Code #")
+
+        var legacyJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        legacyJSON[0].removeValue(forKey: "isRegex")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyJSON)
+        let legacyEntries = try JSONDecoder().decode([UserDataSyncDictionaryEntry].self, from: legacyData)
+        XCTAssertFalse(try XCTUnwrap(legacyEntries.first).isRegex)
+        XCTAssertFalse(try XCTUnwrap(legacyEntries.first).isRegexFieldPresent)
+        try destination.applyUserDataSyncMutations(legacyEntries.map(UserDataSyncMutation.upsertDictionary))
+        XCTAssertEqual(destination.applyCorrections(to: "Code 123"), "Code #")
+        XCTAssertEqual(destination.entries.count, 1)
+
+        legacyJSON[0]["isRegex"] = false
+        let literalEntries = try JSONDecoder().decode([UserDataSyncDictionaryEntry].self, from: JSONSerialization.data(withJSONObject: legacyJSON))
+        try destination.applyUserDataSyncMutations(literalEntries.map(UserDataSyncMutation.upsertDictionary))
+        XCTAssertEqual(destination.entries.count, 2)
+        try destination.applyUserDataSyncMutations([.deleteDictionary(itemID:
+            UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: #"\d+"#, isRegex: true)
+        )])
+        XCTAssertEqual(destination.applyCorrections(to: "Code 123"), "Code 123")
+    }
+
+    @MainActor
     func testDictionaryTermsCorrectionsAndLearning() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -335,6 +682,29 @@ final class DictionaryServiceTests: XCTestCase {
         service.saveDeferredUsageCounts()
 
         XCTAssertEqual(DictionaryService(appSupportDirectory: appSupportDirectory).corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
+    func testCorrectionTiesDoNotDependOnInsertionOrFetchOrder() throws {
+        let literal = DictionaryEntry(type: .correction, original: "foo", replacement: "A")
+        let regex = DictionaryEntry(type: .correction, original: "foo", replacement: "B", isRegex: true)
+        let preceding = DictionaryEntry(type: .correction, original: "bar", replacement: "foo")
+        for order in [[literal, regex, preceding], [literal, preceding, regex],
+                      [regex, literal, preceding], [regex, preceding, literal],
+                      [preceding, literal, regex], [preceding, regex, literal]] {
+            XCTAssertEqual(DictionaryService.orderedForApplication(order).map(\.id),
+                           [preceding.id, literal.id, regex.id])
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            for entry in order {
+                XCTAssertTrue(service.addEntry(type: .correction, original: entry.original,
+                                               replacement: entry.replacement, isRegex: entry.isRegex))
+            }
+            XCTAssertEqual(service.previewCorrections(to: "bar foo"), "A A")
+            XCTAssertEqual(service.applyCorrections(to: "bar foo"), "A A")
+            XCTAssertEqual(DictionaryService(appSupportDirectory: directory).applyCorrections(to: "bar foo"), "A A")
+        }
     }
 
     @MainActor
@@ -447,6 +817,7 @@ final class DictionaryServiceTests: XCTestCase {
         service.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
         service.addEntry(type: .correction, original: "claw", replacement: "claude")
         service.addEntry(type: .correction, original: "um", replacement: "")
+        service.addEntry(type: .correction, original: #"\s+new line\s+"#, replacement: #"\n"#, isRegex: true)
         service.addEntry(type: .term, original: "Disabled Term")
         let disabledTerm = try XCTUnwrap(service.terms.first { $0.original == "Disabled Term" })
         service.setEntryEnabled(disabledTerm, enabled: false)
@@ -700,6 +1071,54 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertTrue(try service.deleteAPITerm("typewhisper"))
         XCTAssertEqual(service.enabledTerms(), ["WhisperKit"])
         XCTAssertFalse(try service.deleteAPITerm("Missing"))
+    }
+
+    @MainActor
+    func testAPILiteralUnicodeCaseFoldingKeepsRegexPatternsSeparate() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        try service.upsertAPICorrection(original: "Straße", replacement: "street", caseSensitive: false)
+        let literalID = try XCTUnwrap(service.corrections.first).id
+        try service.upsertAPICorrection(original: "Straße", replacement: "regex", caseSensitive: false, isRegex: true)
+        try service.upsertAPICorrection(original: "STRASSE", replacement: "updated", caseSensitive: true)
+        XCTAssertEqual(service.corrections.count, 2)
+        XCTAssertEqual(service.corrections.first { !$0.isRegex }?.id, literalID)
+        XCTAssertEqual(service.corrections.first { !$0.isRegex }?.replacement, "updated")
+        XCTAssertTrue(try service.deleteAPICorrection(original: "straße"))
+        XCTAssertEqual(service.corrections.count, 1)
+        XCTAssertTrue(try XCTUnwrap(service.corrections.first).isRegex)
+        XCTAssertFalse(try service.deleteAPICorrection(original: "STRASSE", isRegex: true))
+        XCTAssertTrue(try service.deleteAPICorrection(original: "Straße", isRegex: true))
+    }
+
+    @MainActor
+    func testAPICorrectionsFindDisabledEntriesWithoutChangingTermsOrOtherModes() throws {
+        for isRegex in [false, true] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            service.addEntry(type: .term, original: "teh")
+            try service.upsertAPICorrection(original: "teh", replacement: "the", caseSensitive: false, isRegex: isRegex)
+            let entry = try XCTUnwrap(service.corrections.first)
+            entry.usageCount = 7
+            service.toggleEntry(entry)
+            try service.upsertAPICorrection(original: "teh", replacement: "other mode", caseSensitive: false, isRegex: !isRegex)
+
+            try service.upsertAPICorrection(original: "teh", replacement: "updated", caseSensitive: true, isRegex: isRegex)
+            XCTAssertEqual(service.entries.count, 3)
+            XCTAssertEqual(service.corrections.first { $0.isRegex == isRegex }?.id, entry.id)
+            XCTAssertEqual(entry.usageCount, 7)
+            XCTAssertEqual(entry.replacement, "updated")
+            XCTAssertTrue(entry.isEnabled)
+
+            service.toggleEntry(entry)
+            XCTAssertTrue(try service.deleteAPICorrection(original: "teh", isRegex: isRegex))
+            let reloaded = DictionaryService(appSupportDirectory: directory)
+            XCTAssertEqual(reloaded.entries.count, 2)
+            XCTAssertEqual(reloaded.terms.first?.original, "teh")
+            XCTAssertEqual(reloaded.corrections.first?.replacement, "other mode")
+        }
     }
 
     @MainActor
@@ -1317,6 +1736,34 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testTermPackCorrectionsDoNotClaimOrDeleteMatchingPersonalRegex() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let suiteName = "DictionaryPackRegex-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "swift ui", replacement: "SwiftUI", caseSensitive: true, isRegex: true)
+        let regex = try XCTUnwrap(service.corrections.first)
+        let regexID = regex.id
+        regex.usageCount = 5
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let pack = makeTermPack(id: "regex-overlap", terms: [], corrections: [TermPackCorrection(original: "swift ui", replacement: "SwiftUI")])
+        viewModel.activatePack(pack)
+        XCTAssertEqual(service.corrections.count, 2)
+        XCTAssertEqual(service.corrections.filter { !$0.isRegex }.count, 1)
+        let updated = makeTermPack(id: pack.id, terms: [], corrections: [TermPackCorrection(
+            original: "SWIFT UI", replacement: "SwiftUI", caseSensitive: false)], version: "1.1.0")
+        viewModel.updatePack(updated)
+        XCTAssertEqual(regex.original, "swift ui")
+        XCTAssertTrue(regex.caseSensitive)
+        viewModel.deactivatePack(updated)
+        XCTAssertEqual(service.corrections.map(\.id), [regexID])
+        XCTAssertTrue(try XCTUnwrap(service.corrections.first).isRegex)
+        XCTAssertEqual(service.corrections.first?.usageCount, 5)
+    }
+
+    @MainActor
     func testTermPackEntryOverridesSurviveTogglesAndUpdates() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1759,6 +2206,39 @@ final class DictionaryServiceTests: XCTestCase {
             let prefix = "Term\(index)-"
             let paddingLength = max(0, length - prefix.count)
             return prefix + String(repeating: "x", count: paddingLength)
+        }
+    }
+}
+
+/// The persisted model before regex support, to exercise real lightweight migration.
+private enum DictionarySchemaBeforeRegex {
+    @Model
+    final class DictionaryEntry {
+        var id: UUID
+        var entryType: String
+        var original: String
+        var replacement: String?
+        var caseSensitive: Bool
+        var isEnabled: Bool
+        var ctcMinSimilarity: Float?
+        var createdAt: Date
+        var updatedAt: Date?
+        var usageCount: Int
+        var sourceRawValue: String?
+
+        init(id: UUID) {
+            let now = Date()
+            self.id = id
+            entryType = "correction"
+            original = "teh"
+            replacement = "the"
+            caseSensitive = false
+            isEnabled = true
+            ctcMinSimilarity = nil
+            createdAt = now
+            updatedAt = now
+            usageCount = 7
+            sourceRawValue = "manual"
         }
     }
 }
