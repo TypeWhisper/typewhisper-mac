@@ -209,12 +209,6 @@ struct SettingsView: View {
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
         }
-        .onChange(of: homeViewModel.navigateToHistory) { _, navigate in
-            if navigate {
-                selectedTab = .history
-                homeViewModel.navigateToHistory = false
-            }
-        }
         .onChange(of: homeViewModel.navigateToStatistics) { _, navigate in
             if navigate {
                 selectedTab = .statistics

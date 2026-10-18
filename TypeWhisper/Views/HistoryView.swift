@@ -202,33 +202,44 @@ struct HistoryView: View {
             if viewModel.filteredRecords.isEmpty {
                 emptyListState
             } else {
-                List(selection: recordSelection) {
-                    ForEach(viewModel.groupedSections) { section in
-                        Section {
-                            if !viewModel.collapsedGroups.contains(section.group) {
-                                ForEach(section.records, id: \.id) { record in
-                                    HistoryRecordRow(record: record)
-                                        .tag(record.id)
-                                        .contextMenu { recordContextMenu(for: record) }
-                                        .onAppear {
-                                            guard record.id == lastVisibleRecordID else { return }
-                                            viewModel.loadMoreRecords()
-                                        }
+                ScrollViewReader { proxy in
+                    List(selection: recordSelection) {
+                        ForEach(viewModel.groupedSections) { section in
+                            Section {
+                                if !viewModel.collapsedGroups.contains(section.group) {
+                                    ForEach(section.records, id: \.id) { record in
+                                        HistoryRecordRow(record: record)
+                                            .id(record.id)
+                                            .tag(record.id)
+                                            .contextMenu { recordContextMenu(for: record) }
+                                            .onAppear {
+                                                guard record.id == lastVisibleRecordID else { return }
+                                                viewModel.loadMoreRecords()
+                                            }
+                                    }
                                 }
-                            }
-                        } header: {
-                            HistorySectionHeader(
-                                group: section.group,
-                                count: section.records.count,
-                                isCollapsed: viewModel.collapsedGroups.contains(section.group)
-                            ) {
-                                viewModel.toggleSection(section.group)
+                            } header: {
+                                HistorySectionHeader(
+                                    group: section.group,
+                                    count: section.records.count,
+                                    isCollapsed: viewModel.collapsedGroups.contains(section.group)
+                                ) {
+                                    viewModel.toggleSection(section.group)
+                                }
                             }
                         }
                     }
+                    .listStyle(.inset)
+                    .id(viewModel.queryID)
+                    .onChange(of: viewModel.recordScrollRequest, initial: true) { _, request in
+                        guard let request else { return }
+                        // Let the native list lay out newly loaded or expanded rows first.
+                        DispatchQueue.main.async {
+                            guard viewModel.recordScrollRequest == request else { return }
+                            proxy.scrollTo(request.recordID, anchor: .center)
+                        }
+                    }
                 }
-                .listStyle(.inset)
-                .id(viewModel.queryID)
             }
         }
         .navigationTitle(viewModel.navigationTitle)

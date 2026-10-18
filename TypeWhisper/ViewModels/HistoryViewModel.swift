@@ -24,6 +24,11 @@ struct HistorySection: Identifiable {
     var id: Int { group.id }
 }
 
+struct HistoryRecordScrollRequest: Equatable {
+    let id = UUID()
+    let recordID: UUID
+}
+
 enum HistoryTimeRange: Int, CaseIterable, Identifiable {
     case sevenDays, thirtyDays, ninetyDays, all
 
@@ -166,6 +171,7 @@ struct HistoryDeviceSection: Identifiable, Hashable {
 
 private enum PendingHistoryTransition: Equatable {
     case recordSelection(Set<UUID>)
+    case openRecord(UUID)
     case navigation(HistoryNavigationSelection)
     case appFilter(String?)
     case timeRange(HistoryTimeRange)
@@ -223,6 +229,7 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var isLoadingMore = false
     @Published private(set) var queryID = UUID()
     @Published private(set) var pendingDeletionIDs: Set<UUID> = []
+    @Published private(set) var recordScrollRequest: HistoryRecordScrollRequest?
 
 
     private let historyService: HistoryService
@@ -243,6 +250,8 @@ final class HistoryViewModel: ObservableObject {
     private let diffPresentationLoader: DiffPresentationLoader
     private let historyRefreshDelay: Duration
     private var queryGeneration = 0
+    private var lastRequestedSearchQuery = ""
+    private var pendingRecordToRevealID: UUID?
     /// A reload that was skipped or dropped while the draft had unsaved changes.
     private var deferredReload: (preservingLoadedRecords: Bool, resetListIdentity: Bool)?
     private var queryTask: Task<Void, Never>?
@@ -451,6 +460,16 @@ final class HistoryViewModel: ObservableObject {
     func requestRecordSelection(_ selection: Set<UUID>) {
         guard selection != selectedRecordIDs else { return }
         prepare(.recordSelection(selection))
+    }
+
+    func requestOpenRecord(withID id: UUID) {
+        guard let record = historyService.record(withID: id) else { return }
+        if selectedRecordIDs == [id], isDirty,
+           matchesCurrentNavigation(record), HistoryPostFilter(query: currentQuery).matches(record) {
+            recordScrollRequest = HistoryRecordScrollRequest(recordID: id)
+            return
+        }
+        prepare(.openRecord(id))
     }
 
     func requestAppFilter(_ bundleID: String?) {
@@ -851,20 +870,21 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private var currentQuery: HistoryQuery {
-        let sortOrder: HistoryQuery.SortOrder = switch selectedSortOrder {
+        var query = navigationQuery
+        query.searchText = searchQuery
+        query.appBundleIdentifier = selectedAppFilter
+        query.cutoffDate = selectedTimeRange.cutoffDate
+        query.sortOrder = switch selectedSortOrder {
         case .newest: .newest
         case .oldest: .oldest
         case .duration: .duration
         case .appName: .appName
         }
-        var query = HistoryQuery(
-            searchText: searchQuery,
-            appBundleIdentifier: selectedAppFilter,
-            cutoffDate: selectedTimeRange.cutoffDate,
-            collection: .all,
-            sortOrder: sortOrder
-        )
+        return query
+    }
 
+    private var navigationQuery: HistoryQuery {
+        var query = HistoryQuery()
         switch navigationSelection {
         case .smartMailbox(let scope):
             query.collection = switch scope {
@@ -907,6 +927,7 @@ final class HistoryViewModel: ObservableObject {
             limit = HistoryService.recentRecordsLimit
         }
         let query = currentQuery
+        lastRequestedSearchQuery = searchQuery
         guard query.requiresPostFiltering else {
             applyReloadedPage(
                 historyService.fetchPage(query: query, offset: 0, limit: limit),
@@ -967,14 +988,65 @@ final class HistoryViewModel: ObservableObject {
             queryID = UUID()
         }
         recomputeVisibleRecords()
+        revealPendingRecordIfLoaded()
     }
 
     private func appendPage(_ page: HistoryPage) {
         let existingIDs = Set(records.map(\.id))
-        records.append(contentsOf: page.records.filter { !existingIDs.contains($0.id) })
+        let newRecords = page.records.filter { !existingIDs.contains($0.id) }
+        records.append(contentsOf: newRecords)
+        if newRecords.isEmpty { pendingRecordToRevealID = nil }
         totalMatchingRecordCount = page.totalCount
         hasMoreRecords = page.hasMore
         recomputeVisibleRecords()
+        revealPendingRecordIfLoaded()
+    }
+
+    private func openRecord(withID id: UUID) {
+        guard let record = historyService.record(withID: id) else { return }
+        if !matchesCurrentNavigation(record) {
+            navigationSelection = .smartMailbox(.all)
+        }
+        if let selectedAppFilter, record.appBundleIdentifier != selectedAppFilter {
+            self.selectedAppFilter = nil
+        }
+        if let cutoff = selectedTimeRange.cutoffDate, record.timestamp < cutoff {
+            selectedTimeRange = .all
+        }
+        if !HistoryPostFilter(query: currentQuery).matchesSearchText(record) {
+            searchQuery = ""
+        }
+        pendingRecordToRevealID = id
+        if isActive {
+            reloadCurrentQuery(preservingLoadedRecords: true, resetListIdentity: false)
+        } else {
+            activate()
+        }
+    }
+
+    private func matchesCurrentNavigation(_ record: TranscriptionRecord) -> Bool {
+        !Self.applyCollectionScope(selectedSmartMailbox ?? .all, to: [record]).isEmpty
+            && HistoryPostFilter(query: navigationQuery).matches(record)
+    }
+
+    private func revealPendingRecordIfLoaded() {
+        guard let id = pendingRecordToRevealID else { return }
+        if let section = groupedSections.first(where: { $0.records.contains { $0.id == id } }) {
+            pendingRecordToRevealID = nil
+            collapsedGroups.remove(section.group)
+            detailViewMode = .final
+            selectedRecordIDs = [id]
+            recordScrollRequest = HistoryRecordScrollRequest(recordID: id)
+        } else if hasMoreRecords, !records.isEmpty {
+            // Continue after the current page has finished updating its loading state.
+            // A recent entry can be on a later page when History is sorted oldest first.
+            startTrackedTask { [weak self] in
+                guard let self, self.pendingRecordToRevealID == id else { return }
+                self.loadMoreRecords()
+            }
+        } else {
+            pendingRecordToRevealID = nil
+        }
     }
 
     private func refreshFacets() {
@@ -1028,7 +1100,12 @@ final class HistoryViewModel: ObservableObject {
         $searchQuery
             .dropFirst()
             .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
-            .sink { [weak self] _ in self?.reloadCurrentQuery() }
+            .sink { [weak self] query in
+                guard let self, query != self.lastRequestedSearchQuery else { return }
+                self.pendingRecordToRevealID = nil
+                self.recordScrollRequest = nil
+                self.reloadCurrentQuery()
+            }
             .store(in: &cancellables)
 
         $collapsedGroups
@@ -1077,6 +1154,8 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private func cancelPendingQueryWork() {
+        pendingRecordToRevealID = nil
+        recordScrollRequest = nil
         deferredReload = nil
         queryGeneration &+= 1
         queryTask?.cancel()
@@ -1183,10 +1262,14 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private func execute(_ transition: PendingHistoryTransition) {
+        pendingRecordToRevealID = nil
+        recordScrollRequest = nil
         switch transition {
         case .recordSelection(let selection):
             detailViewMode = .final
             selectedRecordIDs = selection
+        case .openRecord(let id):
+            openRecord(withID: id)
         case .navigation(let selection):
             navigationSelection = selection
             reloadCurrentQuery()

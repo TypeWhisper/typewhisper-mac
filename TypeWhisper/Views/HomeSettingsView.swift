@@ -7,9 +7,15 @@ struct HomeSettingsView: View {
     @ObservedObject private var license = LicenseService.shared
     @ObservedObject private var statistics = StatisticsViewModel.shared
     @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
+    @State private var copiedRecordID: UUID?
+    @State private var copyFeedbackTask: Task<Void, Never>?
 
     var body: some View {
         dashboardView
+            .onDisappear {
+                copyFeedbackTask?.cancel()
+                copiedRecordID = nil
+            }
     }
 
     private var dashboardView: some View {
@@ -196,7 +202,7 @@ struct HomeSettingsView: View {
         SettingsCard {
             VStack(alignment: .leading, spacing: 12) {
                 Button {
-                    viewModel.navigateToHistory = true
+                    ManagedAppWindowOpener.shared.open(id: "history")
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "clock.arrow.circlepath")
@@ -228,11 +234,11 @@ struct HomeSettingsView: View {
                     VStack(spacing: 0) {
                         ForEach(viewModel.recentTranscriptions, id: \.id) { record in
                             Button {
-                                viewModel.navigateToHistory = true
+                                openInHistory(record)
                             } label: {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(record.finalText)
+                                        Text(record.displayText)
                                             .lineLimit(1)
                                             .truncationMode(.tail)
                                             .font(.body)
@@ -249,6 +255,11 @@ struct HomeSettingsView: View {
                                         }
                                     }
                                     Spacer()
+                                    if copiedRecordID == record.id {
+                                        Label(String(localized: "Copied to clipboard"), systemImage: "checkmark")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                     Image(systemName: "chevron.right")
                                         .font(.caption)
                                         .foregroundStyle(.tertiary)
@@ -258,6 +269,18 @@ struct HomeSettingsView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .contextMenu {
+                                Button {
+                                    copyTranscription(record)
+                                } label: {
+                                    Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+                                }
+                                Button {
+                                    openInHistory(record)
+                                } label: {
+                                    Label(String(localized: "Open in History"), systemImage: "clock.arrow.circlepath")
+                                }
+                            }
 
                             if record.id != viewModel.recentTranscriptions.last?.id {
                                 Divider()
@@ -266,6 +289,24 @@ struct HomeSettingsView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func openInHistory(_ record: TranscriptionRecord) {
+        HistoryViewModel.shared.requestOpenRecord(withID: record.id)
+        ManagedAppWindowOpener.shared.open(id: "history")
+    }
+
+    private func copyTranscription(_ record: TranscriptionRecord) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(record.displayText, forType: .string)
+        copyFeedbackTask?.cancel()
+        copiedRecordID = record.id
+        copyFeedbackTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(2))
+                copiedRecordID = nil
+            } catch {}
         }
     }
 
