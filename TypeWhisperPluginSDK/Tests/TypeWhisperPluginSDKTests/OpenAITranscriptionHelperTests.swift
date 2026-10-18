@@ -258,15 +258,47 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
                 error: PluginTranscriptionError.apiError("HTTP \(status): \(llamaError)")
             ))
         }
-        for message in ["Failed to load audio model", "Failed to load audio configuration", "audio too short"] {
+        for message in [
+            "Failed to load audio model",
+            "Failed to load audio configuration",
+            "audio too short",
+            "Missing model parameter; example error: Failed to load image or audio file",
+            "Prompt must not contain \"Failed to load image or audio file\"",
+        ] {
             let body = try JSONSerialization.data(withJSONObject: [
                 "error": ["message": message, "type": "invalid_request_error"],
             ])
             for status in [400, 422] {
                 XCTAssertFalse(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    statusCode: status, responseData: Data(message.utf8)
+                ))
+                XCTAssertFalse(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    error: PluginTranscriptionError.apiError("HTTP \(status): \(message)")
+                ))
+                XCTAssertFalse(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                     statusCode: status, responseData: body
                 ))
                 XCTAssertFalse(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    error: PluginTranscriptionError.apiError("HTTP \(status): \(String(decoding: body, as: UTF8.self))")
+                ))
+            }
+        }
+    }
+
+    func testWavFallbackNormalizesExactLlamaCppMessages() throws {
+        for message in ["Failed to load image or audio file", " \nFAILED TO LOAD IMAGE OR AUDIO FILE\t "] {
+            let body = try JSONSerialization.data(withJSONObject: ["error": ["message": message]])
+            for status in [400, 422] {
+                XCTAssertTrue(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    statusCode: status, responseData: Data(message.utf8)
+                ))
+                XCTAssertTrue(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    error: PluginTranscriptionError.apiError("HTTP \(status): \(message)")
+                ))
+                XCTAssertTrue(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+                    statusCode: status, responseData: body
+                ))
+                XCTAssertTrue(PluginAudioUploadEncoder.shouldRetryWithWavUpload(
                     error: PluginTranscriptionError.apiError("HTTP \(status): \(String(decoding: body, as: UTF8.self))")
                 ))
             }

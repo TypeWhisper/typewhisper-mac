@@ -880,6 +880,8 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             (.auto, 403, "Failed to load image or audio file"),
             (.auto, 400, "Failed to load audio model"),
             (.auto, 422, "audio too short"),
+            (.auto, 400, "Missing model parameter; example error: Failed to load image or audio file"),
+            (.auto, 422, "Prompt must not contain 'Failed to load image or audio file'"),
             (.wav, 400, "Failed to load image or audio file"),
             (.wav, 415, "unsupported audio format"),
         ]
