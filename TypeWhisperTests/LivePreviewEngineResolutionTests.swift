@@ -94,6 +94,20 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
         )
     }
 
+    func testMatchingPreferenceDefersPreviewReadinessToWorkflowModel() {
+        for engineOverrideId: String? in [nil, "profile-engine"] {
+            XCTAssertEqual(
+                DictationViewModel.resolvePreviewEngine(
+                    preferredPreviewEngineId: engineOverrideId ?? "openai-compatible",
+                    dictationEngineOverrideId: engineOverrideId,
+                    selectedProviderId: "openai-compatible",
+                    isEngineAvailable: { _ in false }
+                ),
+                .followsDictationEngine
+            )
+        }
+    }
+
     func testPreferenceDistinctFromProfileOverrideWins() {
         XCTAssertEqual(
             DictationViewModel.resolvePreviewEngine(
@@ -104,6 +118,36 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
             ),
             .overrideEngine("speechanalyzer")
         )
+    }
+
+    func testBatchOnlyLiveEngineIsUnavailableAsSeparatePreviewEngine() {
+        let plugin = LivePreviewPolicyPlugin(isConfigured: true)
+
+        XCTAssertFalse(DictationViewModel.engineSupportsPreview(plugin))
+        XCTAssertEqual(
+            DictationViewModel.resolvePreviewEngine(
+                preferredPreviewEngineId: plugin.providerId,
+                dictationEngineOverrideId: nil,
+                selectedProviderId: "groq",
+                isEngineAvailable: { _ in DictationViewModel.engineSupportsPreview(plugin) }
+            ),
+            .previewUnavailable
+        )
+    }
+
+    func testNativeLivePreviewRemainsAvailableWhenFallbackIsDisabled() {
+        let plugin = LivePreviewPolicyPlugin(isConfigured: true)
+        plugin.supportsStreaming = true
+
+        XCTAssertTrue(DictationViewModel.engineSupportsPreview(plugin))
+    }
+
+    func testAllowedBatchPreviewAndLegacyEnginesRemainAvailable() {
+        let plugin = LivePreviewPolicyPlugin(isConfigured: true)
+        plugin.allowsTranscriptPreviewFallback = true
+
+        XCTAssertTrue(DictationViewModel.engineSupportsPreview(plugin))
+        XCTAssertTrue(DictationViewModel.engineSupportsPreview(LivePreviewReadinessPlugin(isConfigured: true)))
     }
 
     // MARK: - Ready-or-restorable predicate
@@ -377,7 +421,7 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
     }
 }
 
-private final class LivePreviewReadinessPlugin: NSObject, TranscriptionModelCatalogProviding, PluginAuthRoleStatusProviding, @unchecked Sendable {
+private class LivePreviewReadinessPlugin: NSObject, TranscriptionModelCatalogProviding, PluginAuthRoleStatusProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.live-preview-readiness"
     static let pluginName = "Live Preview Readiness Mock"
     static let defaultProviderId = "live-preview-readiness"
@@ -392,6 +436,7 @@ private final class LivePreviewReadinessPlugin: NSObject, TranscriptionModelCata
     let providerDisplayName = "Live Preview Readiness"
     let transcriptionModels: [PluginModelInfo] = []
     let supportsTranslation = false
+    var supportsStreaming = false
 
     init(
         providerId: String = defaultProviderId,
@@ -434,5 +479,18 @@ private final class LivePreviewReadinessPlugin: NSObject, TranscriptionModelCata
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "preview", detectedLanguage: language)
+    }
+}
+
+private final class LivePreviewPolicyPlugin: LivePreviewReadinessPlugin, LiveTranscriptionCapablePlugin, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
+    var allowsTranscriptPreviewFallback = false
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        throw PluginTranscriptionError.apiError("Live session unavailable")
     }
 }

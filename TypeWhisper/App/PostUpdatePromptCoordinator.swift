@@ -11,6 +11,7 @@ enum StartupSheetRoute: String, Identifiable {
 
 enum InitialWindowPresentation: Equatable {
     case setup
+    case whatsNew
     case settings
     case none
 }
@@ -19,8 +20,12 @@ enum InitialWindowPresentationPolicy {
     static func presentation(
         setupWizardRequired: Bool,
         postUpdatePromptPending: Bool,
-        iOSCompanionPromptPending: Bool = false
+        iOSCompanionPromptPending: Bool = false,
+        whatsNewPending: Bool = false
     ) -> InitialWindowPresentation {
+        if !setupWizardRequired, whatsNewPending {
+            return .whatsNew
+        }
         switch (setupWizardRequired, iOSCompanionPromptPending, postUpdatePromptPending) {
         case (true, _, _):
             return .setup

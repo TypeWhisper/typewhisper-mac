@@ -1886,6 +1886,7 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         guard HistoryRetranscriptionActivity.recordID == nil else {
             hotkeyService.cancelDictation()
             showNotchFeedback(message: HistoryRetranscriptionError.busy.localizedDescription, icon: "hourglass", duration: 2)
@@ -4348,7 +4349,11 @@ final class DictationViewModel: ObservableObject {
     /// to produce a preview — via a native live session or the batch fallback.
     func canUseEngineForPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
         guard modelManager.canPrepareForTranscription(engine) else { return false }
-        if engine is any LiveTranscriptionCapablePlugin { return true }
+        return Self.engineSupportsPreview(engine)
+    }
+
+    nonisolated static func engineSupportsPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
+        if engine is any LiveTranscriptionCapablePlugin, engine.supportsStreaming { return true }
         let allowsFallback = (engine as? any TranscriptPreviewFallbackPolicyProviding)?
             .allowsTranscriptPreviewFallback ?? true
         return allowsFallback
@@ -4376,11 +4381,13 @@ final class DictationViewModel: ObservableObject {
         guard let preferred = preferredPreviewEngineId, !preferred.isEmpty else {
             return .followsDictationEngine
         }
+        if preferred == (dictationEngineOverrideId ?? selectedProviderId) {
+            // Follow the effective dictation model, which a workflow may override
+            // even when this provider's default model cannot produce previews.
+            return .followsDictationEngine
+        }
         guard isEngineAvailable(preferred) else {
             return .previewUnavailable
-        }
-        if preferred == (dictationEngineOverrideId ?? selectedProviderId) {
-            return .followsDictationEngine
         }
         return .overrideEngine(preferred)
     }

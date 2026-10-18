@@ -539,12 +539,28 @@ final class ModelManagerService: ObservableObject {
         return loadedPlugin.manifest.requiresAPIKey == true
     }
 
-    func allowsTranscriptPreviewFallback(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
+    func allowsTranscriptPreviewFallback(
+        engineOverrideId: String? = nil,
+        selectedProviderId: String? = nil,
+        cloudModelOverride: String? = nil
+    ) -> Bool {
         guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
-        return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
+        guard let policy = plugin as? any TranscriptPreviewFallbackPolicyProviding else {
+            return true
+        }
+        guard plugin is any LiveTranscriptionCapablePlugin else {
+            // Keep batch-only engines' policy checks free of model-load side effects.
+            return policy.allowsTranscriptPreviewFallback
+        }
+
+        // A failed live session already restored the default model. Evaluate the
+        // preview policy for the model that fallback transcription would use.
+        let modelOverride = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        defer { restoreCloudModelOverride(plugin: plugin, previousId: modelOverride.restoreId) }
+        return policy.allowsTranscriptPreviewFallback
     }
 
     /// Whether the dictation engine opted in to delivering its final result through a

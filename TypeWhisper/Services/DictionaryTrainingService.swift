@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import TypeWhisperPluginSDK
 
@@ -23,6 +24,10 @@ enum DictionaryTrainingSampleState: Equatable, Sendable {
     case transcribing
     case completed
     case failed(String)
+
+    var isActive: Bool {
+        self == .preparing || self == .recording || self == .transcribing
+    }
 }
 
 enum DictionaryTrainingSampleEvaluation: Equatable, Sendable {
@@ -176,9 +181,14 @@ final class DictionaryTrainingService: ObservableObject {
     }
 
     var activeSampleID: UUID? {
-        samples.first {
-            $0.state == .preparing || $0.state == .recording || $0.state == .transcribing
-        }?.id
+        samples.first { $0.state.isActive }?.id
+    }
+
+    var activityPublisher: AnyPublisher<Bool, Never> {
+        $samples
+            .map { $0.contains { $0.state.isActive } }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 
     var canProceedToReview: Bool {
