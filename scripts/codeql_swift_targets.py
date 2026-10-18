@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Select the Xcode targets the CodeQL Swift job builds.
 
-Release tags, the nightly schedule and manual runs build every target. A pull
-request builds only what its Swift changes touch, so a plugin-only change does
-not compile the app and 52 other plugins:
+CI (release tags, the nightly schedule and manual runs) builds every target.
+For partial runs outside CI, `changed` selects only what a set of changed files
+touches, so a plugin-only change does not compile the app and 52 other plugins:
 
 - changes to the CodeQL workflow, its scripts, the Xcode project or its base
   xcconfig, a package manifest or lock file, or Plugin SDK sources (the app and every plugin call
@@ -71,7 +71,7 @@ def is_test_source(path: str) -> bool:
 
 
 def select_targets(changed_paths: list[str], plugins: list[str]) -> list[str]:
-    """Returns the targets to build for a pull request, in build order."""
+    """Returns the targets to build for a set of changed files, in build order."""
     selected: set[str] = set()
     for path in changed_paths:
         if path.startswith(FULL_BUILD_PATHS) or Path(path).name in FULL_BUILD_FILE_NAMES:

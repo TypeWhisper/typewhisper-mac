@@ -1,9 +1,15 @@
 # CodeQL Swift analysis
 
 The `Analyze (swift)` job in [`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml)
-runs on every pull request to `main` and `release/**`, on non-daily `v*` tags,
-nightly at 03:26 UTC (default branch), and on manual dispatch. Branch pushes run only
-the Actions and Python analyses. It is not a required status check.
+runs nightly at 03:26 UTC (default branch), on non-daily `v*` tags and on manual
+dispatch, and always builds every target. Pull requests and branch pushes run only the
+Actions and Python analyses. It is not a required status check.
+
+From 2026-10-11 to 2026-10-18 the job also ran on every pull request with the target
+selection below. On the Intel runner it took 27 to 83 minutes per push and used 4,120
+of the repository's 12,407 macOS runner minutes in that week, a third of the total,
+while the Build DMG jobs waited for free macOS runners. Only one Swift alert was
+opened in that week. Pull requests now rely on the nightly scan.
 
 Concurrency groups include the event type and the pull request number or full ref.
 New commits cancel earlier runs for the same pull request or branch push. Scheduled,
@@ -13,8 +19,7 @@ requests cannot cancel them.
 ## What gets built
 
 [`scripts/codeql-build-swift.sh`](../scripts/codeql-build-swift.sh) runs one traced
-`xcodebuild build` with explicit `-target` arguments. On release tags, the nightly
-schedule and manual runs it builds every target:
+`xcodebuild build` with explicit `-target` arguments. In CI it builds every target:
 
 - app targets: `TypeWhisper`, `typewhisper-cli`, `TypeWhisperICloudBridge`,
   `TypeWhisperWidgetExtension`, `TypeWhisperTranscribeAction` (and through them the
@@ -26,10 +31,11 @@ Every maintained plugin has a target of the same name in `TypeWhisper.xcodeproj`
 as `WhisperKitPlugin`, `LocalLLMPlugin`, `DeepgramPlugin` or `GoogleCloudSTTPlugin`).
 A plugin directory without that target fails the build instead of being skipped.
 
-On pull requests, [`scripts/codeql_swift_targets.py`](../scripts/codeql_swift_targets.py)
-selects targets from the files the pull request changes (merge commit against its
-first parent). Sources are Swift files plus C and Objective-C files and headers, which
-Swift sees through the bridging header:
+For partial runs outside CI, `python3 scripts/codeql_swift_targets.py changed <file>`
+selects targets from a list of changed files; `CODEQL_SWIFT_TARGETS` limits the build
+script to them and `scripts/codeql_swift_coverage.py --targets` checks only their
+areas. Sources are Swift files plus C and Objective-C files and headers, which Swift
+sees through the bridging header:
 
 | Changed files | Targets |
 | --- | --- |
@@ -38,9 +44,6 @@ Swift sees through the bridging header:
 | Sources in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
 | Sources in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
 | anything else: tests, docs, resources, `AppStore/` | none |
-
-Without selected targets the job skips the build and analysis and still succeeds, so
-the check name stays stable. Such a pull request has no Swift analysis.
 
 To print the full target list: `bash scripts/codeql-build-swift.sh --print-targets`.
 
@@ -54,10 +57,10 @@ extracted, and prints the missing files. A green build alone is not proof of cov
 tag-only Swift job reported "CodeQL scanned 32 out of 451 Swift files" for `v1.7.0`.
 
 The analysis runs with `upload: never`; the SARIF is uploaded only after the check
-passes, so a partial extraction cannot close alerts in files it skipped. The job sets
-`CODEQL_ACTION_FILE_COVERAGE_ON_PRS=true` because the CodeQL Action omits the per-file
-extraction diagnostics on pull requests by default. CodeQL extraction errors in tracked
-files are shown as warnings; they do not fail the job.
+passes, so a partial extraction cannot close alerts in files it skipped. CodeQL
+extraction errors in tracked files are shown as warnings; they do not fail the job. A
+pull request job would need `CODEQL_ACTION_FILE_COVERAGE_ON_PRS=true`: since v4.33.0
+the CodeQL Action omits the per-file extraction diagnostics on pull requests.
 
 ## Not analyzed
 
@@ -133,10 +136,8 @@ The full Intel run reported "CodeQL scanned 340 out of 504 Swift files"; the cov
 check found all 339 tracked first-party files extracted. The 504 include test files and
 other Swift files outside the analyzed areas.
 
-Which row applies depends on the pull request: changes to the workflow, the CodeQL
-scripts, the Xcode project, `CodeSigning.xcconfig`, package manifests or the SDK sources
-build everything. The Swift job timeout is 180 minutes, including pull requests
-that select every target.
+CI runs are full scans (last row). The other rows apply to partial runs with a target
+selection. The Swift job timeout is 180 minutes.
 
 The full scan of [main run 38180344636](https://github.com/TypeWhisper/typewhisper-mac/actions/runs/38180344636)
 spent 100 minutes 31 seconds building and another 14 minutes 27 seconds analyzing

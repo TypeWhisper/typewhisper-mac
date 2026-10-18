@@ -44,6 +44,38 @@ jobs:
           ruby scripts/dependency_coverage.rb check
           ruby scripts/test_dependency_coverage.rb
 
+  # Pull requests that leave the Plugin SDK package alone skip its macOS test job.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      plugin_sdk: ${{ steps.diff.outputs.plugin_sdk }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The pull request merge commit's first parent is the base branch.
+          fetch-depth: 2
+
+      - name: Detect changed areas
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          plugin_sdk=true
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            # A pathspec also catches files renamed out of the package; exit 1 means changed.
+            status=0
+            git diff --quiet HEAD^1 HEAD -- TypeWhisperPluginSDK/ .github/workflows/build.yml || status=$?
+            case "$status" in
+              0) plugin_sdk=false ;;
+              1) ;;
+              *) echo "::error::git diff failed with exit code $status"; exit "$status" ;;
+            esac
+          fi
+          echo "plugin_sdk=$plugin_sdk" | tee -a "$GITHUB_OUTPUT"
+
   release-build:
     runs-on: macos-26
     steps:
@@ -85,9 +117,17 @@ jobs:
           bash scripts/check_release_binary_instrumentation.sh --self-test
           bash scripts/check_release_signing.sh --self-test
 
+      # Pull requests build only the arm64 slice. Release branches, manual runs and
+      # the nightly release build stay universal and also compile the x86_64 slice.
       - name: Build App
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -o pipefail
+          arch_args=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            arch_args=(ARCHS=arm64)
+          fi
           xcodebuild -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
@@ -97,7 +137,8 @@ jobs:
             ENABLE_CODE_COVERAGE=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO | tee build.log
+            CODE_SIGNING_ALLOWED=NO \
+            "${arch_args[@]}" | tee build.log
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
@@ -115,10 +156,15 @@ jobs:
           echo "$VENV_DIR/bin" >> $GITHUB_PATH
 
       - name: Create DMG
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           SHORT_SHA="${GITHUB_SHA::7}"
           APP_NAME="TypeWhisper"
           DMG_NAME="TypeWhisper-${SHORT_SHA}.dmg"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            DMG_NAME="TypeWhisper-${SHORT_SHA}-arm64.dmg"
+          fi
           APP_PATH="build/Build/Products/Release/TypeWhisper.app"
           SETTINGS="${GITHUB_WORKSPACE}/.github/dmgbuild-settings.py"
           BACKGROUND="${GITHUB_WORKSPACE}/.github/dmg-background.png"
@@ -150,9 +196,10 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
-      # This job owns the cache save so the parallel release build does not race it.
-      - name: Cache Swift packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # The nightly release workflow seeds this cache on main. Caches saved here would
+      # be scoped to this pull request and unreachable for every other one.
+      - name: Restore Swift package cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/SourcePackages
           key: spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
@@ -182,6 +229,7 @@ jobs:
             -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | tee test.log
@@ -190,6 +238,8 @@ jobs:
         run: bash scripts/check_first_party_warnings.sh test.log
 
   plugin-sdk-tests:
+    needs: changes
+    if: needs.changes.outputs.plugin_sdk == 'true'
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -238,14 +288,8 @@ jobs:
       - name: Generate App Store project
         run: scripts/appstore/generate_project.sh
 
-      - name: Cache Swift packages
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/AppStoreSourcePackages
-          key: appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('appstore-project.yml', 'TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved', 'TypeWhisperPluginSDK/Package.resolved') }}
-          restore-keys: |
-            appstore-spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
-
+      # No package cache: nothing on main seeds one, so every pull request saved its
+      # own 1.2 GB copy, and builds with a cache hit were not faster.
       - name: Build App Store app (Debug, arm64, unsigned)
         run: |
           mkdir -p build
@@ -255,7 +299,6 @@ jobs:
             -configuration Debug \
             -destination 'platform=macOS,arch=arm64' \
             -derivedDataPath "$APPSTORE_DERIVED_DATA" \
-            -clonedSourcePackagesDirPath "$RUNNER_TEMP/AppStoreSourcePackages" \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
@@ -279,14 +322,20 @@ jobs:
   ci-ok:
     name: CI ok
     if: always()
-    needs: [checks, release-build, app-tests, plugin-sdk-tests, appstore]
+    needs: [checks, changes, release-build, app-tests, plugin-sdk-tests, appstore]
     runs-on: ubuntu-latest
     steps:
       - name: Require every CI job to succeed
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
-          failed="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<<"$NEEDS")"
+          # plugin-sdk-tests may be skipped only when the changes job ruled it out.
+          failed="$(jq -r '
+            (.changes.outputs.plugin_sdk == "false") as $sdk_unchanged
+            | to_entries[]
+            | select(.value.result != "success")
+            | select((.key == "plugin-sdk-tests" and .value.result == "skipped" and $sdk_unchanged) | not)
+            | "\(.key): \(.value.result)"' <<<"$NEEDS")"
           if [ -n "$failed" ]; then
             echo "::error::Not every CI job succeeded"
             printf '%s\n' "$failed"
