@@ -463,8 +463,9 @@ final class HistoryViewModel: ObservableObject {
     }
 
     func requestOpenRecord(withID id: UUID) {
-        guard historyService.record(withID: id) != nil else { return }
-        if selectedRecordIDs == [id], isDirty {
+        guard let record = historyService.record(withID: id) else { return }
+        if selectedRecordIDs == [id], isDirty,
+           matchesCurrentNavigation(record), HistoryPostFilter(query: currentQuery).matches(record) {
             recordScrollRequest = HistoryRecordScrollRequest(recordID: id)
             return
         }
@@ -869,20 +870,21 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private var currentQuery: HistoryQuery {
-        let sortOrder: HistoryQuery.SortOrder = switch selectedSortOrder {
+        var query = navigationQuery
+        query.searchText = searchQuery
+        query.appBundleIdentifier = selectedAppFilter
+        query.cutoffDate = selectedTimeRange.cutoffDate
+        query.sortOrder = switch selectedSortOrder {
         case .newest: .newest
         case .oldest: .oldest
         case .duration: .duration
         case .appName: .appName
         }
-        var query = HistoryQuery(
-            searchText: searchQuery,
-            appBundleIdentifier: selectedAppFilter,
-            cutoffDate: selectedTimeRange.cutoffDate,
-            collection: .all,
-            sortOrder: sortOrder
-        )
+        return query
+    }
 
+    private var navigationQuery: HistoryQuery {
+        var query = HistoryQuery()
         switch navigationSelection {
         case .smartMailbox(let scope):
             query.collection = switch scope {
@@ -1002,12 +1004,17 @@ final class HistoryViewModel: ObservableObject {
 
     private func openRecord(withID id: UUID) {
         guard let record = historyService.record(withID: id) else { return }
-        let matchesMailbox = !Self.applyCollectionScope(selectedSmartMailbox ?? .all, to: [record]).isEmpty
-        if !matchesMailbox || !HistoryPostFilter(query: currentQuery).matches(record) {
+        if !matchesCurrentNavigation(record) {
             navigationSelection = .smartMailbox(.all)
-            selectedAppFilter = nil
+        }
+        if let selectedAppFilter, record.appBundleIdentifier != selectedAppFilter {
+            self.selectedAppFilter = nil
+        }
+        if let cutoff = selectedTimeRange.cutoffDate, record.timestamp < cutoff {
             selectedTimeRange = .all
-            if !searchQuery.isEmpty { searchQuery = "" }
+        }
+        if !HistoryPostFilter(query: currentQuery).matchesSearchText(record) {
+            searchQuery = ""
         }
         pendingRecordToRevealID = id
         if isActive {
@@ -1015,6 +1022,11 @@ final class HistoryViewModel: ObservableObject {
         } else {
             activate()
         }
+    }
+
+    private func matchesCurrentNavigation(_ record: TranscriptionRecord) -> Bool {
+        !Self.applyCollectionScope(selectedSmartMailbox ?? .all, to: [record]).isEmpty
+            && HistoryPostFilter(query: navigationQuery).matches(record)
     }
 
     private func revealPendingRecordIfLoaded() {
