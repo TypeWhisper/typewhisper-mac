@@ -4354,6 +4354,76 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testRecoveryPreservesLocalModeChanges() async throws {
+        for recovery in [false, true] {
+            for previouslyRegex in [false, true] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let previous = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "old",
+                    updatedAt: Self.date(10), isRegex: previouslyRegex)
+                let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: previous.entryType, original: previous.original)
+                let synced = CloudFolderSyncOperation.upsertDictionary(previous, itemID: oldID, deviceId: "mac", operationId: "own-rule")
+                let peer = CloudFolderSyncOperation.upsertDictionary(previous, itemID: oldID, deviceId: "peer", operationId: "peer-republished-rule")
+                let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/peer")
+                try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+                for operation in recovery ? [peer] : [peer, synced] {
+                    var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(operation)) as? [String: Any])
+                    payload["schemaVersion"] = 1
+                    try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("\(operation.operationId).json"))
+                }
+                let regex = Self.dictionaryEntry(entryType: .correction, original: previous.original, replacement: "current",
+                    updatedAt: Self.date(20), isRegex: true)
+                let store = InMemoryUserDataSyncStore(dictionaryEntries: [regex])
+                var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
+                    exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [synced.operationId])
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                XCTAssertEqual(store.dictionaryEntries, [regex])
+                let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                    try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+                }
+                XCTAssertEqual(published.contains { $0.kind == .delete && $0.itemId == oldID }, recovery || !previouslyRegex)
+                XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.dictionary == regex })
+                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                XCTAssertEqual(repeated.operationsWritten, 0)
+                XCTAssertEqual(store.dictionaryEntries, [regex])
+            }
+        }
+    }
+
+    @MainActor
+    func testLegacyModeChangeDoesNotRestoreSupersededRule() async throws {
+        for latestIsRegex in [false, true] {
+            for unencodedID in [false, true] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let previous = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "old", updatedAt: Self.date(10), isRegex: !latestIsRegex)
+                let current = Self.dictionaryEntry(entryType: .correction, original: previous.original, replacement: "current", updatedAt: Self.date(20), isRegex: latestIsRegex)
+                let oldID = unencodedID ? #"dictionary:correction:\d"# : UserDataSyncIdentity.dictionaryItemID(entryType: previous.entryType, original: previous.original)
+                let old = CloudFolderSyncOperation.upsertDictionary(previous, itemID: oldID, deviceId: "old", operationId: "previous")
+                let newer = CloudFolderSyncOperation.upsertDictionary(current, itemID: oldID, deviceId: "old", operationId: "current")
+                let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/old")
+                try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+                for operation in [old, newer] {
+                    var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(operation)) as? [String: Any])
+                    payload["schemaVersion"] = 1
+                    try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("\(operation.operationId).json"))
+                }
+                let store = InMemoryUserDataSyncStore()
+                var state = CloudFolderSyncState(deviceId: "mac")
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                XCTAssertEqual(store.dictionaryEntries, [current])
+                XCTAssertTrue(state.appliedOperationIDs.contains(old.operationId))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                try FileManager.default.removeItem(at: remote.appendingPathComponent("current.json"))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(50))
+                XCTAssertEqual(store.dictionaryEntries, [current])
+            }
+        }
+    }
+
+    @MainActor
     func testPackageRecoveryPreservesKnownLocalDeletions() async throws {
         for kind in ["snippet", "term", "literal", "exactRegex"] {
             let folder = try TestSupport.makeTemporaryDirectory()

@@ -458,12 +458,14 @@ enum CloudFolderSyncEngine {
             let initialRecords = records(from: preparedSnapshot)
             var publicationState = stateSnapshot
             if migration.rebuildPackage {
-                // Preserve pending deletions, except old folded IDs for regex rules
-                // still present locally. Those IDs are withdrawn during migration.
+                // Only unchanged regex rules can withdraw their old folded IDs.
+                // Changed rules may have replaced literals that still need deleting.
                 for record in initialRecords.values {
                     guard let entry = record.dictionary, entry.entryType == .correction, entry.isRegex else { continue }
                     let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
-                    if publicationState.exportedItemVersions[oldID]?.hasPrefix("dictionary-v3|") != true {
+                    let version = publicationState.exportedItemVersions[oldID]
+                    let timestamp = versionString(for: entry.updatedAt)
+                    if version == timestamp || version == "dictionary-v2|\(timestamp)" {
                         publicationState.knownLocalItemIDs.remove(oldID)
                     }
                 }
@@ -944,7 +946,8 @@ enum CloudFolderSyncEngine {
         return operations.reduce(into: [:]) { result, operation in
             guard operationSchemaIsSupported(operation) else { return }
             guard operationIsValid(operation) else { return }
-            if operation.schemaVersion == 1, let entry = operation.dictionary, entry.isRegex {
+            if operation.schemaVersion == 1, operation.kind == .upsert,
+               let entry = operation.dictionary, entry.entryType == .correction {
                 let oldKey = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
                 guard legacyWinners[oldKey]?.operationId == operation.operationId else { return }
             }

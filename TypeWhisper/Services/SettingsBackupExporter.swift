@@ -689,7 +689,10 @@ enum SettingsBackupExporter {
             result.workflowsImported += 1
         }
 
-        let dictionaryItems = backup.dictionaryEntries.map {
+        let dictionaryItems = backup.dictionaryEntries.filter { entry in
+            guard entry.type == .correction, entry.isRegex == true else { return true }
+            return (try? NSRegularExpression(pattern: entry.original, options: entry.caseSensitive ? [] : [.caseInsensitive])) != nil
+        }.map {
             (type: $0.type, original: $0.original, replacement: $0.replacement,
              caseSensitive: $0.caseSensitive, isRegex: $0.isRegex ?? false, isEnabled: $0.isEnabled,
              ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
