@@ -953,6 +953,11 @@ public enum PluginAudioUploadEncoder {
 
     private static func indicatesUnsupportedAudioUpload(_ message: String) -> Bool {
         let lowercased = message.lowercased()
+        // llama.cpp uses this message when its media loader cannot decode M4A.
+        // Match the specific rejection, not generic model/configuration load failures.
+        if lowercased.contains("failed to load image or audio file") {
+            return true
+        }
         let rejectionTerms = [
             "unsupported", "not supported", "does not support", "invalid", "unrecognized", "unknown",
             "could not process", "failed to process", "corrupt",

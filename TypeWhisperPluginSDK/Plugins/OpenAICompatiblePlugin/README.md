@@ -14,6 +14,24 @@ provider-specific deployment-scoped batch transcription routes.
 The selected transcription model is included in the multipart `model` field.
 The plugin keeps Standard v1 as the default for existing profiles.
 
+## Batch upload format
+
+Each batch profile has an **Upload Format** setting:
+
+- **Auto** (default) compresses audio as M4A and falls back to WAV if encoding
+  fails or the server rejects the audio format, including llama.cpp's
+  `Failed to load image or audio file` response.
+- **WAV** sends WAV directly, without AAC encoding or an initial M4A request.
+  Use this for servers that do not accept M4A.
+
+The setting applies to batch transcription and translation on both endpoint
+styles, including requests with an API version. Long recordings still use the
+same chunking limits. Realtime transcription is unaffected.
+
+The llama.cpp fallback is implemented in the host SDK. Update the host app
+together with the plugin to receive this fix. On older hosts, select **WAV**
+to bypass the rejected M4A upload.
+
 ## Transcript previews
 
 Batch profiles submit transcription after recording stops, without repeatedly

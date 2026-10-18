@@ -64,6 +64,13 @@ enum OpenAICompatibleBatchEndpoint: String, Codable, CaseIterable, Sendable {
     case deploymentScoped = "deployment-scoped"
 }
 
+/// Per-profile audio format for batch uploads. Auto keeps compressed uploads
+/// with WAV fallback; WAV skips AAC encoding and sends WAV directly.
+enum OpenAICompatibleUploadFormat: String, Codable, CaseIterable, Sendable {
+    case auto
+    case wav
+}
+
 /// Per-profile LLM endpoint selection. Chat Completions remains the default so
 /// profiles created before Responses API support keep their existing behavior.
 enum OpenAICompatibleLLMAPI: String, Codable, CaseIterable, Sendable {
@@ -165,6 +172,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var thinkingEnabled: Bool
     var transcriptionTransportRaw: String
     var batchEndpointRaw: String
+    var uploadFormatRaw: String
     var llmAPIModeRaw: String
     var reasoningEffortRaw: String
     var serverKindRaw: String
@@ -187,6 +195,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case thinkingEnabled
         case transcriptionTransportRaw
         case batchEndpointRaw
+        case uploadFormatRaw
         case llmAPIModeRaw
         case reasoningEffortRaw
         case serverKindRaw
@@ -206,6 +215,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         thinkingEnabled: Bool = false,
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
         batchEndpointRaw: String = OpenAICompatibleBatchEndpoint.standard.rawValue,
+        uploadFormatRaw: String = OpenAICompatibleUploadFormat.auto.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
         reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue,
         serverKindRaw: String = OpenAICompatibleServerKind.generic.rawValue
@@ -223,6 +233,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.thinkingEnabled = thinkingEnabled
         self.transcriptionTransportRaw = transcriptionTransportRaw
         self.batchEndpointRaw = batchEndpointRaw
+        self.uploadFormatRaw = uploadFormatRaw
         self.llmAPIModeRaw = llmAPIModeRaw
         self.reasoningEffortRaw = reasoningEffortRaw
         self.serverKindRaw = serverKindRaw
@@ -248,6 +259,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             ?? OpenAICompatibleTranscriptTransport.auto.rawValue
         batchEndpointRaw = try container.decodeIfPresent(String.self, forKey: .batchEndpointRaw)
             ?? OpenAICompatibleBatchEndpoint.standard.rawValue
+        uploadFormatRaw = try container.decodeIfPresent(String.self, forKey: .uploadFormatRaw)
+            ?? OpenAICompatibleUploadFormat.auto.rawValue
         // Profiles saved before Responses API support always used Chat Completions.
         llmAPIModeRaw = try container.decodeIfPresent(String.self, forKey: .llmAPIModeRaw)
             ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue
@@ -279,6 +292,10 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
 
     var batchEndpoint: OpenAICompatibleBatchEndpoint {
         OpenAICompatibleBatchEndpoint(rawValue: batchEndpointRaw) ?? .standard
+    }
+
+    var uploadFormat: OpenAICompatibleUploadFormat {
+        OpenAICompatibleUploadFormat(rawValue: uploadFormatRaw) ?? .auto
     }
 
     var llmAPI: OpenAICompatibleLLMAPI {
@@ -862,6 +879,17 @@ final class OpenAICompatiblePlugin: NSObject,
         }
         let apiKey = apiKey(for: profileId) ?? ""
         if profile.apiVersion.isEmpty, profile.batchEndpoint == .standard {
+            if profile.uploadFormat == .wav {
+                return try await helper.transcribe(
+                    audio: audio,
+                    apiKey: apiKey,
+                    modelName: modelId,
+                    language: language,
+                    translate: translate,
+                    prompt: prompt,
+                    requestTimeout: Self.transcriptionRequestTimeout
+                )
+            }
             return try await helper.transcribeCompressedAudioWithWavFallback(
                 audio: audio,
                 apiKey: apiKey,
@@ -882,7 +910,7 @@ final class OpenAICompatiblePlugin: NSObject,
             audio,
             maximumChunkDuration: PluginOpenAITranscriptionHelper.maximumChunkDuration(forModel: "gpt-4o-transcribe")
         ) { chunk in
-            try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: chunk) { uploadFile in
+            let upload: (PluginAudioUploadFile) async throws -> PluginTranscriptionResult = { uploadFile in
                 try await self.performBatchTranscriptionRequest(
                     profile: profile,
                     uploadFile: uploadFile,
@@ -893,6 +921,26 @@ final class OpenAICompatiblePlugin: NSObject,
                     prompt: prompt
                 )
             }
+            switch profile.uploadFormat {
+            case .auto:
+                return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(
+                    from: chunk,
+                    operation: upload
+                )
+            case .wav:
+                let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(chunk)
+                do {
+                    return try await upload(PluginAudioUploadEncoder.wavUpload(from: uploadAudio))
+                } catch let failure as PluginAudioUploadHTTPFailure {
+                    throw failure.underlyingError
+                }
+            }
+        }
+    }
+
+    func setUploadFormat(_ format: OpenAICompatibleUploadFormat, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.uploadFormatRaw = format.rawValue
         }
     }
 
@@ -2129,6 +2177,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var chatTimeoutInput = ""
     @State private var transcriptionTransport: OpenAICompatibleTranscriptTransport = .auto
     @State private var batchEndpoint: OpenAICompatibleBatchEndpoint = .standard
+    @State private var uploadFormat: OpenAICompatibleUploadFormat = .auto
     @State private var llmAPI: OpenAICompatibleLLMAPI = .chatCompletions
     @State private var reasoningEffort: OpenAICompatibleReasoningEffort = .providerDefault
     @State private var serverKind: OpenAICompatibleServerKind = .generic
@@ -2416,6 +2465,9 @@ private struct OpenAICompatibleSettingsView: View {
             llmAPISection
             transportSection
             batchEndpointSection
+            if selectedProfile?.resolvedTranscriptionTransport() == .batch {
+                uploadFormatSection
+            }
         }
     }
 
@@ -2488,6 +2540,31 @@ private struct OpenAICompatibleSettingsView: View {
             }
 
             Text("Standard v1 uses /v1/audio/transcriptions. Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime transcription continues to use /v1/realtime.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var uploadFormatSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Upload Format", bundle: bundle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("Upload Format", selection: $uploadFormat) {
+                Text("Auto", bundle: bundle).tag(OpenAICompatibleUploadFormat.auto)
+                Text("WAV", bundle: bundle).tag(OpenAICompatibleUploadFormat.wav)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: uploadFormat) {
+                guard let selectedProfile,
+                      uploadFormat != selectedProfile.uploadFormat else { return }
+                plugin.setUploadFormat(uploadFormat, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+
+            Text("Auto compresses batch uploads as M4A and retries as WAV if needed. WAV uploads directly for servers that do not accept M4A.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -2734,6 +2811,7 @@ private struct OpenAICompatibleSettingsView: View {
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         transcriptionTransport = profile.transcriptionTransport
         batchEndpoint = profile.batchEndpoint
+        uploadFormat = profile.uploadFormat
         llmAPI = profile.llmAPI
         reasoningEffort = profile.reasoningEffort
         serverKind = profile.serverKind
