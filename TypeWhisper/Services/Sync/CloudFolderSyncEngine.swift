@@ -576,7 +576,7 @@ enum CloudFolderSyncEngine {
         for key in republishedSpeakerKeys {
             state.exportedItemVersions.removeValue(forKey: key)
         }
-        state.appliedOperationIDs.formUnion(operations.map(\.operationId))
+        state.appliedOperationIDs.formUnion(operations.filter(operationRegexIsSupported).map(\.operationId))
         state.lastSyncAt = now
 
         return CloudFolderSyncResult(
@@ -941,6 +941,9 @@ enum CloudFolderSyncEngine {
         from operations: [CloudFolderSyncOperation],
         localRecords: [String: CloudFolderSyncRecord] = [:]
     ) -> [String: CloudFolderSyncOperation] {
+        // Keep migration history readable, but reject unsupported new patterns
+        // before they can suppress a valid older correction.
+        let operations = operations.filter(operationRegexIsSupported)
         let legacyWinners = legacyWinningOperations(from: operations)
         let legacyAliases = legacyDictionaryAliases(from: operations, localRecords: localRecords)
         return operations.reduce(into: [:]) { result, operation in
@@ -968,6 +971,7 @@ enum CloudFolderSyncEngine {
                     effectiveEntry = entry.preservingRegexMode(true)
                     operation.dictionary = effectiveEntry
                 }
+                guard effectiveEntry.isRegexPatternSupported else { return }
                 operation.itemId = UserDataSyncIdentity.dictionaryItemID(
                     entryType: effectiveEntry.entryType,
                     original: effectiveEntry.original,
@@ -985,6 +989,10 @@ enum CloudFolderSyncEngine {
                 result[key] = operation
             }
         }
+    }
+
+    private static func operationRegexIsSupported(_ operation: CloudFolderSyncOperation) -> Bool {
+        operation.kind != .upsert || operation.dictionary?.isRegexPatternSupported != false
     }
 
     private static func operationSchemaIsSupported(_ operation: CloudFolderSyncOperation) -> Bool {

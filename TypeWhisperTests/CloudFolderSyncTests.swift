@@ -4354,6 +4354,62 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testIncomingUnsupportedRegexDoesNotReplaceStoredCorrections() async throws {
+        for schema in [1, 2] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let dictionary = DictionaryService(appSupportDirectory: folder)
+            dictionary.addEntry(type: .correction, original: "[", replacement: "literal")
+            let pattern = #"(?<open>a)(?<-open>b)"#
+            XCTAssertNil(try? NSRegularExpression(pattern: pattern))
+            let invalid = Self.dictionaryEntry(entryType: .correction, original: pattern, replacement: "unsupported", updatedAt: Self.date(20), isRegex: true)
+            let operation = CloudFolderSyncOperation.upsertDictionary(invalid,
+                itemID: UserDataSyncIdentity.dictionaryItemID(entryType: invalid.entryType, original: pattern, isRegex: schema == 2), deviceId: "windows")
+            let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/windows")
+            try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+            var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(operation)) as? [String: Any])
+            payload["schemaVersion"] = schema
+            try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("unsupported.json"))
+            let store = TypeWhisperUserDataSyncStore(dictionaryService: dictionary, snippetService: SnippetService(appSupportDirectory: folder))
+            var state = CloudFolderSyncState(deviceId: "mac")
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            XCTAssertEqual(dictionary.entries.count, 1)
+            XCTAssertEqual(dictionary.entries.first?.replacement, "literal")
+            XCTAssertFalse(state.appliedOperationIDs.contains(operation.operationId))
+            try dictionary.applyUserDataSyncMutations([.upsertDictionary(invalid)])
+            XCTAssertEqual(dictionary.entries.count, 1)
+        }
+    }
+
+    @MainActor
+    func testPreviouslyAppliedUnsupportedRegexDoesNotBlockUpgrade() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let entry = Self.dictionaryEntry(entryType: .correction, original: "[", replacement: "old", updatedAt: Self.date(10), isRegex: true)
+        let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+        let operation = CloudFolderSyncOperation.upsertDictionary(entry, itemID: oldID, deviceId: "old")
+        let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/old")
+        try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+        var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(operation)) as? [String: Any])
+        payload["schemaVersion"] = 1
+        try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("applied.json"))
+        let snippet = Self.snippet(trigger: ";sig", replacement: "Changed", updatedAt: Self.date(20))
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [entry], snippets: [snippet])
+        var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
+            exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [operation.operationId])
+        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+        XCTAssertEqual(store.dictionaryEntries, [entry])
+        let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+            try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+        }
+        XCTAssertTrue(published.contains { $0.snippet == snippet })
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+        XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
     func testRecoveryPreservesLocalModeChanges() async throws {
         for recovery in [false, true] {
             for previouslyRegex in [false, true] {

@@ -33,6 +33,10 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let createdAt: Date
     let updatedAt: Date
 
+    var isRegexPatternSupported: Bool {
+        !isRegex || (try? NSRegularExpression(pattern: original, options: caseSensitive ? [] : [.caseInsensitive])) != nil
+    }
+
     init(
         entryType: UserDataSyncDictionaryEntryType,
         original: String,
