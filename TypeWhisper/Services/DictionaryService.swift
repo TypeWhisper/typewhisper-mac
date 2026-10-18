@@ -739,19 +739,20 @@ final class DictionaryService: ObservableObject {
         ).first ?? text
     }
 
-    /// Orders corrections for application: longest original first, ties keep the
-    /// caller's (alphabetical) order so results stay deterministic.
+    /// Longest original first, then original UTF-8 bytes. Identical originals
+    /// apply literal rules before regex rules, independent of fetch order.
     static func orderedForApplication(_ entries: [DictionaryEntry]) -> [DictionaryEntry] {
-        entries.enumerated()
-            .sorted { lhs, rhs in
-                let lhsLength = lhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
-                let rhsLength = rhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
-                if lhsLength != rhsLength {
-                    return lhsLength > rhsLength
-                }
-                return lhs.offset < rhs.offset
+        entries.sorted { lhs, rhs in
+            let lhsLength = lhs.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+            let rhsLength = rhs.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+            if lhsLength != rhsLength {
+                return lhsLength > rhsLength
             }
-            .map(\.element)
+            if !lhs.original.utf8.elementsEqual(rhs.original.utf8) {
+                return lhs.original.utf8.lexicographicallyPrecedes(rhs.original.utf8)
+            }
+            return !lhs.isRegex && rhs.isRegex
+        }
     }
 
     /// Spellings that LLM post-processing must preserve: enabled terms plus the target

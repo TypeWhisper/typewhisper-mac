@@ -186,6 +186,8 @@ final class SettingsBackupExporterTests: XCTestCase {
             ["type": "correction", "original": "[", "replacement": "literal", "caseSensitive": false, "isEnabled": true, "source": "manual"],
             ["type": "term", "original": "[", "isRegex": true, "caseSensitive": false, "isEnabled": true, "source": "manual"],
             ["type": "correction", "original": #"\d+"#, "replacement": "#", "isRegex": true, "caseSensitive": false, "isEnabled": true, "source": "manual"],
+            ["type": "correction", "original": " ", "replacement": "-", "isRegex": true, "caseSensitive": false, "isEnabled": true, "source": "manual"],
+            ["type": "correction", "original": "", "replacement": "broken", "isRegex": true, "caseSensitive": false, "isEnabled": true, "source": "manual"],
             ["type": "correction", "original": "(", "replacement": "broken", "isRegex": true, "caseSensitive": false, "isEnabled": true, "source": "manual"],
             ["type": "correction", "original": "[", "replacement": "broken", "isRegex": true, "caseSensitive": true, "isEnabled": false, "source": "manual"]
         ]
@@ -194,14 +196,15 @@ final class SettingsBackupExporterTests: XCTestCase {
             let destination = try makeFixture()
             defer { teardown(destination) }
             let result = await importBackup(backup, into: destination, mode: mode)
-            XCTAssertEqual(result.dictionaryImported, 3)
-            XCTAssertEqual(result.dictionarySkipped, 2)
+            XCTAssertEqual(result.dictionaryImported, 4)
+            XCTAssertEqual(result.dictionarySkipped, 3)
             XCTAssertEqual(destination.dictionaryService.applyCorrections(to: "123"), "#")
-            XCTAssertEqual(destination.dictionaryService.entries.filter(\.isRegex).count, 1)
-            XCTAssertEqual(DictionaryService(appSupportDirectory: destination.dir).entries.count, 3)
+            XCTAssertEqual(destination.dictionaryService.applyCorrections(to: "a b"), "a-b")
+            XCTAssertEqual(destination.dictionaryService.entries.filter(\.isRegex).count, 2)
+            XCTAssertEqual(DictionaryService(appSupportDirectory: destination.dir).entries.count, 4)
             let repeated = await importBackup(backup, into: destination, mode: mode)
             XCTAssertEqual(repeated.dictionaryImported, 0)
-            XCTAssertEqual(repeated.dictionarySkipped, 5)
+            XCTAssertEqual(repeated.dictionarySkipped, 7)
         }
     }
 

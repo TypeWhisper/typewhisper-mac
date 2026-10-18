@@ -602,6 +602,29 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCorrectionTiesDoNotDependOnInsertionOrFetchOrder() throws {
+        let literal = DictionaryEntry(type: .correction, original: "foo", replacement: "A")
+        let regex = DictionaryEntry(type: .correction, original: "foo", replacement: "B", isRegex: true)
+        let preceding = DictionaryEntry(type: .correction, original: "bar", replacement: "foo")
+        for order in [[literal, regex, preceding], [literal, preceding, regex],
+                      [regex, literal, preceding], [regex, preceding, literal],
+                      [preceding, literal, regex], [preceding, regex, literal]] {
+            XCTAssertEqual(DictionaryService.orderedForApplication(order).map(\.id),
+                           [preceding.id, literal.id, regex.id])
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            for entry in order {
+                XCTAssertTrue(service.addEntry(type: .correction, original: entry.original,
+                                               replacement: entry.replacement, isRegex: entry.isRegex))
+            }
+            XCTAssertEqual(service.previewCorrections(to: "bar foo"), "A A")
+            XCTAssertEqual(service.applyCorrections(to: "bar foo"), "A A")
+            XCTAssertEqual(DictionaryService(appSupportDirectory: directory).applyCorrections(to: "bar foo"), "A A")
+        }
+    }
+
+    @MainActor
     func testLongerCorrectionOriginalsApplyBeforeShorterPrefixes() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
