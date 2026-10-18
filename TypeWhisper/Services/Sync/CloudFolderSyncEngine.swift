@@ -875,6 +875,17 @@ enum CloudFolderSyncEngine {
         return legacyAliases
     }
 
+    private static func legacyItemID(_ itemID: String, aliases: [String: String]) -> String {
+        if let canonical = aliases[itemID] { return canonical }
+        // A v1 Base64URL suffix cannot contain a colon. In schema 1 this tag is
+        // part of a raw literal, never an exact-pattern v2 identity.
+        guard itemID.hasPrefix(UserDataSyncIdentity.regexCorrectionPrefix) else { return itemID }
+        return UserDataSyncIdentity.dictionaryItemID(
+            entryType: UserDataSyncDictionaryEntryType.correction,
+            original: String(itemID.dropFirst("dictionary:correction:".count))
+        )
+    }
+
     private static func legacyWinningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
         // Resolve the old namespace before migrating regex upserts. Otherwise an old
         // tombstone or a renamed pattern would resurrect superseded v1 regex records.
@@ -883,7 +894,7 @@ enum CloudFolderSyncEngine {
             .reduce(into: [String: CloudFolderSyncOperation]()) { result, operation in
                 let key = operation.dictionary.map {
                     UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original)
-                } ?? legacyAliases[operation.itemId] ?? operation.itemId
+                } ?? legacyItemID(operation.itemId, aliases: legacyAliases)
                 if let existing = result[key], !prefers(operation, over: existing) { return }
                 result[key] = operation
             }
@@ -956,8 +967,8 @@ enum CloudFolderSyncEngine {
             }
             var operation = operation
             if operation.schemaVersion == 1, operation.collection == .dictionary, operation.kind == .delete,
-               localRecords[operation.itemId] == nil, let canonicalID = legacyAliases[operation.itemId] {
-                operation.itemId = canonicalID
+               operation.itemId.hasPrefix(UserDataSyncIdentity.regexCorrectionPrefix) || localRecords[operation.itemId] == nil {
+                operation.itemId = legacyItemID(operation.itemId, aliases: legacyAliases)
             }
             if operation.kind == .upsert, let entry = operation.dictionary {
                 var effectiveEntry = entry

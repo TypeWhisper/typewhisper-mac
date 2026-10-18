@@ -4876,6 +4876,81 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testSchemaOneRawRegexPrefixTombstoneNeverDeletesSchemaTwoRegex() async throws {
+        for hasLocalEntries in [false, true] {
+            for hasLegacyUpsert in [false, true] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let regex = Self.dictionaryEntry(entryType: .correction, original: #"\d+"#, replacement: "regex", updatedAt: Self.date(20), isRegex: true)
+                let regexID = UserDataSyncIdentity.dictionaryItemID(entryType: regex.entryType, original: regex.original, isRegex: true)
+                let literal = Self.dictionaryEntry(entryType: .correction, original: String(regexID.dropFirst("dictionary:correction:".count)), replacement: "literal", updatedAt: Self.date(10))
+                let directory = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/legacy")
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                if hasLegacyUpsert {
+                    let upsert = CloudFolderSyncOperation.upsertDictionary(literal, itemID: regexID, deviceId: "legacy", operationId: "raw-literal")
+                    try Self.entitlementEncoder.encode(upsert).write(to: directory.appendingPathComponent("literal.json"))
+                }
+                let deletion = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: regexID, deviceId: "legacy", deletedAt: Self.date(30))
+                var raw = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(deletion)) as? [String: Any])
+                raw["schemaVersion"] = 1
+                try JSONSerialization.data(withJSONObject: raw).write(to: directory.appendingPathComponent("delete-literal.json"))
+                let upsert = CloudFolderSyncOperation.upsertDictionary(regex, itemID: regexID, deviceId: "modern")
+                try Self.entitlementEncoder.encode(upsert).write(to: directory.appendingPathComponent("regex.json"))
+                let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntries ? [literal, regex] : [])
+                var state = CloudFolderSyncState(deviceId: "mac")
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
+                XCTAssertEqual(store.dictionaryEntries, [regex])
+                // A first-time exporter can still publish its deleted local literal's
+                // tombstone on the next sync. Check that publication then settles.
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(42))
+                XCTAssertEqual(repeated.operationsWritten, 0)
+                let newcomer = InMemoryUserDataSyncStore()
+                var newcomerState = CloudFolderSyncState(deviceId: "newcomer")
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, entitlements: entitlement, now: Self.date(45))
+                XCTAssertEqual(newcomer.dictionaryEntries, [regex])
+                let exactDelete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: regexID, deviceId: "modern", deletedAt: Self.date(50))
+                try Self.entitlementEncoder.encode(exactDelete).write(to: directory.appendingPathComponent("delete-regex.json"))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(60))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, entitlements: entitlement, now: Self.date(65))
+                XCTAssertTrue(store.dictionaryEntries.isEmpty)
+                XCTAssertTrue(newcomer.dictionaryEntries.isEmpty)
+                let afterDeletion = InMemoryUserDataSyncStore()
+                var afterDeletionState = CloudFolderSyncState(deviceId: "after-deletion")
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: afterDeletion, state: &afterDeletionState, entitlements: entitlement, now: Self.date(70))
+                XCTAssertTrue(afterDeletion.dictionaryEntries.isEmpty)
+            }
+        }
+    }
+
+    @MainActor
+    func testSupersededUppercaseLegacyUpsertsStillSupplyDeletionAliases() async throws {
+        for entryType in [UserDataSyncDictionaryEntryType.correction, .term] {
+            for hasLocalEntry in [false, true] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let entry = Self.dictionaryEntry(entryType: entryType, original: "TEH", replacement: entryType == .correction ? "the" : nil, updatedAt: Self.date(10))
+                let rawID = "dictionary:\(entryType.rawValue):TEH"
+                let upsert = CloudFolderSyncOperation.upsertDictionary(entry, itemID: rawID, deviceId: "legacy", operationId: "uppercase-upsert")
+                try Self.writeLegacyOperation(upsert, to: folder)
+                let deletion = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: rawID, deviceId: "legacy", deletedAt: Self.date(20))
+                let deletionURL = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/legacy/delete.json")
+                try Self.entitlementEncoder.encode(deletion).write(to: deletionURL)
+                let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntry ? [entry] : [])
+                var state = CloudFolderSyncState(deviceId: "mac")
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                XCTAssertTrue(store.dictionaryEntries.isEmpty)
+                XCTAssertTrue(state.appliedOperationIDs.contains(upsert.operationId))
+                try FileManager.default.removeItem(at: deletionURL)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                XCTAssertTrue(store.dictionaryEntries.isEmpty)
+            }
+        }
+    }
+
+    @MainActor
     func testUnencodedLegacyLiteralTombstonesDoNotResurrectEntries() async throws {
         for entryType in [UserDataSyncDictionaryEntryType.correction, .term] {
             for hasLocalEntry in [false, true] {
