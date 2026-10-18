@@ -4310,6 +4310,26 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testUnencodedLegacyUpdatePreservesModeWithoutStealingCoexistingLiteral() async throws {
+        for hasLiteral in [false, true] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let regex = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "regex", updatedAt: Self.date(10), isRegex: true)
+            let literal = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "literal", updatedAt: Self.date(10))
+            let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLiteral ? [regex, literal] : [regex])
+            let legacyEntry = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "updated", updatedAt: Self.date(20), isRegexFieldPresent: false)
+            let operation = CloudFolderSyncOperation.upsertDictionary(legacyEntry, itemID: #"dictionary:correction:\d"#, deviceId: "legacy")
+            try Self.writeLegacyOperation(operation, to: folder)
+            var state = CloudFolderSyncState(deviceId: "mac")
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                entitlements: PaidEntitlements(canUseCloudFolderSync: true), now: Self.date(30))
+            XCTAssertEqual(store.dictionaryEntries.count, hasLiteral ? 2 : 1)
+            XCTAssertEqual(store.dictionaryEntries.first { $0.isRegex }?.replacement, hasLiteral ? "regex" : "updated")
+            if hasLiteral { XCTAssertEqual(store.dictionaryEntries.first { !$0.isRegex }?.replacement, "updated") }
+        }
+    }
+
+    @MainActor
     func testLegacyRegexModeIsPreservedAndRepublishedOnce() async throws {
         let folder = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(folder) }
@@ -4331,6 +4351,82 @@ final class CloudFolderSyncTests: XCTestCase {
         let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
         XCTAssertEqual(republish.operationsWritten, 1)
         XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
+    func testLiteralToRegexBeforeFirstUpgradeSyncDeletesTheOldLiteral() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let entry = Self.dictionaryEntry(entryType: .correction, original: "foo", replacement: "bar", updatedAt: Self.date(10))
+        let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+        let legacy = CloudFolderSyncOperation.upsertDictionary(entry, itemID: oldID, deviceId: "legacy", operationId: "old-literal")
+        try Self.writeLegacyOperation(legacy, to: folder)
+        func oldState(_ device: String) -> CloudFolderSyncState {
+            CloudFolderSyncState(deviceId: device, knownLocalItemIDs: [oldID],
+                exportedItemVersions: [oldID: "dictionary-v2|1700000010000"], appliedOperationIDs: [legacy.operationId])
+        }
+        var a = oldState("a")
+        var b = oldState("b")
+        let first = InMemoryUserDataSyncStore(dictionaryEntries: [entry])
+        let changed = InMemoryUserDataSyncStore(dictionaryEntries: [Self.dictionaryEntry(
+            entryType: .correction, original: "foo", replacement: "bar", updatedAt: Self.date(20), isRegex: true)])
+        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(30))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: changed, state: &b, entitlements: entitlement, now: Self.date(40))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+        for store in [first, changed] {
+            XCTAssertEqual(store.dictionaryEntries.count, 1)
+            XCTAssertTrue(try XCTUnwrap(store.dictionaryEntries.first).isRegex)
+        }
+        let published = try Self.operationFiles(folder: folder, deviceId: "b").map {
+            try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+        }
+        XCTAssertTrue(published.contains { $0.kind == .delete && $0.itemId == oldID && $0.schemaVersion == 1 })
+    }
+
+    @MainActor
+    func testRemovingRegexBeforeFirstUpgradeSyncDeletesItsMigratedIdentity() async throws {
+        for (renamePattern, laterLegacyDelete, convertToLiteral) in [(false, false, false), (true, false, false), (false, true, false), (false, false, true)] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+            let entry = try XCTUnwrap(legacy.dictionary)
+            try Self.writeLegacyOperation(legacy, to: folder)
+            func oldState(_ device: String) -> CloudFolderSyncState {
+                CloudFolderSyncState(deviceId: device, knownLocalItemIDs: [legacy.itemId],
+                    exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"], appliedOperationIDs: [legacy.operationId])
+            }
+            var a = oldState("a")
+            var b = oldState("b")
+            let first = InMemoryUserDataSyncStore(dictionaryEntries: [entry])
+            let removed = InMemoryUserDataSyncStore(dictionaryEntries: renamePattern ? [Self.dictionaryEntry(
+                entryType: .correction, original: #"\D+"#, replacement: "#", updatedAt: Self.date(35), isRegex: true)]
+                : convertToLiteral ? [Self.dictionaryEntry(entryType: .correction, original: entry.original,
+                    replacement: entry.replacement, updatedAt: Self.date(35))] : [])
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(30))
+            if laterLegacyDelete {
+                let deletion = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: legacy.itemId, deviceId: "old-peer", deletedAt: Self.date(35))
+                let path = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/\(legacy.deviceId)/other-delete.json")
+                try Self.entitlementEncoder.encode(deletion).write(to: path)
+            }
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, entitlements: entitlement, now: Self.date(40))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+            for store in [first, removed] {
+                XCTAssertFalse(store.dictionaryEntries.contains { $0.isRegex && $0.original == entry.original })
+                XCTAssertEqual(store.dictionaryEntries.count, renamePattern || convertToLiteral ? 1 : 0)
+                if renamePattern { XCTAssertEqual(store.dictionaryEntries.first?.original, #"\D+"#) }
+                if convertToLiteral { XCTAssertFalse(try XCTUnwrap(store.dictionaryEntries.first).isRegex) }
+            }
+            let rawID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: true)
+            let published = try Self.operationFiles(folder: folder, deviceId: "b").map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            XCTAssertEqual(published.contains { $0.kind == .delete && $0.itemId == legacy.itemId && $0.schemaVersion == 1 }, !convertToLiteral)
+            XCTAssertTrue(published.contains { $0.kind == .delete && $0.itemId == rawID && $0.schemaVersion == 2 })
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, entitlements: entitlement, now: Self.date(60))
+            XCTAssertEqual(repeated.operationsWritten, 0)
+        }
     }
 
     @MainActor

@@ -1478,7 +1478,7 @@ final class DictionaryService: ObservableObject {
             throw DictionaryServiceMutationError.unavailable
         }
 
-        if let entry = duplicateEntry(type: .correction, original: original, isRegex: isRegex) {
+        if let entry = apiCorrection(original: original, isRegex: isRegex) {
             entry.original = original
             entry.replacement = replacement
             entry.caseSensitive = caseSensitive
@@ -1516,7 +1516,7 @@ final class DictionaryService: ObservableObject {
             throw DictionaryServiceMutationError.unavailable
         }
 
-        guard let entry = duplicateEntry(type: .correction, original: original, isRegex: isRegex) else {
+        guard let entry = apiCorrection(original: original, isRegex: isRegex) else {
             return false
         }
 
@@ -1529,6 +1529,15 @@ final class DictionaryService: ObservableObject {
         } catch {
             logger.error("Failed to delete correction: \(error.localizedDescription)")
             throw DictionaryServiceMutationError.saveFailed(error)
+        }
+    }
+
+    private func apiCorrection(original: String, isRegex: Bool) -> DictionaryEntry? {
+        corrections.first { entry in
+            guard entry.isRegex == isRegex else { return false }
+            // Preserve the API's Unicode case folding for literals; regex identity is exact.
+            return isRegex ? entry.original.utf8.elementsEqual(original.utf8)
+                : entry.original.caseInsensitiveCompare(original) == .orderedSame
         }
     }
 

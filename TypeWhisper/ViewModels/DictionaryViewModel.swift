@@ -1097,7 +1097,7 @@ class DictionaryViewModel: ObservableObject {
         case .term:
             return termKey(entry.original)
         case .correction:
-            guard let replacement = entry.replacement else { return nil }
+            guard !entry.isRegex, let replacement = entry.replacement else { return nil }
             return correctionKey(original: entry.original, replacement: replacement)
         }
     }

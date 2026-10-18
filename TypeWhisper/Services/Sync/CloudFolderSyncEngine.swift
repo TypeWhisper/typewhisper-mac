@@ -456,6 +456,7 @@ enum CloudFolderSyncEngine {
                 records: initialRecords.filter { !withheldKeys.contains($0.key) },
                 deletedHistoryRecords: preparedSnapshot.deletedHistoryRecords,
                 state: stateSnapshot,
+                legacyRegexItemIDs: legacyRegexItemIDs(from: legacyOperations, state: stateSnapshot),
                 now: now
             )
             try write(localOperations, to: deviceOperationsURL, now: now)
@@ -824,10 +825,7 @@ enum CloudFolderSyncEngine {
         return record.itemID
     }
 
-    static func winningOperations(
-        from operations: [CloudFolderSyncOperation],
-        localRecords: [String: CloudFolderSyncRecord] = [:]
-    ) -> [String: CloudFolderSyncOperation] {
+    private static func legacyWinningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
         // Resolve the old namespace before migrating regex upserts. Otherwise an old
         // tombstone or a renamed pattern would resurrect superseded v1 regex records.
         var legacyAliases: [String: String] = [:]
@@ -837,7 +835,7 @@ enum CloudFolderSyncEngine {
             legacyAliases[operation.itemId] = key
             legacyAliases["dictionary:correction:\(UserDataSyncIdentity.normalizedKey(entry.original))"] = key
         }
-        let legacyWinners = operations.filter { $0.schemaVersion == 1 && operationIsValid($0) }
+        return operations.filter { $0.schemaVersion == 1 && operationIsValid($0) }
             .reduce(into: [String: CloudFolderSyncOperation]()) { result, operation in
                 let key = operation.dictionary.map {
                     UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original)
@@ -845,6 +843,28 @@ enum CloudFolderSyncEngine {
                 if let existing = result[key], !prefers(operation, over: existing) { return }
                 result[key] = operation
             }
+    }
+
+    /// Recover the identity this device last synced, before any local deletion or mode
+    /// change. Unseen remote edits must not change which exact pattern that deletion targets.
+    private static func legacyRegexItemIDs(
+        from operations: [CloudFolderSyncOperation], state: CloudFolderSyncState
+    ) -> [String: String] {
+        let known = legacyWinningOperations(from: operations.filter { state.appliedOperationIDs.contains($0.operationId) })
+        return known.filter {
+            state.knownLocalItemIDs.contains($0.key) && state.exportedItemVersions[$0.key]?.hasPrefix("dictionary-v3|") != true
+        }.compactMapValues { operation in
+            guard operation.kind == .upsert, let entry = operation.dictionary,
+                  entry.entryType == .correction, entry.isRegex else { return nil }
+            return UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: true)
+        }
+    }
+
+    static func winningOperations(
+        from operations: [CloudFolderSyncOperation],
+        localRecords: [String: CloudFolderSyncRecord] = [:]
+    ) -> [String: CloudFolderSyncOperation] {
+        let legacyWinners = legacyWinningOperations(from: operations)
         return operations.reduce(into: [:]) { result, operation in
             guard operationSchemaIsSupported(operation) else { return }
             guard operationIsValid(operation) else { return }
@@ -857,7 +877,8 @@ enum CloudFolderSyncEngine {
                 var effectiveEntry = entry
                 // An old peer may omit the mode of a regex entry it previously received.
                 // Only recover an exact pattern, and never steal an existing literal entry.
-                if !entry.isRegexFieldPresent, localRecords[operation.itemId] == nil,
+                if !entry.isRegexFieldPresent,
+                   localRecords[UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)] == nil,
                    localRecords.values.contains(where: {
                        $0.dictionary?.isRegex == true && $0.dictionary?.original.utf8.elementsEqual(entry.original.utf8) == true
                    }) {
@@ -899,6 +920,7 @@ enum CloudFolderSyncEngine {
         records: [String: CloudFolderSyncRecord],
         deletedHistoryRecords: [UserDataSyncHistoryDeletion],
         state: CloudFolderSyncState,
+        legacyRegexItemIDs: [String: String],
         now: Date
     ) -> [CloudFolderSyncOperation] {
         var operations: [CloudFolderSyncOperation] = []
@@ -924,17 +946,20 @@ enum CloudFolderSyncEngine {
             }
         }
 
+        // A rule removed before its first upgraded sync has no v2 key in local state.
+        // Delete that exact identity too, including a switch back to a literal at the old ID.
+        for (_, regexID) in legacyRegexItemIDs.sorted(by: { $0.key < $1.key })
+        where records[regexID] == nil && !state.knownLocalItemIDs.contains(regexID) {
+            operations.append(.delete(collection: .dictionary, itemID: regexID, deviceId: state.deviceId, deletedAt: now))
+        }
+
         let deletedItemIDs = state.knownLocalItemIDs
             .subtracting(records.keys)
             .filter { !$0.hasPrefix("history:") }
         for itemID in deletedItemIDs.sorted() {
-            // Withdraw only a pre-v3 identity, without deleting the old peer's rule.
-            // Literal entries created after migration still emit normal tombstones.
-            if state.exportedItemVersions[itemID]?.hasPrefix("dictionary-v3|") != true,
-               records.values.contains(where: {
-                   guard let entry = $0.dictionary, entry.isRegex else { return false }
-                   return UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original) == itemID
-               }) { continue }
+            // Only a known regex that still exists under its exact ID is a migration.
+            // A literal-to-regex edit must still delete the old literal on other devices.
+            if let regexID = legacyRegexItemIDs[itemID], records[regexID] != nil { continue }
             let collection: UserDataSyncCollection = itemID.hasPrefix("snippet:") ? .snippets : .dictionary
             operations.append(.delete(collection: collection, itemID: itemID, deviceId: state.deviceId, deletedAt: now))
         }

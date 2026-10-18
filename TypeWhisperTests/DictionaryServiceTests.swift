@@ -968,6 +968,25 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAPILiteralUnicodeCaseFoldingKeepsRegexPatternsSeparate() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        try service.upsertAPICorrection(original: "Straße", replacement: "street", caseSensitive: false)
+        let literalID = try XCTUnwrap(service.corrections.first).id
+        try service.upsertAPICorrection(original: "Straße", replacement: "regex", caseSensitive: false, isRegex: true)
+        try service.upsertAPICorrection(original: "STRASSE", replacement: "updated", caseSensitive: true)
+        XCTAssertEqual(service.corrections.count, 2)
+        XCTAssertEqual(service.corrections.first { !$0.isRegex }?.id, literalID)
+        XCTAssertEqual(service.corrections.first { !$0.isRegex }?.replacement, "updated")
+        XCTAssertTrue(try service.deleteAPICorrection(original: "straße"))
+        XCTAssertEqual(service.corrections.count, 1)
+        XCTAssertTrue(try XCTUnwrap(service.corrections.first).isRegex)
+        XCTAssertFalse(try service.deleteAPICorrection(original: "STRASSE", isRegex: true))
+        XCTAssertTrue(try service.deleteAPICorrection(original: "Straße", isRegex: true))
+    }
+
+    @MainActor
     func testAPICorrectionHelpersUpsertCaseInsensitiveAndPreserveUsageCount() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -1579,6 +1598,34 @@ final class DictionaryServiceTests: XCTestCase {
             viewModel.termBoostingLabel(for: service.entries.first { $0.original == "Tokio" }?.ctcMinSimilarity),
             DictionaryViewModel.TermBoostingMode.precise.displayName
         )
+    }
+
+    @MainActor
+    func testTermPackCorrectionsDoNotClaimOrDeleteMatchingPersonalRegex() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let suiteName = "DictionaryPackRegex-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "swift ui", replacement: "SwiftUI", caseSensitive: true, isRegex: true)
+        let regex = try XCTUnwrap(service.corrections.first)
+        let regexID = regex.id
+        regex.usageCount = 5
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let pack = makeTermPack(id: "regex-overlap", terms: [], corrections: [TermPackCorrection(original: "swift ui", replacement: "SwiftUI")])
+        viewModel.activatePack(pack)
+        XCTAssertEqual(service.corrections.count, 2)
+        XCTAssertEqual(service.corrections.filter { !$0.isRegex }.count, 1)
+        let updated = makeTermPack(id: pack.id, terms: [], corrections: [TermPackCorrection(
+            original: "SWIFT UI", replacement: "SwiftUI", caseSensitive: false)], version: "1.1.0")
+        viewModel.updatePack(updated)
+        XCTAssertEqual(regex.original, "swift ui")
+        XCTAssertTrue(regex.caseSensitive)
+        viewModel.deactivatePack(updated)
+        XCTAssertEqual(service.corrections.map(\.id), [regexID])
+        XCTAssertTrue(try XCTUnwrap(service.corrections.first).isRegex)
+        XCTAssertEqual(service.corrections.first?.usageCount, 5)
     }
 
     @MainActor
