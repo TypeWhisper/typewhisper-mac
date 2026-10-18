@@ -193,7 +193,7 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
-    private final class MockPreviewFallbackOptOutPlugin: NSObject, TranscriptionEnginePlugin, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
+    private class MockPreviewFallbackOptOutPlugin: NSObject, TranscriptionEnginePlugin, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.preview-opt-out" }
         static var pluginName: String { "Mock Preview Opt Out" }
 
@@ -201,17 +201,22 @@ final class StreamingHandlerTests: XCTestCase {
         var providerDisplayName: String { "Mock Preview Opt Out" }
         var isConfigured: Bool { true }
         var transcriptionModels: [PluginModelInfo] { [] }
-        var selectedModelId: String? { nil }
+        private(set) var selectedModelId: String? = "batch-model"
         var supportsTranslation: Bool { false }
         var supportsStreaming: Bool { false }
         var supportedLanguages: [String] { ["en"] }
         var allowsTranscriptPreviewFallback: Bool { false }
+        private(set) var selectedModelIds: [String] = []
 
         private let recorder = SlowPreviewFallbackRecorder()
 
+        required override init() { super.init() }
         func activate(host: HostServices) {}
         func deactivate() {}
-        func selectModel(_ modelId: String) {}
+        func selectModel(_ modelId: String) {
+            selectedModelIds.append(modelId)
+            selectedModelId = modelId
+        }
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
             await recorder.begin(prompt: prompt)
@@ -222,6 +227,22 @@ final class StreamingHandlerTests: XCTestCase {
 
         func snapshot() async -> (callCount: Int, maxConcurrentTranscriptions: Int, prompts: [String?]) {
             await recorder.snapshot()
+        }
+    }
+
+    private final class MockLivePreviewFallbackOptOutPlugin: MockPreviewFallbackOptOutPlugin, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+        override var supportsStreaming: Bool { selectedModelId == "realtime-model" }
+        override var allowsTranscriptPreviewFallback: Bool { selectedModelId == "realtime-model" }
+        private(set) var liveSessionModelId: String?
+
+        func createLiveTranscriptionSession(
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            liveSessionModelId = selectedModelId
+            throw PluginTranscriptionError.apiError("Live session unavailable")
         }
     }
 
@@ -1417,28 +1438,37 @@ final class StreamingHandlerTests: XCTestCase {
     }
 
     func testPreviewFallbackOptOutSkipsIntermediateWorkAndAllowsFinalTranscription() async throws {
+        try await assertPreviewFallbackOptOut()
+    }
+
+    func testPreviewFallbackPolicyUsesModelOverrideAndRestoresDefaultSelection() async throws {
+        try await assertPreviewFallbackOptOut(cloudModelOverride: "batch-model")
+    }
+
+    func testPreviewFallbackPolicyDoesNotSelectModelsForBatchOnlyEngine() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let plugin = MockPreviewFallbackOptOutPlugin()
+        let modelManager = installPreviewFallbackPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        XCTAssertFalse(modelManager.allowsTranscriptPreviewFallback(cloudModelOverride: "another-batch-model"))
+        XCTAssertEqual(plugin.selectedModelId, "batch-model")
+        XCTAssertTrue(plugin.selectedModelIds.isEmpty)
+    }
+
+    private func assertPreviewFallbackOptOut(cloudModelOverride: String? = nil) async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
-        let plugin = MockPreviewFallbackOptOutPlugin()
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: "com.typewhisper.mock.preview-opt-out",
-                    name: "Mock Preview Opt Out",
-                    version: "1.0.0",
-                    principalClass: "MockPreviewFallbackOptOutPlugin"
-                ),
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let modelManager = ModelManagerService()
-        modelManager.selectProvider(plugin.providerId)
+        let plugin: MockPreviewFallbackOptOutPlugin = cloudModelOverride == nil
+            ? MockPreviewFallbackOptOutPlugin()
+            : MockLivePreviewFallbackOptOutPlugin()
+        if cloudModelOverride != nil {
+            plugin.selectModel("realtime-model")
+            XCTAssertTrue(plugin.allowsTranscriptPreviewFallback)
+        }
+        let defaultModelId = plugin.selectedModelId
+        let modelManager = installPreviewFallbackPlugin(plugin, appSupportDirectory: appSupportDirectory)
 
         let handler = StreamingHandler(
             modelManager: modelManager,
@@ -1457,19 +1487,25 @@ final class StreamingHandlerTests: XCTestCase {
             selectedProviderId: plugin.providerId,
             languageSelection: .exact("en"),
             task: .transcribe,
-            cloudModelOverride: nil,
+            cloudModelOverride: cloudModelOverride,
             allowLiveTranscription: true,
             stateCheck: { true }
         )
 
         try await Task.sleep(for: .milliseconds(3400))
         let liveResult = await handler.finish().result
+        let previewSnapshot = await plugin.snapshot()
+        XCTAssertEqual(previewSnapshot.callCount, 0)
+        if let livePlugin = plugin as? MockLivePreviewFallbackOptOutPlugin {
+            XCTAssertEqual(livePlugin.liveSessionModelId, "batch-model")
+        }
+        XCTAssertEqual(plugin.selectedModelId, defaultModelId)
         let finalResult = try await modelManager.transcribe(
             audioSamples: Array(repeating: 0.5, count: 16_000),
             languageSelection: .exact("en"),
             task: .transcribe,
             engineOverrideId: plugin.providerId,
-            cloudModelOverride: nil,
+            cloudModelOverride: cloudModelOverride,
             prompt: "Final Terms"
         )
         let snapshot = await plugin.snapshot()
@@ -1479,6 +1515,31 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(snapshot.callCount, 1)
         XCTAssertEqual(snapshot.maxConcurrentTranscriptions, 1)
         XCTAssertEqual(snapshot.prompts, ["Final Terms"])
+        XCTAssertEqual(plugin.selectedModelId, defaultModelId)
+    }
+
+    private func installPreviewFallbackPlugin(
+        _ plugin: MockPreviewFallbackOptOutPlugin,
+        appSupportDirectory: URL
+    ) -> ModelManagerService {
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: MockPreviewFallbackOptOutPlugin.pluginId,
+                    name: MockPreviewFallbackOptOutPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "MockPreviewFallbackOptOutPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        return modelManager
     }
 
     func testFinishWaitsForInFlightFallbackPreviewBeforeFinalTranscription() async throws {

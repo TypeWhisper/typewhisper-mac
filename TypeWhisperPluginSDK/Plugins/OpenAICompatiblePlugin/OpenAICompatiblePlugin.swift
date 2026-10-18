@@ -370,6 +370,7 @@ enum OpenAICompatibleServerKind: String, Codable, Sendable, CaseIterable {
 @objc(OpenAICompatiblePlugin)
 final class OpenAICompatiblePlugin: NSObject,
     TranscriptionEnginePlugin,
+    TranscriptPreviewFallbackPolicyProviding,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
     LLMProviderIdentityProviding,
@@ -474,6 +475,10 @@ final class OpenAICompatiblePlugin: NSObject,
 
     var supportsStreaming: Bool {
         supportsStreaming(for: providerId)
+    }
+
+    var allowsTranscriptPreviewFallback: Bool {
+        allowsTranscriptPreviewFallback(for: providerId)
     }
 
     func createLiveTranscriptionSession(
@@ -935,6 +940,12 @@ final class OpenAICompatiblePlugin: NSObject,
         resolvedTranscriptionTransport(for: profileId) == .realtime
     }
 
+    func allowsTranscriptPreviewFallback(for profileId: String) -> Bool {
+        // Batch profiles only submit audio after recording stops, including when
+        // Auto resolves to batch. Native realtime sessions are handled separately.
+        resolvedTranscriptionTransport(for: profileId) == .realtime
+    }
+
     func createLiveTranscriptionSession(
         languageSelection: PluginLanguageSelection,
         translate: Bool,
@@ -951,10 +962,8 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
         guard profile.resolvedTranscriptionTransport() == .realtime else {
-            // Batch-routed models: don't fake streaming with a repeated-REST-upload
-            // loop here. Throwing lets the host fall back to its own generic
-            // polling-based transcript preview loop over the regular `transcribe()`
-            // call, which is exactly the behavior a batch-only model already had.
+            // Batch profiles have no live session and opt out of the host's
+            // polling preview through allowsTranscriptPreviewFallback.
             throw PluginTranscriptionError.apiError(
                 "\"\(modelId)\" is routed through batch transcription; live streaming is unavailable for it."
             )
@@ -1880,6 +1889,7 @@ final class OpenAICompatiblePlugin: NSObject,
 
 private final class OpenAICompatibleProfileRole: NSObject,
     TranscriptionEnginePlugin,
+    TranscriptPreviewFallbackPolicyProviding,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
     LLMProviderIdentityProviding,
@@ -1937,6 +1947,10 @@ private final class OpenAICompatibleProfileRole: NSObject,
 
     var supportsStreaming: Bool {
         plugin.supportsStreaming(for: profileId)
+    }
+
+    var allowsTranscriptPreviewFallback: Bool {
+        plugin.allowsTranscriptPreviewFallback(for: profileId)
     }
 
     func createLiveTranscriptionSession(
