@@ -503,8 +503,21 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                     refreshStartupSheet()
                 }
                 .onReceive(NotificationCenter.default.publisher(for: .startupActivityDidBecomeIdle)) { _ in
-                    if startupSheetDeferredForActivity {
-                        refreshStartupSheet()
+                    // @Published emits before the underlying view-model state
+                    // is stored; recheck activity on the next main-queue turn.
+                    DispatchQueue.main.async {
+                        refreshDeferredStartupSheetIfPossible()
+                    }
+                }
+                .onReceive(Publishers.Merge3(
+                    NotificationCenter.default.publisher(for: NSWindow.willCloseNotification),
+                    NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification),
+                    NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+                )) { _ in
+                    // Let AppKit detach the sheet or finish its modal session first.
+                    // Regaining key status also covers panels that are ordered out.
+                    DispatchQueue.main.async {
+                        refreshDeferredStartupSheetIfPossible()
                     }
                 }
         }
@@ -570,6 +583,13 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         #endif
     }
 
+    private func refreshDeferredStartupSheetIfPossible() {
+        guard startupSheetDeferredForActivity,
+              startupSheet == nil,
+              !appDelegate.operationInProgress else { return }
+        refreshStartupSheet()
+    }
+
     private func refreshStartupSheet() {
         startupSheetDeferredForActivity = false
         if AppConstants.isScreenshotAutomation {
@@ -583,10 +603,18 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         }
 
         let manualIOSCompanionRequest = iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
+        // An automatic refresh must not dismiss or replace an existing sheet,
+        // nor treat that sheet as a blocker that should itself be dismissed.
+        if !manualIOSCompanionRequest, startupSheet != nil { return }
         if !manualIOSCompanionRequest, let whatsNew = WhatsNewCoordinator.shared,
            whatsNew.shouldDeferAutomaticSheets {
             startupSheetDeferredForActivity = whatsNew.operationInProgress
             startupSheet = nil
+            return
+        }
+
+        if !manualIOSCompanionRequest, appDelegate.operationInProgress {
+            startupSheetDeferredForActivity = true
             return
         }
 
@@ -1095,7 +1123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         whatsNew.observeActivity(activities)
     }
 
-    private var operationInProgress: Bool {
+    var operationInProgress: Bool {
         let container = ServiceContainer.shared
         return container.dictationViewModel.state != .idle
             || container.hotkeyService.isDictationStartPending
@@ -1105,7 +1133,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             || container.speakerTranscriptionViewModel.batchState == .processing
             || container.dictionaryTrainingService.activeSampleID != nil
             || HistoryRetranscriptionActivity.recordID != nil
-            || NSApp.modalWindow != nil
+            || Self.hasBlockingModalPresentation
+    }
+
+    static var hasBlockingModalPresentation: Bool {
+        NSApp.modalWindow != nil
             || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
     }
 

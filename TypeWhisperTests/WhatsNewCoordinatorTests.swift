@@ -367,6 +367,48 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         ))
     }
 
+    func testAttachedSheetRemainsABlockerAfterTrackedActivityEnds() async {
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        XCTAssertEqual(launch(coordinator), .whatsNew)
+        coordinator.updateOperationInProgress(true)
+        let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+                             styleMask: [.titled], backing: .buffered, defer: false)
+        parent.isReleasedWhenClosed = false
+        sheet.isReleasedWhenClosed = false
+        parent.orderFront(nil)
+        defer {
+            parent.close()
+            sheet.close()
+        }
+        let ended = expectation(description: "blocking sheet ends")
+        parent.beginSheet(sheet) { _ in ended.fulfill() }
+
+        coordinator.updateOperationInProgress(false)
+        XCTAssertFalse(coordinator.operationInProgress)
+        XCTAssertTrue(AppDelegate.hasBlockingModalPresentation)
+        parent.endSheet(sheet)
+        await fulfillment(of: [ended], timeout: 2)
+
+        XCTAssertFalse(AppDelegate.hasBlockingModalPresentation)
+        XCTAssertEqual(launch(coordinator), .none, "Ending a sheet must not retry update highlights")
+    }
+
+    func testModalSessionRemainsABlockerUntilItEnds() {
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+                            styleMask: [.titled], backing: .buffered, defer: false)
+        panel.isReleasedWhenClosed = false
+        defer { panel.close() }
+        let session = NSApp.beginModalSession(for: panel)
+        _ = NSApp.runModalSession(session)
+
+        XCTAssertTrue(AppDelegate.hasBlockingModalPresentation)
+        NSApp.endModalSession(session)
+
+        XCTAssertFalse(AppDelegate.hasBlockingModalPresentation)
+    }
+
     func testInterruptionClosesActualWindowWithoutAcknowledging() throws {
         let coordinator = WhatsNewCoordinator(defaults: defaults)
         XCTAssertEqual(launch(coordinator), .whatsNew)
