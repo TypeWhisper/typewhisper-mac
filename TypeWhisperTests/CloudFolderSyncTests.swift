@@ -4354,6 +4354,81 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPackageRecoveryPreservesKnownLocalDeletions() async throws {
+        for kind in ["snippet", "term", "literal", "exactRegex"] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let local = Self.dictionaryEntry(entryType: .correction, original: "teh", replacement: "the", updatedAt: Self.date(10))
+            let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: local.original)
+            let removed: CloudFolderSyncOperation
+            if kind == "snippet" {
+                let snippet = Self.snippet(trigger: ";sig", replacement: "Signature", updatedAt: Self.date(10))
+                removed = .upsertSnippet(snippet, itemID: UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger), deviceId: "peer")
+            } else {
+                let entry = Self.dictionaryEntry(entryType: kind == "term" ? .term : .correction,
+                    original: "removed", replacement: kind == "term" ? nil : "replacement", updatedAt: Self.date(10), isRegex: kind == "exactRegex")
+                removed = .upsertDictionary(entry, itemID: UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: entry.isRegex), deviceId: "peer")
+            }
+            let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/peer")
+            try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+            try Self.entitlementEncoder.encode(removed).write(to: remote.appendingPathComponent("recreated.json"))
+            let store = InMemoryUserDataSyncStore(dictionaryEntries: [local])
+            var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID, removed.itemId],
+                exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z", removed.itemId: "2023-11-14T22:13:30.000Z"],
+                appliedOperationIDs: ["removed-local-upsert", "removed-peer-upsert"])
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            XCTAssertEqual(store.dictionaryEntries, [local])
+            XCTAssertTrue(store.snippets.isEmpty)
+            let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            XCTAssertTrue(published.contains { $0.kind == .delete && $0.itemId == removed.itemId })
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            XCTAssertEqual(repeated.operationsWritten, 0)
+            XCTAssertEqual(store.dictionaryEntries, [local])
+            XCTAssertTrue(store.snippets.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testUpgradeUsesExportedCorrectionVersionDespiteClockSkew() async throws {
+        for mode in ["literal", "regex", "misimportedRegex", "deletedRegex"] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let entry = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "current", updatedAt: Self.date(10), isRegex: mode != "literal")
+            let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+            let current = CloudFolderSyncOperation.upsertDictionary(entry, itemID: oldID, deviceId: "old", operationId: "current-upsert")
+            var oldEntry = Self.dictionaryEntry(entryType: .correction, original: entry.original, replacement: "old", updatedAt: Self.date(15))
+            oldEntry = oldEntry.preservingRegexMode(mode == "literal")
+            let old = CloudFolderSyncOperation.upsertDictionary(oldEntry, itemID: oldID, deviceId: "old", operationId: "older-upsert-future-clock")
+            let deleted = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: oldID, deviceId: "old", deletedAt: Self.date(20), operationId: "already-applied-delete")
+            let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/old")
+            try FileManager.default.createDirectory(at: remote, withIntermediateDirectories: true)
+            for operation in [old, deleted, current] {
+                var payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Self.entitlementEncoder.encode(operation)) as? [String: Any])
+                payload["schemaVersion"] = 1
+                try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("\(operation.operationId).json"))
+            }
+            let local = mode == "misimportedRegex" ? entry.preservingRegexMode(false) : entry
+            let store = InMemoryUserDataSyncStore(dictionaryEntries: mode == "deletedRegex" ? [] : [local])
+            var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
+                exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"],
+                appliedOperationIDs: [old.operationId, deleted.operationId, current.operationId])
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            XCTAssertEqual(store.dictionaryEntries, mode == "deletedRegex" ? [] : [entry])
+            let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            XCTAssertEqual(published.contains { $0.kind == .delete }, mode == "deletedRegex")
+            if mode == "deletedRegex" { XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.kind == .delete }) }
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            XCTAssertEqual(repeated.operationsWritten, 0)
+        }
+    }
+
+    @MainActor
     func testUpgradeRebuildsMissingOrReplacedPackage() async throws {
         for package in ["missing", "empty", "replaced"] {
             for isRegex in [false, true] {

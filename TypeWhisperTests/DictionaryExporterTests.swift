@@ -115,6 +115,21 @@ final class DictionaryExporterTests: XCTestCase {
     }
 
     @MainActor
+    func testDictionaryJSONRejectsInvalidRegexBeforeImportingAnyEntries() throws {
+        for enabled in [false, true] {
+            let json = """
+            [{"type":"term","original":"valid"},
+             {"type":"correction","original":"[","replacement":"broken","isRegex":true,"isEnabled":\(enabled)}]
+            """
+            XCTAssertThrowsError(try DictionaryExporter.parseJSON(Data(json.utf8))) { error in
+                guard case DictionaryImportError.invalidRegex = error else { return XCTFail("Unexpected error: \(error)") }
+            }
+        }
+        let literals = #"[{"type":"term","original":"[","isRegex":true},{"type":"correction","original":"[","replacement":"literal"}]"#
+        XCTAssertEqual(try DictionaryExporter.parseJSON(Data(literals.utf8)).count, 2)
+    }
+
+    @MainActor
     func testLegacyDictionaryImportDefaultsToLiteralAndTermsIgnoreRegexFlag() throws {
         let json = #"[{"type":"correction","original":"command","replacement":"\\n"},{"type":"term","original":"Term","isRegex":true}]"#
         let entries = try DictionaryExporter.parseJSON(Data(json.utf8))

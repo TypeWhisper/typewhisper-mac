@@ -400,7 +400,7 @@ enum CloudFolderSyncEngine {
                         throw CloudFolderSyncError.incompleteMigrationHistory
                     }
                     // No old operations remain in an otherwise readable package.
-                    // Republish local data without guessing old deletion identities.
+                    // Republish local data without guessing old regex identities.
                     return (operations: [CloudFolderSyncOperation](), rebuildPackage: true)
                 }
                 return (operations: read.operations.filter { $0.schemaVersion == 1 }, rebuildPackage: false)
@@ -409,14 +409,7 @@ enum CloudFolderSyncEngine {
             migration = (operations: [], rebuildPackage: false)
         }
         let legacyOperations = migration.operations
-        let stateSnapshot: CloudFolderSyncState = {
-            var snapshot = previousState
-            if migration.rebuildPackage {
-                snapshot.knownLocalItemIDs = []
-                snapshot.exportedItemVersions = [:]
-            }
-            return snapshot
-        }()
+        let stateSnapshot = previousState
         let preparation = try await MainActor.run {
             let snapshot = store.snapshot()
             let repairs = legacyRegexRepairs(operations: legacyOperations, snapshot: snapshot, state: stateSnapshot)
@@ -463,6 +456,19 @@ enum CloudFolderSyncEngine {
             )
             let preparedSnapshot = assetPreparation.snapshot
             let initialRecords = records(from: preparedSnapshot)
+            var publicationState = stateSnapshot
+            if migration.rebuildPackage {
+                // Preserve pending deletions, except old folded IDs for regex rules
+                // still present locally. Those IDs are withdrawn during migration.
+                for record in initialRecords.values {
+                    guard let entry = record.dictionary, entry.entryType == .correction, entry.isRegex else { continue }
+                    let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+                    if publicationState.exportedItemVersions[oldID]?.hasPrefix("dictionary-v3|") != true {
+                        publicationState.knownLocalItemIDs.remove(oldID)
+                    }
+                }
+                publicationState.exportedItemVersions = [:]
+            }
             // Versions that do not know the speaker components report them as
             // invalid files, so they are held back while such a device syncs here.
             let withheldKeys = speakerComponentsCanBeWritten(
@@ -476,7 +482,7 @@ enum CloudFolderSyncEngine {
             let localOperations = makeLocalOperations(
                 records: initialRecords.filter { !withheldKeys.contains($0.key) },
                 deletedHistoryRecords: preparedSnapshot.deletedHistoryRecords,
-                state: stateSnapshot,
+                state: publicationState,
                 legacyRegexItemIDs: legacyRegexItemIDs(from: legacyOperations, state: stateSnapshot),
                 now: now
             )
@@ -590,7 +596,7 @@ enum CloudFolderSyncEngine {
         snapshot: UserDataSyncSnapshot,
         state: CloudFolderSyncState
     ) -> [UserDataSyncMutation] {
-        winningOperations(from: operations).values.compactMap { operation in
+        legacySynchronizedCorrections(from: operations, state: state).values.compactMap { operation in
             guard state.appliedOperationIDs.contains(operation.operationId),
                   let regex = operation.dictionary, regex.isRegex else { return nil }
             let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: regex.entryType, original: regex.original)
@@ -881,10 +887,27 @@ enum CloudFolderSyncEngine {
             }
     }
 
+    private static func legacySynchronizedCorrections(
+        from operations: [CloudFolderSyncOperation], state: CloudFolderSyncState
+    ) -> [String: CloudFolderSyncOperation] {
+        // Match the actual exported local version. An already-applied tombstone or
+        // older upsert can have a later timestamp when device clocks disagree.
+        let matching = operations.filter { operation in
+            guard operation.schemaVersion == 1, operation.kind == .upsert,
+                  state.appliedOperationIDs.contains(operation.operationId),
+                  let entry = operation.dictionary, entry.entryType == .correction else { return false }
+            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+            guard state.knownLocalItemIDs.contains(itemID), let version = state.exportedItemVersions[itemID] else { return false }
+            let timestamp = versionString(for: entry.updatedAt)
+            return version == timestamp || version == "dictionary-v2|\(timestamp)"
+        }
+        return legacyWinningOperations(from: matching)
+    }
+
     private static func legacyCorrectionHistoryIsComplete(
         operations: [CloudFolderSyncOperation], state: CloudFolderSyncState
     ) -> Bool {
-        let known = legacyWinningOperations(from: operations.filter { state.appliedOperationIDs.contains($0.operationId) })
+        let known = legacySynchronizedCorrections(from: operations, state: state)
         return state.knownLocalItemIDs.allSatisfy { itemID in
             guard itemID.hasPrefix("dictionary:correction:"), !itemID.hasPrefix("dictionary:correction:regex:"),
                   let version = state.exportedItemVersions[itemID], !version.hasPrefix("dictionary-v3|") else { return true }
@@ -902,7 +925,7 @@ enum CloudFolderSyncEngine {
     private static func legacyRegexItemIDs(
         from operations: [CloudFolderSyncOperation], state: CloudFolderSyncState
     ) -> [String: String] {
-        let known = legacyWinningOperations(from: operations.filter { state.appliedOperationIDs.contains($0.operationId) })
+        let known = legacySynchronizedCorrections(from: operations, state: state)
         return known.filter {
             state.knownLocalItemIDs.contains($0.key) && state.exportedItemVersions[$0.key]?.hasPrefix("dictionary-v3|") != true
         }.compactMapValues { operation in
