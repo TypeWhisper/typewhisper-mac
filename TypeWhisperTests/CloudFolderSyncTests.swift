@@ -43,37 +43,27 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
         for mutation in mutations {
             switch mutation {
             case .upsertDictionary(let entry):
-                let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+                let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: entry.isRegex)
                 let existing = dictionaryEntries.first {
                     UserDataSyncIdentity.dictionaryItemID(
                         entryType: $0.entryType,
-                        original: $0.original
+                        original: $0.original, isRegex: $0.isRegex
                     ) == itemID
                 }
                 dictionaryEntries.removeAll {
-                    UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original) == itemID
+                    UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original, isRegex: $0.isRegex) == itemID
                 }
-                if entry.entryType == .term,
-                   !entry.ctcMinSimilarityFieldPresent {
-                    dictionaryEntries.append(
-                        UserDataSyncDictionaryEntry(
-                            entryType: entry.entryType,
-                            original: entry.original,
-                            replacement: entry.replacement,
-                            caseSensitive: entry.caseSensitive,
-                            isEnabled: entry.isEnabled,
-                            source: entry.source,
-                            ctcMinSimilarity: existing?.ctcMinSimilarity,
-                            createdAt: entry.createdAt,
-                            updatedAt: entry.updatedAt
-                        )
-                    )
-                } else {
-                    dictionaryEntries.append(entry)
-                }
+                dictionaryEntries.append(UserDataSyncDictionaryEntry(
+                    entryType: entry.entryType, original: entry.original, replacement: entry.replacement,
+                    caseSensitive: entry.caseSensitive, isEnabled: entry.isEnabled,
+                    isRegex: entry.isRegexFieldPresent ? entry.isRegex : (existing?.isRegex ?? false),
+                    source: entry.source,
+                    ctcMinSimilarity: entry.ctcMinSimilarityFieldPresent ? entry.ctcMinSimilarity : existing?.ctcMinSimilarity,
+                    createdAt: entry.createdAt, updatedAt: entry.updatedAt
+                ))
             case .deleteDictionary(let itemID):
                 dictionaryEntries.removeAll {
-                    UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original) == itemID
+                    UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original, isRegex: $0.isRegex) == itemID
                 }
             case .upsertSnippet(let snippet):
                 let itemID = UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger)
@@ -4272,6 +4262,93 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(snippetMatches.first?.replacement, "New")
     }
 
+    @MainActor
+    func testRegexIdentitiesAndVersionedOperationsMatchSharedFixtures() throws {
+        struct Vector: Decodable { let pattern: String; let itemId: String }
+        let vectors: [Vector] = try Self.decodeFixture("regex-dictionary-identities-v2")
+        for vector in vectors {
+            XCTAssertEqual(UserDataSyncIdentity.dictionaryItemID(
+                entryType: UserDataSyncDictionaryEntryType.correction, original: vector.pattern, isRegex: true
+            ), vector.itemId)
+        }
+        XCTAssertEqual(Set(vectors.map(\.itemId)).count, vectors.count)
+        let operation: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v2")
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [operation])[operation.itemId], operation)
+        XCTAssertEqual(operation.schemaVersion, 2)
+        let delete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: operation.itemId, deviceId: "mac", deletedAt: Self.date(30))
+        XCTAssertEqual(delete.schemaVersion, 2)
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [operation, delete])[operation.itemId]?.kind, .delete)
+    }
+
+    @MainActor
+    func testRegexRulesSyncIndependentlyAndDeletingOneKeepsLiteralAndOtherPattern() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let entries = [
+            Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "digit", updatedAt: Self.date(10), isRegex: true),
+            Self.dictionaryEntry(entryType: .correction, original: #"\D"#, replacement: "other", updatedAt: Self.date(10), isRegex: true),
+            Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "literal", updatedAt: Self.date(10))
+        ]
+        let first = InMemoryUserDataSyncStore(dictionaryEntries: entries)
+        let second = InMemoryUserDataSyncStore()
+        var a = CloudFolderSyncState(deviceId: "mac")
+        var b = CloudFolderSyncState(deviceId: "windows")
+        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(20))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, entitlements: entitlement, now: Self.date(30))
+        XCTAssertEqual(second.dictionaryEntries.count, 3)
+        second.dictionaryEntries.removeAll { $0.isRegex && $0.original == #"\D"# }
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, entitlements: entitlement, now: Self.date(40))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+        XCTAssertEqual(first.dictionaryEntries.count, 2)
+        XCTAssertTrue(first.dictionaryEntries.allSatisfy { $0.original == #"\d"# })
+        XCTAssertEqual(first.dictionaryEntries.filter(\.isRegex).count, 1)
+    }
+
+    @MainActor
+    func testLegacyRegexModeIsPreservedAndRepublishedOnce() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let entry = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "#", updatedAt: Self.date(10), isRegex: true)
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [entry])
+        let legacyEntry = Self.dictionaryEntry(entryType: .correction, original: #"\d"#, replacement: "new", updatedAt: Self.date(20), isRegexFieldPresent: false)
+        let legacy = CloudFolderSyncOperation.upsertDictionary(legacyEntry, itemID: UserDataSyncIdentity.dictionaryItemID(
+            entryType: legacyEntry.entryType, original: legacyEntry.original
+        ), deviceId: "legacy", operationId: "legacy")
+        try Self.writeLegacyOperation(legacy, to: folder)
+        var state = CloudFolderSyncState(deviceId: "mac")
+        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+        let first = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(25))
+        XCTAssertEqual(store.dictionaryEntries.count, 1)
+        XCTAssertTrue(try XCTUnwrap(store.dictionaryEntries.first).isRegex)
+        XCTAssertEqual(store.dictionaryEntries.first?.replacement, "new")
+        XCTAssertTrue(first.requiresFollowUpSync)
+        let republish = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
+        XCTAssertEqual(republish.operationsWritten, 1)
+        XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
+    func testLegacyTombstoneSuppressesLegacyRegexWithoutDeletingMigratedRule() throws {
+        var legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+        let oldID = legacy.itemId
+        let rawID = UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: #"\d+"#, isRegex: true)
+        let oldDelete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: oldID, deviceId: "old", deletedAt: Self.date(90))
+        let winners = CloudFolderSyncEngine.winningOperations(from: [legacy, oldDelete])
+        XCTAssertNil(winners[rawID])
+        XCTAssertEqual(winners[oldID]?.kind, .delete)
+        var unencodedLegacy = legacy
+        unencodedLegacy.itemId = #"dictionary:correction:\d+"#
+        let unencodedDelete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: unencodedLegacy.itemId, deviceId: "old", deletedAt: Self.date(90))
+        XCTAssertNil(CloudFolderSyncEngine.winningOperations(from: [unencodedLegacy, unencodedDelete])[rawID])
+        let migrated: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v2")
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [legacy, migrated, oldDelete])[rawID]?.kind, .upsert)
+        legacy.itemId = rawID
+        let rawDelete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: rawID, deviceId: "new", deletedAt: Self.date(90))
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [legacy, rawDelete])[rawID]?.kind, .delete)
+    }
+
     private static func dictionaryEntry(
         entryType: UserDataSyncDictionaryEntryType = .term,
         original: String,
@@ -4279,7 +4356,9 @@ final class CloudFolderSyncTests: XCTestCase {
         source: DictionaryEntrySource? = nil,
         updatedAt: Date,
         ctcMinSimilarity: Float? = nil,
-        ctcMinSimilarityFieldPresent: Bool? = nil
+        ctcMinSimilarityFieldPresent: Bool? = nil,
+        isRegex: Bool = false,
+        isRegexFieldPresent: Bool? = nil
     ) -> UserDataSyncDictionaryEntry {
         UserDataSyncDictionaryEntry(
             entryType: entryType,
@@ -4287,6 +4366,8 @@ final class CloudFolderSyncTests: XCTestCase {
             replacement: replacement,
             caseSensitive: false,
             isEnabled: true,
+            isRegex: isRegex,
+            isRegexFieldPresent: isRegexFieldPresent,
             source: source,
             ctcMinSimilarity: ctcMinSimilarity,
             ctcMinSimilarityFieldPresent:

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "operationId": "regex-v1",
+  "deviceId": "windows",
+  "collection": "dictionary",
+  "itemId": "dictionary:correction:XGQr",
+  "kind": "upsert",
+  "updatedAt": "2023-11-14T22:13:30.000Z",
+  "dictionary": {
+    "entryType": "correction",
+    "original": "\\d+",
+    "replacement": "#",
+    "caseSensitive": false,
+    "isEnabled": true,
+    "isRegex": true,
+    "createdAt": "2023-11-14T22:13:21.000Z",
+    "updatedAt": "2023-11-14T22:13:30.000Z"
+  }
+}

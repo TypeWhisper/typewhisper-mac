@@ -175,11 +175,11 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
     let operationId: String
     let deviceId: String
     let collection: UserDataSyncCollection
-    let itemId: String
+    var itemId: String
     let kind: Kind
     let updatedAt: Date
     let deletedAt: Date?
-    let dictionary: UserDataSyncDictionaryEntry?
+    var dictionary: UserDataSyncDictionaryEntry?
     let snippet: UserDataSyncSnippet?
     let historyPayloadVersion: Int?
     let historyGeneration: String?
@@ -197,7 +197,7 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
         operationId: String = UUID().uuidString
     ) -> CloudFolderSyncOperation {
         CloudFolderSyncOperation(
-            schemaVersion: 1,
+            schemaVersion: entry.isRegex ? 2 : 1,
             operationId: operationId,
             deviceId: deviceId,
             collection: .dictionary,
@@ -286,7 +286,7 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
         operationId: String = UUID().uuidString
     ) -> CloudFolderSyncOperation {
         CloudFolderSyncOperation(
-            schemaVersion: 1,
+            schemaVersion: itemID.hasPrefix(UserDataSyncIdentity.regexCorrectionPrefix) ? 2 : 1,
             operationId: operationId,
             deviceId: deviceId,
             collection: collection,
@@ -439,7 +439,7 @@ enum CloudFolderSyncEngine {
             let fingerprint = packageFingerprint(packageURL: packageURL)
             let readResult = try readOperations(from: operationsURL, cache: syncCache)
             let deviceReadResult = try readDevices(from: devicesURL)
-            let winners = winningOperations(from: readResult.operations)
+            let winners = winningOperations(from: readResult.operations, localRecords: initialRecords)
             let mutations = makeMutations(
                 from: winners,
                 localRecords: initialRecords,
@@ -505,7 +505,8 @@ enum CloudFolderSyncEngine {
             }
         }
         let republishedItemIDs = dictionaryItemIDsRequiringRepublish(
-            afterApplying: mutations
+            afterApplying: mutations,
+            legacyRegexEntries: operations.filter { $0.schemaVersion == 1 }.compactMap(\.dictionary).filter(\.isRegex)
         )
         for itemID in republishedItemIDs {
             state.exportedItemVersions.removeValue(forKey: itemID)
@@ -554,7 +555,7 @@ enum CloudFolderSyncEngine {
     static func records(from snapshot: UserDataSyncSnapshot) -> [String: CloudFolderSyncRecord] {
         var records: [String: CloudFolderSyncRecord] = [:]
         for entry in snapshot.dictionaryEntries {
-            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: entry.isRegex)
             merge(
                 CloudFolderSyncRecord(
                     collection: .dictionary,
@@ -695,7 +696,8 @@ enum CloudFolderSyncEngine {
             case .upsertDictionary(let entry):
                 let itemID = UserDataSyncIdentity.dictionaryItemID(
                     entryType: entry.entryType,
-                    original: entry.original
+                    original: entry.original,
+                    isRegex: entry.isRegex
                 )
                 records[itemID] = Self.records(
                     from: UserDataSyncSnapshot(dictionaryEntries: [entry])
@@ -754,6 +756,8 @@ enum CloudFolderSyncEngine {
                 dictionary.replacement ?? "",
                 String(dictionary.caseSensitive),
                 String(dictionary.isEnabled),
+                String(dictionary.isRegexFieldPresent),
+                String(dictionary.isRegex),
                 String(dictionary.ctcMinSimilarityFieldPresent),
                 ctcValue,
                 versionString(for: dictionary.createdAt)
@@ -775,10 +779,54 @@ enum CloudFolderSyncEngine {
         return record.itemID
     }
 
-    static func winningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
-        operations.reduce(into: [:]) { result, operation in
-            guard operation.schemaVersion == 1 else { return }
+    static func winningOperations(
+        from operations: [CloudFolderSyncOperation],
+        localRecords: [String: CloudFolderSyncRecord] = [:]
+    ) -> [String: CloudFolderSyncOperation] {
+        // Resolve the old namespace before migrating regex upserts. Otherwise an old
+        // tombstone or a renamed pattern would resurrect superseded v1 regex records.
+        var legacyAliases: [String: String] = [:]
+        for operation in operations where operation.schemaVersion == 1 {
+            guard let entry = operation.dictionary, entry.isRegex else { continue }
+            let key = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+            legacyAliases[operation.itemId] = key
+            legacyAliases["dictionary:correction:\(UserDataSyncIdentity.normalizedKey(entry.original))"] = key
+        }
+        let legacyWinners = operations.filter { $0.schemaVersion == 1 && operationIsValid($0) }
+            .reduce(into: [String: CloudFolderSyncOperation]()) { result, operation in
+                let key = operation.dictionary.map {
+                    UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original)
+                } ?? legacyAliases[operation.itemId] ?? operation.itemId
+                if let existing = result[key], !prefers(operation, over: existing) { return }
+                result[key] = operation
+            }
+        return operations.reduce(into: [:]) { result, operation in
+            guard operationSchemaIsSupported(operation) else { return }
             guard operationIsValid(operation) else { return }
+            if operation.schemaVersion == 1, let entry = operation.dictionary, entry.isRegex {
+                let oldKey = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+                guard legacyWinners[oldKey]?.operationId == operation.operationId else { return }
+            }
+            var operation = operation
+            if operation.kind == .upsert, let entry = operation.dictionary {
+                var effectiveEntry = entry
+                // An old peer may omit the mode of a regex entry it previously received.
+                // Only recover an exact pattern, and never steal an existing literal entry.
+                if !entry.isRegexFieldPresent, localRecords[operation.itemId] == nil,
+                   localRecords.values.contains(where: {
+                       $0.dictionary?.isRegex == true && $0.dictionary?.original.utf8.elementsEqual(entry.original.utf8) == true
+                   }) {
+                    effectiveEntry = entry.preservingRegexMode(true)
+                    operation.dictionary = effectiveEntry
+                }
+                operation.itemId = UserDataSyncIdentity.dictionaryItemID(
+                    entryType: effectiveEntry.entryType,
+                    original: effectiveEntry.original,
+                    isRegex: effectiveEntry.isRegex
+                )
+            }
+            // A legacy tombstone suppresses legacy upserts above, but cannot delete a
+            // migrated v2 rule: its folded ID cannot distinguish \d from \D.
             let key = operationStateKey(operation)
             if let existing = result[key] {
                 if prefers(operation, over: existing) {
@@ -788,6 +836,18 @@ enum CloudFolderSyncEngine {
                 result[key] = operation
             }
         }
+    }
+
+    private static func operationSchemaIsSupported(_ operation: CloudFolderSyncOperation) -> Bool {
+        if operation.schemaVersion == 1 { return true }
+        guard operation.schemaVersion == 2,
+              operation.collection == .dictionary,
+              operation.itemId.hasPrefix(UserDataSyncIdentity.regexCorrectionPrefix) else { return false }
+        if operation.kind == .delete { return true }
+        guard let entry = operation.dictionary, entry.entryType == .correction, entry.isRegex else { return false }
+        return operation.itemId == UserDataSyncIdentity.dictionaryItemID(
+            entryType: entry.entryType, original: entry.original, isRegex: true
+        )
     }
 
     private static func makeLocalOperations(
@@ -1066,7 +1126,7 @@ enum CloudFolderSyncEngine {
             return true
         }
         if operation.updatedAt == local.updatedAt {
-            if let presencePreference = ctcPresencePreference(
+            if let presencePreference = dictionaryFieldPresencePreference(
                 candidate: operation.dictionary,
                 existing: local.dictionary
             ) {
@@ -1081,7 +1141,7 @@ enum CloudFolderSyncEngine {
         if candidate.updatedAt != existing.updatedAt {
             return candidate.updatedAt > existing.updatedAt
         }
-        if let presencePreference = ctcPresencePreference(
+        if let presencePreference = dictionaryFieldPresencePreference(
             candidate: candidate.dictionary,
             existing: existing.dictionary
         ) {
@@ -1207,7 +1267,7 @@ enum CloudFolderSyncEngine {
             for file in files where file.pathExtension == "json" {
                 listedPaths.insert(file.path)
                 switch operationFileContents(at: file, cache: cache) {
-                case .operation(let operation) where operation.schemaVersion == 1:
+                case .operation(let operation) where operationSchemaIsSupported(operation):
                     operations.append(operation)
                 case .operation, .unsupportedSchema:
                     diagnostics.append(.init(kind: .unsupportedSchema, fileName: file.lastPathComponent))
@@ -1351,13 +1411,18 @@ enum CloudFolderSyncEngine {
     private static func dictionaryVersionString(
         for entry: UserDataSyncDictionaryEntry
     ) -> String {
-        "dictionary-v2|\(versionString(for: entry.updatedAt))"
+        "dictionary-v3|\(versionString(for: entry.updatedAt))"
     }
 
-    private static func ctcPresencePreference(
+    private static func dictionaryFieldPresencePreference(
         candidate: UserDataSyncDictionaryEntry?,
         existing: UserDataSyncDictionaryEntry?
     ) -> Bool? {
+        if candidate?.entryType == .correction,
+           existing?.entryType == .correction,
+           candidate?.isRegexFieldPresent != existing?.isRegexFieldPresent {
+            return candidate?.isRegexFieldPresent == true
+        }
         guard candidate?.entryType == .term,
               existing?.entryType == .term,
               candidate?.ctcMinSimilarityFieldPresent
@@ -1377,7 +1442,8 @@ enum CloudFolderSyncEngine {
             case .upsertDictionary(let entry):
                 keys.insert(UserDataSyncIdentity.dictionaryItemID(
                     entryType: entry.entryType,
-                    original: entry.original
+                    original: entry.original,
+                    isRegex: entry.isRegex
                 ))
                 continue
             case .deleteDictionary(let itemID), .deleteSnippet(let itemID):
@@ -1451,17 +1517,22 @@ enum CloudFolderSyncEngine {
     }
 
     private static func dictionaryItemIDsRequiringRepublish(
-        afterApplying mutations: [UserDataSyncMutation]
+        afterApplying mutations: [UserDataSyncMutation],
+        legacyRegexEntries: [UserDataSyncDictionaryEntry]
     ) -> Set<String> {
         Set(mutations.compactMap { mutation in
-            guard case .upsertDictionary(let entry) = mutation,
-                  entry.entryType == .term,
-                  !entry.ctcMinSimilarityFieldPresent else {
-                return nil
+            guard case .upsertDictionary(let entry) = mutation else { return nil }
+            let missingField = entry.entryType == .term
+                ? !entry.ctcMinSimilarityFieldPresent
+                : !entry.isRegexFieldPresent
+            let migratedRegex = entry.isRegex && legacyRegexEntries.contains {
+                $0.original.utf8.elementsEqual(entry.original.utf8)
             }
+            guard missingField || migratedRegex else { return nil }
             return UserDataSyncIdentity.dictionaryItemID(
                 entryType: entry.entryType,
-                original: entry.original
+                original: entry.original,
+                isRegex: entry.isRegex
             )
         })
     }

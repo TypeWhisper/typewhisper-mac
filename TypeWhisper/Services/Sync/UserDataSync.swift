@@ -26,6 +26,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let caseSensitive: Bool
     let isEnabled: Bool
     let isRegex: Bool
+    let isRegexFieldPresent: Bool
     let source: DictionaryEntrySource?
     let ctcMinSimilarity: Float?
     let ctcMinSimilarityFieldPresent: Bool
@@ -39,6 +40,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         caseSensitive: Bool,
         isEnabled: Bool,
         isRegex: Bool = false,
+        isRegexFieldPresent: Bool? = nil,
         source: DictionaryEntrySource? = nil,
         ctcMinSimilarity: Float? = nil,
         ctcMinSimilarityFieldPresent: Bool? = nil,
@@ -51,6 +53,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
         self.isRegex = entryType == .correction && isRegex
+        self.isRegexFieldPresent = entryType == .correction && (isRegexFieldPresent ?? true)
         self.source = source
         self.ctcMinSimilarity = entryType == .term
             ? Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
@@ -84,6 +87,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         let decodedIsRegex = try container.decodeIfPresent(Bool.self, forKey: .isRegex) ?? false
         isRegex = entryType == .correction && decodedIsRegex
+        isRegexFieldPresent = entryType == .correction && container.contains(.isRegex)
         let sourceRawValue = try container.decodeIfPresent(String.self, forKey: .source)
         source = sourceRawValue.flatMap(DictionaryEntrySource.init(rawValue:))
         ctcMinSimilarityFieldPresent =
@@ -107,7 +111,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         try container.encodeIfPresent(replacement, forKey: .replacement)
         try container.encode(caseSensitive, forKey: .caseSensitive)
         try container.encode(isEnabled, forKey: .isEnabled)
-        if entryType == .correction {
+        if isRegexFieldPresent {
             try container.encode(isRegex, forKey: .isRegex)
         }
         try container.encodeIfPresent(source?.rawValue, forKey: .source)
@@ -121,6 +125,17 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     private static func normalizedCtcMinSimilarity(_ value: Float?) -> Float? {
         guard let value, value.isFinite else { return nil }
         return min(max(value, 0), 1)
+    }
+
+    func preservingRegexMode(_ isRegex: Bool) -> Self {
+        Self(
+            entryType: entryType, original: original, replacement: replacement,
+            caseSensitive: caseSensitive, isEnabled: isEnabled,
+            isRegex: isRegex, isRegexFieldPresent: isRegexFieldPresent,
+            source: source, ctcMinSimilarity: ctcMinSimilarity,
+            ctcMinSimilarityFieldPresent: ctcMinSimilarityFieldPresent,
+            createdAt: createdAt, updatedAt: updatedAt
+        )
     }
 }
 

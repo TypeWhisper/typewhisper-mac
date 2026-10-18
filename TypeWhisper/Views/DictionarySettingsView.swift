@@ -1726,7 +1726,7 @@ private struct DictionaryEditorSheet: View {
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .original)
 
-                            if let error = viewModel.editRegexError {
+                            if let error = viewModel.editValidationError {
                                 Text(error)
                                     .font(.caption)
                                     .foregroundStyle(.red)

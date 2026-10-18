@@ -387,7 +387,18 @@ class DictionaryViewModel: ObservableObject {
     }
 
     var canSaveEditing: Bool {
-        !editOriginal.isEmpty && editRegexError == nil
+        !editOriginal.isEmpty && editValidationError == nil
+    }
+
+    var editValidationError: String? {
+        if let editRegexError { return editRegexError }
+        if dictionaryService.duplicateEntry(
+            type: editType, original: editOriginal, isRegex: editIsRegex,
+            excluding: isCreatingNew ? nil : selectedEntry?.id
+        ) != nil {
+            return String(localized: "An entry with this original and matching mode already exists.")
+        }
+        return nil
     }
 
     func startCreating(type: DictionaryEntryType = .term) {
@@ -446,8 +457,8 @@ class DictionaryViewModel: ObservableObject {
             error = String(localized: "Original text cannot be empty")
             return
         }
-        if let editRegexError {
-            error = editRegexError
+        if let editValidationError {
+            error = editValidationError
             return
         }
 
@@ -457,24 +468,30 @@ class DictionaryViewModel: ObservableObject {
         let ctcMinSimilarity = editType == .term ? editCtcMinSimilarity : nil
 
         if isCreatingNew {
-            dictionaryService.addEntry(
+            guard dictionaryService.addEntry(
                 type: editType,
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
                 isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
-            )
+            ) else {
+                error = String(localized: "Could not save the dictionary entry.")
+                return
+            }
             suggestTermsSettingIfNeeded(afterAdding: editType)
         } else if let entry = selectedEntry {
-            dictionaryService.updateEntry(
+            guard dictionaryService.updateEntry(
                 entry,
                 original: editOriginal,
                 replacement: replacement,
                 caseSensitive: editCaseSensitive,
                 isRegex: editType == .correction && editIsRegex,
                 ctcMinSimilarity: ctcMinSimilarity
-            )
+            ) else {
+                error = String(localized: "Could not save the dictionary entry.")
+                return
+            }
         }
 
         cancelEditing()

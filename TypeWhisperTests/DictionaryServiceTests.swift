@@ -410,6 +410,65 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testRegexBudgetIsSharedAcrossRulesAndRelatedTextFields() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        service.addEntry(type: .correction, original: "ok|(a+)+$", replacement: "slow", isRegex: true)
+        service.addEntry(type: .correction, original: "(a+)+$", replacement: "slow", isRegex: true)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        let slowText = "ok teh " + String(repeating: "a", count: 100) + "!"
+        let inputs = ["ok teh"] + Array(repeating: slowText, count: 12)
+        let start = ContinuousClock.now
+        let results = service.applyCorrections(to: inputs)
+        XCTAssertLessThan(start.duration(to: .now), .seconds(1.5))
+        // The fast first field is rolled back when the same rule times out on a later field.
+        XCTAssertEqual(results, inputs.map { $0.replacingOccurrences(of: "teh", with: "the") })
+        XCTAssertTrue(service.corrections.filter(\.isRegex).allSatisfy { $0.usageCount == 0 })
+    }
+
+    @MainActor
+    func testRegexIdentityPreservesPatternCaseAndModeInEditorAndImport() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = DictionaryService(appSupportDirectory: directory)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        for pattern in [#"\d"#, #"\D"#] {
+            viewModel.startCreating(type: .correction)
+            viewModel.editOriginal = pattern
+            viewModel.editReplacement = "#"
+            viewModel.editIsRegex = true
+            XCTAssertTrue(viewModel.canSaveEditing)
+            viewModel.saveEditing()
+            XCTAssertFalse(viewModel.isEditing)
+        }
+        XCTAssertEqual(service.entries.count, 2)
+        XCTAssertTrue(service.appImportSnapshot.isEmpty)
+        viewModel.startCreating(type: .correction)
+        viewModel.editOriginal = #"\d"#
+        viewModel.editIsRegex = true
+        XCTAssertFalse(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        XCTAssertTrue(viewModel.isEditing)
+        XCTAssertNotNil(viewModel.error)
+        viewModel.editIsRegex = false
+        XCTAssertTrue(viewModel.canSaveEditing)
+        viewModel.saveEditing()
+        XCTAssertEqual(service.entries.count, 3)
+        let encoded = Data(DictionaryExporter.exportJSON(service.entries).utf8)
+        let importedDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(importedDirectory) }
+        let imported = DictionaryService(appSupportDirectory: importedDirectory)
+        let parsed = try DictionaryExporter.parseJSON(encoded)
+        imported.importEntries(parsed.map {
+            (type: $0.type, original: $0.original, replacement: $0.replacement, caseSensitive: $0.caseSensitive,
+             isRegex: $0.isRegex, isEnabled: $0.isEnabled, ctcMinSimilarity: $0.ctcMinSimilarity, source: $0.source)
+        })
+        XCTAssertEqual(imported.entries.count, 3)
+        XCTAssertEqual(imported.entries.filter(\.isRegex).count, 2)
+    }
+
+    @MainActor
     func testRegexEditorValidatesPatternsAndPreservesMode() throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }
@@ -464,7 +523,18 @@ final class DictionaryServiceTests: XCTestCase {
         let legacyData = try JSONSerialization.data(withJSONObject: legacyJSON)
         let legacyEntries = try JSONDecoder().decode([UserDataSyncDictionaryEntry].self, from: legacyData)
         XCTAssertFalse(try XCTUnwrap(legacyEntries.first).isRegex)
+        XCTAssertFalse(try XCTUnwrap(legacyEntries.first).isRegexFieldPresent)
         try destination.applyUserDataSyncMutations(legacyEntries.map(UserDataSyncMutation.upsertDictionary))
+        XCTAssertEqual(destination.applyCorrections(to: "Code 123"), "Code #")
+        XCTAssertEqual(destination.entries.count, 1)
+
+        legacyJSON[0]["isRegex"] = false
+        let literalEntries = try JSONDecoder().decode([UserDataSyncDictionaryEntry].self, from: JSONSerialization.data(withJSONObject: legacyJSON))
+        try destination.applyUserDataSyncMutations(literalEntries.map(UserDataSyncMutation.upsertDictionary))
+        XCTAssertEqual(destination.entries.count, 2)
+        try destination.applyUserDataSyncMutations([.deleteDictionary(itemID:
+            UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: #"\d+"#, isRegex: true)
+        )])
         XCTAssertEqual(destination.applyCorrections(to: "Code 123"), "Code 123")
     }
 

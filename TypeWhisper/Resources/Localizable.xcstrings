@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Could not save the dictionary entry." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Wörterbucheintrag konnte nicht gespeichert werden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書の項目を保存できませんでした。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存词典条目。"
+          }
+        }
+      }
+    },
+    "An entry with this original and matching mode already exists." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Eintrag mit diesem Ausgangstext und Suchmodus existiert bereits."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この元のテキストと一致モードの項目はすでに存在します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存在具有相同原文和匹配模式的条目。"
+          }
+        }
+      }
+    },
     "Regular expression" : {
       "localizations" : {
         "de" : {

@@ -145,7 +145,7 @@ final class DictionaryService: ObservableObject {
     }
 
     var appImportSnapshot: [AppVocabularyImport.Existing] {
-        entries.map {
+        entries.filter { !$0.isRegex }.map {
             AppVocabularyImport.Existing(id: $0.id, entry: AppVocabularyImport.Entry(kind: $0.type == .term ? .term : .correction, original: $0.original, replacement: $0.replacement),
                                          caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled)
         }
@@ -190,6 +190,21 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    static func entryIdentity(type: DictionaryEntryType, original: String, isRegex: Bool) -> String {
+        if type == .correction, isRegex {
+            return UserDataSyncIdentity.dictionaryItemID(entryType: type, original: original, isRegex: true)
+        }
+        return "\(type.rawValue):\(original.lowercased())"
+    }
+
+    func duplicateEntry(type: DictionaryEntryType, original: String, isRegex: Bool, excluding id: UUID? = nil) -> DictionaryEntry? {
+        let key = Self.entryIdentity(type: type, original: original, isRegex: isRegex)
+        return entries.first {
+            $0.id != id && Self.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex) == key
+        }
+    }
+
+    @discardableResult
     func addEntry(
         type: DictionaryEntryType,
         original: String,
@@ -198,12 +213,12 @@ final class DictionaryService: ObservableObject {
         isRegex: Bool = false,
         ctcMinSimilarity: Float? = nil,
         source: DictionaryEntrySource = .manual
-    ) {
-        guard let context = modelContext else { return }
+    ) -> Bool {
+        guard let context = modelContext else { return false }
 
         // Check for duplicate
-        if entries.contains(where: { $0.original.lowercased() == original.lowercased() && $0.type == type }) {
-            return
+        if duplicateEntry(type: type, original: original, isRegex: isRegex) != nil {
+            return false
         }
 
         let now = Date()
@@ -224,11 +239,14 @@ final class DictionaryService: ObservableObject {
         do {
             try context.save()
             loadEntries()
+            return true
         } catch {
             logger.error("Failed to save entry: \(error.localizedDescription)")
+            return false
         }
     }
 
+    @discardableResult
     func updateEntry(
         _ entry: DictionaryEntry,
         original: String,
@@ -236,8 +254,11 @@ final class DictionaryService: ObservableObject {
         caseSensitive: Bool,
         isRegex: Bool? = nil,
         ctcMinSimilarity: Float? = nil
-    ) {
-        guard let context = modelContext else { return }
+    ) -> Bool {
+        guard let context = modelContext else { return false }
+        guard duplicateEntry(type: entry.type, original: original, isRegex: isRegex ?? entry.isRegex, excluding: entry.id) == nil else {
+            return false
+        }
 
         entry.original = original
         entry.replacement = replacement
@@ -249,8 +270,10 @@ final class DictionaryService: ObservableObject {
         do {
             try context.save()
             loadEntries()
+            return true
         } catch {
             logger.error("Failed to update entry: \(error.localizedDescription)")
+            return false
         }
     }
 
@@ -321,10 +344,10 @@ final class DictionaryService: ObservableObject {
     func addEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
-        var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
+        var existingOriginals = Set(entries.map { Self.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex) })
 
         for item in items {
-            let key = "\(item.type.rawValue):\(item.original.lowercased())"
+            let key = Self.entryIdentity(type: item.type, original: item.original, isRegex: false)
             guard !existingOriginals.contains(key) else { continue }
             let now = Date()
 
@@ -379,10 +402,10 @@ final class DictionaryService: ObservableObject {
     func importEntries(_ items: [(type: DictionaryEntryType, original: String, replacement: String?, caseSensitive: Bool, isRegex: Bool, isEnabled: Bool, ctcMinSimilarity: Float?, source: DictionaryEntrySource)]) {
         guard let context = modelContext, !items.isEmpty else { return }
 
-        var existingOriginals = Set(entries.map { "\($0.type.rawValue):\($0.original.lowercased())" })
+        var existingOriginals = Set(entries.map { Self.entryIdentity(type: $0.type, original: $0.original, isRegex: $0.isRegex) })
 
         for item in items {
-            let key = "\(item.type.rawValue):\(item.original.lowercased())"
+            let key = Self.entryIdentity(type: item.type, original: item.original, isRegex: item.isRegex)
             guard !existingOriginals.contains(key) else { continue }
             let now = Date()
 
@@ -756,16 +779,28 @@ final class DictionaryService: ObservableObject {
     ) -> [String] {
         var results = texts
         var needsSave = false
+        let regexDeadline = ContinuousClock.now + .milliseconds(250)
 
         for correction in correctionsForApplication {
             guard let replacement = correction.replacement else { continue }
 
             var correctionWasApplied = false
+            var correctionResults = results
+            var interrupted = false
             for index in results.indices {
                 let before = results[index]
-                results[index] = applyCorrection(correction, to: before, replacement: replacement)
-                correctionWasApplied = correctionWasApplied || results[index] != before
+                guard let corrected = applyCorrection(
+                    correction, to: before, replacement: replacement, regexDeadline: regexDeadline
+                ) else {
+                    interrupted = true
+                    break
+                }
+                correctionResults[index] = corrected
+                correctionWasApplied = correctionWasApplied || corrected != before
             }
+            // A timed-out rule must not leave the full transcript and its segments inconsistent.
+            guard !interrupted else { continue }
+            results = correctionResults
 
             if correctionWasApplied, countedCorrectionIDs.insert(correction.id).inserted {
                 correction.usageCount += 1
@@ -794,12 +829,17 @@ final class DictionaryService: ObservableObject {
     /// Like `previewCorrections(to:)`, and adds the id of every correction that changed the
     /// text to `appliedCorrectionIDs`, so a caller can count their usage later with
     /// `recordUsage(ofCorrectionIDs:deferUsageCountSave:)` once the result is actually used.
-    func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>) -> String {
+    func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true) -> String {
         var result = text
+        let regexDeadline = ContinuousClock.now + .milliseconds(250)
         for correction in correctionsForApplication {
+            guard includeRegex || !correction.isRegex else { continue }
             guard let replacement = correction.replacement else { continue }
             let before = result
-            result = applyCorrection(correction, to: before, replacement: replacement)
+            guard let corrected = applyCorrection(
+                correction, to: before, replacement: replacement, regexDeadline: regexDeadline
+            ) else { continue }
+            result = corrected
             if result != before {
                 appliedCorrectionIDs.insert(correction.id)
             }
@@ -838,10 +878,15 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
+    private func applyCorrection(
+        _ correction: DictionaryEntry,
+        to text: String,
+        replacement: String,
+        regexDeadline: ContinuousClock.Instant
+    ) -> String? {
         if correction.isRegex {
             guard let regex = regexCorrections[correction.id] else { return text }
-            return Self.replacingRegexMatches(regex, in: text, with: replacement)
+            return Self.replacingRegexMatches(regex, in: text, with: replacement, deadline: regexDeadline)
         }
 
         switch matchPolicy(for: correction) {
@@ -911,10 +956,15 @@ final class DictionaryService: ObservableObject {
         return result
     }
 
-    private static func replacingRegexMatches(_ regex: NSRegularExpression, in text: String, with replacement: String) -> String {
-        // Match Windows' 250 ms budget. Progress callbacks also interrupt a single
-        // pathological match; discard partial results if matching is interrupted.
-        let deadline = ContinuousClock.now + .milliseconds(250)
+    private static func replacingRegexMatches(
+        _ regex: NSRegularExpression,
+        in text: String,
+        with replacement: String,
+        deadline: ContinuousClock.Instant
+    ) -> String? {
+        // One 250 ms budget covers all regex rules and related text fields in this pass.
+        // Progress callbacks interrupt a single pathological match as well.
+        guard ContinuousClock.now < deadline else { return nil }
         let source = text as NSString
         let replacement = expandedRegexReplacement(replacement)
         var result = ""
@@ -935,7 +985,7 @@ final class DictionaryService: ObservableObject {
             result += replacement
             endOfLastMatch = NSMaxRange(match.range)
         }
-        guard !interrupted else { return text }
+        guard !interrupted else { return nil }
         result += source.substring(from: endOfLastMatch)
         return result
     }
@@ -1183,7 +1233,7 @@ final class DictionaryService: ObservableObject {
 
         var existingOriginals = Set(
             entries
-                .filter { $0.type == .correction }
+                .filter { $0.type == .correction && !$0.isRegex }
                 .map { $0.original.lowercased() }
         )
         let now = Date()
@@ -1293,7 +1343,7 @@ final class DictionaryService: ObservableObject {
             ))
         }
 
-        let existingCorrections = entries.filter { $0.type == .correction }
+        let existingCorrections = entries.filter { $0.type == .correction && !$0.isRegex }
         var seenCandidateKeys = Set<String>()
         var addedCorrections: [String] = []
         var duplicateCorrections: [String] = []
@@ -1398,18 +1448,16 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    func upsertAPICorrection(original: String, replacement: String, caseSensitive: Bool) throws {
+    func upsertAPICorrection(original: String, replacement: String, caseSensitive: Bool, isRegex: Bool = false) throws {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
 
-        if let entry = entries.first(where: {
-            $0.type == .correction &&
-            $0.original.caseInsensitiveCompare(original) == .orderedSame
-        }) {
+        if let entry = duplicateEntry(type: .correction, original: original, isRegex: isRegex) {
             entry.original = original
             entry.replacement = replacement
             entry.caseSensitive = caseSensitive
+            entry.isRegex = isRegex
             entry.isEnabled = true
             entry.source = .manual
             entry.updatedAt = Date()
@@ -1420,6 +1468,7 @@ final class DictionaryService: ObservableObject {
                 original: original,
                 replacement: replacement,
                 caseSensitive: caseSensitive,
+                isRegex: isRegex,
                 isEnabled: true,
                 source: .manual,
                 createdAt: now,
@@ -1437,15 +1486,12 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    func deleteAPICorrection(original: String) throws -> Bool {
+    func deleteAPICorrection(original: String, isRegex: Bool = false) throws -> Bool {
         guard let context = modelContext else {
             throw DictionaryServiceMutationError.unavailable
         }
 
-        guard let entry = entries.first(where: {
-            $0.type == .correction &&
-            $0.original.caseInsensitiveCompare(original) == .orderedSame
-        }) else {
+        guard let entry = duplicateEntry(type: .correction, original: original, isRegex: isRegex) else {
             return false
         }
 
@@ -1466,7 +1512,7 @@ final class DictionaryService: ObservableObject {
         excludingCorrectionItemIDs: Set<String> = []
     ) -> [UserDataSyncDictionaryEntry] {
         entries.compactMap { entry in
-            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.type, original: entry.original)
+            let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.type, original: entry.original, isRegex: entry.isRegex)
             if entry.type == .term, excludingTermItemIDs.contains(itemID) {
                 return nil
             }
@@ -1526,17 +1572,24 @@ final class DictionaryService: ObservableObject {
 
     private func upsertSyncedDictionaryEntry(_ synced: UserDataSyncDictionaryEntry, context: ModelContext) {
         let targetType = DictionaryEntryType(synced.entryType)
-        let targetID = UserDataSyncIdentity.dictionaryItemID(entryType: synced.entryType, original: synced.original)
+        let targetID = UserDataSyncIdentity.dictionaryItemID(entryType: synced.entryType, original: synced.original, isRegex: synced.isRegex)
         let replacement = targetType == .correction ? (synced.replacement ?? "") : nil
 
         if let entry = entries.first(where: {
             $0.type == targetType &&
-            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == targetID
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original, isRegex: $0.isRegex) == targetID
+        }) ?? entries.first(where: {
+            targetType == .correction && !synced.isRegexFieldPresent && $0.isRegex &&
+            $0.original.utf8.elementsEqual(synced.original.utf8)
         }) {
             entry.original = synced.original
             entry.replacement = replacement
             entry.caseSensitive = synced.caseSensitive
-            entry.isRegex = targetType == .correction && synced.isRegex
+            if targetType != .correction {
+                entry.isRegex = false
+            } else if synced.isRegexFieldPresent {
+                entry.isRegex = synced.isRegex
+            }
             entry.isEnabled = synced.isEnabled
             entry.source = synced.source ?? .manual
             if targetType == .correction {
@@ -1566,7 +1619,7 @@ final class DictionaryService: ObservableObject {
 
     private func deleteSyncedDictionaryEntry(itemID: String, context: ModelContext) {
         guard let entry = entries.first(where: {
-            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original) == itemID
+            UserDataSyncIdentity.dictionaryItemID(entryType: $0.type, original: $0.original, isRegex: $0.isRegex) == itemID
         }) else {
             return
         }

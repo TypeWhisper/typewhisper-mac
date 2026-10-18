@@ -1282,6 +1282,7 @@ final class APIHandlers: @unchecked Sendable {
         let original: String
         let replacement: String
         let caseSensitive: Bool
+        let isRegex: Bool
     }
 
     private struct DictionaryCorrectionsResponse: Encodable {
@@ -1300,6 +1301,7 @@ final class APIHandlers: @unchecked Sendable {
             let original: String
             let replacement: String
             let caseSensitive: Bool?
+            let isRegex: Bool?
         }
 
         guard !request.body.isEmpty else {
@@ -1313,9 +1315,13 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Invalid JSON body")
         }
 
-        let original = payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRegex = payload.isRegex ?? false
+        let original = isRegex ? payload.original : payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !original.isEmpty else {
             return .error(status: 400, message: "Missing or empty 'original'")
+        }
+        if isRegex, (try? NSRegularExpression(pattern: original)) == nil {
+            return .error(status: 400, message: "Invalid regular expression")
         }
 
         do {
@@ -1323,7 +1329,8 @@ final class APIHandlers: @unchecked Sendable {
                 try dictionaryService.upsertAPICorrection(
                     original: original,
                     replacement: payload.replacement,
-                    caseSensitive: payload.caseSensitive ?? false
+                    caseSensitive: payload.caseSensitive ?? false,
+                    isRegex: isRegex
                 )
                 return dictionaryCorrectionsResponse()
             }
@@ -1335,6 +1342,7 @@ final class APIHandlers: @unchecked Sendable {
     private func handleDeleteDictionaryCorrections(_ request: HTTPRequest) async -> HTTPResponse {
         struct DeleteDictionaryCorrectionRequest: Decodable {
             let original: String
+            let isRegex: Bool?
         }
 
         struct DeleteResponse: Encodable {
@@ -1353,14 +1361,15 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Invalid JSON body")
         }
 
-        let original = payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isRegex = payload.isRegex ?? false
+        let original = isRegex ? payload.original : payload.original.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !original.isEmpty else {
             return .error(status: 400, message: "Missing or empty 'original'")
         }
 
         do {
             return try await MainActor.run {
-                let deleted = try dictionaryService.deleteAPICorrection(original: original)
+                let deleted = try dictionaryService.deleteAPICorrection(original: original, isRegex: isRegex)
                 let count = dictionaryService.corrections.count
                 return .json(DeleteResponse(deleted: deleted, count: count))
             }
@@ -1375,7 +1384,8 @@ final class APIHandlers: @unchecked Sendable {
             DictionaryCorrectionEntry(
                 original: $0.original,
                 replacement: $0.replacement ?? "",
-                caseSensitive: $0.caseSensitive
+                caseSensitive: $0.caseSensitive,
+                isRegex: $0.isRegex
             )
         }
         return .json(DictionaryCorrectionsResponse(corrections: corrections, count: corrections.count))

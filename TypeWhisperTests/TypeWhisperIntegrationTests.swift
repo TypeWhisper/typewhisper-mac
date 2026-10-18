@@ -3230,6 +3230,39 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(missingOriginalDelete.status, 400)
     }
 
+    func testDictionaryAPIKeepsRegexModeAndPatternIdentityExplicit() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = await MainActor.run { Self.makeAPIContext(appSupportDirectory: directory) }
+        let router = context.router
+        func request(_ method: String, _ payload: [String: Any] = [:]) async throws -> HTTPResponse {
+            await router.route(HTTPRequest(method: method, path: "/v1/dictionary/corrections",
+                queryParams: [:], headers: ["content-type": "application/json"],
+                body: method == "GET" ? Data() : try JSONSerialization.data(withJSONObject: payload)))
+        }
+        for pattern in [#"\d"#, #"\D"#, " word "] {
+            let response = try await request("PUT", ["original": pattern, "replacement": "#", "isRegex": true])
+            XCTAssertEqual(response.status, 200)
+        }
+        // Older clients keep their literal-only contract and cannot mutate a regex entry.
+        let literalResponse = try await request("PUT", ["original": #"\d"#, "replacement": "literal"])
+        XCTAssertEqual(literalResponse.status, 200)
+        let response = try await request("GET")
+        let object = try Self.jsonObject(response)
+        let entries = try XCTUnwrap(object["corrections"] as? [[String: Any]])
+        XCTAssertEqual(entries.count, 4)
+        XCTAssertEqual(entries.filter { $0["isRegex"] as? Bool == true }.count, 3)
+        XCTAssertTrue(entries.contains { $0["original"] as? String == " word " })
+        let invalid = try await request("PUT", ["original": "[", "replacement": "#", "isRegex": true])
+        XCTAssertEqual(invalid.status, 400)
+        let deleted = try Self.jsonObject(await request("DELETE", ["original": #"\D"#, "isRegex": true]))
+        XCTAssertEqual(deleted["count"] as? Int, 3)
+        let remaining = await MainActor.run { context.dictionaryService.entries.map { ($0.original, $0.isRegex) } }
+        XCTAssertTrue(remaining.contains { $0.0 == #"\d"# && $0.1 })
+        XCTAssertTrue(remaining.contains { $0.0 == #"\d"# && !$0.1 })
+        XCTAssertFalse(remaining.contains { $0.0 == #"\D"# })
+    }
+
     func testTranscribeEndpointPassesDictionaryTermsAsPrompt() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?

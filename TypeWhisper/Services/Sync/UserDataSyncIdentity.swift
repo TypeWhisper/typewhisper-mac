@@ -1,12 +1,19 @@
 import Foundation
 
 enum UserDataSyncIdentity {
-    static func dictionaryItemID(entryType: UserDataSyncDictionaryEntryType, original: String) -> String {
-        "dictionary:\(entryType.rawValue):\(encodedKey(normalizedKey(original)))"
+    static let regexCorrectionPrefix = "dictionary:correction:regex:"
+
+    static func dictionaryItemID(entryType: UserDataSyncDictionaryEntryType, original: String, isRegex: Bool = false) -> String {
+        if entryType == .correction, isRegex {
+            // Pattern bytes are significant: \d and \D, accents, and surrounding spaces
+            // must not collapse even when the expression matches case-insensitively.
+            return regexCorrectionPrefix + encodedKey(original)
+        }
+        return "dictionary:\(entryType.rawValue):\(encodedKey(normalizedKey(original)))"
     }
 
-    static func dictionaryItemID(entryType: DictionaryEntryType, original: String) -> String {
-        dictionaryItemID(entryType: UserDataSyncDictionaryEntryType(entryType), original: original)
+    static func dictionaryItemID(entryType: DictionaryEntryType, original: String, isRegex: Bool = false) -> String {
+        dictionaryItemID(entryType: UserDataSyncDictionaryEntryType(entryType), original: original, isRegex: isRegex)
     }
 
     static func snippetItemID(trigger: String) -> String {
