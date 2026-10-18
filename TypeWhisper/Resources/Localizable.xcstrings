@@ -29465,6 +29465,29 @@
         }
       }
     },
+    "Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuvor synchronisierte Korrekturdateien fehlen oder sind nicht lesbar. Warte, bis dein Cloud-Anbieter sie heruntergeladen hat. Falls die alten Dateien gelöscht wurden, wähle einen neuen Sync-Ordner."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前に同期した修正ルールのファイルが見つからないか、読み取れません。クラウドサービスによるダウンロードの完了を待ってください。古いファイルを削除した場合は、新しい同期フォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之前同步的纠正规则文件缺失或无法读取。请等待云服务完成下载；如果旧文件已被删除，请选择新的同步文件夹。"
+          }
+        }
+      }
+    },
     "Pricing in short" : {
       "localizations" : {
         "ja" : {

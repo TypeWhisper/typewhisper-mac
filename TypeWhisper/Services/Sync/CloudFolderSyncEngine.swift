@@ -346,7 +346,7 @@ enum CloudFolderSyncError: LocalizedError {
         case .notEntitled:
             String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
         case .incompleteMigrationHistory:
-            String(localized: "Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them.")
+            String(localized: "Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted.")
         }
     }
 }
@@ -380,27 +380,43 @@ enum CloudFolderSyncEngine {
             throw CloudFolderSyncError.missingStore
         }
 
-        let stateSnapshot = state
+        let previousState = state
         // Repair modes dropped by a pre-regex Mac before it can republish them as
         // explicit literals. Only already-applied v1 operations and pre-v3 state qualify.
-        let legacyOperations: [CloudFolderSyncOperation]
-        if stateSnapshot.knownLocalItemIDs.contains(where: {
+        let migration: (operations: [CloudFolderSyncOperation], rebuildPackage: Bool)
+        if previousState.knownLocalItemIDs.contains(where: {
             $0.hasPrefix("dictionary:correction:") &&
-                stateSnapshot.exportedItemVersions[$0]?.hasPrefix("dictionary-v3|") != true
+                previousState.exportedItemVersions[$0]?.hasPrefix("dictionary-v3|") != true
         }) {
-            legacyOperations = try await Task.detached(priority: .utility) {
+            migration = try await Task.detached(priority: .utility) {
                 let operationsURL = packageURL(for: folderURL).appendingPathComponent(operationsDirectoryName)
-                let operations = FileManager.default.fileExists(atPath: operationsURL.path)
-                    ? try readOperations(from: operationsURL, cache: cache ?? CloudFolderSyncCache()).operations
-                    : []
-                if !legacyCorrectionHistoryIsComplete(operations: operations, state: stateSnapshot) {
-                    throw CloudFolderSyncError.incompleteMigrationHistory
+                let read = FileManager.default.fileExists(atPath: operationsURL.path)
+                    ? try readOperations(from: operationsURL, cache: cache ?? CloudFolderSyncCache())
+                    : (operations: [CloudFolderSyncOperation](), diagnostics: [CloudFolderSyncDiagnostic]())
+                if !legacyCorrectionHistoryIsComplete(operations: read.operations, state: previousState) {
+                    let hasAppliedHistory = read.operations.contains { previousState.appliedOperationIDs.contains($0.operationId) }
+                    let unreadableHistory = read.diagnostics.contains { $0.kind == .unreadableFile || $0.kind == .malformedOperation }
+                    guard !hasAppliedHistory && !unreadableHistory else {
+                        throw CloudFolderSyncError.incompleteMigrationHistory
+                    }
+                    // No old operations remain in an otherwise readable package.
+                    // Republish local data without guessing old deletion identities.
+                    return (operations: [CloudFolderSyncOperation](), rebuildPackage: true)
                 }
-                return operations.filter { $0.schemaVersion == 1 }
+                return (operations: read.operations.filter { $0.schemaVersion == 1 }, rebuildPackage: false)
             }.value
         } else {
-            legacyOperations = []
+            migration = (operations: [], rebuildPackage: false)
         }
+        let legacyOperations = migration.operations
+        let stateSnapshot: CloudFolderSyncState = {
+            var snapshot = previousState
+            if migration.rebuildPackage {
+                snapshot.knownLocalItemIDs = []
+                snapshot.exportedItemVersions = [:]
+            }
+            return snapshot
+        }()
         let preparation = try await MainActor.run {
             let snapshot = store.snapshot()
             let repairs = legacyRegexRepairs(operations: legacyOperations, snapshot: snapshot, state: stateSnapshot)
@@ -832,16 +848,29 @@ enum CloudFolderSyncEngine {
         return record.itemID
     }
 
+    private static func legacyDictionaryAliases(
+        from operations: [CloudFolderSyncOperation], localRecords: [String: CloudFolderSyncRecord] = [:]
+    ) -> [String: String] {
+        var legacyAliases: [String: String] = [:]
+        func remember(_ entry: UserDataSyncDictionaryEntry, transmittedID: String? = nil) {
+            // Always map to the folded v1 namespace, never to an exact regex ID.
+            let key = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+            if let transmittedID { legacyAliases[transmittedID] = key }
+            legacyAliases["dictionary:\(entry.entryType.rawValue):\(UserDataSyncIdentity.normalizedKey(entry.original))"] = key
+        }
+        for record in localRecords.values {
+            if let entry = record.dictionary { remember(entry) }
+        }
+        for operation in operations where operation.schemaVersion == 1 && operation.kind == .upsert && operationIsValid(operation) {
+            if let entry = operation.dictionary { remember(entry, transmittedID: operation.itemId) }
+        }
+        return legacyAliases
+    }
+
     private static func legacyWinningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
         // Resolve the old namespace before migrating regex upserts. Otherwise an old
         // tombstone or a renamed pattern would resurrect superseded v1 regex records.
-        var legacyAliases: [String: String] = [:]
-        for operation in operations where operation.schemaVersion == 1 {
-            guard let entry = operation.dictionary, entry.isRegex else { continue }
-            let key = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
-            legacyAliases[operation.itemId] = key
-            legacyAliases["dictionary:correction:\(UserDataSyncIdentity.normalizedKey(entry.original))"] = key
-        }
+        let legacyAliases = legacyDictionaryAliases(from: operations)
         return operations.filter { $0.schemaVersion == 1 && operationIsValid($0) }
             .reduce(into: [String: CloudFolderSyncOperation]()) { result, operation in
                 let key = operation.dictionary.map {
@@ -888,6 +917,7 @@ enum CloudFolderSyncEngine {
         localRecords: [String: CloudFolderSyncRecord] = [:]
     ) -> [String: CloudFolderSyncOperation] {
         let legacyWinners = legacyWinningOperations(from: operations)
+        let legacyAliases = legacyDictionaryAliases(from: operations, localRecords: localRecords)
         return operations.reduce(into: [:]) { result, operation in
             guard operationSchemaIsSupported(operation) else { return }
             guard operationIsValid(operation) else { return }
@@ -896,6 +926,10 @@ enum CloudFolderSyncEngine {
                 guard legacyWinners[oldKey]?.operationId == operation.operationId else { return }
             }
             var operation = operation
+            if operation.schemaVersion == 1, operation.collection == .dictionary, operation.kind == .delete,
+               localRecords[operation.itemId] == nil, let canonicalID = legacyAliases[operation.itemId] {
+                operation.itemId = canonicalID
+            }
             if operation.kind == .upsert, let entry = operation.dictionary {
                 var effectiveEntry = entry
                 // An old peer may omit the mode of a regex entry it previously received.
