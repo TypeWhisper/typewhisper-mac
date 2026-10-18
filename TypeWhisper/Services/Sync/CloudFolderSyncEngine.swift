@@ -390,18 +390,13 @@ enum CloudFolderSyncEngine {
         }) {
             legacyOperations = try await Task.detached(priority: .utility) {
                 let operationsURL = packageURL(for: folderURL).appendingPathComponent(operationsDirectoryName)
-                guard FileManager.default.fileExists(atPath: operationsURL.path) else { return [CloudFolderSyncOperation]() }
-                let result = try readOperations(
-                    from: operationsURL,
-                    cache: cache ?? CloudFolderSyncCache()
-                )
-                // Missing applied history makes the last mode ambiguous. Do not
-                // publish a deletion or advance the migration while files are partial.
-                if result.diagnostics.contains(where: { $0.kind == .unreadableFile || $0.kind == .malformedOperation }),
-                   !stateSnapshot.appliedOperationIDs.isSubset(of: Set(result.operations.map(\.operationId))) {
+                let operations = FileManager.default.fileExists(atPath: operationsURL.path)
+                    ? try readOperations(from: operationsURL, cache: cache ?? CloudFolderSyncCache()).operations
+                    : []
+                if !legacyCorrectionHistoryIsComplete(operations: operations, state: stateSnapshot) {
                     throw CloudFolderSyncError.incompleteMigrationHistory
                 }
-                return result.operations.filter { $0.schemaVersion == 1 }
+                return operations.filter { $0.schemaVersion == 1 }
             }.value
         } else {
             legacyOperations = []
@@ -855,6 +850,22 @@ enum CloudFolderSyncEngine {
                 if let existing = result[key], !prefers(operation, over: existing) { return }
                 result[key] = operation
             }
+    }
+
+    private static func legacyCorrectionHistoryIsComplete(
+        operations: [CloudFolderSyncOperation], state: CloudFolderSyncState
+    ) -> Bool {
+        let known = legacyWinningOperations(from: operations.filter { state.appliedOperationIDs.contains($0.operationId) })
+        return state.knownLocalItemIDs.allSatisfy { itemID in
+            guard itemID.hasPrefix("dictionary:correction:"), !itemID.hasPrefix("dictionary:correction:regex:"),
+                  let version = state.exportedItemVersions[itemID], !version.hasPrefix("dictionary-v3|") else { return true }
+            // Upserts are retained even when unrelated applied tombstones are pruned.
+            // Match the last exported version: an older readable operation is not enough.
+            guard let operation = known[itemID], operation.kind == .upsert,
+                  let entry = operation.dictionary, entry.entryType == .correction else { return false }
+            let timestamp = versionString(for: entry.updatedAt)
+            return version == timestamp || version == "dictionary-v2|\(timestamp)"
+        }
     }
 
     /// Recover the identity this device last synced, before any local deletion or mode

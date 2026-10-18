@@ -4354,8 +4354,53 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testRegexUpgradeIgnoresPrunedOperationsAndUnrelatedUnreadableFiles() async throws {
+        for prefix in ["", "dictionary-v2|"] {
+            for deleted in [false, true] {
+                let folder = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(folder) }
+                let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+                try Self.writeLegacyOperation(legacy, to: folder)
+                let remote = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/\(legacy.deviceId)")
+                try Data("{".utf8).write(to: remote.appendingPathComponent("unrelated-partial.json"))
+                let history = CloudFolderSyncOperation.deleteHistory(recordID: UUID(), generation: "history-v1",
+                    deviceId: legacy.deviceId, deletedAt: Self.date(5), operationId: "readable-history")
+                try Self.entitlementEncoder.encode(history).write(to: remote.appendingPathComponent("history.json"))
+                let entry = try XCTUnwrap(legacy.dictionary)
+                let snippet = Self.snippet(trigger: ";sig", replacement: "Signature", updatedAt: Self.date(15))
+                let store = InMemoryUserDataSyncStore(dictionaryEntries: deleted ? [] : [entry], snippets: [snippet])
+                var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
+                    exportedItemVersions: [legacy.itemId: prefix + "2023-11-14T22:13:30.000Z"],
+                    appliedOperationIDs: [legacy.operationId, history.operationId, "expired-dictionary-delete", "expired-snippet-delete", "expired-history-delete"])
+                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                    try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+                }
+                let dictionaryOperations = published.filter { $0.collection == .dictionary }
+                if deleted {
+                    XCTAssertTrue(store.dictionaryEntries.isEmpty)
+                    XCTAssertEqual(dictionaryOperations.count, 2)
+                    XCTAssertTrue(dictionaryOperations.allSatisfy { $0.kind == .delete })
+                    XCTAssertTrue(dictionaryOperations.contains { $0.schemaVersion == 2 })
+                } else {
+                    XCTAssertEqual(store.dictionaryEntries, [entry])
+                    XCTAssertEqual(dictionaryOperations.count, 1)
+                    XCTAssertEqual(dictionaryOperations.first?.schemaVersion, 2)
+                    XCTAssertEqual(dictionaryOperations.first?.kind, .upsert)
+                }
+                XCTAssertTrue(published.contains { $0.snippet == snippet })
+                for now in [Self.date(40), Self.date(50)] {
+                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: now)
+                    XCTAssertEqual(repeated.operationsWritten, 0)
+                }
+            }
+        }
+    }
+
+    @MainActor
     func testRegexUpgradeWaitsForAppliedLegacyFilesBeforeChangingDataOrState() async throws {
-        for mode in ["regex", "deleted", "misimportedLiteral"] {
+        for mode in ["regex", "deleted", "misimportedLiteral", "missingFile"] {
             let folder = try TestSupport.makeTemporaryDirectory()
             defer { TestSupport.remove(folder) }
             let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
@@ -4364,7 +4409,11 @@ final class CloudFolderSyncTests: XCTestCase {
             let operationsFolder = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops")
             let legacyFile = operationsFolder.appendingPathComponent("\(legacy.deviceId)/legacy.json")
             let data = try Data(contentsOf: legacyFile)
-            try Data("{".utf8).write(to: legacyFile)
+            if mode == "missingFile" {
+                try FileManager.default.removeItem(at: legacyFile)
+            } else {
+                try Data("{".utf8).write(to: legacyFile)
+            }
             // An older readable literal must not be mistaken for the latest applied mode.
             let older = CloudFolderSyncOperation.upsertDictionary(
                 Self.dictionaryEntry(entryType: .correction, original: entry.original, replacement: "old", updatedAt: Self.date(5)),
@@ -4375,17 +4424,19 @@ final class CloudFolderSyncTests: XCTestCase {
                 : [mode == "misimportedLiteral" ? entry.preservingRegexMode(false) : entry])
             let snapshot = store.dictionaryEntries
             var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
-                exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+                exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: [legacy.operationId, older.operationId])
             let previousState = state
             let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
             do {
                 _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(20))
                 XCTFail("Migration must wait for the applied operation to become readable")
-            } catch {
+            } catch CloudFolderSyncError.incompleteMigrationHistory {
                 XCTAssertEqual(state.knownLocalItemIDs, previousState.knownLocalItemIDs)
                 XCTAssertEqual(state.exportedItemVersions, previousState.exportedItemVersions)
                 XCTAssertEqual(state.appliedOperationIDs, previousState.appliedOperationIDs)
+            } catch {
+                return XCTFail("Unexpected error: \(error)")
             }
             XCTAssertEqual(store.dictionaryEntries, snapshot)
             XCTAssertTrue(Self.operationFiles(folder: folder, deviceId: "mac").isEmpty)
@@ -4442,7 +4493,7 @@ final class CloudFolderSyncTests: XCTestCase {
         try Self.writeLegacyOperation(legacy, to: folder)
         func oldState(_ device: String) -> CloudFolderSyncState {
             CloudFolderSyncState(deviceId: device, knownLocalItemIDs: [oldID],
-                exportedItemVersions: [oldID: "dictionary-v2|1700000010000"], appliedOperationIDs: [legacy.operationId])
+                exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [legacy.operationId])
         }
         var a = oldState("a")
         var b = oldState("b")
@@ -4473,7 +4524,7 @@ final class CloudFolderSyncTests: XCTestCase {
             try Self.writeLegacyOperation(legacy, to: folder)
             func oldState(_ device: String) -> CloudFolderSyncState {
                 CloudFolderSyncState(deviceId: device, knownLocalItemIDs: [legacy.itemId],
-                    exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"], appliedOperationIDs: [legacy.operationId])
+                    exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [legacy.operationId])
             }
             var a = oldState("a")
             var b = oldState("b")
@@ -4530,7 +4581,7 @@ final class CloudFolderSyncTests: XCTestCase {
             let store = TypeWhisperUserDataSyncStore(dictionaryService: dictionary,
                 snippetService: SnippetService(appSupportDirectory: folder.appendingPathComponent("snippets")))
             var state = CloudFolderSyncState(deviceId: deviceID, knownLocalItemIDs: [legacy.itemId],
-                exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+                exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: [legacy.operationId])
             let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
             _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
@@ -4573,7 +4624,7 @@ final class CloudFolderSyncTests: XCTestCase {
             replacement: "edited", updatedAt: Self.date(20))
         let store = InMemoryUserDataSyncStore(dictionaryEntries: [literal])
         var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
-            exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+            exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
             appliedOperationIDs: [legacy.operationId])
         _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
             entitlements: PaidEntitlements(canUseCloudFolderSync: true), now: Self.date(30))
