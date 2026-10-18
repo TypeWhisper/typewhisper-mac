@@ -1518,6 +1518,72 @@
           }
         }
       }
+    },
+    "Upload Format": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Upload-Format"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アップロード形式"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上传格式"
+          }
+        }
+      }
+    },
+    "WAV": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        }
+      }
+    },
+    "Auto compresses batch uploads as M4A and retries as WAV if needed. WAV uploads directly for servers that do not accept M4A.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto komprimiert Batch-Uploads als M4A und versucht es bei Bedarf erneut mit WAV. WAV lädt direkt hoch, wenn der Server M4A nicht unterstützt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AutoではバッチアップロードをM4Aに圧縮し、必要に応じてWAVで再試行します。M4Aに対応していないサーバーには、WAVで直接アップロードできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto 将批量上传压缩为 M4A，并在需要时以 WAV 重试。对于不支持 M4A 的服务器，WAV 会直接上传。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

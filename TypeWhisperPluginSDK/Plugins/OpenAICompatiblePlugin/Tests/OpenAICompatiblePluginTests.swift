@@ -70,6 +70,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(profile.llmTemperatureModeRaw, PluginLLMTemperatureMode.custom.rawValue)
         XCTAssertEqual(profile.llmTemperatureValue, 0.7)
         XCTAssertFalse(profile.thinkingEnabled)
+        XCTAssertEqual(profile.uploadFormat, .auto)
         XCTAssertEqual(profile.llmAPI, .chatCompletions)
         XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.fetchedModels.map(\.id), ["legacy-model"])
@@ -129,6 +130,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(profile.apiVersion, "")
         XCTAssertFalse(profile.thinkingEnabled)
         XCTAssertEqual(profile.batchEndpoint, .standard)
+        XCTAssertEqual(profile.uploadFormat, .auto)
         XCTAssertEqual(profile.llmAPI, .chatCompletions)
         XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.resolvedChatRequestTimeout, 45)
@@ -711,6 +713,273 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "sovereign-key")
     }
 
+    func testUploadFormatPersistsIndependentlyForEachProfile() throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let wavProfile = plugin.addProfile(named: "WAV Server")
+        let autoProfile = plugin.addProfile(named: "Auto Server")
+
+        XCTAssertEqual(wavProfile.uploadFormat, .auto)
+        plugin.setUploadFormat(.wav, for: wavProfile.id)
+        plugin.deactivate()
+
+        let reloaded = OpenAICompatiblePlugin()
+        reloaded.activate(host: host)
+        XCTAssertEqual(reloaded.profileSnapshot(for: wavProfile.id)?.uploadFormat, .wav)
+        XCTAssertEqual(reloaded.profileSnapshot(for: autoProfile.id)?.uploadFormat, .auto)
+        XCTAssertEqual(reloaded.profileSnapshot(for: reloaded.providerId)?.uploadFormat, .auto)
+
+        reloaded.setUploadFormat(.wav, for: reloaded.providerId)
+        reloaded.setUploadFormat(.auto, for: wavProfile.id)
+        reloaded.deactivate()
+        let persisted = OpenAICompatiblePlugin()
+        persisted.activate(host: host)
+        XCTAssertEqual(persisted.profileSnapshot(for: persisted.providerId)?.uploadFormat, .wav)
+        XCTAssertEqual(persisted.profileSnapshot(for: wavProfile.id)?.uploadFormat, .auto)
+    }
+
+    func testUnknownSavedUploadFormatDefaultsToAutoWithoutDroppingProfile() throws {
+        let savedProfile = OpenAICompatibleProfile(
+            id: OpenAICompatibleProfile.defaultId,
+            name: "Saved Server",
+            baseURL: "https://example.test",
+            selectedModelId: "large-v3",
+            uploadFormatRaw: "future-format"
+        )
+        let host = try PluginTestHostServices(defaults: [
+            "profiles": try JSONEncoder().encode([savedProfile]),
+        ])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        let profile = try XCTUnwrap(plugin.profileSnapshots.first)
+        XCTAssertEqual(profile.name, "Saved Server")
+        XCTAssertEqual(profile.selectedModelId, "large-v3")
+        XCTAssertEqual(profile.uploadFormat, .auto)
+    }
+
+    private static let batchUploadTestRoutes: [
+        (apiVersion: String, endpoint: OpenAICompatibleBatchEndpoint, path: String)
+    ] = [
+        ("", .standard, "/openai/v1/audio"),
+        ("2025-03-01-preview", .standard, "/openai/v1/audio"),
+        ("2025-03-01-preview", .deploymentScoped, "/openai/deployments/large-v3/audio"),
+    ]
+
+    func testDirectWavUploadPreservesFieldsAndPadsShortAudioOnEveryBatchRoute() async throws {
+        for route in Self.batchUploadTestRoutes {
+            for translate in [false, true] {
+                let host = try PluginTestHostServices(
+                    defaults: [
+                        "baseURL": "https://example.test/openai",
+                        "selectedModel": "large-v3",
+                    ],
+                    secrets: ["api-key": "test-key"]
+                )
+                let plugin = OpenAICompatiblePlugin()
+                plugin.activate(host: host)
+                plugin.setApiVersion(route.apiVersion, for: plugin.providerId)
+                plugin.setBatchEndpoint(route.endpoint, for: plugin.providerId)
+                plugin.setUploadFormat(.wav, for: plugin.providerId)
+                let path = route.path + (translate ? "/translations" : "/transcriptions")
+                let store = PluginHTTPClientSessionStore()
+                PluginHTTPClientTestHarness.configure { _ in
+                    store.makeSession(outcomes: [
+                        .success(
+                            Data(#"{"text":"direct WAV"}"#.utf8),
+                            Self.httpResponse(url: "https://example.test" + path, statusCode: 200)
+                        ),
+                    ])
+                }
+
+                let samples = [Float](repeating: 0.1, count: 1_600)
+                let result = try await plugin.transcribe(
+                    audio: AudioData(samples: samples, wavData: Data(), duration: 0.1),
+                    language: "de",
+                    translate: translate,
+                    prompt: "TypeWhisper"
+                )
+
+                XCTAssertEqual(result.text, "direct WAV")
+                let requests = store.sessions.flatMap(\.requestedRequests)
+                XCTAssertEqual(requests.count, 1)
+                let request = try XCTUnwrap(requests.first)
+                XCTAssertEqual(request.url?.path, path)
+                XCTAssertEqual(
+                    request.url?.query,
+                    route.apiVersion.isEmpty ? nil : "api-version=" + route.apiVersion
+                )
+                XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-key")
+                XCTAssertEqual(request.timeoutInterval, 600)
+                let data = try XCTUnwrap(request.httpBody)
+                let body = String(decoding: data, as: UTF8.self)
+                XCTAssertTrue(body.contains(#"filename="audio.wav""#))
+                XCTAssertTrue(body.contains("Content-Type: audio/wav"))
+                XCTAssertFalse(body.contains("audio.m4a"))
+                XCTAssertTrue(body.contains("name=\"model\"\r\n\r\nlarge-v3\r\n"))
+                XCTAssertTrue(body.contains("name=\"response_format\"\r\n\r\njson\r\n"))
+                XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\nTypeWhisper\r\n"))
+                XCTAssertEqual(body.contains("name=\"language\"\r\n\r\nde\r\n"), !translate)
+                let expectedWav = PluginWavEncoder.encode(samples + [Float](repeating: 0, count: 14_400))
+                XCTAssertNotNil(data.range(of: expectedWav))
+            }
+        }
+    }
+
+    func testAutoUploadRetriesLlamaCppMediaLoadFailureOnEveryBatchRoute() async throws {
+        for route in Self.batchUploadTestRoutes {
+            let host = try PluginTestHostServices(defaults: [
+                "baseURL": "https://example.test/openai",
+                "selectedModel": "large-v3",
+            ])
+            let plugin = OpenAICompatiblePlugin()
+            plugin.activate(host: host)
+            plugin.setApiVersion(route.apiVersion, for: plugin.providerId)
+            plugin.setBatchEndpoint(route.endpoint, for: plugin.providerId)
+            let url = "https://example.test" + route.path + "/transcriptions"
+            let store = PluginHTTPClientSessionStore()
+            PluginHTTPClientTestHarness.configure { _ in
+                store.makeSession(outcomes: [
+                    .success(
+                        Data(#"{"error":{"code":400,"message":"Failed to load image or audio file","type":"invalid_request_error"}}"#.utf8),
+                        Self.httpResponse(url: url, statusCode: 400)
+                    ),
+                    .success(
+                        Data(#"{"text":"fallback WAV"}"#.utf8),
+                        Self.httpResponse(url: url, statusCode: 200)
+                    ),
+                ])
+            }
+            let samples = [Float](repeating: 0.1, count: 16_000)
+            let result = try await plugin.transcribe(
+                audio: AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1),
+                language: "de",
+                translate: false,
+                prompt: "TypeWhisper"
+            )
+
+            XCTAssertEqual(result.text, "fallback WAV")
+            let requests = store.sessions.flatMap(\.requestedRequests)
+            XCTAssertEqual(requests.count, 2)
+            let bodies = try requests.map { String(decoding: try XCTUnwrap($0.httpBody), as: UTF8.self) }
+            XCTAssertTrue(try XCTUnwrap(bodies.first).contains(#"filename="audio.m4a""#))
+            XCTAssertTrue(try XCTUnwrap(bodies.last).contains(#"filename="audio.wav""#))
+            for body in bodies {
+                XCTAssertTrue(body.contains("name=\"model\"\r\n\r\nlarge-v3\r\n"))
+                XCTAssertTrue(body.contains("name=\"language\"\r\n\r\nde\r\n"))
+                XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\nTypeWhisper\r\n"))
+            }
+            XCTAssertEqual(requests.first?.url, requests.last?.url)
+        }
+    }
+
+    func testBatchUploadDoesNotRetryAuthenticationValidationOrDirectWavRejections() async throws {
+        let failures: [(format: OpenAICompatibleUploadFormat, status: Int, message: String)] = [
+            (.auto, 401, "Failed to load image or audio file"),
+            (.auto, 403, "Failed to load image or audio file"),
+            (.auto, 400, "Failed to load audio model"),
+            (.auto, 422, "audio too short"),
+            (.auto, 400, "Missing model parameter; example error: Failed to load image or audio file"),
+            (.auto, 422, "Prompt must not contain 'Failed to load image or audio file'"),
+            (.wav, 400, "Failed to load image or audio file"),
+            (.wav, 415, "unsupported audio format"),
+        ]
+        for route in Self.batchUploadTestRoutes {
+            for failure in failures {
+                let host = try PluginTestHostServices(defaults: [
+                    "baseURL": "https://example.test/openai",
+                    "selectedModel": "large-v3",
+                ])
+                let plugin = OpenAICompatiblePlugin()
+                plugin.activate(host: host)
+                plugin.setApiVersion(route.apiVersion, for: plugin.providerId)
+                plugin.setBatchEndpoint(route.endpoint, for: plugin.providerId)
+                plugin.setUploadFormat(failure.format, for: plugin.providerId)
+                let response = try JSONSerialization.data(withJSONObject: [
+                    "error": ["message": failure.message, "type": "invalid_request_error"],
+                ])
+                let store = PluginHTTPClientSessionStore()
+                PluginHTTPClientTestHarness.configure { _ in
+                    store.makeSession(outcomes: [
+                        .success(
+                            response,
+                            Self.httpResponse(
+                                url: "https://example.test" + route.path + "/transcriptions",
+                                statusCode: failure.status
+                            )
+                        ),
+                    ])
+                }
+
+                do {
+                    _ = try await plugin.transcribe(
+                        audio: AudioData(samples: [0.1], wavData: Data(), duration: 1.0 / 16_000),
+                        language: nil,
+                        translate: false,
+                        prompt: nil
+                    )
+                    XCTFail("Expected upload rejection")
+                } catch let error as PluginTranscriptionError {
+                    if failure.status == 401 {
+                        guard case .invalidApiKey = error else {
+                            XCTFail("Expected invalidApiKey, got \(error)")
+                            continue
+                        }
+                    } else if case .apiError(let message) = error {
+                        XCTAssertTrue(message.contains(failure.message))
+                    } else {
+                        XCTFail("Expected apiError, got \(error)")
+                    }
+                }
+                XCTAssertEqual(store.sessions.flatMap(\.requestedRequests).count, 1)
+            }
+        }
+    }
+
+    func testDirectWavUploadsLongRecordingsInChunksOnEveryBatchRoute() async throws {
+        for route in Self.batchUploadTestRoutes {
+            let host = try PluginTestHostServices(defaults: [
+                "baseURL": "https://example.test/openai",
+                "selectedModel": "large-v3",
+            ])
+            let plugin = OpenAICompatiblePlugin()
+            plugin.activate(host: host)
+            plugin.setApiVersion(route.apiVersion, for: plugin.providerId)
+            plugin.setBatchEndpoint(route.endpoint, for: plugin.providerId)
+            plugin.setUploadFormat(.wav, for: plugin.providerId)
+            let url = "https://example.test" + route.path + "/transcriptions"
+            let store = PluginHTTPClientSessionStore()
+            PluginHTTPClientTestHarness.configure { _ in
+                store.makeSession(outcomes: [
+                    .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                    .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(url: url, statusCode: 200)),
+                ])
+            }
+
+            // Standard models use ten-minute chunks; versioned deployments use five.
+            let duration = route.apiVersion.isEmpty ? 660 : 360
+            let samples = [Float](repeating: 0.1, count: 16_000 * duration)
+            let result = try await plugin.transcribe(
+                audio: AudioData(samples: samples, wavData: Data(), duration: Double(duration)),
+                language: nil,
+                translate: false,
+                prompt: nil
+            )
+
+            XCTAssertEqual(result.text, "first second")
+            let requests = store.sessions.flatMap(\.requestedRequests)
+            XCTAssertEqual(requests.count, 2)
+            for request in requests {
+                // Keep the large PCM payload binary to avoid expensive Unicode searches.
+                let body = try XCTUnwrap(request.httpBody)
+                XCTAssertNotNil(body.range(of: Data(#"filename="audio.wav""#.utf8)))
+                XCTAssertNotNil(body.range(of: Data("Content-Type: audio/wav".utf8)))
+                XCTAssertNil(body.range(of: Data("audio.m4a".utf8)))
+            }
+        }
+    }
+
     func testTranscribeRetriesWithWavWhenCompatibleServerRejectsM4A() async throws {
         let host = try PluginTestHostServices(
             defaults: [
@@ -808,6 +1077,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         plugin.setBaseURL("https://alter.test", for: alter.id)
         plugin.setApiKey("alter-token", for: alter.id)
         plugin.selectModel("alter-whisper", for: alter.id)
+        plugin.setUploadFormat(.wav, for: alter.id)
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
@@ -830,6 +1100,11 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         XCTAssertEqual(defaultResult.text, "default text")
         XCTAssertEqual(alterResult.text, "alter text")
+        let bodies = try store.sessions[0].requestedRequests.map {
+            String(decoding: try XCTUnwrap($0.httpBody), as: UTF8.self)
+        }
+        XCTAssertTrue(try XCTUnwrap(bodies.first).contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(try XCTUnwrap(bodies.last).contains(#"filename="audio.wav""#))
         XCTAssertEqual(store.sessions[0].requestedRequests.map { $0.url?.host }, ["default.test", "alter.test"])
         XCTAssertEqual(
             store.sessions[0].requestedRequests.map { $0.value(forHTTPHeaderField: "Authorization") },
@@ -1668,6 +1943,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         )
         let connector = RealtimeSessionConnectorSpy(session: session)
         plugin.realtimeSessionConnector = connector
+        plugin.setUploadFormat(.wav, for: plugin.providerId)
         let samples = Array(repeating: Float(0.25), count: 16_001)
 
         let result = try await plugin.transcribe(

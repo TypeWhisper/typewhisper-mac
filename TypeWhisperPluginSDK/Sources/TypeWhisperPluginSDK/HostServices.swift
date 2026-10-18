@@ -916,7 +916,12 @@ public enum PluginAudioUploadEncoder {
     }
 
     private static func audioUploadErrorMessageCandidates(from responseText: String) -> [String] {
-        let trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        var trimmed = responseText.trimmingCharacters(in: .whitespacesAndNewlines)
+        // API errors can prefix a plain-text response body with its HTTP status.
+        for prefix in ["HTTP 400:", "HTTP 422:", "HTTP 500:"] where trimmed.hasPrefix(prefix) {
+            trimmed = String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            break
+        }
         guard let jsonStart = trimmed.firstIndex(where: { $0 == "{" || $0 == "[" }) else {
             return [trimmed]
         }
@@ -952,7 +957,12 @@ public enum PluginAudioUploadEncoder {
     }
 
     private static func indicatesUnsupportedAudioUpload(_ message: String) -> Bool {
-        let lowercased = message.lowercased()
+        let lowercased = message.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // llama.cpp uses this message when its media loader cannot decode M4A.
+        // Require the whole message so quoted examples do not trigger a retry.
+        if lowercased == "failed to load image or audio file" {
+            return true
+        }
         let rejectionTerms = [
             "unsupported", "not supported", "does not support", "invalid", "unrecognized", "unknown",
             "could not process", "failed to process", "corrupt",
