@@ -337,6 +337,7 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
 enum CloudFolderSyncError: LocalizedError {
     case missingStore
     case notEntitled
+    case incompleteMigrationHistory
 
     var errorDescription: String? {
         switch self {
@@ -344,6 +345,8 @@ enum CloudFolderSyncError: LocalizedError {
             String(localized: "TypeWhisper user data is unavailable.")
         case .notEntitled:
             String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
+        case .incompleteMigrationHistory:
+            String(localized: "Some previously synced files are not readable yet. Retry Cloud Folder Sync once your cloud provider has finished downloading them.")
         }
     }
 }
@@ -388,10 +391,17 @@ enum CloudFolderSyncEngine {
             legacyOperations = try await Task.detached(priority: .utility) {
                 let operationsURL = packageURL(for: folderURL).appendingPathComponent(operationsDirectoryName)
                 guard FileManager.default.fileExists(atPath: operationsURL.path) else { return [CloudFolderSyncOperation]() }
-                return try readOperations(
+                let result = try readOperations(
                     from: operationsURL,
                     cache: cache ?? CloudFolderSyncCache()
-                ).operations.filter { $0.schemaVersion == 1 }
+                )
+                // Missing applied history makes the last mode ambiguous. Do not
+                // publish a deletion or advance the migration while files are partial.
+                if result.diagnostics.contains(where: { $0.kind == .unreadableFile || $0.kind == .malformedOperation }),
+                   !stateSnapshot.appliedOperationIDs.isSubset(of: Set(result.operations.map(\.operationId))) {
+                    throw CloudFolderSyncError.incompleteMigrationHistory
+                }
+                return result.operations.filter { $0.schemaVersion == 1 }
             }.value
         } else {
             legacyOperations = []
@@ -532,7 +542,9 @@ enum CloudFolderSyncEngine {
         }
         let republishedItemIDs = dictionaryItemIDsRequiringRepublish(
             afterApplying: mutations,
-            legacyRegexEntries: operations.filter { $0.schemaVersion == 1 }.compactMap(\.dictionary).filter(\.isRegex)
+            legacyRegexEntries: operations
+                .filter { $0.schemaVersion == 1 && !stateSnapshot.appliedOperationIDs.contains($0.operationId) }
+                .compactMap(\.dictionary).filter(\.isRegex)
         )
         for itemID in republishedItemIDs {
             state.exportedItemVersions.removeValue(forKey: itemID)

@@ -1533,8 +1533,8 @@ final class DictionaryService: ObservableObject {
     }
 
     private func apiCorrection(original: String, isRegex: Bool) -> DictionaryEntry? {
-        corrections.first { entry in
-            guard entry.isRegex == isRegex else { return false }
+        entries.first { entry in
+            guard entry.type == .correction, entry.isRegex == isRegex else { return false }
             // Preserve the API's Unicode case folding for literals; regex identity is exact.
             return isRegex ? entry.original.utf8.elementsEqual(original.utf8)
                 : entry.original.caseInsensitiveCompare(original) == .orderedSame

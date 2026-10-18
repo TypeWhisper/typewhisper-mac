@@ -987,6 +987,35 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAPICorrectionsFindDisabledEntriesWithoutChangingTermsOrOtherModes() throws {
+        for isRegex in [false, true] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let service = DictionaryService(appSupportDirectory: directory)
+            service.addEntry(type: .term, original: "teh")
+            try service.upsertAPICorrection(original: "teh", replacement: "the", caseSensitive: false, isRegex: isRegex)
+            let entry = try XCTUnwrap(service.corrections.first)
+            entry.usageCount = 7
+            service.toggleEntry(entry)
+            try service.upsertAPICorrection(original: "teh", replacement: "other mode", caseSensitive: false, isRegex: !isRegex)
+
+            try service.upsertAPICorrection(original: "teh", replacement: "updated", caseSensitive: true, isRegex: isRegex)
+            XCTAssertEqual(service.entries.count, 3)
+            XCTAssertEqual(service.corrections.first { $0.isRegex == isRegex }?.id, entry.id)
+            XCTAssertEqual(entry.usageCount, 7)
+            XCTAssertEqual(entry.replacement, "updated")
+            XCTAssertTrue(entry.isEnabled)
+
+            service.toggleEntry(entry)
+            XCTAssertTrue(try service.deleteAPICorrection(original: "teh", isRegex: isRegex))
+            let reloaded = DictionaryService(appSupportDirectory: directory)
+            XCTAssertEqual(reloaded.entries.count, 2)
+            XCTAssertEqual(reloaded.terms.first?.original, "teh")
+            XCTAssertEqual(reloaded.corrections.first?.replacement, "other mode")
+        }
+    }
+
+    @MainActor
     func testAPICorrectionHelpersUpsertCaseInsensitiveAndPreserveUsageCount() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

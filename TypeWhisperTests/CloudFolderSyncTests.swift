@@ -4354,6 +4354,85 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testRegexUpgradeWaitsForAppliedLegacyFilesBeforeChangingDataOrState() async throws {
+        for mode in ["regex", "deleted", "misimportedLiteral"] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+            let entry = try XCTUnwrap(legacy.dictionary)
+            try Self.writeLegacyOperation(legacy, to: folder)
+            let operationsFolder = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops")
+            let legacyFile = operationsFolder.appendingPathComponent("\(legacy.deviceId)/legacy.json")
+            let data = try Data(contentsOf: legacyFile)
+            try Data("{".utf8).write(to: legacyFile)
+            // An older readable literal must not be mistaken for the latest applied mode.
+            let older = CloudFolderSyncOperation.upsertDictionary(
+                Self.dictionaryEntry(entryType: .correction, original: entry.original, replacement: "old", updatedAt: Self.date(5)),
+                itemID: legacy.itemId, deviceId: "old-peer", operationId: "older-literal")
+            try Self.writeLegacyOperation(older, to: folder)
+            try FileManager.default.createDirectory(at: operationsFolder.appendingPathComponent("mac"), withIntermediateDirectories: true)
+            let store = InMemoryUserDataSyncStore(dictionaryEntries: mode == "deleted" ? []
+                : [mode == "misimportedLiteral" ? entry.preservingRegexMode(false) : entry])
+            let snapshot = store.dictionaryEntries
+            var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
+                exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+                appliedOperationIDs: [legacy.operationId, older.operationId])
+            let previousState = state
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            do {
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(20))
+                XCTFail("Migration must wait for the applied operation to become readable")
+            } catch {
+                XCTAssertEqual(state.knownLocalItemIDs, previousState.knownLocalItemIDs)
+                XCTAssertEqual(state.exportedItemVersions, previousState.exportedItemVersions)
+                XCTAssertEqual(state.appliedOperationIDs, previousState.appliedOperationIDs)
+            }
+            XCTAssertEqual(store.dictionaryEntries, snapshot)
+            XCTAssertTrue(Self.operationFiles(folder: folder, deviceId: "mac").isEmpty)
+            try data.write(to: legacyFile)
+            // Unrelated partial files are harmless once the applied history is readable.
+            try Data("{".utf8).write(to: legacyFile.deletingLastPathComponent().appendingPathComponent("unapplied-partial.json"))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            if mode == "deleted" {
+                XCTAssertTrue(store.dictionaryEntries.isEmpty)
+                XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.kind == .delete })
+            } else {
+                XCTAssertTrue(try XCTUnwrap(store.dictionaryEntries.first).isRegex)
+                XCTAssertEqual(published.count, 1)
+                XCTAssertTrue(published.allSatisfy { $0.schemaVersion == 2 && $0.kind == .upsert })
+            }
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            XCTAssertEqual(repeated.operationsWritten, 0)
+        }
+    }
+
+    @MainActor
+    func testMigratedRegexEditsDoNotRepublishBecauseOfOldOperationFiles() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+        try Self.writeLegacyOperation(legacy, to: folder)
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac")
+        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(20))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(25))
+        let updated = Self.dictionaryEntry(entryType: .correction, original: try XCTUnwrap(legacy.dictionary).original,
+            replacement: "edited", updatedAt: Self.date(30), isRegex: true)
+        let operation = CloudFolderSyncOperation.upsertDictionary(updated,
+            itemID: UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: updated.original, isRegex: true), deviceId: "peer")
+        try Self.writeLegacyOperation(operation, to: folder)
+        let received = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+        XCTAssertEqual(store.dictionaryEntries.first?.replacement, "edited")
+        XCTAssertFalse(received.requiresFollowUpSync)
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(50))
+        XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
     func testLiteralToRegexBeforeFirstUpgradeSyncDeletesTheOldLiteral() async throws {
         let folder = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(folder) }
