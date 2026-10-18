@@ -60,53 +60,29 @@ jobs:
         with:
           category: "/language:${{ matrix.language }}"
 
-  # Pull requests build only the targets their Swift changes touch. Full scans run
-  # nightly, on non-daily release tags and on manual dispatch; branch pushes keep
-  # the lightweight Actions and Python analyses. See docs/codeql-swift.md.
+  # Full scans of every target run nightly, on non-daily release tags and on manual
+  # dispatch. Pull requests and branch pushes keep the lightweight Actions and
+  # Python analyses. See docs/codeql-swift.md.
   analyze-swift:
     name: Analyze (swift)
-    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     # Intel on purpose: the CodeQL tracer and Swift extractor are x86_64, so on
     # Apple Silicon the traced build runs under Rosetta and each new runner first
     # translates the Xcode tools and the extractor (11-25 minutes per run). On
     # macos-26-intel a single-plugin pull request takes 12 minutes instead of
     # 22-35. See docs/codeql-swift.md.
     runs-on: macos-26-intel
-    # PRs that change shared build inputs or SDK sources also build every target.
     timeout-minutes: 180
     env:
       XCODE_VERSION: "26.6"
-      # The coverage check below reads per-file extraction diagnostics, which the
-      # CodeQL Action skips on pull requests by default since v4.33.0.
-      CODEQL_ACTION_FILE_COVERAGE_ON_PRS: "true"
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          # The pull request merge commit's first parent is the base branch.
-          fetch-depth: 2
-
-      - name: Select Swift targets
-        id: targets
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          set -o pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            git diff --name-only HEAD^1 HEAD > "$RUNNER_TEMP/changed-files.txt"
-            python3 scripts/codeql_swift_targets.py changed "$RUNNER_TEMP/changed-files.txt" | tee -a "$GITHUB_OUTPUT"
-          else
-            python3 scripts/codeql_swift_targets.py all | tee -a "$GITHUB_OUTPUT"
-          fi
-
-      - name: No Swift changes to analyze
-        if: steps.targets.outputs.build != 'true'
-        run: echo "This pull request changes no Swift sources that a CodeQL Swift build compiles; skipping the analysis."
 
       - name: Setup Xcode
-        if: steps.targets.outputs.build == 'true'
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
@@ -114,7 +90,6 @@ jobs:
       # Package checkouts only, never compiled artifacts: every Swift file must be
       # compiled under CodeQL tracing to be extracted.
       - name: Restore Swift package cache
-        if: steps.targets.outputs.build == 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/SourcePackages
@@ -125,7 +100,6 @@ jobs:
       # Resolve before CodeQL initialization; the traced build must not fetch or
       # resolve packages again. The project has one package graph for all targets.
       - name: Resolve Swift packages
-        if: steps.targets.outputs.build == 'true'
         run: |
           for attempt in 1 2 3; do
             echo "Attempt $attempt of 3"
@@ -141,7 +115,6 @@ jobs:
           exit 1
 
       - name: Verify Metal toolchain
-        if: steps.targets.outputs.build == 'true'
         run: |
           if ! xcrun metal -v; then
             xcodebuild -downloadComponent MetalToolchain
@@ -153,7 +126,6 @@ jobs:
       # missing Metal Toolchain, while the downloaded toolchain's `metal` works. A
       # one-tool toolchain that forwards to it lets the MLX plugins build.
       - name: Route Metal compiles to the downloaded Metal toolchain
-        if: steps.targets.outputs.build == 'true'
         id: metal-toolchain
         run: |
           metal="$(xcrun --find metal)"
@@ -181,7 +153,6 @@ jobs:
           echo "identifier=$identifier" >> "$GITHUB_OUTPUT"
 
       - name: Initialize CodeQL
-        if: steps.targets.outputs.build == 'true'
         uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           languages: swift
@@ -189,9 +160,7 @@ jobs:
           queries: security-and-quality
 
       - name: Build Swift for CodeQL
-        if: steps.targets.outputs.build == 'true'
         env:
-          CODEQL_SWIFT_TARGETS: ${{ steps.targets.outputs.targets }}
           SOURCE_PACKAGES_DIR: ${{ runner.temp }}/SourcePackages
           TOOLCHAINS: ${{ steps.metal-toolchain.outputs.identifier }}
         run: |
@@ -201,7 +170,6 @@ jobs:
       # Upload only after the coverage check, so a partial extraction cannot make
       # alerts in skipped files look fixed.
       - name: Perform CodeQL Analysis
-        if: steps.targets.outputs.build == 'true'
         id: analyze
         uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
@@ -209,14 +177,11 @@ jobs:
           upload: never
 
       - name: Check Swift extraction coverage
-        if: steps.targets.outputs.build == 'true'
         env:
           SARIF_DIR: ${{ steps.analyze.outputs.sarif-output }}
-          CODEQL_SWIFT_TARGETS: ${{ steps.targets.outputs.targets }}
-        run: python3 scripts/codeql_swift_coverage.py "$SARIF_DIR/swift.sarif" --targets "$CODEQL_SWIFT_TARGETS"
+        run: python3 scripts/codeql_swift_coverage.py "$SARIF_DIR/swift.sarif"
 
       - name: Upload CodeQL Swift results
-        if: steps.targets.outputs.build == 'true'
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: ${{ steps.analyze.outputs.sarif-output }}/swift.sarif
