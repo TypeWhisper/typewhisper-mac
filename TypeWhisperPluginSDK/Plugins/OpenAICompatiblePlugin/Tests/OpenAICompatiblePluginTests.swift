@@ -971,10 +971,11 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             let requests = store.sessions.flatMap(\.requestedRequests)
             XCTAssertEqual(requests.count, 2)
             for request in requests {
-                let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
-                XCTAssertTrue(body.contains(#"filename="audio.wav""#))
-                XCTAssertTrue(body.contains("Content-Type: audio/wav"))
-                XCTAssertFalse(body.contains("audio.m4a"))
+                // Keep the large PCM payload binary to avoid expensive Unicode searches.
+                let body = try XCTUnwrap(request.httpBody)
+                XCTAssertNotNil(body.range(of: Data(#"filename="audio.wav""#.utf8)))
+                XCTAssertNotNil(body.range(of: Data("Content-Type: audio/wav".utf8)))
+                XCTAssertNil(body.range(of: Data("audio.m4a".utf8)))
             }
         }
     }
