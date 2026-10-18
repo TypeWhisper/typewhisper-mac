@@ -62,6 +62,7 @@
 		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
+		A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
@@ -106,9 +107,11 @@
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
+		A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000002 /* WhatsNewCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
 		1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000011 /* IOSCompanionPromoView.swift */; };
+		A11800000000000000000003 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000004 /* WhatsNewView.swift */; };
 		1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000012 /* ios-companion-promo.mp4 */; };
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
 		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
@@ -849,6 +852,7 @@
 		BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
+		A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
 		B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowSegmentedPostProcessingTests.swift; sourceTree = "<group>"; };
@@ -895,9 +899,11 @@
 		C85600000000000000000003 /* CoreAudioHALCallbackContext.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CoreAudioHALCallbackContext.c; sourceTree = "<group>"; };
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
+		A11800000000000000000002 /* WhatsNewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
 		1F0550000000000000000011 /* IOSCompanionPromoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSCompanionPromoView.swift; sourceTree = "<group>"; };
+		A11800000000000000000004 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		1F0550000000000000000012 /* ios-companion-promo.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ios-companion-promo.mp4"; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
@@ -2010,6 +2016,7 @@
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
 				BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */,
+				A11800000000000000000002 /* WhatsNewCoordinator.swift */,
 				BB00000000000000000354 /* SettingsNavigationCoordinator.swift */,
 			);
 			path = App;
@@ -2275,6 +2282,7 @@
 				BB00000000000000000287 /* LicenseSettingsView.swift */,
 				BB00000000000000000288 /* WelcomeSheet.swift */,
 				1F0550000000000000000011 /* IOSCompanionPromoView.swift */,
+				A11800000000000000000004 /* WhatsNewView.swift */,
 				BB00000000000000000355 /* PostUpdateLicensePromptView.swift */,
 				BB00000000000000000289 /* SupporterBadgeView.swift */,
 			);
@@ -3159,6 +3167,7 @@
 				B91F00000000000000000004 /* RecentTranscriptionStoreTests.swift */,
 				C50700000000000000000002 /* MemoryServiceTests.swift */,
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
+				A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */,
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
@@ -5136,6 +5145,7 @@
 				A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */,
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
+				A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */,
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
 				C23000000000000000000001 /* OpenAIPlugin.swift in Sources */,
 				C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */,
@@ -5447,9 +5457,11 @@
 				AA00000000000000000301 /* LicenseSettingsView.swift in Sources */,
 				AA00000000000000000302 /* WelcomeSheet.swift in Sources */,
 				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
+				A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
 				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
 				1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */,
+				A11800000000000000000003 /* WhatsNewView.swift in Sources */,
 				AA00000000000000000303 /* SupporterBadgeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

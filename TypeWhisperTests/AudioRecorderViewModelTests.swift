@@ -138,6 +138,26 @@ private final class BlockingRecorderCompletionsLoader: @unchecked Sendable {
 
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
+    func testRecordingRequestSuppressesWhatsNewBeforeAsyncStartup() async throws {
+        let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        let previous = WhatsNewCoordinator.shared
+        WhatsNewCoordinator.shared = coordinator
+        defer { WhatsNewCoordinator.shared = previous }
+
+        let viewModel = makeViewModel(defaults: defaults)
+        // Reject before accessing hardware; the recording intent must still win.
+        viewModel.micEnabled = false
+        viewModel.systemAudioEnabled = false
+        viewModel.startRecording()
+
+        XCTAssertEqual(viewModel.state, .idle)
+        XCTAssertTrue(coordinator.isSuppressedForLaunch)
+        XCTAssertTrue(coordinator.hasUnseenContent)
+        await Task.yield()
+    }
+
     private struct RestorableRecorderFixture {
         let viewModel: AudioRecorderViewModel
         let plugin: AudioRecorderRestorableTranscriptionPlugin

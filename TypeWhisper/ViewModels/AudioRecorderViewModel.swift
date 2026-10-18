@@ -701,6 +701,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func startRecording() {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         Task {
             do {
                 _ = try await beginRecording(
@@ -728,6 +729,7 @@ final class AudioRecorderViewModel: ObservableObject {
         preferredBaseName: String?,
         transcriptMetadata: CalendarMeetingTranscriptMetadata?
     ) async throws -> URL {
+        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         guard retranscribingRecordingURL == nil, HistoryRetranscriptionActivity.recordID == nil else {
             throw RecorderAPIError.retranscribing
         }
