@@ -21689,7 +21689,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testHybridModifierPressSuppressesWhatsNewBeforeRecordingStarts() throws {
+    func testPendingHybridModifierHoldBlocksAutomaticHighlights() throws {
         let suiteName = "TypeWhisperTests.WhatsNewHotkey.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
@@ -21713,16 +21713,85 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         _ = service.processEventForTesting(try makeControlModifierEvent(isDown: true), source: .monitor)
 
         XCTAssertEqual(starts, 0)
-        XCTAssertTrue(coordinator.isSuppressedForLaunch)
+        XCTAssertFalse(coordinator.isSuppressedForLaunch)
+        XCTAssertTrue(service.isDictationStartPending)
         XCTAssertEqual(coordinator.presentationForLaunch(
             isNormalLaunch: true,
             setupWizardRequired: false,
-            operationInProgress: false,
+            operationInProgress: service.isDictationStartPending,
             postUpdatePromptPending: true,
             iOSCompanionPromptPending: true
         ), .none)
         XCTAssertTrue(coordinator.hasUnseenContent)
         service.cancelDictation()
+    }
+
+    @MainActor
+    func testUnrelatedControlShortcutKeepsVisibleHighlightsOpen() async throws {
+        let suiteName = "TypeWhisperTests.WhatsNewControlShortcut.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        XCTAssertEqual(coordinator.presentationForLaunch(
+            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false,
+            postUpdatePromptPending: false, iOSCompanionPromptPending: false
+        ), .whatsNew)
+
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+        service.modifierFlagsStateProvider = { .control }
+        service.onHotkeyAction = { coordinator.suppressForCurrentLaunch() }
+        service.onDictationStart = { _ in XCTFail("An ordinary Control shortcut must not start dictation") }
+        defer { service.cancelDictation() }
+
+        _ = service.processEventForTesting(try makeControlModifierEvent(isDown: true), source: .monitor)
+        XCTAssertTrue(service.isDictationStartPending)
+        XCTAssertTrue(coordinator.isPresenting)
+        _ = service.processEventForTesting(
+            try makeKeyboardEvent(keyCode: 0x08, keyDown: true, flags: [.maskControl]), source: .monitor
+        )
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(service.isDictationStartPending)
+        XCTAssertFalse(coordinator.isSuppressedForLaunch)
+        XCTAssertTrue(coordinator.isPresenting)
+        XCTAssertTrue(coordinator.hasUnseenContent)
+    }
+
+    @MainActor
+    func testConfirmedControlHoldSuppressesHighlightsBeforeDictationCallback() async throws {
+        let suiteName = "TypeWhisperTests.WhatsNewConfirmedHold.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        XCTAssertEqual(coordinator.presentationForLaunch(
+            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false,
+            postUpdatePromptPending: false, iOSCompanionPromptPending: false
+        ), .whatsNew)
+
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+        service.modifierFlagsStateProvider = { .control }
+        service.onHotkeyAction = { coordinator.suppressForCurrentLaunch() }
+        let started = expectation(description: "confirmed hold starts dictation after dismissing highlights")
+        service.onDictationStart = { _ in
+            XCTAssertFalse(coordinator.isPresenting)
+            XCTAssertTrue(coordinator.isSuppressedForLaunch)
+            XCTAssertTrue(coordinator.hasUnseenContent)
+            started.fulfill()
+        }
+        defer { service.cancelDictation() }
+
+        _ = service.processEventForTesting(try makeControlModifierEvent(isDown: true), source: .monitor)
+        XCTAssertTrue(coordinator.isPresenting)
+        await fulfillment(of: [started], timeout: 1)
+        XCTAssertFalse(service.isDictationStartPending)
     }
 
     @MainActor

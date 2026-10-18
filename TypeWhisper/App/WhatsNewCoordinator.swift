@@ -15,10 +15,12 @@ final class WhatsNewCoordinator: ObservableObject {
     private let contentVersion: Int
     private var didConsiderLaunch = false
     private var isManualPresentation = false
+    private var activitySubscription: AnyCancellable?
     private(set) var isSuppressedForLaunch = false
     private(set) var isPresenting = false
     @Published private(set) var operationInProgress = false
     var dismissPresentation: (() -> Void)?
+    var activityDidBecomeIdle: (() -> Void)?
 
     init(defaults: UserDefaults = .standard, contentVersion: Int = WhatsNewContent.version) {
         self.defaults = defaults
@@ -91,10 +93,26 @@ final class WhatsNewCoordinator: ObservableObject {
         return true
     }
 
+    /// All activity publishers deliver on the main thread. Keep the app busy
+    /// until every operation is idle, including overlapping kinds of work.
+    func observeActivity(_ activities: [AnyPublisher<Bool, Never>]) {
+        guard let first = activities.first else { return }
+        activitySubscription = activities.dropFirst().reduce(first) { combined, activity in
+            combined.combineLatest(activity).map { $0 || $1 }.eraseToAnyPublisher()
+        }
+        .removeDuplicates()
+        .sink { [weak self] in self?.updateOperationInProgress($0) }
+    }
+
     func updateOperationInProgress(_ inProgress: Bool) {
+        let wasInProgress = operationInProgress
         operationInProgress = inProgress
         if inProgress {
             suppressForCurrentLaunch()
+        } else if wasInProgress {
+            // Settings may retry a sheet that was deferred specifically by work.
+            // The update overview itself is never retried on this transition.
+            activityDidBecomeIdle?()
         }
     }
 

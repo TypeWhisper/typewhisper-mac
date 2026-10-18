@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 @testable import TypeWhisper
 
@@ -158,6 +159,37 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         XCTAssertEqual(launch(coordinator), .none)
     }
 
+    func testOverlappingActivityNotifiesIdleOnlyAfterAllWorkFinishesWithoutRetryingHighlights() {
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        let recording = CurrentValueSubject<Bool, Never>(false)
+        let transcription = CurrentValueSubject<Bool, Never>(false)
+        var idleTransitions = 0
+        coordinator.activityDidBecomeIdle = {
+            XCTAssertFalse(coordinator.operationInProgress)
+            idleTransitions += 1
+        }
+        coordinator.observeActivity([recording.eraseToAnyPublisher(), transcription.eraseToAnyPublisher()])
+        XCTAssertEqual(idleTransitions, 0)
+        XCTAssertEqual(launch(coordinator), .whatsNew)
+
+        recording.send(true)
+        transcription.send(true)
+        recording.send(false)
+        XCTAssertTrue(coordinator.operationInProgress)
+        XCTAssertEqual(idleTransitions, 0)
+        transcription.send(false)
+
+        XCTAssertFalse(coordinator.shouldDeferAutomaticSheets)
+        XCTAssertEqual(idleTransitions, 1)
+        XCTAssertFalse(coordinator.isPresenting)
+        XCTAssertTrue(coordinator.hasUnseenContent)
+        XCTAssertEqual(launch(coordinator), .none)
+        transcription.send(false)
+        XCTAssertTrue(coordinator.beginManualPresentation())
+        coordinator.acknowledgePresentation()
+        XCTAssertEqual(idleTransitions, 1, "Closing the overview must not request another startup sheet")
+    }
+
     func testInterruptionClosesVisibleOverviewBeforeActionAndKeepsContentPending() {
         let coordinator = WhatsNewCoordinator(defaults: defaults)
         XCTAssertEqual(launch(coordinator), .whatsNew)
@@ -311,6 +343,28 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         XCTAssertFalse(window.isVisible)
         XCTAssertFalse(coordinator.hasUnseenContent)
         XCTAssertEqual(launch(coordinator), .none)
+    }
+
+    func testOverviewIsManagedForDockVisibilityWhileOpen() throws {
+        let coordinator = WhatsNewCoordinator(defaults: defaults)
+        let controller = WhatsNewWindowController(coordinator: coordinator)
+        let window = try XCTUnwrap(controller.window)
+        let appDelegate = AppDelegate()
+        controller.showWindow(nil)
+        defer { controller.close() }
+
+        XCTAssertTrue(appDelegate.isManagedWindow(window))
+        XCTAssertTrue(DockIconVisibility.shouldShowDockIcon(
+            showMenuBarIcon: false,
+            dockIconBehavior: .onlyWhileWindowOpen,
+            hasVisibleManagedWindow: appDelegate.isManagedWindow(window) && window.isVisible
+        ))
+        controller.close()
+        XCTAssertFalse(DockIconVisibility.shouldShowDockIcon(
+            showMenuBarIcon: false,
+            dockIconBehavior: .onlyWhileWindowOpen,
+            hasVisibleManagedWindow: appDelegate.isManagedWindow(window) && window.isVisible
+        ))
     }
 
     func testInterruptionClosesActualWindowWithoutAcknowledging() throws {

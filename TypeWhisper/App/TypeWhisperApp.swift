@@ -23,6 +23,7 @@ extension Notification.Name {
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
     static let iOSCompanionPromoRequested = Notification.Name("iOSCompanionPromoRequested")
     static let whatsNewRequested = Notification.Name("whatsNewRequested")
+    static let startupActivityDidBecomeIdle = Notification.Name("startupActivityDidBecomeIdle")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -414,6 +415,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     @State private var startupSheet: StartupSheetRoute?
     @State private var lastPresentedStartupSheet: StartupSheetRoute?
     @State private var ignoreNextStartupSheetDismiss = false
+    @State private var startupSheetDeferredForActivity = false
 
     private var postUpdatePromptCoordinator: PostUpdatePromptCoordinator {
         PostUpdatePromptCoordinator.shared
@@ -500,6 +502,11 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                 .onReceive(NotificationCenter.default.publisher(for: .iOSCompanionPromoRequested)) { _ in
                     refreshStartupSheet()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .startupActivityDidBecomeIdle)) { _ in
+                    if startupSheetDeferredForActivity {
+                        refreshStartupSheet()
+                    }
+                }
         }
     }
 
@@ -564,6 +571,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     }
 
     private func refreshStartupSheet() {
+        startupSheetDeferredForActivity = false
         if AppConstants.isScreenshotAutomation {
             startupSheet = nil
             return
@@ -577,6 +585,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         let manualIOSCompanionRequest = iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
         if !manualIOSCompanionRequest, let whatsNew = WhatsNewCoordinator.shared,
            whatsNew.shouldDeferAutomaticSheets {
+            startupSheetDeferredForActivity = whatsNew.operationInProgress
             startupSheet = nil
             return
         }
@@ -1070,31 +1079,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func observeStartupActivity() {
         let container = ServiceContainer.shared
+        guard let whatsNew = WhatsNewCoordinator.shared else { return }
+        whatsNew.activityDidBecomeIdle = {
+            NotificationCenter.default.post(name: .startupActivityDidBecomeIdle, object: nil)
+        }
         let activities = [
             container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
             container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
             container.audioRecorderViewModel.$retranscribingRecordingURL.map { $0 != nil }.eraseToAnyPublisher(),
             container.fileTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
             container.speakerTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
+            container.dictionaryTrainingService.activityPublisher,
             HistoryRetranscriptionActivity.recordIDPublisher.map { $0 != nil }.eraseToAnyPublisher()
         ]
-        // The About button becomes available only after every operation is idle.
-        // A single operation finishing must not hide another one's busy state.
-        activities.dropFirst().reduce(activities[0]) { combined, activity in
-            combined.combineLatest(activity).map { $0 || $1 }.eraseToAnyPublisher()
-        }
-            .removeDuplicates()
-            .sink { WhatsNewCoordinator.shared?.updateOperationInProgress($0) }
-            .store(in: &startupActivitySubscriptions)
+        whatsNew.observeActivity(activities)
     }
 
     private var operationInProgress: Bool {
         let container = ServiceContainer.shared
         return container.dictationViewModel.state != .idle
+            || container.hotkeyService.isDictationStartPending
             || container.audioRecorderViewModel.state != .idle
             || container.audioRecorderViewModel.retranscribingRecordingURL != nil
             || container.fileTranscriptionViewModel.batchState == .processing
             || container.speakerTranscriptionViewModel.batchState == .processing
+            || container.dictionaryTrainingService.activeSampleID != nil
             || HistoryRetranscriptionActivity.recordID != nil
             || NSApp.modalWindow != nil
             || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
@@ -1113,6 +1122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             whatsNewWindowController = WhatsNewWindowController(coordinator: coordinator)
         }
         whatsNewWindowController?.showWindow(nil)
+        // An unfocused overview still counts as an open window for Dock policy.
+        applyActivationPolicy()
     }
 
     private func presentInitialWindow(isNormalLaunch: Bool) {
@@ -1339,12 +1350,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
     }
 
-    private func isManagedWindow(_ window: NSWindow) -> Bool {
+    func isManagedWindow(_ window: NSWindow) -> Bool {
         if let identifier = window.identifier?.rawValue.lowercased() {
             if identifier.contains("settings")
                 || identifier.contains("setup")
                 || identifier.contains("history")
-                || identifier.contains("errors") {
+                || identifier.contains("errors")
+                || identifier == "whats-new" {
                 return true
             }
         }
@@ -1375,7 +1387,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window = notification.object as? NSWindow else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isManagedWindow(window), window.isVisible else { return }
-            self.applyActivationPolicy(activate: true)
+            // The overview participates in Dock policy without activating the app
+            // over the user's current work when it is shown automatically.
+            self.applyActivationPolicy(activate: window.identifier?.rawValue != "whats-new")
         }
     }
 
