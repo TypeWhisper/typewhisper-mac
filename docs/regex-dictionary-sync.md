@@ -14,7 +14,9 @@ Existing clients accept only schema-1 operations, so they ignore the new regex o
 
 Resolve version-1 operations in their original namespace before migrating regex upserts. An old tombstone or a later renamed/replaced entry suppresses its superseded version-1 regex upsert; deleted rules must not reappear on a newly upgraded device. Surviving legacy regex upserts are mapped to exact-pattern IDs and republished in version 2 on the next sync. Local export versions advance to `dictionary-v3` so existing entries publish their current metadata once.
 
-Legacy tombstones do not target migrated version-2 identities, because a folded ID cannot distinguish `\d` from `\D`. During local migration, removing the old ID from the snapshot retires that old identity independently of the new rule. Use an upgraded client to delete a migrated regex rule.
+Legacy tombstones do not target migrated version-2 identities, because a folded ID cannot distinguish `\d` from `\D`. During local migration, withdraw the pre-`dictionary-v3` folded ID from local state without publishing a tombstone when its regex still exists under the exact-pattern ID. A migration must not delete the existing rule on older peers. Once a literal has been exported as `dictionary-v3`, deleting it still publishes its normal version-1 tombstone, even if a regex with the same original text coexists. Use an upgraded client to delete a migrated regex rule.
+
+Before its first export, an upgraded Mac repairs regex modes that an older Mac dropped when receiving Windows version-1 operations. Repair requires a surviving version-1 regex operation already recorded as applied, its folded ID in pre-`dictionary-v3` local state, and a local literal with the same UTF-8 original, replacement, timestamp, case sensitivity, and enabled state. The repair retains the local entry's identity and usage count. Locally edited literals and literals exported by a version-2-capable client are not reclassified. Repair runs before publication so an old copy cannot be republished as an explicit literal, including when Windows has already published the version-2 rule.
 
 Missing `isRegex` is different from an explicit `false`. A legacy update preserves a known local regex mode only for the exact same pattern and when it does not address a coexisting literal entry. The preserved mode is republished once. New legacy entries without a mode default to literal. At equal timestamps, an explicit mode takes precedence over an absent field.
 
@@ -26,6 +28,6 @@ Both repositories contain identical fixtures in their test `Fixtures/PremiumSync
 - `upsert-dictionary-regex-v1.json`: legacy migration input.
 - `upsert-dictionary-regex-v2.json`: shared version-2 wire payload.
 
-Sync tests cover independent rules, literal/regex coexistence, targeted deletion, preserved legacy mode, one-time republishing, and tombstones that suppress legacy upserts without deleting migrated rules.
+Sync tests cover independent rules, literal/regex coexistence, targeted deletion, preserved legacy mode, one-time republishing, upgrades with already-synced state, and tombstones that suppress legacy upserts without deleting migrated rules.
 
 The dictionary HTTP APIs include `isRegex` in GET responses. PUT and DELETE use `(original, isRegex)` as their identity; omitted `isRegex` means literal, so older API clients cannot update or delete a regex accidentally. Invalid regex PUT requests return HTTP 400. To change modes, delete the old mode and create the new one.

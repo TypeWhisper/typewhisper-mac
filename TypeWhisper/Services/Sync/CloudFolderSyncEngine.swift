@@ -377,8 +377,33 @@ enum CloudFolderSyncEngine {
             throw CloudFolderSyncError.missingStore
         }
 
-        let initialSnapshot = await store.snapshot()
         let stateSnapshot = state
+        // Repair modes dropped by a pre-regex Mac before it can republish them as
+        // explicit literals. Only already-applied v1 operations and pre-v3 state qualify.
+        let legacyOperations: [CloudFolderSyncOperation]
+        if stateSnapshot.knownLocalItemIDs.contains(where: {
+            $0.hasPrefix("dictionary:correction:") &&
+                stateSnapshot.exportedItemVersions[$0]?.hasPrefix("dictionary-v3|") != true
+        }) {
+            legacyOperations = try await Task.detached(priority: .utility) {
+                let operationsURL = packageURL(for: folderURL).appendingPathComponent(operationsDirectoryName)
+                guard FileManager.default.fileExists(atPath: operationsURL.path) else { return [CloudFolderSyncOperation]() }
+                return try readOperations(
+                    from: operationsURL,
+                    cache: cache ?? CloudFolderSyncCache()
+                ).operations.filter { $0.schemaVersion == 1 }
+            }.value
+        } else {
+            legacyOperations = []
+        }
+        let preparation = try await MainActor.run {
+            let snapshot = store.snapshot()
+            let repairs = legacyRegexRepairs(operations: legacyOperations, snapshot: snapshot, state: stateSnapshot)
+            guard !repairs.isEmpty else { return (snapshot: snapshot, repairs: 0) }
+            try store.apply(repairs)
+            return (snapshot: store.snapshot(), repairs: repairs.count)
+        }
+        let initialSnapshot = preparation.snapshot
         let deviceName = Host.current().localizedName
             ?? ProcessInfo.processInfo.hostName
         let fileResult = try await Task.detached(priority: .utility) {
@@ -525,7 +550,7 @@ enum CloudFolderSyncEngine {
         return CloudFolderSyncResult(
             operationsRead: operations.count,
             operationsWritten: fileResult.localOperations.count,
-            mutationsApplied: mutations.count,
+            mutationsApplied: mutations.count + preparation.repairs,
             syncedAt: now,
             diagnostics: fileResult.readResult.diagnostics
                 + fileResult.deviceReadResult.diagnostics
@@ -534,6 +559,22 @@ enum CloudFolderSyncEngine {
             packageFingerprint: fileResult.packageFingerprint,
             requiresFollowUpSync: !republishedItemIDs.isEmpty || !republishedSpeakerKeys.isEmpty
         )
+    }
+
+    private static func legacyRegexRepairs(
+        operations: [CloudFolderSyncOperation],
+        snapshot: UserDataSyncSnapshot,
+        state: CloudFolderSyncState
+    ) -> [UserDataSyncMutation] {
+        winningOperations(from: operations).values.compactMap { operation in
+            guard state.appliedOperationIDs.contains(operation.operationId),
+                  let regex = operation.dictionary, regex.isRegex else { return nil }
+            let oldID = UserDataSyncIdentity.dictionaryItemID(entryType: regex.entryType, original: regex.original)
+            guard state.knownLocalItemIDs.contains(oldID),
+                  state.exportedItemVersions[oldID]?.hasPrefix("dictionary-v3|") != true,
+                  snapshot.dictionaryEntries.contains(where: { $0.isLegacyLiteralCopy(of: regex) }) else { return nil }
+            return .restoreLegacyDictionaryRegex(regex)
+        }
     }
 
     /// A device that has not synced for this long no longer holds speaker components back.
@@ -693,6 +734,10 @@ enum CloudFolderSyncEngine {
         var records = initialRecords
         for mutation in mutations {
             switch mutation {
+            case .restoreLegacyDictionaryRegex(let entry):
+                records.removeValue(forKey: UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original))
+                let migrated = Self.records(from: UserDataSyncSnapshot(dictionaryEntries: [entry]))
+                records.merge(migrated) { existing, _ in existing }
             case .upsertDictionary(let entry):
                 let itemID = UserDataSyncIdentity.dictionaryItemID(
                     entryType: entry.entryType,
@@ -883,6 +928,13 @@ enum CloudFolderSyncEngine {
             .subtracting(records.keys)
             .filter { !$0.hasPrefix("history:") }
         for itemID in deletedItemIDs.sorted() {
+            // Withdraw only a pre-v3 identity, without deleting the old peer's rule.
+            // Literal entries created after migration still emit normal tombstones.
+            if state.exportedItemVersions[itemID]?.hasPrefix("dictionary-v3|") != true,
+               records.values.contains(where: {
+                   guard let entry = $0.dictionary, entry.isRegex else { return false }
+                   return UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original) == itemID
+               }) { continue }
             let collection: UserDataSyncCollection = itemID.hasPrefix("snippet:") ? .snippets : .dictionary
             operations.append(.delete(collection: collection, itemID: itemID, deviceId: state.deviceId, deletedAt: now))
         }
@@ -1439,6 +1491,10 @@ enum CloudFolderSyncEngine {
         for mutation in mutations {
             let historyRecordID: UUID
             switch mutation {
+            case .restoreLegacyDictionaryRegex(let entry):
+                keys.insert(UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original))
+                keys.insert(UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: true))
+                continue
             case .upsertDictionary(let entry):
                 keys.insert(UserDataSyncIdentity.dictionaryItemID(
                     entryType: entry.entryType,

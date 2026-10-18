@@ -28,6 +28,8 @@ final class DictionaryExporterTests: XCTestCase {
         XCTAssertEqual(correction["replacement"] as? String, "the")
         XCTAssertEqual(correction["caseSensitive"] as? Bool, true)
         XCTAssertEqual(correction["isEnabled"] as? Bool, true)
+        // Released Windows importers reject unknown fields, even when set to false.
+        XCTAssertNil(correction["isRegex"])
 
         let term = try XCTUnwrap(array.first { ($0["type"] as? String) == "term" })
         XCTAssertEqual(term["original"] as? String, "Kubernetes")

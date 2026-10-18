@@ -137,6 +137,15 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
             createdAt: createdAt, updatedAt: updatedAt
         )
     }
+
+    /// Old macOS versions retained these fields when importing a Windows regex,
+    /// but dropped its mode. Edited literals must not be repaired as old copies.
+    func isLegacyLiteralCopy(of regex: Self) -> Bool {
+        entryType == .correction && !isRegex && regex.isRegex
+            && original.utf8.elementsEqual(regex.original.utf8)
+            && replacement == regex.replacement && updatedAt == regex.updatedAt
+            && caseSensitive == regex.caseSensitive && isEnabled == regex.isEnabled
+    }
 }
 
 struct UserDataSyncSnippet: Codable, Equatable, Sendable {
@@ -203,6 +212,7 @@ struct UserDataSyncSnapshot: Codable, Equatable, Sendable {
 
 enum UserDataSyncMutation: Equatable, Sendable {
     case upsertDictionary(UserDataSyncDictionaryEntry)
+    case restoreLegacyDictionaryRegex(UserDataSyncDictionaryEntry)
     case deleteDictionary(itemID: String)
     case upsertSnippet(UserDataSyncSnippet)
     case deleteSnippet(itemID: String)

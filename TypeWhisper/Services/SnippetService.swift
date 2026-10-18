@@ -281,6 +281,7 @@ final class SnippetService: ObservableObject {
             case .deleteSnippet(let itemID):
                 deleteSyncedSnippet(itemID: itemID, context: context)
             case .upsertDictionary,
+                 .restoreLegacyDictionaryRegex,
                  .deleteDictionary,
                  .upsertHistoryContent,
                  .upsertHistoryInbox,

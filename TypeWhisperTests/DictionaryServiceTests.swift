@@ -410,6 +410,28 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testRegexBudgetExcludesTimeBetweenMatchesButSharesMatchingTime() {
+        var time = ContinuousClock.now
+        var budget = RegexCorrectionBudget(now: { time })
+        time += .seconds(2) // Literal corrections before the first regex.
+        XCTAssertEqual(budget.perform { deadline in
+            XCTAssertEqual(time.duration(to: deadline), .milliseconds(250))
+            time += .milliseconds(100)
+            return "first"
+        }, "first")
+        time += .seconds(2) // Literal corrections interleaved between regex rules.
+        XCTAssertEqual(budget.perform { deadline in
+            XCTAssertEqual(time.duration(to: deadline), .milliseconds(150))
+            time += .milliseconds(150)
+            return "second"
+        }, "second")
+        XCTAssertNil(budget.perform { _ in
+            XCTFail("An exhausted budget must not run another match")
+            return "unexpected"
+        })
+    }
+
+    @MainActor
     func testRegexBudgetIsSharedAcrossRulesAndRelatedTextFields() throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }

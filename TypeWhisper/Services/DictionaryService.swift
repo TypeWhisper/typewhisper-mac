@@ -26,6 +26,23 @@ enum DictionaryCorrectionMatchPolicy {
     case substring
 }
 
+/// One aggregate budget for regex matching; literal work between matches is excluded.
+struct RegexCorrectionBudget {
+    private var remaining: Duration = .milliseconds(250)
+    private let now: () -> ContinuousClock.Instant
+
+    init(now: @escaping () -> ContinuousClock.Instant = { .now }) {
+        self.now = now
+    }
+
+    mutating func perform(_ match: (ContinuousClock.Instant) -> String?) -> String? {
+        guard remaining > .zero else { return nil }
+        let started = now()
+        defer { remaining -= started.duration(to: now()) }
+        return match(started + remaining)
+    }
+}
+
 struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
     let id: UUID
     let original: String
@@ -779,7 +796,7 @@ final class DictionaryService: ObservableObject {
     ) -> [String] {
         var results = texts
         var needsSave = false
-        let regexDeadline = ContinuousClock.now + .milliseconds(250)
+        var regexBudget = RegexCorrectionBudget()
 
         for correction in correctionsForApplication {
             guard let replacement = correction.replacement else { continue }
@@ -790,7 +807,7 @@ final class DictionaryService: ObservableObject {
             for index in results.indices {
                 let before = results[index]
                 guard let corrected = applyCorrection(
-                    correction, to: before, replacement: replacement, regexDeadline: regexDeadline
+                    correction, to: before, replacement: replacement, regexBudget: &regexBudget
                 ) else {
                     interrupted = true
                     break
@@ -799,7 +816,10 @@ final class DictionaryService: ObservableObject {
                 correctionWasApplied = correctionWasApplied || corrected != before
             }
             // A timed-out rule must not leave the full transcript and its segments inconsistent.
-            guard !interrupted else { continue }
+            guard !interrupted else {
+                logger.notice("Regex correction interrupted; skipped rule \(correction.id, privacy: .public)")
+                continue
+            }
             results = correctionResults
 
             if correctionWasApplied, countedCorrectionIDs.insert(correction.id).inserted {
@@ -831,14 +851,17 @@ final class DictionaryService: ObservableObject {
     /// `recordUsage(ofCorrectionIDs:deferUsageCountSave:)` once the result is actually used.
     func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>, includeRegex: Bool = true) -> String {
         var result = text
-        let regexDeadline = ContinuousClock.now + .milliseconds(250)
+        var regexBudget = RegexCorrectionBudget()
         for correction in correctionsForApplication {
             guard includeRegex || !correction.isRegex else { continue }
             guard let replacement = correction.replacement else { continue }
             let before = result
             guard let corrected = applyCorrection(
-                correction, to: before, replacement: replacement, regexDeadline: regexDeadline
-            ) else { continue }
+                correction, to: before, replacement: replacement, regexBudget: &regexBudget
+            ) else {
+                logger.notice("Regex correction interrupted; skipped rule \(correction.id, privacy: .public)")
+                continue
+            }
             result = corrected
             if result != before {
                 appliedCorrectionIDs.insert(correction.id)
@@ -882,11 +905,13 @@ final class DictionaryService: ObservableObject {
         _ correction: DictionaryEntry,
         to text: String,
         replacement: String,
-        regexDeadline: ContinuousClock.Instant
+        regexBudget: inout RegexCorrectionBudget
     ) -> String? {
         if correction.isRegex {
             guard let regex = regexCorrections[correction.id] else { return text }
-            return Self.replacingRegexMatches(regex, in: text, with: replacement, deadline: regexDeadline)
+            return regexBudget.perform { deadline in
+                Self.replacingRegexMatches(regex, in: text, with: replacement, deadline: deadline)
+            }
         }
 
         switch matchPolicy(for: correction) {
@@ -962,7 +987,7 @@ final class DictionaryService: ObservableObject {
         with replacement: String,
         deadline: ContinuousClock.Instant
     ) -> String? {
-        // One 250 ms budget covers all regex rules and related text fields in this pass.
+        // The remaining portion of the shared 250 ms matching budget covers this call.
         // Progress callbacks interrupt a single pathological match as well.
         guard ContinuousClock.now < deadline else { return nil }
         let source = text as NSString
@@ -1547,6 +1572,19 @@ final class DictionaryService: ObservableObject {
             switch mutation {
             case .upsertDictionary(let synced):
                 upsertSyncedDictionaryEntry(synced, context: context)
+            case .restoreLegacyDictionaryRegex(let synced):
+                // Restore the mode in place so local identity and usage survive the upgrade.
+                guard let entry = entries.first(where: {
+                    $0.type == .correction && !$0.isRegex && synced.isRegex
+                        && $0.original.utf8.elementsEqual(synced.original.utf8)
+                        && $0.replacement == synced.replacement && $0.effectiveUpdatedAt == synced.updatedAt
+                        && $0.caseSensitive == synced.caseSensitive && $0.isEnabled == synced.isEnabled
+                }) else { continue }
+                if entries.contains(where: { $0.isRegex && $0.original.utf8.elementsEqual(synced.original.utf8) }) {
+                    context.delete(entry)
+                } else {
+                    entry.isRegex = true
+                }
             case .deleteDictionary(let itemID):
                 deleteSyncedDictionaryEntry(itemID: itemID, context: context)
             case .upsertSnippet,

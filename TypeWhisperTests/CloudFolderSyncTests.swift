@@ -42,6 +42,10 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
 
         for mutation in mutations {
             switch mutation {
+            case .restoreLegacyDictionaryRegex(let entry):
+                if let index = dictionaryEntries.firstIndex(where: { $0.isLegacyLiteralCopy(of: entry) }) {
+                    dictionaryEntries[index] = dictionaryEntries[index].preservingRegexMode(true)
+                }
             case .upsertDictionary(let entry):
                 let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original, isRegex: entry.isRegex)
                 let existing = dictionaryEntries.first {
@@ -4327,6 +4331,78 @@ final class CloudFolderSyncTests: XCTestCase {
         let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
         XCTAssertEqual(republish.operationsWritten, 1)
         XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
+    func testUpgradeRestoresAlreadyAppliedWindowsRegexBeforePublishing() async throws {
+        for deviceID in ["aaa-mac", "zzz-mac"] {
+            let folder = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(folder) }
+            let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+            let regex = try XCTUnwrap(legacy.dictionary)
+            try Self.writeLegacyOperation(legacy, to: folder)
+            if deviceID == "zzz-mac" {
+                let migrated: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v2")
+                let peerFolder = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/upgraded-peer")
+                try FileManager.default.createDirectory(at: peerFolder, withIntermediateDirectories: true)
+                try Self.entitlementEncoder.encode(migrated).write(to: peerFolder.appendingPathComponent("v2.json"))
+            }
+            let dictionary = DictionaryService(appSupportDirectory: folder.appendingPathComponent("dictionary"))
+            try dictionary.applyUserDataSyncMutations([.upsertDictionary(regex.preservingRegexMode(false))])
+            let oldEntry = try XCTUnwrap(dictionary.corrections.first)
+            oldEntry.usageCount = 7
+            let oldUUID = oldEntry.id
+            let store = TypeWhisperUserDataSyncStore(dictionaryService: dictionary,
+                snippetService: SnippetService(appSupportDirectory: folder.appendingPathComponent("snippets")))
+            var state = CloudFolderSyncState(deviceId: deviceID, knownLocalItemIDs: [legacy.itemId],
+                exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+                appliedOperationIDs: [legacy.operationId])
+            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                entitlements: entitlement, now: Self.date(30))
+            XCTAssertEqual(dictionary.corrections.count, 1)
+            XCTAssertTrue(try XCTUnwrap(dictionary.corrections.first).isRegex)
+            XCTAssertEqual(dictionary.corrections.first?.id, oldUUID)
+            XCTAssertEqual(dictionary.corrections.first?.usageCount, 7)
+            let published = try Self.operationFiles(folder: folder, deviceId: deviceID).map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            XCTAssertEqual(published.count, 1)
+            XCTAssertTrue(published.allSatisfy { $0.schemaVersion == 2 && $0.kind == .upsert && $0.dictionary?.isRegex == true })
+            XCTAssertFalse(state.knownLocalItemIDs.contains(legacy.itemId))
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                entitlements: entitlement, now: Self.date(40))
+            XCTAssertEqual(repeated.operationsWritten, 0)
+
+            dictionary.addEntry(type: .correction, original: regex.original, replacement: "literal")
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                entitlements: entitlement, now: Self.date(50))
+            dictionary.deleteEntry(try XCTUnwrap(dictionary.corrections.first { !$0.isRegex }))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+                entitlements: entitlement, now: Self.date(60))
+            let allOperations = try Self.operationFiles(folder: folder, deviceId: deviceID).map {
+                try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
+            }
+            XCTAssertTrue(allOperations.contains { $0.kind == .delete && $0.itemId == legacy.itemId })
+            XCTAssertEqual(dictionary.corrections.count, 1)
+        }
+    }
+
+    @MainActor
+    func testUpgradeKeepsLocallyEditedLegacyLiteral() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(folder) }
+        let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-regex-v1")
+        try Self.writeLegacyOperation(legacy, to: folder)
+        let literal = Self.dictionaryEntry(entryType: .correction, original: #"\d+"#,
+            replacement: "edited", updatedAt: Self.date(20))
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [literal])
+        var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
+            exportedItemVersions: [legacy.itemId: "dictionary-v2|1700000010000"],
+            appliedOperationIDs: [legacy.operationId])
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true), now: Self.date(30))
+        XCTAssertEqual(store.dictionaryEntries, [literal])
     }
 
     @MainActor

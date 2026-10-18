@@ -32,8 +32,8 @@ enum DictionaryExporter {
             if let replacement = entry.replacement {
                 dict["replacement"] = replacement
             }
-            if entry.type == .correction {
-                dict["isRegex"] = entry.isRegex
+            if entry.type == .correction, entry.isRegex {
+                dict["isRegex"] = true
             }
             if entry.type == .term, let ctcMinSimilarity = entry.ctcMinSimilarity {
                 dict["ctcMinSimilarity"] = ctcMinSimilarity

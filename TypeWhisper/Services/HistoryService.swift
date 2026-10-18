@@ -1449,6 +1449,7 @@ final class HistoryService: ObservableObject {
                     deletedIDs.append(recordID)
                 }
             case .upsertDictionary,
+                 .restoreLegacyDictionaryRegex,
                  .deleteDictionary,
                  .upsertSnippet,
                  .deleteSnippet:
