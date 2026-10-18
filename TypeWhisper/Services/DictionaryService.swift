@@ -83,6 +83,7 @@ final class DictionaryService: ObservableObject {
 
     #if DEBUG
     private var trainingSaveOverride: (() throws -> Void)?
+    var updateEntrySaveOverride: (() throws -> Void)?
 
     func setTrainingSaveOverrideForTesting(_ override: (() throws -> Void)?) {
         trainingSaveOverride = override
@@ -277,6 +278,14 @@ final class DictionaryService: ObservableObject {
             return false
         }
 
+        let previous = (
+            original: entry.original,
+            replacement: entry.replacement,
+            caseSensitive: entry.caseSensitive,
+            isRegex: entry.isRegex,
+            ctcMinSimilarity: entry.ctcMinSimilarity,
+            updatedAt: entry.updatedAt
+        )
         entry.original = original
         entry.replacement = replacement
         entry.caseSensitive = caseSensitive
@@ -285,10 +294,22 @@ final class DictionaryService: ObservableObject {
         entry.updatedAt = Date()
 
         do {
+            #if DEBUG
+            try updateEntrySaveOverride?()
+            #endif
             try context.save()
             loadEntries()
             return true
         } catch {
+            // Restore this edit without discarding deferred usage counts or other
+            // pending changes. The application order and regex cache still hold
+            // the previous saved rule because they reload only after a successful save.
+            entry.original = previous.original
+            entry.replacement = previous.replacement
+            entry.caseSensitive = previous.caseSensitive
+            entry.isRegex = previous.isRegex
+            entry.ctcMinSimilarity = previous.ctcMinSimilarity
+            entry.updatedAt = previous.updatedAt
             logger.error("Failed to update entry: \(error.localizedDescription)")
             return false
         }
