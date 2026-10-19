@@ -2791,6 +2791,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/webhook/",
       "releases": [
         {
+          "version": "1.2.1",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 302611,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-webhook-v1.2.1/WebhookPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.2.0",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -2844,7 +2852,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 5
         }
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.tts.system",
