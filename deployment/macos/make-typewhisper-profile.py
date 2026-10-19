@@ -157,7 +157,8 @@ def build_profile(
     if recommended:
         settings["Recommended"] = dict(recommended)
     payloads = []
-    for domain in domains:
+    # A repeated domain would add a second payload with the same identifier and UUID.
+    for domain in dict.fromkeys(domains):
         payloads.append({
             "PayloadType": "com.apple.ManagedClient.preferences",
             "PayloadVersion": 1,

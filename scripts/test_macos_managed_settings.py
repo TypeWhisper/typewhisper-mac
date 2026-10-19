@@ -177,6 +177,13 @@ class GeneratorTests(unittest.TestCase):
         uuids = [first["PayloadUUID"]] + [item["PayloadUUID"] for item in first["PayloadContent"]]
         self.assertEqual(len(set(uuids)), 3)
 
+    def test_writes_a_repeated_domain_once(self):
+        _, profile, _ = self.generate(
+            "--set", "SuppressOptionalPrompts=true",
+            "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
+        )
+        self.assertEqual([next(iter(item["PayloadContent"])) for item in profile["PayloadContent"]], list(EDITION_DOMAINS))
+
     def test_refuses_invalid_input(self):
         cases = [
             (["--set", "updateMode=external"], "did you mean UpdateMode?"),
