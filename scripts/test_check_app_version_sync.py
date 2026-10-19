@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import unittest
-from pathlib import Path
 
 from check_app_version_sync import (
     APPSTORE_XCCONFIG,
