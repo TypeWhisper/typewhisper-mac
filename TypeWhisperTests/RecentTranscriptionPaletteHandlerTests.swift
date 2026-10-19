@@ -1231,6 +1231,58 @@ final class TranslationHostWindowTests: XCTestCase {
         )
         XCTAssertTrue(window.isVisible)
     }
+
+    func testOffscreenHostCannotReceiveFocusOrJoinWindowCycle() {
+        let window = TranslationHostWindow(translationService: TranslationService())
+        defer { window.orderOut(nil) }
+
+        XCTAssertFalse(window.canBecomeKey)
+        XCTAssertFalse(window.canBecomeMain)
+        XCTAssertTrue(window.collectionBehavior.contains(.ignoresCycle))
+
+        window.makeKeyAndOrderFront(nil)
+
+        XCTAssertFalse(window.isKeyWindow)
+        XCTAssertFalse(window.isMainWindow)
+        XCTAssertTrue(window.isVisible, "The translation task must remain hosted in an ordered-in window")
+    }
+
+    func testInteractiveHostAllowsLanguagePackUIAndRestoresOffscreenState() async {
+        let window = TranslationHostWindow(translationService: TranslationService())
+        defer { window.orderOut(nil) }
+        let offscreenFrame = window.frame
+
+        window.setInteractiveMode(true)
+        await drainMainQueue()
+
+        XCTAssertTrue(window.canBecomeKey)
+        XCTAssertTrue(window.canBecomeMain)
+        window.makeMain()
+        XCTAssertTrue(window.collectionBehavior.contains(.ignoresCycle))
+        XCTAssertEqual(window.level, .floating)
+        XCTAssertNotEqual(window.frame, offscreenFrame)
+
+        window.setInteractiveMode(false)
+        await drainMainQueue()
+
+        XCTAssertFalse(window.canBecomeKey)
+        XCTAssertFalse(window.canBecomeMain)
+        XCTAssertFalse(window.isKeyWindow)
+        XCTAssertFalse(window.isMainWindow)
+        XCTAssertTrue(window.collectionBehavior.contains(.ignoresCycle))
+        XCTAssertEqual(window.level, .normal)
+        XCTAssertEqual(window.frame, offscreenFrame)
+        XCTAssertEqual(window.alphaValue, 0)
+        XCTAssertTrue(window.isVisible, "Returning off-screen must not suspend the translation task")
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                continuation.resume()
+            }
+        }
+    }
 }
 #endif
 
