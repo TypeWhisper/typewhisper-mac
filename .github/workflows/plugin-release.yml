@@ -198,6 +198,11 @@ jobs:
               raise SystemExit(
                   f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
               )
+          # Managed settings decide on locality, so the catalog must not classify the plugin differently.
+          if metadata.get("locality") != manifest.get("locality"):
+              raise SystemExit(
+                  f"community metadata locality {metadata.get('locality')} does not match manifest locality {manifest.get('locality')}"
+              )
           PY
 
       - name: Validate release manifest
@@ -593,11 +598,16 @@ jobs:
               elif distribution_source == "community":
                   plugin.pop("categories", None)
 
-              for field in ["iconSystemName", "requiresAPIKey", "hosting", "locality", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
+              for field in ["iconSystemName", "requiresAPIKey", "hosting", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
                   if field in metadata and metadata[field] is not None:
                       plugin[field] = metadata[field]
                   else:
                       plugin.pop(field, None)
+              # The bundled manifest is what the host enforces, so the catalog publishes its locality.
+              if manifest.get("locality") is not None:
+                  plugin["locality"] = manifest["locality"]
+              else:
+                  plugin.pop("locality", None)
 
           def build_release():
               release = {
