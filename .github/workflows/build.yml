@@ -89,6 +89,14 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      # The xcode-27 image ships without the Metal Toolchain that MLX needs.
+      - name: Verify Metal toolchain
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal -v
+
       - name: Restore Swift package cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -196,6 +204,14 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      # The xcode-27 image ships without the Metal Toolchain that MLX needs.
+      - name: Verify Metal toolchain
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal -v
+
       # The nightly release workflow seeds this cache on main. Caches saved here would
       # be scoped to this pull request and unreachable for every other one.
       - name: Restore Swift package cache
@@ -252,6 +268,14 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      # The xcode-27 image ships without the Metal Toolchain that MLX needs.
+      - name: Verify Metal toolchain
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal -v
+
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
@@ -275,6 +299,14 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
+
+      # The xcode-27 image ships without the Metal Toolchain that MLX needs.
+      - name: Verify Metal toolchain
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal -v
 
       - name: Install XcodeGen
         run: |
