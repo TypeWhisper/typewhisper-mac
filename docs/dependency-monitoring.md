@@ -23,8 +23,9 @@ settings; `dependabot.yml` alone does not enable them.
 
 Python release-tool updates must preserve wheel-only hash verification and pass
 the release tooling policy tests; see [the update procedure](release-tooling-security.md).
-The custom SBOM assertion below covers Swift and Ruby; confirm Python graph
-discovery in GitHub after the requirements file first reaches main.
+The custom coverage checks below cover Swift (SBOM) and Ruby (dependency-graph
+compare); confirm Python graph discovery in GitHub after the requirements file
+first reaches main.
 
 The root Swift entry discovers the Xcode project; the SDK requires its own
 directory. The current upstream Swift updater handles Xcode manifests and
@@ -77,12 +78,18 @@ git fetch origin main
 dependency_sha=$(git rev-parse origin/main)
 gh api repos/TypeWhisper/typewhisper-mac/dependency-graph/sbom > /tmp/typewhisper-sbom.json
 ruby scripts/dependency_coverage.rb sbom /tmp/typewhisper-sbom.json "$dependency_sha"
+ruby_base=$(ruby scripts/dependency_coverage.rb ruby-base)
+gh api --paginate --slurp "repos/TypeWhisper/typewhisper-mac/dependency-graph/compare/$ruby_base...$dependency_sha" > /tmp/typewhisper-compare.json
+ruby scripts/dependency_coverage.rb ruby-graph /tmp/typewhisper-compare.json "$dependency_sha"
 ```
 
 Expected settings: `enabled: true`, `paused: false`, and HTTP 204 for alerts.
-The SBOM check must pass for every Swift pin in both locks and every locked Ruby
-gem, not merely find one package from each ecosystem. The workflow retries this
-check for up to 100 seconds after submission to allow GitHub indexing to finish.
+The SBOM check must pass for every Swift pin in both locks, and the dependency-graph
+compare check for every locked Ruby gem, not merely find one package from each
+ecosystem. Ruby is checked through the commit-specific compare against the last
+main commit without `Gemfile.lock`, because GitHub's SBOM export lagged behind the
+Bundler graph after the 2026-10-15 Fastlane update. The workflow retries both checks
+for up to 100 seconds after submission to allow GitHub indexing to finish.
 
 If the graph needs refreshing, run `Dependency Coverage` on main. For a one-off
 bootstrap before the workflow is merged, generate a snapshot for the verified
