@@ -131,9 +131,14 @@ enum ManagedPolicyValidator {
             ))
         }
 
+        // Administrators may force other keys of the app's domain, such as Sparkle's `SU*` keys;
+        // those do not make the policy present.
+        let containsPolicyKey = reading.forcedValues.keys.contains { key in
+            key == ManagedPolicyKeys.recommendedDictionary || ManagedPolicyKeys.definition(named: key) != nil
+        }
         return ManagedPolicySnapshot(
             revision: revision,
-            status: reading.forcedValues.isEmpty ? .absent : .present,
+            status: containsPolicyKey ? .present : .absent,
             readAt: readAt,
             enforcedValues: enforced,
             recommendedValues: recommended,
@@ -173,9 +178,9 @@ enum ManagedPolicyValidator {
 
         for name in section.keys.sorted() where ManagedPolicyKeys.definition(named: name) == nil {
             let message = if let match = ManagedPolicyKeys.caseInsensitiveMatch(for: name) {
-                "Unknown key \(name) is ignored; keys are case-sensitive (did you mean \(match)?)."
+                "\(name) is not a TypeWhisper managed setting; keys are case-sensitive (did you mean \(match)?)."
             } else {
-                "Unknown key \(name) is ignored."
+                "\(name) is not a TypeWhisper managed setting and is not applied as one."
             }
             issues.append(ManagedPolicyIssue(key: name, scope: scope, message: message))
         }

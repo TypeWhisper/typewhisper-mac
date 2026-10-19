@@ -244,10 +244,22 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         XCTAssertTrue(snapshot.recommendedValues.isEmpty)
         XCTAssertTrue(snapshot.invalidEnforcedKeys.isEmpty)
         XCTAssertEqual(snapshot.issues.map(\.message), [
-            "Unknown key FutureSetting is ignored.",
-            "Unknown key allowCloudTranscription is ignored; keys are case-sensitive (did you mean AllowCloudTranscription?).",
-            "Unknown key launchAtLogin is ignored; keys are case-sensitive (did you mean LaunchAtLogin?).",
+            "FutureSetting is not a TypeWhisper managed setting and is not applied as one.",
+            "allowCloudTranscription is not a TypeWhisper managed setting; keys are case-sensitive (did you mean AllowCloudTranscription?).",
+            "launchAtLogin is not a TypeWhisper managed setting; keys are case-sensitive (did you mean LaunchAtLogin?).",
         ])
+    }
+
+    func testOtherForcedKeysOfTheDomainDoNotMakeThePolicyPresent() {
+        let snapshot = validate(forced: ["SUEnableAutomaticChecks": .boolean(false)])
+
+        XCTAssertEqual(snapshot.status, .absent)
+        XCTAssertFalse(snapshot.isManaged)
+        XCTAssertEqual(snapshot.issues.map(\.message), [
+            "SUEnableAutomaticChecks is not a TypeWhisper managed setting and is not applied as one.",
+        ])
+        XCTAssertEqual(validate(forced: ["Recommended": .dictionary([:])]).status, .present)
+        XCTAssertEqual(validate(forced: ["UpdateMode": .integer(1), "SUEnableAutomaticChecks": .boolean(false)]).status, .present)
     }
 
     func testValuesSetOutsideAProfileAreReportedExceptTheManagedLicenseKey() {
@@ -575,7 +587,7 @@ final class ManagedPolicyDiagnosticsTests: XCTestCase {
         ])
         XCTAssertEqual(diagnostics.recommended, [.init(name: "UpdateChannel", value: "2", items: nil)])
         XCTAssertEqual(diagnostics.issues, [
-            .init(key: "[omitted]", scope: "enforced", message: "Unknown key [omitted] is ignored."),
+            .init(key: "[omitted]", scope: "enforced", message: "[omitted] is not a TypeWhisper managed setting and is not applied as one."),
         ])
     }
 
