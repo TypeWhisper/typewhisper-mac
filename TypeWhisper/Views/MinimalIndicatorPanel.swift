@@ -13,6 +13,8 @@ class MinimalIndicatorPanel: NSPanel {
     private let overlayPositionProvider: () -> OverlayPosition
     private let indicatorVisibleInScreenCapturesProvider: () -> Bool
     private let countdownModel: CalendarMeetingCountdownModel
+    private let pointerRegion: IndicatorPointerRegion
+    private let pointerTracker: IndicatorPointerTracker
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var isActionFeedbackInteractive = false
@@ -48,6 +50,7 @@ class MinimalIndicatorPanel: NSPanel {
         overlayPositionProvider: @escaping () -> OverlayPosition,
         indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
         countdownModel: CalendarMeetingCountdownModel = .init(),
+        pointerLocationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation },
         @ViewBuilder content: () -> Content
     ) {
         self.screenResolver = screenResolver
@@ -55,6 +58,12 @@ class MinimalIndicatorPanel: NSPanel {
         self.overlayPositionProvider = overlayPositionProvider
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
         self.countdownModel = countdownModel
+        let pointerRegion = IndicatorPointerRegion()
+        self.pointerRegion = pointerRegion
+        pointerTracker = IndicatorPointerTracker(
+            region: pointerRegion,
+            pointerLocationProvider: pointerLocationProvider
+        )
         let initialSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .minimal,
             isFeedbackInteractive: false
@@ -81,7 +90,9 @@ class MinimalIndicatorPanel: NSPanel {
             isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
 
-        let hostingView = MinimalFirstMouseHostingView(rootView: content())
+        let hostingView = MinimalFirstMouseHostingView(
+            rootView: IndicatorPointerHost(region: pointerRegion, content: content())
+        )
         hostingView.sizingOptions = []
         // The minimal content lays itself out from its own metrics and never
         // consumes the safe area.
@@ -99,6 +110,10 @@ class MinimalIndicatorPanel: NSPanel {
             hostingSize: IndicatorFeedbackPanelLayout.hostingSize(for: .minimal),
             verticalAnchor: Self.hostingAnchor(for: overlayPositionProvider())
         )
+        pointerTracker.hostingView = hostingView
+        pointerTracker.onChange = { [weak self] in
+            self?.updateMouseEventHandling()
+        }
     }
 
     private static func hostingAnchor(for position: OverlayPosition) -> IndicatorHostingContainerView.VerticalAnchor {
@@ -231,6 +246,9 @@ class MinimalIndicatorPanel: NSPanel {
             countdownPresented: isMeetingCountdownPresented
         ) {
             show()
+            pointerTracker.setActive(
+                presentation.source == .recorder && presentation.state == .recording
+            )
         } else {
             dismiss()
         }
@@ -274,7 +292,7 @@ class MinimalIndicatorPanel: NSPanel {
 
         (contentView as? IndicatorHostingContainerView)?.verticalAnchor = Self.hostingAnchor(for: overlayPosition)
         setFrame(panelFrame, display: true)
-        ignoresMouseEvents = !isFeedbackInteractive
+        updateMouseEventHandling()
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
             displayMode: displayModeProvider(),
@@ -305,7 +323,7 @@ class MinimalIndicatorPanel: NSPanel {
         message: String? = nil,
         actionTitle: String? = nil
     ) {
-        if !isInteractive && !isMeetingCountdownPresented {
+        if !isInteractive && !isMeetingCountdownPresented && !pointerRegion.isPointerInside {
             ignoresMouseEvents = true
         }
         // The message decides how tall the feedback surface is, so a changed
@@ -333,7 +351,14 @@ class MinimalIndicatorPanel: NSPanel {
         updateVisibility(vm: vm, recorder: recorder)
     }
 
+    /// Takes the mouse only for feedback, the countdown, or while the pointer
+    /// is on a Recorder indicator; otherwise clicks pass through to other apps.
+    private func updateMouseEventHandling() {
+        ignoresMouseEvents = !(isFeedbackInteractive || pointerRegion.isPointerInside)
+    }
+
     func dismiss() {
+        pointerTracker.setActive(false)
         ignoresMouseEvents = true
         cachedScreen = nil
         orderOut(nil)

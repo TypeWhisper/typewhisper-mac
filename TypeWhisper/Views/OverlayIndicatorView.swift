@@ -163,6 +163,7 @@ struct OverlayIndicatorView: View {
             }
             .frame(width: currentWidth)
         }
+        .indicatorPointerSurface()
         .shadow(color: .black.opacity(0.3 * viewModel.indicatorTheme.shadowOpacityScale), radius: 10, y: 5)
         .scaleEffect(revealScale, anchor: isTop ? .top : .bottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
