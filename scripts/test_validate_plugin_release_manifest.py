@@ -9,12 +9,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from validate_plugin_release_manifest import validate_manifest
+from validate_plugin_release_manifest import validate_manifest, validate_release_order
 
 
 class PluginReleaseManifestTests(unittest.TestCase):
     def manifest(self, host="1.7.0"):
-        return {"version": "1.2.3", "minHostVersion": host, "sdkCompatibilityVersion": "v1"}
+        return {
+            "id": "com.typewhisper.example",
+            "version": "1.2.3",
+            "minHostVersion": host,
+            "sdkCompatibilityVersion": "v1",
+            "locality": "local",
+        }
 
     def test_rejects_older_hosts(self):
         for host in ("1.5.0", "1.6.0", "1.6.99"):
@@ -46,6 +52,47 @@ class PluginReleaseManifestTests(unittest.TestCase):
         manifest = self.manifest()
         manifest["sdkCompatibilityVersion"] = "v1-model-import"
         validate_manifest(manifest)
+
+    def test_locality_is_required_and_known(self):
+        for locality in ("local", "cloud", "configurable"):
+            manifest = self.manifest()
+            manifest["locality"] = locality
+            with self.subTest(locality=locality):
+                validate_manifest(manifest)
+        for locality in (None, "", "Local", "hybrid", True):
+            manifest = self.manifest()
+            manifest["locality"] = locality
+            with self.subTest(locality=locality), self.assertRaisesRegex(ValueError, "locality"):
+                validate_manifest(manifest)
+
+    def test_release_must_not_be_older_than_the_published_version(self):
+        registry = {"plugins": [
+            {"id": "com.typewhisper.other", "releases": [{"version": "9.0.0"}]},
+            {"id": "com.typewhisper.example", "releases": [{"version": "1.2.3"}, {"version": "1.0.0"}]},
+        ]}
+        validate_release_order(self.manifest(), "1.2.3", registry)
+        validate_release_order(self.manifest(), "1.2.4", registry)
+        validate_release_order(self.manifest(), "1.2.4", {"plugins": []})
+        with self.assertRaisesRegex(ValueError, "older than the published '1.2.3'"):
+            validate_release_order(self.manifest(), "1.2.2", registry)
+        with self.assertRaisesRegex(ValueError, "older than the published"):
+            validate_release_order(self.manifest(), "1.2.3-rc.1", registry)
+
+    def test_cli_compares_with_the_published_registry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = Path(directory) / "manifest.json"
+            registry_path = Path(directory) / "plugins.json"
+            manifest_path.write_text(json.dumps(self.manifest()))
+            registry_path.write_text(json.dumps({"plugins": [
+                {"id": "com.typewhisper.example", "releases": [{"version": "1.3.0"}]},
+            ]}))
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).with_name("validate_plugin_release_manifest.py")),
+                 str(manifest_path), "--version", "1.2.3", "--published-registry", str(registry_path)],
+                capture_output=True, text=True
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("older than the published '1.3.0'", result.stderr)
 
     def test_validation_does_not_rewrite_metadata(self):
         manifest = self.manifest()

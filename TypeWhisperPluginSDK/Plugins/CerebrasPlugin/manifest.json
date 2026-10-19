@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.cerebras",
     "name": "Cerebras",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -15,5 +15,6 @@
     "iconSystemName": "bolt.fill",
     "principalClass": "CerebrasPlugin",
     "requiresAPIKey": true,
+    "locality": "cloud",
     "detailsURL": "https://www.typewhisper.com/addons/cerebras/"
 }

@@ -1,7 +1,7 @@
 {
     "id": "com.minerale.mistralai",
     "name": "Mistral AI",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -17,6 +17,7 @@
         "llm"
     ],
     "hosting": "cloud",
+    "locality": "cloud",
     "iconURL": "https://www.typewhisper.com/brand-logos/mistral/logo.svg",
     "principalClass": "MistralAIPlugin",
     "requiresAPIKey": true,

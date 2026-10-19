@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.assemblyai",
     "name": "AssemblyAI",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -15,5 +15,6 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "AssemblyAIPlugin",
     "requiresAPIKey": true,
+    "locality": "cloud",
     "detailsURL": "https://www.typewhisper.com/addons/assemblyai/"
 }

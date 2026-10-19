@@ -24,7 +24,7 @@ OUTPUT = ROOT / "AppStore" / "Resources" / "AppStorePluginCatalog.json"
 DEFAULT_FEED = "https://typewhisper.github.io/typewhisper-mac/plugins-community-v1.json"
 METADATA_KEYS = (
     "name", "author", "description", "descriptions", "category", "categories",
-    "capabilities", "iconSystemName", "requiresAPIKey", "hosting",
+    "capabilities", "iconSystemName", "requiresAPIKey", "hosting", "locality",
     "detailsURL", "homepageURL", "iconURL", "iconDarkURL",
 )
 # Metadata for plugins whose App Store build drops features that the registry

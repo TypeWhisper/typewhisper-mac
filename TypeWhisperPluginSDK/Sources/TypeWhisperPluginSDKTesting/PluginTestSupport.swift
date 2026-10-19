@@ -37,7 +37,7 @@ public final class PluginTestEventBus: EventBusProtocol, @unchecked Sendable {
     }
 }
 
-public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, @unchecked Sendable {
+public final class PluginTestHostServices: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
     private struct AnySendable: @unchecked Sendable {
         let value: Any
     }
@@ -63,6 +63,8 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
     public var availableWorkflows: [PluginWorkflowInfo]
     public var shouldRestoreLoadedModelsPassively: Bool
     public var unloadsModelsImmediatelyAfterUse: Bool
+    /// Set to a reason to simulate an organization that does not allow model downloads.
+    public var modelDownloadRefusal: String?
 
     public init(
         defaults: [String: Any] = [:],
@@ -74,7 +76,8 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         availableRuleNames: [String] = [],
         availableWorkflows: [PluginWorkflowInfo] = [],
         shouldRestoreLoadedModelsPassively: Bool = true,
-        unloadsModelsImmediatelyAfterUse: Bool = false
+        unloadsModelsImmediatelyAfterUse: Bool = false,
+        modelDownloadRefusal: String? = nil
     ) throws {
         self.state = State(
             defaults: defaults.mapValues(AnySendable.init(value:)),
@@ -87,6 +90,7 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         self.availableWorkflows = availableWorkflows
         self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
         self.unloadsModelsImmediatelyAfterUse = unloadsModelsImmediatelyAfterUse
+        self.modelDownloadRefusal = modelDownloadRefusal
 
         if let pluginDataDirectory {
             self.pluginDataDirectory = pluginDataDirectory

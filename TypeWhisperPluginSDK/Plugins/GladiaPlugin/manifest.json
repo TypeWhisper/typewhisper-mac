@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gladia",
     "name": "Gladia",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -15,5 +15,6 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "GladiaPlugin",
     "requiresAPIKey": true,
+    "locality": "cloud",
     "detailsURL": "https://www.typewhisper.com/addons/gladia/"
 }

@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gemini",
     "name": "Gemini",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -20,5 +20,6 @@
     "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg",
     "principalClass": "GeminiPlugin",
     "requiresAPIKey": true,
+    "locality": "cloud",
     "detailsURL": "https://www.typewhisper.com/addons/gemini/"
 }

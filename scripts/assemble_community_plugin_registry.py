@@ -27,6 +27,7 @@ VALID_CATEGORIES = {
     "utility",
 }
 VALID_HOSTING = {"local", "cloud"}
+VALID_LOCALITY = {"local", "cloud", "configurable"}
 VALID_ARCHITECTURES = {"arm64", "x86_64"}
 
 PLUGIN_REQUIRED_FIELDS = {
@@ -297,6 +298,10 @@ def validate_plugin(plugin: dict, path: Path) -> list[str]:
     hosting = plugin.get("hosting")
     if hosting is not None and hosting not in VALID_HOSTING:
         errors.append(f"{filename}: 'hosting' must be 'local' or 'cloud'")
+
+    locality = plugin.get("locality")
+    if locality not in VALID_LOCALITY:
+        errors.append(f"{filename}: 'locality' must be 'local', 'cloud' or 'configurable'")
 
     requires_api_key = plugin.get("requiresAPIKey")
     if requires_api_key is not None and not isinstance(requires_api_key, bool):

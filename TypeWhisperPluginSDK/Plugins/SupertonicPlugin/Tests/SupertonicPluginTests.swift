@@ -5,7 +5,7 @@ import XCTest
 @testable import SupertonicPlugin
 
 final class SupertonicPluginTests: XCTestCase {
-    func testManifestDeclaresLocalTTSPluginForHost17AndArm64() throws {
+    func testManifestDeclaresLocalTTSPluginForHost18AndArm64() throws {
         let manifestURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -21,7 +21,7 @@ final class SupertonicPluginTests: XCTestCase {
         XCTAssertEqual(manifest.category, "tts")
         XCTAssertEqual(manifest.hosting, .local)
         XCTAssertEqual(manifest.requiresAPIKey, false)
-        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
@@ -52,6 +52,24 @@ final class SupertonicPluginTests: XCTestCase {
         XCTAssertEqual(plugin.modelState, .error(SupertonicPluginError.licenseNotAccepted.localizedDescription))
         let modelDirectory = SupertonicModelAssetManager(rootDirectory: host.pluginDataDirectory).modelDirectory
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+    }
+
+    func testDownloadRefusedByHostReportsReasonWithoutStartingDownload() async throws {
+        let reason = "Your organization does not allow model downloads."
+        let host = try PluginTestHostServices(modelDownloadRefusal: reason)
+        let plugin = SupertonicPlugin()
+        plugin.activate(host: host)
+        plugin.acceptCurrentModelLicense()
+
+        await plugin.downloadModel()
+
+        // A started download would fail with its own message or write the cache.
+        XCTAssertEqual(plugin.modelState, .error(reason))
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, reason)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(plugin.modelDownloadProgress, 0)
+        let contents = try FileManager.default.contentsOfDirectory(atPath: host.pluginDataDirectory.path)
+        XCTAssertEqual(contents, [])
     }
 
     func testChangedModelLicenseRevisionInvalidatesPriorAcceptance() throws {
