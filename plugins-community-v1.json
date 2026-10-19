@@ -3565,6 +3565,14 @@
       "requiresAPIKey": false,
       "releases": [
         {
+          "version": "0.2.2",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 3341604,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mcp-client-v0.2.2/MCPClientPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "0.2.1",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
@@ -3591,7 +3599,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 3
         }
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.web-link",
