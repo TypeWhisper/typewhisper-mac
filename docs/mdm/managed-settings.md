@@ -114,6 +114,8 @@ The App Store edition is updated by the App Store and has its plugins built in:
 A pair names a provider by its [provider ID](#provider-ids) and a model by the ID the
 provider lists, for example `com.typewhisper.parakeet` with
 `parakeet-tdt-0.6b-v3`, or `com.typewhisper.groq` with `whisper-large-v3`.
+Apple Intelligence has a single model and accepts any model ID, for example
+`default`. Providers that list no models accept the ID as written.
 
 An **enforced transcription pair** is used by dictation, its live preview, file
 transcription, the Recorder, watch folders, recovery, history re-transcription and
