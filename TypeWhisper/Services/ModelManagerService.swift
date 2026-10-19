@@ -576,7 +576,7 @@ final class ModelManagerService: ObservableObject {
         cloudModelOverride: String? = nil
     ) -> Bool {
         let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
-        guard let providerId = effectiveEngineId(effectiveEngineId(engineOverrideId)),
+        guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
@@ -598,7 +598,7 @@ final class ModelManagerService: ObservableObject {
     /// Whether the dictation engine opted in to delivering its final result through a
     /// live session, so dictation should stream even when no transcript preview is shown.
     func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
-        guard let providerId = effectiveEngineId(effectiveEngineId(engineOverrideId)),
+        guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
               PluginManager.shared.transcriptionEngine(for: providerId) is any LiveTranscriptionCapablePlugin,
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
             return false
@@ -789,18 +789,25 @@ final class ModelManagerService: ObservableObject {
               let manager = PluginManager.shared,
               let recommended = manager.selectionPolicy.recommendedTranscription,
               case .resolved(let providerId, let modelId) = manager.resolveTranscriptionPair(recommended),
-              let engine = manager.transcriptionEngine(for: providerId) else { return }
-        let previousModelId = engine.selectedModelId
-        engine.selectModel(modelId)
-        guard canUseForTranscription(engine), !lacksDownloadedModel(engine) else {
-            // Not ready yet: keep the plugin's own selection and try again on a later pass.
-            if let previousModelId, previousModelId != modelId {
-                engine.selectModel(previousModelId)
-            }
-            return
-        }
+              let engine = manager.transcriptionEngine(for: providerId),
+              // Not ready yet: leave the plugin's selection alone and try again on a later pass.
+              isReadyForRecommendation(engine, modelId: modelId) else { return }
         UserDefaults.standard.set(true, forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied)
+        if engine.selectedModelId != modelId {
+            engine.selectModel(modelId)
+        }
         selectProvider(providerId)
+    }
+
+    /// Whether a recommended model can be used as it is, judged without selecting it: selecting a
+    /// local model loads it, which a check repeated on every plugin change must not do.
+    private func isReadyForRecommendation(_ engine: TranscriptionEnginePlugin, modelId: String) -> Bool {
+        guard canUseForTranscription(engine) else { return false }
+        let modelManager = (engine as? any PluginDownloadedModelManaging)
+            ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
+                as? any PluginDownloadedModelManaging)
+        guard let modelManager else { return true }
+        return modelManager.downloadedModels.contains { $0.id.caseInsensitiveCompare(modelId) == .orderedSame }
     }
 
     private func isUsableForTranscription(_ providerId: String) -> Bool {

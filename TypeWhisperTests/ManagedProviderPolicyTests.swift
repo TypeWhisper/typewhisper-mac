@@ -293,6 +293,103 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         XCTAssertEqual(PolicyTestLLM.calls, 0)
     }
 
+    func testFallbackListWhoseEveryProviderIsRefusedReportsThePolicy() async throws {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        let suite = "TypeWhisperTests.ManagedLLMFallback.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let service = PromptProcessingService(userDefaults: defaults)
+        service.addLLMFallback(providerId: "Cloud LLM")
+        for item in service.fallbackPriorityList where item.providerId != service.normalizeProviderId("Cloud LLM") {
+            service.removeLLMFallback(item)
+        }
+        XCTAssertEqual(service.fallbackPriorityList.count, 1)
+        manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTextProcessing: false))
+
+        do {
+            _ = try await service.process(prompt: "Fix", text: "hello", skipMemoryInjection: true)
+            XCTFail("A refused provider must not run")
+        } catch {
+            XCTAssertEqual(error as? ManagedPolicyRefusal, ManagedPolicyRefusal(
+                reason: ManagedProviderPolicy(allowsCloudTextProcessing: false).cloudRefusal(.text, locality: .cloud)!
+            ), "Not an exhausted fallback list, which the API reports as 503")
+        }
+        XCTAssertEqual(PolicyTestLLM.calls, 0)
+    }
+
+    func testCopyThatLosesTheReplacementLeavesTheRefusalAlone() throws {
+        let manager = makeManager()
+        let pluginId = PolicyTestEngine.localId
+        manager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: pluginId, name: pluginId, version: "2.0.0", principalClass: "Test",
+                    categories: ["transcription"], locality: "local"
+                ),
+                instance: PolicyTestEngine(providerID: "local-engine"),
+                bundle: Bundle.main,
+                sourceURL: directory,
+                isEnabled: true
+            ),
+        ]
+        manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTranscription: false))
+        XCTAssertNil(manager.policyRefusals[pluginId])
+
+        // An older copy without a locality would be refused, but it loses to the loaded version.
+        let olderURL = directory.appendingPathComponent("Older.bundle", isDirectory: true)
+        try writeBundle(at: olderURL, manifest: PluginManifest(
+            id: pluginId, name: pluginId, version: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            principalClass: "Test", categories: ["transcription"]
+        ))
+        try manager.loadPlugin(at: olderURL)
+
+        XCTAssertNil(manager.policyRefusals[pluginId])
+        XCTAssertEqual(manager.loadedPlugins.first { $0.id == pluginId }?.manifest.version, "2.0.0")
+        XCTAssertNil(manager.transcriptionPolicyRefusal(forProviderId: "local-engine"))
+    }
+
+    func testRefusedPluginFileIsNotInstalled() async throws {
+        let manager = PluginManager(appSupportDirectory: directory)
+        PluginManager.shared = manager
+        manager.applyProviderPolicy(ManagedProviderPolicy(allowedPlugins: [PolicyTestEngine.localId]))
+        let incoming = directory.appendingPathComponent("Incoming", isDirectory: true)
+        let bundleURL = incoming.appendingPathComponent("Refused.bundle", isDirectory: true)
+        try writeBundle(at: bundleURL, manifest: PluginManifest(
+            id: PolicyTestEngine.cloudId, name: "Refused", version: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            principalClass: "Test", categories: ["transcription"], locality: "local"
+        ))
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: directory.appendingPathComponent("Cache", isDirectory: true),
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        do {
+            _ = try await service.installFromFile(bundleURL)
+            XCTFail("A plugin outside AllowedPlugins must not be installed")
+        } catch {
+            XCTAssertNotNil(error as? ManagedPolicyRefusal)
+        }
+        let installed = (try? FileManager.default.contentsOfDirectory(atPath: manager.pluginsDirectory.path)) ?? []
+        XCTAssertTrue(installed.isEmpty, "Nothing was copied: \(installed)")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
+    }
+
+    private func writeBundle(at bundleURL: URL, manifest: PluginManifest) throws {
+        let resources = bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        let info: [String: Any] = [
+            "CFBundleIdentifier": manifest.id, "CFBundleName": manifest.name,
+            "CFBundlePackageType": "BNDL", "CFBundleShortVersionString": manifest.version, "CFBundleVersion": "1",
+        ]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: bundleURL.appendingPathComponent("Contents/Info.plist"))
+        try JSONEncoder().encode(manifest).write(to: resources.appendingPathComponent("manifest.json"))
+    }
+
     private func makeManager(cloudEngineCategories: [String] = ["transcription"]) -> PluginManager {
         PolicyTestLLM.calls = 0
         let manager = PluginManager(appSupportDirectory: directory)
