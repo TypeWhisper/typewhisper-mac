@@ -650,13 +650,17 @@ private struct LLMFallbackPriorityRow: View {
 
     @ViewBuilder
     private var selectionFields: some View {
-        providerPicker
-        if showsModelPicker {
-            modelPicker
+        // An enforced LLM pair replaces the fallback list; the saved rows stay as they are.
+        Group {
+            providerPicker
+            if showsModelPicker {
+                modelPicker
+            }
+            if showsEffortPicker {
+                effortPicker
+            }
         }
-        if showsEffortPicker {
-            effortPicker
-        }
+        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
     }
 
     private var providerPicker: some View {
@@ -1428,6 +1432,7 @@ private struct WorkflowEditorPage: View {
                         Text(engine.providerDisplayName).tag(engine.providerId as String?)
                     }
                 }
+                .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
 
                 Text(
                     draft.transcriptionEngineId == nil
@@ -1456,6 +1461,7 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
 
                         Text(
                             localizedAppText(
@@ -1669,6 +1675,7 @@ private struct WorkflowEditorPage: View {
                         Text(provider.displayName).tag(provider.id as String?)
                     }
                 }
+                .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
 
                 Text(
                     draft.providerId == nil
@@ -1697,6 +1704,7 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
 
                         Text(
                             localizedAppText(

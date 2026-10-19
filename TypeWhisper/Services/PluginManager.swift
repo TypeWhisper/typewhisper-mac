@@ -305,6 +305,8 @@ final class PluginManager: ObservableObject {
     }
     /// The cloud, provider and plugin restrictions of the managed settings.
     private(set) var providerPolicy: ManagedProviderPolicy = .unmanaged
+    /// The enforced and recommended provider and model pairs of the managed settings.
+    private(set) var selectionPolicy: ManagedSelectionPolicy = .unmanaged
     /// Advances whenever `loadedPlugins` or `incompatibleExternalBundles` change.
     @Published private(set) var registryRevision = 0
     @Published private(set) var readinessRevision = 0
@@ -569,6 +571,119 @@ final class PluginManager: ObservableObject {
             }
         }
         publishRegistryChange()
+    }
+
+    /// Applies new provider and model pairs. Listeners re-resolve the engine and language model.
+    func applySelectionPolicy(_ policy: ManagedSelectionPolicy) {
+        guard policy != selectionPolicy else { return }
+        selectionPolicy = policy
+        publishRegistryChange()
+    }
+
+    /// The engine the enforced transcription pair selects, nil when no pair is enforced.
+    var enforcedTranscriptionResolution: ManagedPairResolution? {
+        if selectionPolicy.isTranscriptionBlocked {
+            return .unavailable(ManagedProviderPolicy.blockedMessage)
+        }
+        return selectionPolicy.enforcedTranscription.map(resolveTranscriptionPair)
+    }
+
+    /// The language model the enforced LLM pair selects, nil when no pair is enforced.
+    var enforcedLlmResolution: ManagedPairResolution? {
+        if selectionPolicy.isLlmBlocked {
+            return .unavailable(ManagedProviderPolicy.blockedMessage)
+        }
+        return selectionPolicy.enforcedLlm.map(resolveLlmPair)
+    }
+
+    func resolveTranscriptionPair(_ pair: ManagedSelectionPair) -> ManagedPairResolution {
+        let (pluginId, qualifier) = pair.components
+        guard let plugin = loadedPlugins.first(where: { $0.manifest.id.caseInsensitiveCompare(pluginId) == .orderedSame }) else {
+            return .unavailable(String(localized: "The transcription provider your organization requires is not installed."))
+        }
+        if let refusal = policyRefusals[plugin.manifest.id] {
+            return .unavailable(refusal)
+        }
+        guard plugin.isEnabled, plugin.isRuntimeLoaded else {
+            return .unavailable(String(localized: "The transcription provider your organization requires is turned off."))
+        }
+        var engines: [TranscriptionEnginePlugin] = []
+        if let engine = plugin.instance as? TranscriptionEnginePlugin {
+            engines.append(engine)
+        }
+        if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
+            engines.append(contentsOf: expanded.additionalTranscriptionEngines)
+        }
+        let engine: TranscriptionEnginePlugin? = if let qualifier {
+            engines.first { $0.providerId.caseInsensitiveCompare(qualifier) == .orderedSame }
+        } else {
+            engines.count == 1 ? engines.first : nil
+        }
+        guard let engine else {
+            return .unavailable(String(localized: "Your organization's transcription provider does not name one of this plugin's engines."))
+        }
+        if let refusal = transcriptionRefusal(for: engine.providerId, in: plugin) {
+            return .unavailable(refusal)
+        }
+        let models = engine.transcriptionModels
+        guard let modelId = Self.matchingModelId(pair.modelId, in: models.map(\.id)) else {
+            return .unavailable(String(localized: "The transcription model your organization requires is not offered by this provider."))
+        }
+        return .resolved(providerId: engine.providerId, modelId: modelId)
+    }
+
+    func resolveLlmPair(_ pair: ManagedSelectionPair) -> ManagedPairResolution {
+        let (pluginId, qualifier) = pair.components
+        if pluginId.caseInsensitiveCompare(ManagedProviderPolicy.appleIntelligenceId) == .orderedSame {
+            if let refusal = providerPolicy.llmRefusal(
+                pluginId: ManagedProviderPolicy.appleIntelligenceId,
+                providerId: PromptProcessingService.appleIntelligenceId,
+                locality: .local
+            ) {
+                return .unavailable(refusal)
+            }
+            return .resolved(providerId: PromptProcessingService.appleIntelligenceId, modelId: pair.modelId)
+        }
+        guard let plugin = loadedPlugins.first(where: { $0.manifest.id.caseInsensitiveCompare(pluginId) == .orderedSame }) else {
+            return .unavailable(String(localized: "The language model provider your organization requires is not installed."))
+        }
+        if let refusal = policyRefusals[plugin.manifest.id] {
+            return .unavailable(refusal)
+        }
+        guard plugin.isEnabled, plugin.isRuntimeLoaded else {
+            return .unavailable(String(localized: "The language model provider your organization requires is turned off."))
+        }
+        var providers: [LLMProviderPlugin] = []
+        if let provider = plugin.instance as? LLMProviderPlugin {
+            providers.append(provider)
+        }
+        if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
+            providers.append(contentsOf: expanded.additionalLLMProviders)
+        }
+        let provider: LLMProviderPlugin? = if let qualifier {
+            providers.first {
+                $0.llmProviderId.caseInsensitiveCompare(qualifier) == .orderedSame
+                    || $0.providerName.caseInsensitiveCompare(qualifier) == .orderedSame
+            }
+        } else {
+            providers.count == 1 ? providers.first : nil
+        }
+        guard let provider else {
+            return .unavailable(String(localized: "Your organization's language model provider does not name one of this plugin's providers."))
+        }
+        if let refusal = llmRefusal(for: provider, in: plugin) {
+            return .unavailable(refusal)
+        }
+        guard let modelId = Self.matchingModelId(pair.modelId, in: provider.supportedModels.map(\.id)) else {
+            return .unavailable(String(localized: "The language model your organization requires is not offered by this provider."))
+        }
+        return .resolved(providerId: provider.llmProviderId, modelId: modelId)
+    }
+
+    /// The catalog's spelling of `modelId`. Providers whose models are not listed in advance accept it as is.
+    private static func matchingModelId(_ modelId: String, in catalog: [String]) -> String? {
+        guard !catalog.isEmpty else { return modelId }
+        return catalog.first { $0.caseInsensitiveCompare(modelId) == .orderedSame }
     }
 
     private func storedEnabledState(for plugin: LoadedPlugin) -> Bool {

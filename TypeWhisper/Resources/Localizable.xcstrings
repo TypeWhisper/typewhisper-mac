@@ -1,6 +1,182 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "The transcription provider your organization requires is not installed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Transkriptionsanbieter, den deine Organisation vorgibt, ist nicht installiert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した文字起こしプロバイダーがインストールされていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求的转写提供方未安装。"
+          }
+        }
+      }
+    },
+    "The transcription provider your organization requires is turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Transkriptionsanbieter, den deine Organisation vorgibt, ist deaktiviert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した文字起こしプロバイダーがオフになっています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求的转写提供方已关闭。"
+          }
+        }
+      }
+    },
+    "Your organization's transcription provider does not name one of this plugin's engines." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der von deiner Organisation vorgegebene Transkriptionsanbieter benennt keine Engine dieses Plugins."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した文字起こしプロバイダーは、このプラグインのエンジンを指定していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织指定的转写提供方未指明此插件的某个引擎。"
+          }
+        }
+      }
+    },
+    "The transcription model your organization requires is not offered by this provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Transkriptionsmodell, das deine Organisation vorgibt, wird von diesem Anbieter nicht angeboten."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した文字起こしモデルは、このプロバイダーでは提供されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此提供方不提供你的组织要求的转写模型。"
+          }
+        }
+      }
+    },
+    "The language model provider your organization requires is not installed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, ist nicht installiert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した言語モデルプロバイダーがインストールされていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求的语言模型提供方未安装。"
+          }
+        }
+      }
+    },
+    "The language model provider your organization requires is turned off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, ist deaktiviert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した言語モデルプロバイダーがオフになっています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求的语言模型提供方已关闭。"
+          }
+        }
+      }
+    },
+    "Your organization's language model provider does not name one of this plugin's providers." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der von deiner Organisation vorgegebene Sprachmodell-Anbieter benennt keinen Anbieter dieses Plugins."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した言語モデルプロバイダーは、このプラグインのプロバイダーを指定していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织指定的语言模型提供方未指明此插件的某个提供方。"
+          }
+        }
+      }
+    },
+    "The language model your organization requires is not offered by this provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Sprachmodell, das deine Organisation vorgibt, wird von diesem Anbieter nicht angeboten."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した言語モデルは、このプロバイダーでは提供されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此提供方不提供你的组织要求的语言模型。"
+          }
+        }
+      }
+    },
     "Your organization does not allow this transcription provider." : {
       "localizations" : {
         "de" : {
