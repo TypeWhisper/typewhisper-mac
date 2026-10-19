@@ -1,6 +1,6 @@
 import XCTest
 import TypeWhisperPluginSDK
-import TypeWhisperPluginSDKTesting
+@_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import Qwen3Plugin
 
 final class Qwen3PluginTests: XCTestCase {
@@ -399,6 +399,64 @@ final class Qwen3PluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
         XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
+    }
+
+    func testRefusedModelDownloadReportsHostReasonBeforeAnyRequest() async throws {
+        let reason = "Your organization does not allow model downloads."
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false, modelDownloadRefusal: reason)
+        let sessions = recordHTTPRequests()
+        let plugin = Qwen3Plugin()
+        plugin.activate(host: host)
+
+        plugin.triggerRestoreModel(forModel: model.id as NSString)
+        await plugin.explicitModelLoadTask?.value
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(plugin.currentSettingsActivity, PluginSettingsActivity(message: reason, isError: true))
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        XCTAssertEqual(sessions.sessions.flatMap(\.requestedPaths), [])
+        let modelsDirectory = host.pluginDataDirectory.appendingPathComponent("models")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: modelsDirectory.path), [])
+    }
+
+    @MainActor
+    func testRefusedHuggingFaceImportThrowsHostReasonBeforeDownloading() async throws {
+        let reason = "Your organization does not allow model downloads."
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false, modelDownloadRefusal: reason)
+        let plugin = Qwen3Plugin()
+        plugin.activate(host: host)
+        let candidate = try await Self.remoteImportCandidate(modelType: "qwen3_asr")
+
+        do {
+            _ = try await plugin.importModel(candidate, token: nil)
+            XCTFail("Imported a Hugging Face model although downloads are refused")
+        } catch {
+            XCTAssertEqual(error as? PluginModelDownloadRefusedError, PluginModelDownloadRefusedError(reason: reason))
+        }
+        XCTAssertNil(plugin.currentSettingsActivity)
+        let importDirectory = host.pluginDataDirectory.appendingPathComponent("custom-models")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: importDirectory.path), "Import must not stage files")
+    }
+
+    /// A regressed guard would reach the Hugging Face size lookup first. Failing
+    /// it with a cancellation stops the load before HubClient opens a connection.
+    private func recordHTTPRequests() -> PluginHTTPClientSessionStore {
+        let sessions = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in sessions.makeSession(outcomes: [.failure(CancellationError())]) }
+        addTeardownBlock { PluginHTTPClientTestHarness.reset() }
+        return sessions
+    }
+
+    /// Lists no repository files, so a regressed guard fails in the store without a request.
+    private static func remoteImportCandidate(modelType: String) async throws -> PluginModelImportCandidate {
+        try await PluginModelImportCandidate.inspect(.huggingFace("owner/model")) { request in
+            let url = try XCTUnwrap(request.url)
+            let data = url.path.hasPrefix("/api/")
+                ? Data("{\"sha\":\"\(String(repeating: "a", count: 40))\",\"siblings\":[]}".utf8)
+                : Data("{\"model_type\":\"\(modelType)\"}".utf8)
+            return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
     }
 
     @discardableResult

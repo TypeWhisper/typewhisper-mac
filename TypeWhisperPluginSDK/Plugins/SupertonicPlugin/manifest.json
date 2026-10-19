@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.tts.supertonic",
     "name": "Supertonic (Experimental)",
-    "version": "1.0.0",
-    "minHostVersion": "1.7.0",
+    "version": "1.0.2",
+    "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
@@ -19,6 +19,7 @@
         "tts"
     ],
     "hosting": "local",
+    "locality": "local",
     "iconSystemName": "waveform.circle.fill",
     "principalClass": "SupertonicPlugin",
     "requiresAPIKey": false,

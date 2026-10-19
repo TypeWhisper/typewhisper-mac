@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.whisperkit",
     "name": "WhisperKit",
-    "version": "1.2.1",
-    "minHostVersion": "1.7.0",
+    "version": "1.2.2",
+    "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
@@ -20,5 +20,6 @@
     ],
     "iconSystemName": "waveform",
     "principalClass": "WhisperKitPlugin",
+    "locality": "local",
     "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"
 }

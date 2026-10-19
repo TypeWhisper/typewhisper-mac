@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.groq",
     "name": "Groq",
-    "version": "1.0.26",
+    "version": "1.0.27",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -20,5 +20,6 @@
     "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg",
     "principalClass": "GroqPlugin",
     "requiresAPIKey": true,
+    "locality": "cloud",
     "detailsURL": "https://www.typewhisper.com/addons/groq/"
 }

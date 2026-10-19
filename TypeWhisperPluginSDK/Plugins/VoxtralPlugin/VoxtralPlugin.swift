@@ -128,6 +128,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
         guard !isImportingModel, modelState != .loading else { throw PluginModelImportError.busy }
         guard let store = customModelStore else { throw PluginTranscriptionError.notConfigured }
+        if case .huggingFace = candidate.source { try host?.requireModelDownloadAllowed() }
         isImportingModel = true
         let previousState = modelState
         let previousLoadedModelID = loadedModelId
@@ -387,6 +388,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 guard !modelDef.id.hasPrefix("custom-") else {
                     throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
+                // Refuse before the size lookup, and keep any partial cache untouched.
+                try host?.requireModelDownloadAllowed()
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(

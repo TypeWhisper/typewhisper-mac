@@ -207,7 +207,15 @@ jobs:
             echo "Missing manifest for ${TARGET}: $MANIFEST"
             exit 1
           fi
-          python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION"
+          # Compare with the feed already published, before anything is built or released.
+          FEED="plugins-community-v1.json"
+          if git fetch --quiet --depth=1 origin gh-pages && git show "FETCH_HEAD:${FEED}" > "$RUNNER_TEMP/${FEED}"; then
+            python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION" \
+              --published-registry "$RUNNER_TEMP/${FEED}"
+          else
+            echo "Could not read the published ${FEED}"
+            exit 1
+          fi
           echo "Validated $MANIFEST for release $PLUGIN_VERSION"
           cat "$MANIFEST"
 
@@ -584,7 +592,7 @@ jobs:
               elif distribution_source == "community":
                   plugin.pop("categories", None)
 
-              for field in ["iconSystemName", "requiresAPIKey", "hosting", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
+              for field in ["iconSystemName", "requiresAPIKey", "hosting", "locality", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
                   if field in metadata and metadata[field] is not None:
                       plugin[field] = metadata[field]
                   else:
@@ -620,8 +628,20 @@ jobs:
               updated = False
               for plugin in registry["plugins"]:
                   if plugin["id"] == manifest["id"]:
-                      sync_plugin_metadata(plugin)
                       releases = plugin.get("releases", [])
+                      # A manifest whose version fell behind the feed would publish an update nobody
+                      # receives, because hosts install the newest compatible release.
+                      newer = [
+                          release.get("version") for release in releases
+                          if release.get("version") and version_key(release["version"]) > version_key(version)
+                      ]
+                      if newer:
+                          newest = max(newer, key=version_key)
+                          raise SystemExit(
+                              f"{target_registry}: {manifest['id']} v{version} is older than the published v{newest}; "
+                              "bump the manifest version"
+                          )
+                      sync_plugin_metadata(plugin)
                       releases = [release for release in releases if release.get("version") != version]
                       releases.append(build_release())
                       plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)

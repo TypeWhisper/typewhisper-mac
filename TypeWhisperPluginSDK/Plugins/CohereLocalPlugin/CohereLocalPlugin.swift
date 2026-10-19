@@ -365,6 +365,8 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
                 guard allowDownloads else {
                     throw CohereLocalPluginError.modelNotDownloaded
                 }
+                // Refuse before the download touches the asset directory.
+                try context.host.requireModelDownloadAllowed()
                 try await assets.download(bearerToken: context.huggingFaceToken) { [weak self] fraction in
                     self?.updateDownloadProgress(
                         fraction,

@@ -17,5 +17,6 @@
     "category": "utility",
     "iconSystemName": "person.2.wave.2.fill",
     "principalClass": "SpeakerDiarizationPlugin",
-    "requiresAPIKey": false
+    "requiresAPIKey": false,
+    "locality": "local"
 }

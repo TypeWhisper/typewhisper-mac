@@ -10,6 +10,7 @@
   "source": "community",
   "category": "memory",
   "hosting": "cloud",
+  "locality": "configurable",
   "requiresAPIKey": true,
   "iconSystemName": "building.columns"
 }

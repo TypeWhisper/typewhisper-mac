@@ -201,6 +201,12 @@ final class SupertonicPlugin: NSObject, TTSProviderPlugin, PluginSettingsActivit
     }
 
     func downloadModel() async {
+        // The organization's refusal outranks the license prompt: accepting it would not help.
+        if let refusal = host?.modelDownloadRefusal {
+            modelState = .error(refusal)
+            host?.notifyCapabilitiesChanged()
+            return
+        }
         guard canDownloadModel else {
             modelState = .error(SupertonicPluginError.licenseNotAccepted.localizedDescription)
             host?.notifyCapabilitiesChanged()

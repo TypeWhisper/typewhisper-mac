@@ -16,6 +16,7 @@
         "live-dictation"
     ],
     "hosting": "local",
+    "locality": "configurable",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "R2T2Plugin",
     "requiresAPIKey": false,

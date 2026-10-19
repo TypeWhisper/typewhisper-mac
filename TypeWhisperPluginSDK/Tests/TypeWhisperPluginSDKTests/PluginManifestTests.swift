@@ -14,6 +14,37 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertFalse(PluginSDKCompatibility.isCompatible(manifestVersion: "v2", isBundled: false))
     }
 
+    func testLocalityDecodesKnownValuesAndTreatsOthersAsUnknown() throws {
+        for (raw, expected) in [("local", PluginLocality.local), ("cloud", .cloud), ("configurable", .configurable), (" local ", .local)] {
+            XCTAssertEqual(try decodeManifest(locality: raw).resolvedLocality, expected, raw)
+        }
+        for raw in ["hybrid", "Local", ""] {
+            let manifest = try decodeManifest(locality: raw)
+            XCTAssertEqual(manifest.locality, raw, "An unknown value still decodes")
+            XCTAssertNil(manifest.resolvedLocality, raw)
+        }
+    }
+
+    func testMissingLocalityIsUnknownEvenWhenHostingIsDeclared() throws {
+        let manifest = try decodeManifest(locality: nil, hosting: "local")
+
+        XCTAssertNil(manifest.locality)
+        XCTAssertNil(manifest.resolvedLocality)
+        XCTAssertEqual(manifest.resolvedHosting, .local)
+    }
+
+    private func decodeManifest(locality: String?, hosting: String? = nil) throws -> PluginManifest {
+        var json: [String: Any] = [
+            "id": "com.typewhisper.mock",
+            "name": "Mock Plugin",
+            "version": "1.2.3",
+            "principalClass": "MockPlugin",
+        ]
+        json["locality"] = locality
+        json["hosting"] = hosting
+        return try JSONDecoder().decode(PluginManifest.self, from: JSONSerialization.data(withJSONObject: json))
+    }
+
     func testPluginManifestDecodesOptionalCompatibilityFields() throws {
         let data = Data(
             """

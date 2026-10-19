@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.granite",
     "name": "Granite Speech",
-    "version": "1.0.12",
-    "minHostVersion": "1.7.0",
+    "version": "1.0.13",
+    "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1-model-import",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
@@ -17,5 +17,6 @@
     "category": "transcription",
     "iconSystemName": "cpu",
     "principalClass": "GranitePlugin",
+    "locality": "local",
     "detailsURL": "https://www.typewhisper.com/addons/granite/"
 }

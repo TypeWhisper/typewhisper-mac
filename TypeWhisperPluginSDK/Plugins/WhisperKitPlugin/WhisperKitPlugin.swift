@@ -701,6 +701,10 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
             let modelFolder: URL
             if isUsableDownloadedModel(at: modelPath) {
+                // WhisperKit fetches a missing tokenizer from the Hub while loading the model.
+                if !hasLocalTokenizer(for: modelDef, modelFolder: modelPath) {
+                    try host?.requireModelDownloadAllowed()
+                }
                 modelState = .loading(phase: "loading")
                 downloadProgress = 0.80
                 modelFolder = modelPath
@@ -710,6 +714,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     modelState = .notLoaded
                     return
                 }
+                try host?.requireModelDownloadAllowed()
                 removeIncompleteModelIfNeeded(at: modelPath)
                 removeStaleDownloadCache(for: modelDef)
                 modelState = .downloading
@@ -740,7 +745,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 }
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
-            if allowDownloads {
+            // While downloads are refused, load the files as they are, as a passive restore does.
+            if allowDownloads, host?.modelDownloadRefusal == nil {
                 repairSpaceReservation = try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
@@ -1022,6 +1028,17 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         return requiredCompiledFiles.allSatisfy {
             fileManager.fileExists(atPath: compiledPath.appendingPathComponent($0).path)
         }
+    }
+
+    /// Searches the folders WhisperKit checks before it downloads a tokenizer.
+    private func hasLocalTokenizer(for modelDef: WhisperModelDef, modelFolder: URL) -> Bool {
+        let repository = modelDef.tokenizerRepository
+        return [
+            downloadBase.appendingPathComponent("models").appendingPathComponent(repository),
+            downloadBase,
+            modelFolder,
+            modelFolder.appendingPathComponent("models").appendingPathComponent(repository),
+        ].contains { FileManager.default.fileExists(atPath: $0.appendingPathComponent("tokenizer.json").path) }
     }
 
     /// Returns the space reservation for the repaired files. The caller keeps it
@@ -1316,6 +1333,14 @@ struct WhisperModelDef: Identifiable {
     let displayName: String
     let sizeDescription: String
     let ramRequirement: String
+
+    /// The Hub repository of the tokenizer WhisperKit loads for this model. WhisperKit picks it
+    /// from the model's vocabulary size, which every large-v3 derivative shares with large-v3.
+    var tokenizerRepository: String {
+        id.contains("large-v3")
+            ? "openai/whisper-large-v3"
+            : id.replacingOccurrences(of: "openai_", with: "openai/")
+    }
 
     var isRecommended: Bool {
         let ram = ProcessInfo.processInfo.physicalMemory

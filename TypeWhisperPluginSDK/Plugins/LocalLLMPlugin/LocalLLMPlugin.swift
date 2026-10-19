@@ -665,6 +665,8 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
             let modelsDir = modelsDirectory()
             try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
             if !isAlreadyDownloaded {
+                // Refuse before clearing an incomplete cache or reaching the Hub.
+                try host?.requireModelDownloadAllowed()
                 removeIncompleteModelIfNeeded(modelDef)
             }
 
@@ -1268,6 +1270,11 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         if let pluginError = error as? LocalLLMPluginError,
            let description = pluginError.errorDescription {
             return description
+        }
+
+        // Show the organization's reason as the host words it.
+        if let refusal = error as? PluginModelDownloadRefusedError {
+            return refusal.reason
         }
 
         if let urlError = error as? URLError,

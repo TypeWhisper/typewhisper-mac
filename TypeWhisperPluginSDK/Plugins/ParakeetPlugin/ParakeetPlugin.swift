@@ -592,12 +592,18 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     private func performCtcModelDownload(loadIntoMemory: Bool, onlyIfDownloaded: Bool = false) async -> CtcModelState {
         guard ctcModels == nil else { return ctcModelState }
 
+        let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+        let downloadRefusal = host?.modelDownloadRefusal
+        if let downloadRefusal, !onlyIfDownloaded, !CtcModels.modelsExist(at: cacheDir) {
+            ctcModelState = .error(downloadRefusal)
+            return ctcModelState
+        }
+
         if let ctcModelDownloadOverrideForTests {
             await ctcModelDownloadOverrideForTests(loadIntoMemory)
             return ctcModelState
         }
 
-        let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
         if onlyIfDownloaded, !CtcModels.modelsExist(at: cacheDir) {
             return ctcModelState
         }
@@ -608,7 +614,11 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let spaceReservation = try await reserveCtcDownloadSpace()
             defer { spaceReservation?.release() }
             if loadIntoMemory {
-                let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
+                // FluidAudio's loader may repair the cache by downloading; while downloads
+                // are refused, load the installed files directly.
+                let models = downloadRefusal == nil
+                    ? try await CtcModels.downloadAndLoad(variant: .ctc110m)
+                    : try await CtcModels.loadDirect(from: cacheDir, variant: .ctc110m)
                 let tokenizer = try await CtcTokenizer.load(from: cacheDir)
                 ctcModels = models
                 ctcTokenizer = tokenizer
@@ -834,11 +844,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let didLoad = (try? await modelLoadGate.withLock { [self] () -> Bool in
             guard host != nil else { return false }
             if passively {
-                let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
-                    .appendingPathComponent(Self.vocabularyAssetFileName)
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured,
-                      isModelDownloaded(version: version),
-                      Self.vocabularyAssetExists(at: vocabularyURL) else { return false }
+                      isModelInstalled(version: version) else { return false }
             }
             guard !(isConfigured && loadedModelId == version.modelDef.id) else { return false }
             return await performModelLoad(version: version, allowDownloads: !passively)
@@ -860,11 +867,16 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         do {
             applyHuggingFaceTokenToEnvironment()
+            // While downloads are refused, installed files still load locally, as in a passive restore.
+            let downloadRefusal = allowDownloads ? host?.modelDownloadRefusal : nil
+            if let downloadRefusal, !isModelInstalled(version: version) {
+                throw PluginModelDownloadRefusedError(reason: downloadRefusal)
+            }
             let models: AsrModels?
             if let asrModelLoadOverrideForTests {
                 try await asrModelLoadOverrideForTests(version)
                 models = nil
-            } else if allowDownloads {
+            } else if allowDownloads, downloadRefusal == nil {
                 let spaceReservation = isModelDownloaded(version: version)
                     ? nil
                     : try await reserveDownloadSpace(for: version)
@@ -1180,6 +1192,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
         let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
         return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
+    }
+
+    /// Whether `loadInstalledModels` finds everything it needs without downloading.
+    private func isModelInstalled(version: ParakeetVersion) -> Bool {
+        let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
+            .appendingPathComponent(Self.vocabularyAssetFileName)
+        return isModelDownloaded(version: version) && Self.vocabularyAssetExists(at: vocabularyURL)
     }
 
     // MARK: - Settings View

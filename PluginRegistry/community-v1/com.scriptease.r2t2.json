@@ -10,6 +10,7 @@
   "source": "community",
   "category": "transcription",
   "hosting": "local",
+  "locality": "configurable",
   "requiresAPIKey": false,
   "iconSystemName": "waveform.badge.mic"
 }

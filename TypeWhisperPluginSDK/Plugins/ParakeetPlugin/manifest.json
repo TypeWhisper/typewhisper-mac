@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.parakeet",
     "name": "Parakeet",
-    "version": "1.4.2",
+    "version": "1.4.3",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -20,5 +20,6 @@
     ],
     "iconSystemName": "bird",
     "principalClass": "ParakeetPlugin",
+    "locality": "local",
     "detailsURL": "https://www.typewhisper.com/addons/parakeet/"
 }

@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.mcp-client",
     "name": "MCP Client",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -15,5 +15,6 @@
     "category": "action",
     "iconSystemName": "point.3.connected.trianglepath.dotted",
     "principalClass": "MCPClientPlugin",
-    "requiresAPIKey": false
+    "requiresAPIKey": false,
+    "locality": "configurable"
 }

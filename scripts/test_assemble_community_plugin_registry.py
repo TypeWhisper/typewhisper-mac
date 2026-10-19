@@ -27,6 +27,7 @@ def community_entry(plugin_id: str = "com.example.plugin", **overrides) -> dict:
         "author": "Example Author",
         "description": "Example community plugin.",
         "category": "utility",
+        "locality": "cloud",
     }
     entry.update(overrides)
     return entry
@@ -43,6 +44,21 @@ def release(version: str = "1.0.0", download_url: str = TYPEWHISPER_RELEASE_URL)
 
 
 class CommunityPluginRegistryAssemblyTests(unittest.TestCase):
+    def test_locality_is_required_and_known(self) -> None:
+        for locality, valid in [("local", True), ("cloud", True), ("configurable", True), (None, False), ("Local", False), ("hybrid", False)]:
+            entry = community_entry()
+            if locality is None:
+                entry.pop("locality")
+            else:
+                entry["locality"] = locality
+            with self.subTest(locality=locality), tempfile.TemporaryDirectory() as tmp:
+                (Path(tmp) / "com.example.plugin.json").write_text(json.dumps(entry) + "\n")
+                _, errors = load_community_entries(Path(tmp))
+                if valid:
+                    self.assertEqual(errors, [])
+                else:
+                    self.assertTrue(any("'locality' must be" in error for error in errors), errors)
+
     def test_model_import_capability_marker_is_preserved(self) -> None:
         item = release()
         item["minHostVersion"] = "1.7.0"

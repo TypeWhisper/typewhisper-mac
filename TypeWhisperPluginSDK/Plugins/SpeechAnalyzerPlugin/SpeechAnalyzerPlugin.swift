@@ -302,6 +302,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
                     modelState = .notLoaded
                     return
                 }
+                try host?.requireModelDownloadAllowed()
                 let downloadProgressObj = downloader.progress
                 let progressTask = Task.detached { [downloadProgressObj] in
                     while !downloadProgressObj.isFinished && !Task.isCancelled {
