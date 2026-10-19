@@ -103,8 +103,12 @@ struct GeneralSettingsView: View {
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 300)
-        // System Settings can change the login item while TypeWhisper runs.
+        // System Settings can change the login item while TypeWhisper runs, including after
+        // "Open Login Items" while this page stays open.
         .onAppear { launchAtLogin.refreshStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            launchAtLogin.refreshStatus()
+        }
         .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
             Button(String(localized: "Restart Now")) {
                 ApplicationRelauncher.relaunch()
