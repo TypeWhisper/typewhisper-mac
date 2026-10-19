@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.authenticated-cli",
     "name": "Authenticated Provider CLIs",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -13,6 +13,7 @@
     },
     "category": "llm",
     "hosting": "cloud",
+    "locality": "configurable",
     "iconSystemName": "terminal",
     "principalClass": "AuthenticatedCLIPlugin",
     "requiresAPIKey": false,

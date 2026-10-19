@@ -1,7 +1,7 @@
 {
   "id": "com.typewhisper.web-link",
   "name": "Web Link Transcription",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.7.0",
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
@@ -13,6 +13,7 @@
   },
   "principalClass": "WebLinkPlugin",
   "requiresAPIKey": false,
+  "locality": "local",
   "iconSystemName": "link.badge.plus",
   "category": "utility"
 }

@@ -9,6 +9,21 @@ public enum PluginHosting: String, Codable, Sendable {
     }
 }
 
+/// Where a plugin processes the audio and text it receives, declared by the manifest's `locality`.
+///
+/// Managed settings that restrict cloud processing let only `local` plugins run. The value is read
+/// as a string, so a manifest with a value this host does not know still loads; such a plugin counts
+/// as unknown and is treated like one without the field.
+public enum PluginLocality: String, Sendable, CaseIterable {
+    /// Nothing the plugin receives leaves the Mac.
+    case local
+    /// The plugin sends content to its vendor's fixed service.
+    case cloud
+    /// The plugin sends content to an endpoint, script or command the user configures, which the
+    /// host cannot classify.
+    case configurable
+}
+
 public enum PluginCapability: String, Codable, Sendable, CaseIterable {
     case sourceFootageProgress = "source-footage-progress"
     /// The engine's live session produces the final dictation result, so the host
@@ -28,6 +43,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
     public let principalClass: String
     public let requiresAPIKey: Bool?
     public let hosting: PluginHosting?
+    /// The raw `locality` value; see `resolvedLocality`.
+    public let locality: String?
     public let iconSystemName: String?
     public let iconResourceName: String?
     public let category: String?
@@ -58,7 +75,8 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         detailsURL: String? = nil,
         homepageURL: String? = nil,
         iconURL: String? = nil,
-        iconDarkURL: String? = nil
+        iconDarkURL: String? = nil,
+        locality: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -71,6 +89,7 @@ public struct PluginManifest: Codable, Equatable, Sendable {
         self.principalClass = principalClass
         self.requiresAPIKey = requiresAPIKey
         self.hosting = hosting
+        self.locality = locality
         self.iconSystemName = iconSystemName
         self.iconResourceName = iconResourceName
         self.category = category
@@ -86,6 +105,12 @@ public struct PluginManifest: Codable, Equatable, Sendable {
 public extension PluginManifest {
     var resolvedHosting: PluginHosting {
         hosting ?? PluginHosting.fallback(requiresAPIKey: requiresAPIKey)
+    }
+
+    /// The declared locality, or nil when the field is missing or holds a value this host does not
+    /// know. Unlike `hosting`, nil is never derived from other fields: a missing value is unknown.
+    var resolvedLocality: PluginLocality? {
+        locality.flatMap { PluginLocality(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
 
     var resolvedCategoryIdentifiers: [String] {

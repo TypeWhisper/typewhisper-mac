@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.openai-compatible",
     "name": "OpenAI Compatible",
-    "version": "1.1.11",
+    "version": "1.1.12",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -18,5 +18,6 @@
     ],
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin",
+    "locality": "configurable",
     "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"
 }

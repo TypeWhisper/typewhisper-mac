@@ -198,6 +198,11 @@ jobs:
               raise SystemExit(
                   f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
               )
+          # Managed settings decide on locality, so the catalog must not classify the plugin differently.
+          if metadata.get("locality") != manifest.get("locality"):
+              raise SystemExit(
+                  f"community metadata locality {metadata.get('locality')} does not match manifest locality {manifest.get('locality')}"
+              )
           PY
 
       - name: Validate release manifest
@@ -207,7 +212,15 @@ jobs:
             echo "Missing manifest for ${TARGET}: $MANIFEST"
             exit 1
           fi
-          python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION"
+          # Compare with the feed already published, before anything is built or released.
+          FEED="plugins-community-v1.json"
+          if git fetch --quiet --depth=1 origin gh-pages && git show "FETCH_HEAD:${FEED}" > "$RUNNER_TEMP/${FEED}"; then
+            python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION" \
+              --published-registry "$RUNNER_TEMP/${FEED}"
+          else
+            echo "Could not read the published ${FEED}"
+            exit 1
+          fi
           echo "Validated $MANIFEST for release $PLUGIN_VERSION"
           cat "$MANIFEST"
 
@@ -507,7 +520,8 @@ jobs:
             git fetch origin gh-pages
             git reset --hard origin/gh-pages
 
-            python3 << PYEOF
+            # Inside the retry condition errexit is off, so a failed update must return explicitly.
+            python3 << PYEOF || return 1
           import json, os, re, sys, tempfile
 
           sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
@@ -589,6 +603,11 @@ jobs:
                       plugin[field] = metadata[field]
                   else:
                       plugin.pop(field, None)
+              # The bundled manifest is what the host enforces, so the catalog publishes its locality.
+              if manifest.get("locality") is not None:
+                  plugin["locality"] = manifest["locality"]
+              else:
+                  plugin.pop("locality", None)
 
           def build_release():
               release = {
@@ -620,8 +639,20 @@ jobs:
               updated = False
               for plugin in registry["plugins"]:
                   if plugin["id"] == manifest["id"]:
-                      sync_plugin_metadata(plugin)
                       releases = plugin.get("releases", [])
+                      # A manifest whose version fell behind the feed would publish an update nobody
+                      # receives, because hosts install the newest compatible release.
+                      newer = [
+                          release.get("version") for release in releases
+                          if release.get("version") and version_key(release["version"]) > version_key(version)
+                      ]
+                      if newer:
+                          newest = max(newer, key=version_key)
+                          raise SystemExit(
+                              f"{target_registry}: {manifest['id']} v{version} is older than the published v{newest}; "
+                              "bump the manifest version"
+                          )
+                      sync_plugin_metadata(plugin)
                       releases = [release for release in releases if release.get("version") != version]
                       releases.append(build_release())
                       plugin["releases"] = sorted(releases, key=lambda release: version_key(release["version"]), reverse=True)
@@ -674,11 +705,18 @@ jobs:
           }
 
           # Retry up to 5 times to handle concurrent pushes
+          updated=0
           for i in 1 2 3 4 5; do
             if update_registry; then
               echo "Successfully updated ${TARGET_REGISTRIES} (attempt $i)"
+              updated=1
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."
             sleep "$i"
           done
+          # A release whose feed entry was never published must not look successful.
+          if [ "$updated" -ne 1 ]; then
+            echo "Could not update ${TARGET_REGISTRIES} after 5 attempts"
+            exit 1
+          fi

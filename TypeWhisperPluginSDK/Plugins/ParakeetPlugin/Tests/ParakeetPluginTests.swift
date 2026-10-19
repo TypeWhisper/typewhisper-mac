@@ -1443,4 +1443,82 @@ final class ParakeetPluginTests: XCTestCase {
         // Same synchronous-activity contract as the parameterless trigger.
         XCTAssertNotNil(plugin.currentSettingsActivity)
     }
+
+    // MARK: - Managed download refusal
+
+    private let downloadRefusal = "Your organization does not allow model downloads."
+
+    func testRefusedDownloadReportsReasonWithoutDownloadingTheModel() async throws {
+        // Models live in the user's FluidAudio cache, so use a version that is not installed there.
+        guard let version = ParakeetVersion.allCases.first(where: {
+            !AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: $0.asrModelVersion), version: $0.asrModelVersion)
+        }) else {
+            throw XCTSkip("Every Parakeet version is installed, so loading one downloads nothing")
+        }
+        let host = try PluginTestHostServices(
+            defaults: ["loadedModel": version.modelDef.id],
+            modelDownloadRefusal: downloadRefusal
+        )
+        let plugin = makePlugin()
+        plugin.asrModelLoadOverrideForTests = { _ in XCTFail("A refused download must not start") }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.restoreLoadedModel(allowDownloads: true)
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(plugin.modelState, .error(downloadRefusal))
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, downloadRefusal)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, version.modelDef.id)
+    }
+
+    func testRefusedDownloadDoesNotFetchTheVocabularyBoostingModel() async throws {
+        guard !CtcModels.modelsExist(at: CtcModels.defaultCacheDirectory(for: .ctc110m)) else {
+            throw XCTSkip("The CTC model is installed, so Vocabulary Boosting downloads nothing")
+        }
+        let host = try PluginTestHostServices(modelDownloadRefusal: downloadRefusal)
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        plugin.ctcModelDownloadOverrideForTests = { _ in XCTFail("A refused download must not start") }
+
+        do {
+            try await plugin.enableDictionaryTermsSetting()
+            XCTFail("Expected the refusal to be thrown")
+        } catch let error as ParakeetVocabularyBoostingError {
+            XCTAssertEqual(error.localizedDescription, downloadRefusal)
+        }
+        XCTAssertEqual(plugin.ctcModelState, .error(downloadRefusal))
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, downloadRefusal)
+
+        // The settings view's Download Now and Retry buttons take this path.
+        plugin.ctcModelState = .notDownloaded
+        await plugin.downloadCtcModel()
+        XCTAssertEqual(plugin.ctcModelState, .error(downloadRefusal))
+    }
+
+    /// Opt-in Core ML regression: an installed Parakeet v3 model keeps loading through the
+    /// explicit load path, which otherwise lets FluidAudio repair the cache by downloading.
+    func testInstalledV3ModelLoadsAndTranscribesWhileDownloadsAreRefused() async throws {
+        let audio = try regressionAudio()
+
+        let host = try PluginTestHostServices(
+            defaults: [
+                "loadedModel": "parakeet-tdt-0.6b-v3",
+                "vocabularyBoostingEnabled": false,
+            ],
+            modelDownloadRefusal: downloadRefusal
+        )
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.restoreLoadedModel(allowDownloads: true)
+        guard plugin.isConfigured else {
+            XCTFail("Installed Parakeet v3 failed to load: \(plugin.modelState)")
+            return
+        }
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        XCTAssertFalse(result.text.isEmpty)
+    }
 }

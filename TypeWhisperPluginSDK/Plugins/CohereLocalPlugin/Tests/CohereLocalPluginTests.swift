@@ -541,6 +541,72 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertEqual(host.capabilitiesChangedCount, 0)
     }
 
+    func testDownloadRefusedByHostReportsReasonBeforeTouchingAssets() async throws {
+        let reason = "Your organization does not allow model downloads."
+        let host = try PluginTestHostServices(
+            shouldRestoreLoadedModelsPassively: false,
+            modelDownloadRefusal: reason
+        )
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+
+        await plugin.loadModel()
+
+        XCTAssertEqual(plugin.modelState, .error(reason))
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, reason)
+        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        // The download creates the asset directory before its first request.
+        XCTAssertFalse(FileManager.default.fileExists(atPath: assets.rootDirectory.path))
+    }
+
+    func testDownloadRefusalStillStartsInstalledModel() async throws {
+        let reason = "Your organization does not allow model downloads."
+        let host = try PluginTestHostServices(
+            shouldRestoreLoadedModelsPassively: false,
+            modelDownloadRefusal: reason
+        )
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        for relativePath in [CohereLocalPlugin.fastModel.fileName]
+            + CohereLocalModelAssets.sharedRequiredRelativePaths {
+            let url = assets.rootDirectory.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("test".utf8).write(to: url)
+        }
+        // A runtime that exits right away shows the load got past the download step.
+        try Data("#!/bin/sh\nexit 3\n".utf8).write(to: assets.runtimeExecutableURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: assets.runtimeExecutableURL.path
+        )
+
+        await plugin.loadModel()
+
+        guard case .error(let message) = plugin.modelState else {
+            return XCTFail("The fixture runtime must fail to start")
+        }
+        XCTAssertTrue(
+            message.hasPrefix(CohereLocalPluginError.runtimeExited("").localizedDescription),
+            message
+        )
+        XCTAssertTrue(assets.isInstalled)
+    }
+
     func testPassiveRestorePolicyIsDeclaredForExternalPlugin() throws {
         let plugin = CohereLocalPlugin()
         let lifecycleAwarePlugin: any HostModelLifecyclePolicyAwarePlugin = plugin

@@ -13,5 +13,6 @@
     },
     "category": "file-automation",
     "iconSystemName": "folder.badge.gearshape",
-    "principalClass": "FileJobScriptPlugin"
+    "principalClass": "FileJobScriptPlugin",
+    "locality": "configurable"
 }

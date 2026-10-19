@@ -532,6 +532,28 @@ final class MLXPluginModelStorageTests: XCTestCase {
         XCTAssertNil(gemma.runtimeCacheClearTask, "Cleanup must stay cold when the load stopped before MLX")
     }
 
+    @MainActor
+    func testLocalLLMRefusesAModelDownloadTheHostDoesNotAllow() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let reason = "Your organization does not allow model downloads."
+        let gemma = LocalLLMPlugin()
+        gemma.activate(host: MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: reason))
+        let model = LocalLLMModelDef(
+            id: "fixture-refused", displayName: "Fixture", repoId: "mlx-community/fixture-refused",
+            sizeDescription: "", ramRequirement: "", availability: .supported)
+
+        do {
+            try await gemma.loadModel(model)
+            XCTFail("A refused download must not load")
+        } catch {
+            XCTAssertEqual(error as? PluginModelDownloadRefusedError, PluginModelDownloadRefusedError(reason: reason))
+        }
+        XCTAssertEqual(gemma.modelState, .error(reason))
+        gemma.unloadModel()
+        gemma.deactivate()
+    }
+
     /// Unloading, deactivating and reactivating a never-loaded plugin must not
     /// schedule MLX cleanup. A load that fails after entering MLX must.
     @MainActor
@@ -1062,7 +1084,7 @@ private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
     func unsubscribe(id: UUID) {}
 }
 
-private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
     private var defaults: [String: Any]
 
     let pluginDataDirectory: URL
@@ -1071,15 +1093,18 @@ private final class MockHostServices: HostServices, HostModelLifecyclePolicyProv
     let activeAppName: String? = nil
     let availableRuleNames: [String] = []
     let shouldRestoreLoadedModelsPassively: Bool
+    let modelDownloadRefusal: String?
 
     init(
         pluginDataDirectory: URL,
         defaults: [String: Any] = [:],
-        shouldRestoreLoadedModelsPassively: Bool = false
+        shouldRestoreLoadedModelsPassively: Bool = false,
+        modelDownloadRefusal: String? = nil
     ) {
         self.pluginDataDirectory = pluginDataDirectory
         self.defaults = defaults
         self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
+        self.modelDownloadRefusal = modelDownloadRefusal
     }
 
     func storeSecret(key: String, value: String) throws {}

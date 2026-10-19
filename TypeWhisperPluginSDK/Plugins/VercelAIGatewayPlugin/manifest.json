@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.vercel-ai-gateway",
     "name": "Vercel AI Gateway",
-    "version": "1.0.3",
+    "version": "1.0.4",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -17,6 +17,7 @@
         "llm"
     ],
     "hosting": "cloud",
+    "locality": "cloud",
     "iconSystemName": "triangle.fill",
     "iconResourceName": "vercel.svg",
     "principalClass": "VercelAIGatewayPlugin",

@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.script",
     "name": "Script Runner",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -14,5 +14,6 @@
     "category": "post-processor",
     "iconSystemName": "terminal",
     "principalClass": "ScriptPlugin",
+    "locality": "configurable",
     "detailsURL": "https://www.typewhisper.com/addons/script-runner/"
 }
