@@ -52,6 +52,7 @@ final class ServiceContainer: ObservableObject {
     static let shared = ServiceContainer()
 
     // Services
+    let managedPolicyService: ManagedPolicyService
     let modelManagerService: ModelManagerService
     let audioFileService: AudioFileService
     let audioRecordingService: AudioRecordingService
@@ -128,6 +129,12 @@ final class ServiceContainer: ObservableObject {
     let watchFolderViewModel: WatchFolderViewModel
 
     private init() {
+        // Managed preferences are read before any service that may consult them.
+        managedPolicyService = ManagedPolicyService(
+            source: AppConstants.isRunningTests ? EmptyManagedPolicySource() : ManagedPreferencesPolicySource()
+        )
+        managedPolicyService.refresh()
+
         // Services
         let inputActivationGuard = AudioInputDeviceActivationGuard()
         modelManagerService = ModelManagerService()
@@ -553,6 +560,8 @@ final class ServiceContainer: ObservableObject {
         let signposter = LaunchSignposts.signposter
         let initializeState = signposter.beginInterval("Launch.initialize")
         defer { signposter.endInterval("Launch.initialize", initializeState) }
+
+        managedPolicyService.startMonitoring()
 
         #if APPSTORE
         // Listen for App Store transactions as early as possible.

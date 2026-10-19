@@ -454,6 +454,7 @@ private struct DiagnosticsReport: Encodable {
     let workflows: DiagnosticWorkflowSnapshot
     let correctionLearning: DiagnosticCorrectionLearningInfo
     let settings: SettingsSnapshot
+    let policy: ManagedPolicyDiagnostics
     let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
     let errors: [ErrorEntrySnapshot]
@@ -587,7 +588,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 10,
+            schemaVersion: 11,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -689,6 +690,7 @@ final class ErrorLogService: ObservableObject {
                 setupWizardCompleted: defaults.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
                 preferredAppLanguage: defaults.string(forKey: UserDefaultsKeys.preferredAppLanguage)
             ),
+            policy: ManagedPolicyDiagnostics(snapshot: container.managedPolicyService.current),
             lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionPolicy.lastSuppressionDiagnostics(),
             counts: .init(
                 historyRecords: container.historyService.recordCount(),
