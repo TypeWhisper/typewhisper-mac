@@ -3970,6 +3970,14 @@
       "homepageURL": "https://vercel.com/ai-gateway",
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 284774,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-vercel-ai-gateway-v1.0.4/VercelAIGatewayPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -4005,7 +4013,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 6
         }
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.canary",
