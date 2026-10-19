@@ -5,7 +5,7 @@ Thanks for your interest in contributing!
 ## Getting Started
 
 1. Fork the repository and clone it
-2. Open `TypeWhisper.xcodeproj` in Xcode 16+
+2. Open `TypeWhisper.xcodeproj` in Xcode 26.6 or later
 3. SPM dependencies resolve automatically on first build
 4. Build and run (Cmd+R) - the app appears as a menu bar icon
 

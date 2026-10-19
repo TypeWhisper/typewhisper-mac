@@ -297,7 +297,7 @@ TypeWhisper includes the Local LLM (MLX) plugin for on-device prompt processing 
    cd typewhisper-mac
    ```
 
-2. Open in Xcode 16+:
+2. Open in Xcode 26.6 or later:
    ```bash
    open TypeWhisper.xcodeproj
    ```
