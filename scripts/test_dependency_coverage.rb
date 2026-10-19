@@ -53,13 +53,22 @@ class DependencyCoverageTest < Minitest::Test
     assert_raises(RuntimeError) { DependencyCoverage.snapshot("HEAD", "refs/heads/main") }
   end
 
-  def test_sbom_requires_every_version_including_different_versions_between_locks
+  def test_sbom_requires_every_swift_version_including_different_versions_between_locks
     sha = DependencyCoverage.git("rev-parse", "HEAD").strip
     purls = DependencyCoverage.swift_manifests(sha).values.flat_map { |m| m.fetch("resolved").values.map { |d| d.fetch("package_url") } }
-    purls.concat(DependencyCoverage.read("Gemfile.lock", sha).scan(/^    ([A-Za-z0-9_-]+) \(([^ )]+)\)/).map { |n, v| "pkg:gem/#{n}@#{v}" })
     sbom = { "sbom" => { "packages" => purls.uniq.map { |url| { "externalRefs" => [{ "referenceType" => "purl", "referenceLocator" => DependencyCoverage.normalize(url) }] } } } }
     capture_io { DependencyCoverage.check_sbom(sbom, sha) }
     sbom["sbom"]["packages"].shift
     assert_raises(RuntimeError) { DependencyCoverage.check_sbom(sbom, sha) }
+  end
+
+  def test_ruby_graph_requires_every_locked_gem_version_as_added
+    sha = DependencyCoverage.git("rev-parse", "HEAD").strip
+    changes = DependencyCoverage.gems(sha).map { |name, version| { "change_type" => "added", "manifest" => "Gemfile.lock", "name" => name, "version" => version } }
+    capture_io { DependencyCoverage.check_ruby_graph(changes, sha) }
+    stale = changes.dup.tap { |list| list[0] = list[0].merge("version" => "0.0.0") }
+    assert_raises(RuntimeError) { DependencyCoverage.check_ruby_graph(stale, sha) }
+    removed = changes.dup.tap { |list| list[0] = list[0].merge("change_type" => "removed") }
+    assert_raises(RuntimeError) { DependencyCoverage.check_ruby_graph(removed, sha) }
   end
 end
