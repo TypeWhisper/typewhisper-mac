@@ -3758,6 +3758,17 @@
       "detailsURL": "https://github.com/TypeWhisper/typewhisper-mac/issues/1031",
       "releases": [
         {
+          "version": "1.0.4",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1171975,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-transcribe-v1.0.4/CohereLocalPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.3",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
@@ -3829,7 +3840,8 @@
           ],
           "downloadCount": 0
         }
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.mcp-client",
