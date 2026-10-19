@@ -186,6 +186,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # The App Store edition ships the same version from the same commit.
+      - name: Check release tag matches the app version
+        run: python3 scripts/check_app_version_sync.py --tag "$RELEASE_TAG"
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
