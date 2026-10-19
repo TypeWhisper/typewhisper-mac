@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Builds a configuration profile with TypeWhisper managed settings.
+
+The macOS counterpart to deployment/windows/Set-TypeWhisperPolicy.ps1 in TypeWhisper for
+Windows. Values are checked against the keys TypeWhisper understands (docs/mdm/managed-settings.md)
+before the profile is written, so a typo fails here instead of on the Macs.
+
+Examples:
+
+  # Keep audio and text on the Mac and require Parakeet v3 for transcription.
+  make-typewhisper-profile.py \\
+      --set AllowCloudTranscription=false --set AllowCloudTextProcessing=false \\
+      --set TranscriptionProviderId=com.typewhisper.parakeet \\
+      --set TranscriptionModelId=parakeet-tdt-0.6b-v3 \\
+      --output TypeWhisper-LocalOnly.mobileconfig
+
+  # Deployment-managed updates with a recommended (editable) channel.
+  make-typewhisper-profile.py --set UpdateMode=external --recommend UpdateChannel=stable \\
+      --output TypeWhisper-Updates.mobileconfig
+
+Lists are comma-separated; an empty value denies everything. Booleans accept true or false.
+UpdateMode accepts external, check-only or user-initiated, UpdateChannel stable, daily or
+release-candidate, or their numbers.
+"""
+
+from __future__ import annotations
+
+import argparse
+import plistlib
+import sys
+import uuid
+from pathlib import Path
+
+# Mirrors ManagedPolicyKeys.all in TypeWhisper/Models/ManagedPolicy.swift; a test keeps them equal.
+# name: (kind, may be recommended, largest enumeration value)
+KEYS = {
+    "TranscriptionProviderId": ("text", True, 0),
+    "TranscriptionModelId": ("text", True, 0),
+    "LlmProviderId": ("text", True, 0),
+    "LlmModelId": ("text", True, 0),
+    "AllowedTranscriptionProviders": ("list", False, 0),
+    "AllowedLlmProviders": ("list", False, 0),
+    "AllowedPlugins": ("list", False, 0),
+    "AllowCloudTranscription": ("boolean", False, 0),
+    "AllowCloudTextProcessing": ("boolean", False, 0),
+    "AllowPluginDownloads": ("boolean", False, 0),
+    "AllowModelDownloads": ("boolean", False, 0),
+    "UpdateMode": ("enumeration", False, 2),
+    "UpdateChannel": ("enumeration", True, 2),
+    "AllowedUpdateChannels": ("list", False, 0),
+    "LaunchAtLogin": ("boolean", True, 0),
+    "SkipOnboardingWhenReady": ("boolean", False, 0),
+    "SuppressOptionalPrompts": ("boolean", True, 0),
+    "ManagedLicenseKey": ("text", False, 0),
+}
+PAIRS = [("TranscriptionProviderId", "TranscriptionModelId"), ("LlmProviderId", "LlmModelId")]
+ENUMERATION_NAMES = {
+    "UpdateMode": {"external": 0, "check-only": 1, "user-initiated": 2},
+    "UpdateChannel": {"stable": 0, "daily": 1, "release-candidate": 2},
+}
+DOMAINS = (
+    "com.typewhisper.mac",
+    "com.typewhisper.typewhisper-app",
+    "com.typewhisper.mac.dev",
+    "com.typewhisper.typewhisper-app.dev",
+)
+MAXIMUM_TEXT_LENGTH = 1024
+MAXIMUM_LIST_ENTRIES = 256
+
+
+class ProfileError(ValueError):
+    pass
+
+
+def parse_text(name: str, raw: str) -> str:
+    text = raw.strip()
+    if not text:
+        raise ProfileError(f"{name} must not be empty")
+    if len(text) > MAXIMUM_TEXT_LENGTH:
+        raise ProfileError(f"{name} must not exceed {MAXIMUM_TEXT_LENGTH} characters")
+    if any(ord(character) < 32 or ord(character) == 127 for character in text):
+        raise ProfileError(f"{name} must not contain control characters")
+    return text
+
+
+def parse_value(name: str, raw: str):
+    if name not in KEYS:
+        close = [key for key in KEYS if key.lower() == name.lower()]
+        hint = f" (did you mean {close[0]}?)" if close else ""
+        raise ProfileError(f"unknown key {name}{hint}")
+    kind, _, maximum = KEYS[name]
+    if kind == "boolean":
+        lowered = raw.strip().lower()
+        if lowered not in ("true", "false"):
+            raise ProfileError(f"{name} must be true or false")
+        return lowered == "true"
+    if kind == "enumeration":
+        lowered = raw.strip().lower()
+        named = ENUMERATION_NAMES.get(name, {})
+        if lowered in named:
+            return named[lowered]
+        if lowered.isdigit() and 0 <= int(lowered) <= maximum:
+            return int(lowered)
+        names = ", ".join(named) or "numbers"
+        raise ProfileError(f"{name} must be one of {names} or 0 to {maximum}")
+    if kind == "list":
+        items = []
+        for entry in raw.split(",") if raw.strip() else []:
+            item = parse_text(name, entry)
+            if item not in items:
+                items.append(item)
+        if len(items) > MAXIMUM_LIST_ENTRIES:
+            raise ProfileError(f"{name} must not exceed {MAXIMUM_LIST_ENTRIES} entries")
+        if name == "AllowedUpdateChannels":
+            unknown = [item for item in items if item not in ("stable", "daily", "release-candidate", "none")]
+            if unknown:
+                raise ProfileError(f"{name} entries must be stable, daily, release-candidate or none")
+        return items
+    return parse_text(name, raw)
+
+
+def parse_assignments(assignments: list[str], recommended: bool) -> dict:
+    values = {}
+    for assignment in assignments:
+        name, separator, raw = assignment.partition("=")
+        name = name.strip()
+        if not separator:
+            raise ProfileError(f"expected KEY=VALUE, got {assignment!r}")
+        if recommended and name in KEYS and not KEYS[name][1]:
+            raise ProfileError(f"{name} can only be enforced, not recommended")
+        if name in values:
+            raise ProfileError(f"{name} is set twice")
+        values[name] = parse_value(name, raw)
+    for first, second in PAIRS:
+        if (first in values) != (second in values):
+            raise ProfileError(f"{first} and {second} must be set together")
+    return values
+
+
+def stable_uuid(*parts: str) -> str:
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, "/".join(parts))).upper()
+
+
+def build_profile(
+    enforced: dict,
+    recommended: dict,
+    *,
+    domains: list[str],
+    identifier: str,
+    name: str,
+    organization: str | None,
+    scope: str,
+) -> dict:
+    if not enforced and not recommended:
+        raise ProfileError("set at least one value with --set or --recommend")
+    settings = dict(enforced)
+    if recommended:
+        settings["Recommended"] = dict(recommended)
+    payloads = []
+    for domain in domains:
+        payloads.append({
+            "PayloadType": "com.apple.ManagedClient.preferences",
+            "PayloadVersion": 1,
+            "PayloadIdentifier": f"{identifier}.{domain}",
+            "PayloadUUID": stable_uuid(identifier, domain),
+            "PayloadDisplayName": f"TypeWhisper managed settings ({domain})",
+            "PayloadContent": {domain: {"Forced": [{"mcx_preference_settings": settings}]}},
+        })
+    profile = {
+        "PayloadType": "Configuration",
+        "PayloadVersion": 1,
+        "PayloadIdentifier": identifier,
+        "PayloadUUID": stable_uuid(identifier),
+        "PayloadDisplayName": name,
+        "PayloadDescription": "Managed settings for TypeWhisper. See docs/mdm/managed-settings.md.",
+        "PayloadScope": scope,
+        "PayloadContent": payloads,
+    }
+    if organization:
+        profile["PayloadOrganization"] = organization
+    return profile
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="enforced value")
+    parser.add_argument("--recommend", action="append", default=[], metavar="KEY=VALUE", help="recommended value users may change")
+    parser.add_argument("--domain", action="append", choices=DOMAINS, help="preference domain; repeat for both editions (default: com.typewhisper.mac)")
+    parser.add_argument("--identifier", default="com.typewhisper.mdm.settings", help="profile identifier; keep it to replace a deployed profile")
+    parser.add_argument("--name", default="TypeWhisper Managed Settings", help="profile display name")
+    parser.add_argument("--organization", help="PayloadOrganization")
+    parser.add_argument("--scope", choices=("System", "User"), default="System")
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        profile = build_profile(
+            parse_assignments(args.set, recommended=False),
+            parse_assignments(args.recommend, recommended=True),
+            domains=args.domain or ["com.typewhisper.mac"],
+            identifier=args.identifier,
+            name=args.name,
+            organization=args.organization,
+            scope=args.scope,
+        )
+    except ProfileError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 2
+    with args.output.open("wb") as file:
+        plistlib.dump(profile, file)
+    print(f"Wrote {args.output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

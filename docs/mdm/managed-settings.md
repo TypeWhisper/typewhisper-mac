@@ -1,11 +1,12 @@
-# Managed settings on macOS
+# Managed settings on macOS (TypeWhisper 1.8 and later)
 
 Administrators configure TypeWhisper through configuration profiles with a custom
 settings payload (`com.apple.ManagedClient.preferences`), the mechanism Iru, Jamf
 and other MDMs use for app preferences. The key names, values and precedence match
 the [registry policies of TypeWhisper for Windows](https://github.com/TypeWhisper/typewhisper-win/blob/main/docs/enterprise/windows-managed-settings.md),
-so one set of decisions applies to both platforms. The contract and the remaining
-work are tracked in [#1313](https://github.com/TypeWhisper/typewhisper-mac/issues/1313).
+so one set of decisions applies to both platforms. Example profiles, a profile
+generator and schemas for Jamf Pro and profile editors are in
+[`deployment/macos`](../../deployment/macos); see [deployment files](#deployment-files).
 
 ## Preference domains
 
@@ -194,5 +195,207 @@ where users can turn it off even while `LaunchAtLogin` is enforced; Settings >
 General in TypeWhisper then shows that the item needs approval. To approve and lock
 the item, add a Service Management payload
 (`com.apple.servicemanagement`, macOS 13 or later, delivered by MDM) with a rule for
-TypeWhisper's team identifier `2D8ALY3LCL` or bundle identifier. An app that is never
-started cannot register its login item, so launch it once after installation.
+TypeWhisper's team identifier `2D8ALY3LCL` or bundle identifier; the
+[login item example](../../deployment/macos/examples/TypeWhisper-LoginItem.mobileconfig)
+covers both editions. An app that is never started cannot register its login item,
+so launch it once after installation.
+
+## Deployment files
+
+[`deployment/macos`](../../deployment/macos) contains:
+
+| File | Purpose |
+| --- | --- |
+| `make-typewhisper-profile.py` | Builds a configuration profile from `KEY=VALUE` pairs and checks every value against the keys above, the counterpart to `Set-TypeWhisperPolicy.ps1` on Windows. Python 3.9 or later, no packages. |
+| `examples/TypeWhisper-LocalOnly.mobileconfig` | Audio and text stay on the Mac; Parakeet v3 is enforced for transcription. |
+| `examples/TypeWhisper-ApprovedCloud.mobileconfig` | Only Parakeet and OpenAI may transcribe, only OpenAI and Apple Intelligence may process text, no plugin downloads; OpenAI is recommended for transcription. |
+| `examples/TypeWhisper-DeploymentUpdates.mobileconfig` | The deployment updates the app, TypeWhisper starts at login, setup stays closed when ready and optional prompts are hidden. |
+| `examples/TypeWhisper-RecommendedDefaults.mobileconfig` | Editable defaults for both editions. |
+| `examples/TypeWhisper-LoginItem.mobileconfig` | Approves the login item (Service Management payload). |
+| `examples/TypeWhisper-Privacy.mobileconfig` | Privacy preferences (PPPC), see [permissions](#permissions). |
+| `jamf/<domain>.json` | Jamf Pro custom schemas, one per edition. The App Store schema leaves out the keys that edition ignores. |
+| `ProfileManifests/<domain>.plist` | The same settings in the [ProfileManifests](https://github.com/ProfileManifests/ProfileManifests) format of profile editors such as iMazing Profile Editor. |
+
+The examples use the direct-download domain unless their name says otherwise; build
+your own with the generator rather than editing them, so the values are checked:
+
+```sh
+deployment/macos/make-typewhisper-profile.py \
+    --set AllowCloudTranscription=false --set AllowCloudTextProcessing=false \
+    --set TranscriptionProviderId=com.typewhisper.parakeet \
+    --set TranscriptionModelId=parakeet-tdt-0.6b-v3 \
+    --set AllowedUpdateChannels=stable --set UpdateMode=check-only \
+    --recommend LaunchAtLogin=true \
+    --domain com.typewhisper.mac --domain com.typewhisper.typewhisper-app \
+    --organization "Example Corp" --output TypeWhisper.mobileconfig
+```
+
+Lists are comma-separated, and an empty value (`--set AllowedPlugins=`) denies
+everything. `UpdateMode` accepts `external`, `check-only` or `user-initiated`,
+`UpdateChannel` `stable`, `daily` or `release-candidate`. The generator refuses
+unknown keys (with the intended spelling for a key in the wrong case), restrictions
+passed to `--recommend` and incomplete pairs. Keep `--identifier` stable to replace
+a deployed profile instead of adding a second one. The profile's UUIDs derive from
+the identifier, so regenerating it with new values keeps them.
+
+Restrictive keys apply only to the domains you include. To manage both editions,
+include both domains (or deploy one profile per domain): the App Store edition reads
+only `com.typewhisper.typewhisper-app`. Values that do not apply to the App Store
+edition are listed there as policy problems and have no effect.
+
+### Iru
+
+Add the generated profile to the Library as a custom profile and assign it to the
+Blueprints of the intended Macs. The login item and privacy examples are custom
+profiles as well. When the profile is removed from a Mac, TypeWhisper returns to
+the users' own settings within about 30 seconds.
+
+### Jamf Pro
+
+Jamf Pro can configure the settings through a form generated from a schema:
+
+1. Computers > Configuration Profiles > New, then Application & Custom Settings >
+   External Applications > Add > Custom Schema.
+2. Enter the preference domain, `com.typewhisper.mac` or
+   `com.typewhisper.typewhisper-app`, and paste the content of the matching
+   `jamf/<domain>.json`.
+3. Configure the properties you manage and leave the others at "Not Configured",
+   which writes nothing. Recommended settings are under "Recommended settings (users
+   can change)".
+4. Scope the profile and save. Add a second payload for the other edition if needed.
+
+Jamf Pro delivers these values as managed preferences, which TypeWhisper treats as
+enforced. Uploading a profile built with the generator (Configuration Profiles >
+Upload) works as well and is the way to deploy the login item and privacy examples.
+
+### Other MDMs
+
+Any MDM that installs custom configuration profiles works: upload the generated
+`.mobileconfig`. For a profile editor, import the matching `ProfileManifests` file,
+or write the payload by hand following [profile layout](#profile-layout). Sign the
+profile if your MDM expects signed uploads.
+
+To test a profile without MDM, open it in Finder and install it in System Settings >
+General > Device Management. The managed preferences then apply as in a managed
+fleet; the Service Management and privacy payloads take effect only when an MDM
+delivers them.
+
+## Permissions
+
+TypeWhisper asks for these permissions when a feature first needs them. A privacy
+preferences profile (PPPC, `com.apple.TCC.configuration-profile-policy`) delivered by
+MDM can pre-approve some of them; the
+[privacy example](../../deployment/macos/examples/TypeWhisper-Privacy.mobileconfig)
+contains every entry that macOS accepts for TypeWhisper.
+
+| Permission | Used for | PPPC |
+| --- | --- | --- |
+| Microphone | Dictation and recording | Cannot be pre-approved; users approve the prompt. |
+| Accessibility | Direct download: dictation shortcuts, inserting text and reading the active app's context. | `Accessibility`: Allow. |
+| Accessibility (post events) | Pasting the transcript; in the App Store edition, the Accessibility entry in System Settings. | `PostEvent`: Allow. |
+| Input Monitoring | App Store edition: dictation shortcuts. Direct download: shortcuts the system cannot register and Esc in other apps. | `ListenEvent`: only "Allow Standard User To Set System Service", which lets users without administrator rights approve it. |
+| Screen & System Audio Recording | System audio in the Recorder. | `ScreenCapture`: only "Allow Standard User To Set System Service". |
+| Automation (Apple Events) | Reading the current browser URL for profiles. | `AppleEvents`: Allow, with one entry per browser as receiver. |
+| Calendars | Meeting reminders and starting recordings. | `Calendar`: Allow, if the organization wants it. |
+| Local Network | Paired iPhones and iPads that use the Mac for transcription. | Not configurable; users approve the prompt. |
+
+The code requirements in the example are TypeWhisper's designated requirements. To
+check them against an installed app, run `codesign -dr - /Applications/TypeWhisper.app`.
+macOS applies privacy preferences only when an MDM with user-approved or automated
+device enrollment delivers them.
+
+## Installing the app
+
+| Edition | Source | Updates |
+| --- | --- | --- |
+| Direct download | `TypeWhisper-v<version>.dmg` or `.zip` from the [GitHub releases](https://github.com/TypeWhisper/typewhisper-mac/releases), signed with Developer ID and notarized. Most MDMs install the DMG or a package built from it; place `TypeWhisper.app` in `/Applications`. The Homebrew cask is `typewhisper/tap/typewhisper`. | Sparkle, governed by `UpdateMode`, `UpdateChannel` and `AllowedUpdateChannels`. Under `UpdateMode` 0, deploy new versions with your MDM. |
+| Mac App Store | Apple Business Manager > Apps and Books, assigned through your MDM. | The App Store. |
+
+TypeWhisper needs macOS 14 or later. It needs no administrator rights to run and
+stores settings, models and plugins in the user's account. The direct download and
+the App Store edition are separate apps with separate settings, so usually only one
+of them is installed. Apps and Books licenses do not include in-app purchases;
+commercial license keys (`ManagedLicenseKey`) need the direct download.
+
+## Network hosts
+
+The app itself contacts these hosts over HTTPS, using the system proxy settings.
+
+| Host | Used for |
+| --- | --- |
+| `api.polar.sh` | Activation and validation of commercial license keys, including `ManagedLicenseKey`. |
+| `app.typewhisper.com` | Premium account sign-in and status, and the Improve TypeWhisper plugin. |
+| `typewhisper.github.io` | App updates (`/typewhisper-mac/appcast.xml`, unless `UpdateMode` is 0), the plugin catalog and term packs. |
+| `github.com` and `release-assets.githubusercontent.com` | App update and plugin downloads. |
+| `huggingface.co` and the `*.hf.co` content hosts it redirects to (the wildcard must cover several subdomain levels) | Model downloads of the local plugins: Parakeet, WhisperKit, Qwen3, Canary, Granite, Voxtral, Cohere Transcribe, Local LLM, Supertonic, Speaker Detection and Hugging Face imports. |
+| `www.typewhisper.com` | Documentation opened in the browser. |
+
+The Remote Link for paired iPhones and iPads listens on the local network when a user
+turns it on; the HTTP API listens on the loopback interface only.
+
+Cloud plugins contact their vendor; the table lists the hosts of the plugins in the
+catalog at the time of writing. `configurable` plugins contact whatever endpoint,
+command or service the user configures.
+
+| Plugin | Hosts |
+| --- | --- |
+| AssemblyAI | `api.assemblyai.com`, `streaming.assemblyai.com` |
+| Cartesia | `api.cartesia.ai` |
+| Cerebras | `api.cerebras.ai` |
+| Claude | `api.anthropic.com` |
+| Cohere | `api.cohere.com` |
+| Deepgram | `api.deepgram.com` |
+| ElevenLabs | `api.elevenlabs.io` |
+| Fireworks AI | `api.fireworks.ai`, `audio-prod.api.fireworks.ai`, `audio-turbo.api.fireworks.ai` |
+| Gemini | `generativelanguage.googleapis.com` |
+| Gladia | `api.gladia.io` |
+| Google Cloud Speech-to-Text | `speech.googleapis.com`, `oauth2.googleapis.com` |
+| Groq | `api.groq.com` |
+| Linear | `api.linear.app` |
+| Meta | `api.meta.ai` |
+| Microsoft AI | the configured Azure resource, `*.cognitiveservices.azure.com` or `<region>.api.cognitive.microsoft.com` |
+| Mistral AI | `api.mistral.ai` |
+| OpenAI / ChatGPT, OpenAI Vector Memory | `api.openai.com`; `auth.openai.com` and `chatgpt.com` for ChatGPT sign-in |
+| OpenRouter | `openrouter.ai` |
+| Sber SaluteSpeech | `smartspeech.sber.ru`, `ngw.devices.sberbank.ru` |
+| Smallest Pulse | `api.smallest.ai` |
+| Soniox | `api.soniox.com` and its `eu`/`jp` regions, `stt-rt.*` and `tts-rt.*` |
+| Speechmatics | the regional `*.speechmatics.com` hosts |
+| Vercel AI Gateway | `ai-gateway.vercel.sh` |
+| xAI / Grok | `api.x.ai` |
+| Reson8 | `api.reson8.dev` or the configured endpoint |
+| MemPalace | `api.mempalace.cloud` or the configured server |
+| OpenAI Compatible, Cloudflare ASR, MCP Client, Obsidian, Webhook, Script Runner, File Job Script, Authenticated Provider CLIs, R2T2 | the endpoint, command or vault the user configures |
+| Web Link Transcription | the sites of the links users transcribe, through yt-dlp |
+
+## Deployment notes
+
+- TypeWhisper reads the profile before anything else at launch, so a profile present
+  at the first launch applies immediately. Deploy restrictive profiles before or
+  together with the app.
+- With `AllowModelDownloads` or `AllowPluginDownloads` turned off, users cannot fetch
+  models or plugins themselves. Models and plugins live in each user's
+  `~/Library/Application Support`; stage them before the restriction applies or
+  allow downloads for the first setup. Never copy another user's settings or Keychain
+  items.
+- Several users on one Mac each have their own settings, models and plugins. A
+  device profile applies to all of them, a user profile only to that user.
+- The keys govern TypeWhisper's behavior, not the network. Combine them with your
+  MDM's network controls where you need stronger guarantees.
+
+## Pilot checklist
+
+Before a fleet rollout, test the release on one managed Mac:
+
+1. Deploy the profile and launch TypeWhisper as a standard user. Settings > Advanced >
+   Managed Settings lists the values and no invalid keys or policy problems.
+2. Confirm that locked settings show "Managed by your organization." and that refused
+   providers and plugins show the reason.
+3. Dictate once with the intended engine and, if used, a language model workflow.
+4. Change a value in the MDM and confirm the app applies it within about 30 seconds
+   without a restart; remove the profile and confirm the user's own settings return.
+5. Restart the Mac and confirm the login item and permissions behave as intended.
+6. Repeat with the App Store edition if you deploy it.
+
+Automated tests cover the policy reader, the precedence rules and every key with
+simulated profiles. They do not prove delivery through your MDM.
