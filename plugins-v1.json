@@ -2725,13 +2725,22 @@
       "author": "TypeWhisper",
       "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
       "descriptions": {
-        "de": "Text-zu-Sprache ueber die integrierten macOS-AVSpeechSynthesizer-Stimmen fuer gesprochenes Feedback."
+        "de": "Text-zu-Sprache \u00fcber die integrierten macOS-AVSpeechSynthesizer-Stimmen f\u00fcr gesprochenes Feedback.",
+        "ja": "macOS\u6a19\u6e96\u306e\u97f3\u58f0\uff08AVSpeechSynthesizer\uff09\u3067\u3001\u6587\u5b57\u8d77\u3053\u3057\u7d50\u679c\u306a\u3069\u3092\u8aad\u307f\u4e0a\u3052\u307e\u3059\u3002"
       },
       "category": "tts",
       "downloadCount": 0,
       "iconSystemName": "speaker.wave.2.fill",
       "requiresAPIKey": false,
       "releases": [
+        {
+          "version": "1.0.3",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 116770,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-system-tts-v1.0.3/SystemTTSPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.2",
           "minHostVersion": "1.3.0",
@@ -2748,7 +2757,8 @@
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-system-tts-v1.0.1/SystemTTSPlugin.zip",
           "minOSVersion": "14.0"
         }
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.granite",
