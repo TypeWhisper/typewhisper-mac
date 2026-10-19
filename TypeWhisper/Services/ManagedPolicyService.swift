@@ -81,6 +81,7 @@ final class ManagedPolicyService: ObservableObject {
     @Published private(set) var current: ManagedPolicySnapshot = .empty
 
     private let source: any ManagedPolicySource
+    private let snapshotStore: ManagedPolicySnapshotStore?
     private let fallbackTicks: () -> AsyncStream<Void>
     private let now: () -> Date
     private var fallbackRefreshTask: Task<Void, Never>?
@@ -88,14 +89,17 @@ final class ManagedPolicyService: ObservableObject {
 
     /// - Parameter fallbackTicks: Creates the stream that triggers the periodic re-read. Tests pass a
     ///   stream they control; the default ticks every 30 seconds.
+    /// - Parameter snapshotStore: Receives every published snapshot for readers outside the main actor.
     init(
         source: any ManagedPolicySource,
+        snapshotStore: ManagedPolicySnapshotStore? = nil,
         fallbackTicks: @escaping () -> AsyncStream<Void> = {
             ManagedPolicyService.ticks(every: ManagedPolicyService.defaultFallbackRefreshInterval)
         },
         now: @escaping () -> Date = Date.init
     ) {
         self.source = source
+        self.snapshotStore = snapshotStore
         self.fallbackTicks = fallbackTicks
         self.now = now
     }
@@ -112,6 +116,7 @@ final class ManagedPolicyService: ObservableObject {
         if previous.revision > 0 && candidate.contentEquals(previous) {
             return previous
         }
+        snapshotStore?.update(candidate)
         current = candidate
         logger.info(
             "Managed policy revision \(candidate.revision, privacy: .public): \(candidate.status.rawValue, privacy: .public), \(candidate.enforcedValues.count, privacy: .public) enforced, \(candidate.recommendedValues.count, privacy: .public) recommended, \(candidate.invalidEnforcedKeys.count, privacy: .public) invalid, \(candidate.issues.count, privacy: .public) issues"

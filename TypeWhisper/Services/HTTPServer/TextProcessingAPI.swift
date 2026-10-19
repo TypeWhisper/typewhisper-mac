@@ -257,6 +257,9 @@ struct TextProcessingAPI: Sendable {
         default:
             break
         }
+        if let refusal = APIHandlers.managedPolicyRefusal(in: error) {
+            return .error(status: 403, message: refusal, code: "forbidden")
+        }
 
         logger.error("Text processing failed: \(error.localizedDescription, privacy: .private(mask: .hash))")
         let exceededContext = LLMContextLimit.isExceeded(error)

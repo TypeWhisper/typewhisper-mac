@@ -1,6 +1,204 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Your organization does not allow this transcription provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt diesen Transkriptionsanbieter nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はこの文字起こしプロバイダーを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许此转写提供方。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow this language model provider." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt diesen Sprachmodell-Anbieter nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はこの言語モデルプロバイダーを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许此语言模型提供方。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow plugin downloads." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt keine Plugin-Downloads."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はプラグインのダウンロードを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许下载插件。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow model downloads." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt keine Modell-Downloads."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はモデルのダウンロードを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许下载模型。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow audio to be transcribed outside this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt nicht, dass Audio außerhalb dieses Macs transkribiert wird."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織は、このMacの外で音声を文字起こしすることを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许在此 Mac 之外转写音频。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow text to be processed outside this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt nicht, dass Text außerhalb dieses Macs verarbeitet wird."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織は、このMacの外でテキストを処理することを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许在此 Mac 之外处理文本。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow this plugin." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt dieses Plugin nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はこのプラグインを許可していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许此插件。"
+          }
+        }
+      }
+    },
+    "This waits until your organization's settings can be applied." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das wartet, bis die Einstellungen deiner Organisation angewendet werden können."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織の設定を適用できるまで待機します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这将等待，直到可以应用你所在组织的设置。"
+          }
+        }
+      }
+    },
+    "Not allowed by your organization" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von deiner Organisation nicht erlaubt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織により許可されていません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许"
+          }
+        }
+      }
+    },
     "App updates are paused until your organization's update settings can be applied." : {
       "localizations" : {
         "de" : {

@@ -27,7 +27,7 @@ private enum PassiveLoadedModelRestoreContext {
     }
 }
 
-final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, @unchecked Sendable {
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     /// Whether this plugin backs the engine the user actually has selected,
@@ -51,8 +51,12 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
 
+    private let policyStore: ManagedPolicySnapshotStore
+
     init(
         pluginId: String,
+        locality: PluginLocality? = nil,
+        policyStore: ManagedPolicySnapshotStore = .shared,
         eventBus: EventBusProtocol,
         ruleNamesProvider: @escaping @MainActor () -> [String],
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
@@ -60,7 +64,8 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     ) {
         self.pluginId = pluginId
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
-        self.eventBus = eventBus
+        self.policyStore = policyStore
+        self.eventBus = ManagedPolicyEventBus(base: eventBus, pluginId: pluginId, locality: locality, store: policyStore)
         self.ruleNamesProvider = ruleNamesProvider
         self.workflowProvider = workflowProvider
 
@@ -70,6 +75,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
         // Create directory if needed
         try? FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Managed settings
+
+    /// Read on the plugin's own threads, so it comes from the thread-safe snapshot store.
+    var modelDownloadRefusal: String? {
+        policyStore.providerPolicy.modelDownloadRefusal
     }
 
     // MARK: - Keychain
@@ -273,6 +285,47 @@ enum ScreenshotPluginFixture {
             return nil
         default:
             return nil
+        }
+    }
+}
+
+/// Keeps transcripts and other content off plugins the managed settings do not let receive text.
+/// Events without content, such as recording start and stop, still arrive.
+struct ManagedPolicyEventBus: EventBusProtocol {
+    let base: EventBusProtocol
+    let pluginId: String
+    let locality: PluginLocality?
+    var store: ManagedPolicySnapshotStore = .shared
+
+    @discardableResult
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
+        let pluginId = pluginId
+        let locality = locality
+        let store = store
+        return base.subscribe { event in
+            // Checked per event, so a policy that changes while the plugin runs applies at once.
+            if event.carriesContent,
+               store.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) != nil {
+                return
+            }
+            await handler(event)
+        }
+    }
+
+    func unsubscribe(id: UUID) {
+        base.unsubscribe(id: id)
+    }
+}
+
+extension TypeWhisperEvent {
+    /// Whether the event carries transcript, inserted or corrected text, or files with it.
+    var carriesContent: Bool {
+        switch self {
+        case .recordingStarted, .recordingStopped, .transcriptionFailed:
+            false
+        case .transcriptionCompleted, .textInserted, .textCorrectionCommitted, .actionCompleted,
+             .partialTranscriptionUpdate, .recorderTranscriptReady:
+            true
         }
     }
 }
