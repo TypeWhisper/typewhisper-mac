@@ -30,7 +30,12 @@ struct SetupWizardView: View {
     init() {
         let saved = UserDefaults.standard.integer(forKey: UserDefaultsKeys.setupWizardCurrentStep)
         let maxStep = SetupWizardStep.allCases.count - 1
-        _currentStep = State(initialValue: min(max(saved, 0), maxStep))
+        let managedStep = ManagedOnboardingPolicy.initialStep(
+            ServiceContainer.shared.managedPolicyService.current,
+            savedStep: saved,
+            readiness: .current()
+        )
+        _currentStep = State(initialValue: min(max(managedStep ?? saved, 0), maxStep))
         _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
 
         if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
@@ -1707,6 +1712,7 @@ struct SetupWizardView: View {
     }
 }
 
+// Raw values are persisted and mirrored by `ManagedOnboardingPolicy.Step`.
 private enum SetupWizardStep: Int, CaseIterable, Identifiable {
     case welcome
     case permissions

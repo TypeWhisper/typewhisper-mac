@@ -3,18 +3,21 @@ import SwiftUI
 struct AboutSettingsView: View {
     @ObservedObject private var license = LicenseService.shared
     @AppStorage(UserDefaultsKeys.updateChannel) private var selectedUpdateChannelRawValue = AppConstants.defaultReleaseChannel.rawValue
+    @ObservedObject private var updateCoordinator = ServiceContainer.shared.managedUpdateCoordinator
     @State private var isLogoHovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// The channel updates use: the organization's channel, then the user's choice, then the recommendation.
     private var selectedUpdateChannel: AppConstants.ReleaseChannel {
-        AppConstants.ReleaseChannel(rawValue: selectedUpdateChannelRawValue) ?? AppConstants.defaultReleaseChannel
+        _ = selectedUpdateChannelRawValue
+        return updateCoordinator.effectiveChannel.value
     }
 
     private var updateChannelBinding: Binding<AppConstants.ReleaseChannel> {
         Binding(
             get: { selectedUpdateChannel },
             set: { newChannel in
-                guard selectedUpdateChannel != newChannel else { return }
+                guard selectedUpdateChannel != newChannel, !updateCoordinator.policy.isChannelLocked else { return }
                 selectedUpdateChannelRawValue = newChannel.rawValue
                 UpdateChecker.shared?.resetUpdateCycleAfterSettingsChange()
             }
@@ -73,24 +76,39 @@ struct AboutSettingsView: View {
 
                 #if !APPSTORE
                 Section {
+                let updatePolicy = updateCoordinator.policy
+                let checkRefusal = updateCoordinator.checkRefusal
                 Picker(String(localized: "Update Channel"), selection: updateChannelBinding) {
-                    ForEach(AppConstants.ReleaseChannel.allCases, id: \.self) { channel in
+                    ForEach(updatePolicy.selectableChannels(current: selectedUpdateChannel), id: \.self) { channel in
                         Text(channel.selectionDisplayName)
                             .tag(channel)
                     }
                 }
                 .pickerStyle(.menu)
+                .disabled(updatePolicy.isChannelLocked)
 
                 Text(selectedUpdateChannel.updateDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if updatePolicy.isChannelLocked {
+                    ManagedByOrganizationLabel()
+                } else if updatePolicy.allowedChannels != nil {
+                    ManagedByOrganizationLabel(text: String(localized: "Your organization limits the available update channels."))
+                }
+
+                if let checkRefusal {
+                    ManagedByOrganizationLabel(text: checkRefusal)
+                } else if let version = updateCoordinator.announcedVersion {
+                    ManagedByOrganizationLabel(text: String(localized: "TypeWhisper \(version) is available."))
+                }
 
                 HStack {
                     Spacer()
                     Button(String(localized: "Check for Updates...")) {
                         UpdateChecker.shared?.checkForUpdates()
                     }
-                    .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
+                    .disabled(checkRefusal != nil || UpdateChecker.shared?.canCheckForUpdates() != true)
                     Spacer()
                 }
             }

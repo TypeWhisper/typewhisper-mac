@@ -1,5 +1,7 @@
 # Managed license activation (TypeWhisper 1.6.1 and later)
 
+For update, startup, setup and prompt settings, see [managed settings](managed-settings.md).
+
 TypeWhisper can read a commercial license key from macOS preferences and activate
 it in the signed-in user's app session. Administrators do not need to call Polar
 or write to users' Keychains. This is not available in 1.6.0.

@@ -597,7 +597,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             return
         }
 
-        if HomeViewModel.shared.showSetupWizard {
+        if ManagedLaunchGate.isSetupWizardRequired {
             startupSheet = nil
             return
         }
@@ -623,7 +623,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             nextRoute = .iOSCompanion
         } else if LicenseService.shared.needsWelcomeSheet {
             nextRoute = .welcome
-        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt {
+        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt, !ManagedLaunchGate.suppressesOptionalPrompts {
             nextRoute = .iOSCompanion
         } else {
             nextRoute = postUpdatePromptCoordinator.activeSheetRoute
@@ -839,7 +839,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
-        .sparkle(updaterController.updater)
+        .sparkle(updaterController.updater, coordinator: ServiceContainer.shared.managedUpdateCoordinator)
+    }
+
+    /// Under CheckOnly the app announces new versions without installing them: check once now,
+    /// and again whenever the policy changes, because Sparkle's own schedule may be off.
+    private func observeManagedUpdatePolicy() {
+        let coordinator = ServiceContainer.shared.managedUpdateCoordinator
+        let updater = updaterController.updater
+        coordinator.onPolicyChange = { previous, current in
+            updater.resetUpdateCycleAfterShortDelay()
+            if current.mode == .checkOnly, previous.mode != .checkOnly || previous.isBlocked {
+                updater.checkForUpdatesInBackground()
+            }
+        }
+        if coordinator.policy.mode == .checkOnly {
+            updater.checkForUpdatesInBackground()
+        }
     }
     #endif
 
@@ -864,7 +880,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         defaults.register(defaults: [
             UserDefaultsKeys.showMenuBarIcon: true,
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
-            UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
@@ -913,6 +928,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         #if !APPSTORE
         UpdateChecker.shared = updateChecker
+        observeManagedUpdatePolicy()
         #endif
         applyActivationPolicy()
 
@@ -1080,7 +1096,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return true
         }
         if !hasVisibleManagedWindow {
-            if HomeViewModel.shared.showSetupWizard {
+            if ManagedLaunchGate.isSetupWizardRequired {
                 openSetupWindow()
             } else {
                 openSettingsWindow()
@@ -1160,12 +1176,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentInitialWindow(isNormalLaunch: Bool) {
         guard let whatsNew = WhatsNewCoordinator.shared else { return }
+        let suppressesOptionalPrompts = ManagedLaunchGate.suppressesOptionalPrompts
+        if suppressesOptionalPrompts {
+            // The highlights stay available from Settings > About.
+            whatsNew.suppressForCurrentLaunch()
+        }
         let presentation = whatsNew.presentationForLaunch(
             isNormalLaunch: isNormalLaunch,
-            setupWizardRequired: HomeViewModel.shared.showSetupWizard,
+            setupWizardRequired: ManagedLaunchGate.isSetupWizardRequired,
             operationInProgress: operationInProgress,
             postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
-            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt
+            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt && !suppressesOptionalPrompts
         )
 
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
@@ -1437,7 +1458,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 #if !APPSTORE
 extension AppDelegate: SPUUpdaterDelegate {
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        AppConstants.effectiveUpdateChannel.sparkleChannels
+        MainActor.assumeIsolated {
+            ServiceContainer.shared.managedUpdateCoordinator.effectiveChannel.value.sparkleChannels
+        }
+    }
+
+    nonisolated func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        try MainActor.assumeIsolated {
+            try ServiceContainer.shared.managedUpdateCoordinator.authorizeCheck()
+        }
+    }
+
+    nonisolated func updater(
+        _ updater: SPUUpdater,
+        shouldProceedWithUpdate updateItem: SUAppcastItem,
+        updateCheck: SPUUpdateCheck
+    ) throws {
+        let version = updateItem.displayVersionString
+        let userInitiated = updateCheck == .updates
+        try MainActor.assumeIsolated {
+            try ServiceContainer.shared.managedUpdateCoordinator.authorizeUpdate(
+                version: version,
+                userInitiated: userInitiated,
+                downloadsAutomatically: updater.automaticallyDownloadsUpdates
+            )
+        }
+    }
+
+    nonisolated func updaterShouldPromptForPermissionToCheck(forUpdates updater: SPUUpdater) -> Bool {
+        MainActor.assumeIsolated {
+            !ServiceContainer.shared.managedUpdateCoordinator.policy.suppressesAutomaticCheckPrompt
+        }
     }
 }
 #endif

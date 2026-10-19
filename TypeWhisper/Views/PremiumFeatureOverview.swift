@@ -229,6 +229,8 @@ struct PremiumAccessStatusBar: View {
 @MainActor
 struct PremiumLockedFeatureOverview: View {
     let isSupporter: Bool
+    /// False while the organization suppresses optional prompts; access stays manageable from the status bar.
+    var showsUnlock = true
     let onUnlock: () -> Void
 
     var body: some View {
@@ -255,14 +257,16 @@ struct PremiumLockedFeatureOverview: View {
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
 
-                        Button(action: onUnlock) {
-                            Label(
-                                String(localized: "premium.hub.unlock"),
-                                systemImage: "lock.open"
-                            )
+                        if showsUnlock {
+                            Button(action: onUnlock) {
+                                Label(
+                                    String(localized: "premium.hub.unlock"),
+                                    systemImage: "lock.open"
+                                )
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .accessibilityIdentifier("premium.unlock")
                         }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("premium.unlock")
 
                         if isSupporter {
                             Label(

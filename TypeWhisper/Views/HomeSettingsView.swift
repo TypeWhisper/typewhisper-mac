@@ -6,6 +6,7 @@ struct HomeSettingsView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var license = LicenseService.shared
     @ObservedObject private var statistics = StatisticsViewModel.shared
+    @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
     @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
     @State private var copiedRecordID: UUID?
     @State private var copyFeedbackTask: Task<Void, Never>?
@@ -31,7 +32,8 @@ struct HomeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed {
+                    if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed
+                        && !ManagedPromptPolicy.suppressesOptionalPrompts(managedPolicyService.current) {
                         workUsageCard
                     }
 

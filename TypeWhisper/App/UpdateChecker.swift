@@ -9,9 +9,9 @@ struct UpdateChecker {
     let resetUpdateCycleAfterSettingsChange: () -> Void
 
     #if !APPSTORE
-    static func sparkle(_ updater: SPUUpdater) -> UpdateChecker {
+    static func sparkle(_ updater: SPUUpdater, coordinator: ManagedUpdateCoordinator) -> UpdateChecker {
         return UpdateChecker(
-            canCheckForUpdates: { updater.canCheckForUpdates },
+            canCheckForUpdates: { updater.canCheckForUpdates && coordinator.checkRefusal == nil },
             checkForUpdates: { updater.checkForUpdates() },
             resetUpdateCycleAfterSettingsChange: { updater.resetUpdateCycleAfterShortDelay() }
         )

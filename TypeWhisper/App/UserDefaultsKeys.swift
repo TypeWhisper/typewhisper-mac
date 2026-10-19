@@ -220,6 +220,15 @@ enum UserDefaultsKeys {
     static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
     static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
 
+    // MARK: - Managed settings
+    /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once
+    /// the policy is removed.
+    static let managedLaunchAtLoginRetainedState = "managedLaunchAtLoginRetainedState"
+    /// The user's own Launch at Login choice in TypeWhisper. A recommendation never replaces it.
+    static let launchAtLoginUserChoice = "launchAtLoginUserChoice"
+    /// Set once a recommended `LaunchAtLogin` value has been applied to a new profile.
+    static let managedLaunchAtLoginRecommendationApplied = "managedLaunchAtLoginRecommendationApplied"
+
     // MARK: - Supporter
     static let supporterTier = "supporterTier"
     static let supporterStatus = "supporterStatus"
