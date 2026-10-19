@@ -2324,6 +2324,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/openrouter/",
       "releases": [
         {
+          "version": "1.1.10",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 273297,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.1.10/OpenRouterPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.9",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -2426,7 +2434,8 @@
       "categories": [
         "transcription",
         "llm"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.memory.openai-vector",
