@@ -2538,6 +2538,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/soniox/",
       "releases": [
         {
+          "version": "1.2.12",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 453133,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-soniox-v1.2.12/SonioxPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.2.11",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -2676,7 +2684,8 @@
       "categories": [
         "transcription",
         "tts"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.speechmatics",
