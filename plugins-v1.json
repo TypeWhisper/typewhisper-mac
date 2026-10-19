@@ -1069,6 +1069,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/claude/",
       "releases": [
         {
+          "version": "1.1.2",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 458130,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.1.2/ClaudePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.1",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -1104,7 +1112,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 128
         }
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.cerebras",
