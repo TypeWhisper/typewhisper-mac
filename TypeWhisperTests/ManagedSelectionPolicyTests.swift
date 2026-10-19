@@ -253,6 +253,37 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "downloads-engine")
     }
 
+    func testFallbackWhileTheRecommendationIsPendingIsNotSaved() {
+        let pending = DownloadingPairEngine(downloaded: [])
+        let manager = PluginManager(appSupportDirectory: directory)
+        manager.loadedPlugins = [
+            loaded(PairTestEngine(providerID: "ready-engine", models: ["base"]), id: "com.typewhisper.tests.pair.ready", locality: "local", categories: ["transcription"]),
+            loaded(pending, id: "com.typewhisper.tests.pair.downloads", locality: "local", categories: ["transcription"]),
+        ]
+        PluginManager.shared = manager
+        let modelManager = ModelManagerService()
+        modelManager.clearProviderSelection()
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            recommendedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.downloads", modelId: "large")
+        ))
+        defer {
+            manager.applySelectionPolicy(.unmanaged)
+            PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
+        }
+
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "ready-engine", "Dictation works in the meantime")
+        XCTAssertNil(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "The fallback is not the user's choice")
+
+        pending.downloaded = ["large"]
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "downloads-engine")
+        XCTAssertEqual(modelManager.selectedProviderId, "downloads-engine")
+        XCTAssertEqual(pending.selections, ["large"])
+    }
+
     func testRecommendedLlmPairWaitsForAReadyProvider() throws {
         let manager = makeManager()
         PluginManager.shared = manager

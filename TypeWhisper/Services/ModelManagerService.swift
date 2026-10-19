@@ -726,12 +726,20 @@ final class ModelManagerService: ObservableObject {
             return
         }
 
-        if savedProviderId == nil {
+        // While a recommended pair waits to become ready, the fallback stays temporary: saving it
+        // would count as the user's choice and keep the recommendation from ever applying.
+        if savedProviderId == nil, !isTranscriptionRecommendationPending {
             selectProvider(fallback.providerId)
         } else {
             PluginManager.temporaryFallbackEngine.withLock { $0 = fallback.providerId }
             selectedProviderId = fallback.providerId
         }
+    }
+
+    private var isTranscriptionRecommendationPending: Bool {
+        UserDefaults.standard.string(forKey: providerKey) == nil
+            && !UserDefaults.standard.bool(forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied)
+            && PluginManager.shared?.selectionPolicy.recommendedTranscription != nil
     }
 
     /// Selects the enforced pair's engine in memory and its model in the plugin, retaining the model

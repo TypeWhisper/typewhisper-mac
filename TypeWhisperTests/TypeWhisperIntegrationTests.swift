@@ -3347,8 +3347,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(response.status, 403)
-        let message = String(decoding: response.body, as: UTF8.self)
-        XCTAssertTrue(message.contains("your organization requires is not installed"), message)
+        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
+        let reason = await MainActor.run { PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason }
+        XCTAssertNotNil(reason)
+        XCTAssertEqual(error["message"] as? String, reason)
+        XCTAssertEqual(error["code"] as? String, "forbidden")
     }
 
     func testTranscribeEndpointUsesDefaultNumberThreshold() async throws {
