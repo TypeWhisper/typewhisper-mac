@@ -2857,6 +2857,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/filler-words/",
       "releases": [
         {
+          "version": "1.0.3",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 132215,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.3/FillerWordsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.2",
           "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
@@ -2883,7 +2891,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 2081
         }
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.tts.supertonic",
