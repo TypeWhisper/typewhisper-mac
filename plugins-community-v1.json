@@ -2009,13 +2009,22 @@
       "author": "TypeWhisper",
       "description": "Show a floating live transcript window during recording.",
       "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster w\u00e4hrend der Aufnahme.",
+        "ja": "\u9332\u97f3\u4e2d\u306e\u6587\u5b57\u8d77\u3053\u3057\u3092\u3001\u4ed6\u306e\u30a6\u30a3\u30f3\u30c9\u30a6\u306b\u91cd\u306d\u3066\u8868\u793a\u3057\u307e\u3059\u3002"
       },
       "category": "utility",
       "downloadCount": 994,
       "iconSystemName": "text.bubble",
       "detailsURL": "https://www.typewhisper.com/addons/live-transcript/",
       "releases": [
+        {
+          "version": "1.0.13",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 226373,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-livetranscript-v1.0.13/LiveTranscriptPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.12",
           "minHostVersion": "1.1.0",
@@ -2088,7 +2097,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 0
         }
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.linear",
