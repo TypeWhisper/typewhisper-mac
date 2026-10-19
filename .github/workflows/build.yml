@@ -15,7 +15,7 @@ concurrency:
 env:
   SCHEME: TypeWhisper
   PROJECT: TypeWhisper.xcodeproj
-  XCODE_VERSION: "26.6"
+  XCODE_VERSION: "27.1"
 
 permissions:
   contents: read
@@ -77,7 +77,7 @@ jobs:
           echo "plugin_sdk=$plugin_sdk" | tee -a "$GITHUB_OUTPUT"
 
   release-build:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,6 +88,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Ensure Metal toolchain
+        run: bash scripts/ensure_metal_toolchain.sh
 
       - name: Restore Swift package cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -184,7 +187,7 @@ jobs:
           retention-days: 14
 
   app-tests:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -195,6 +198,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Ensure Metal toolchain
+        run: bash scripts/ensure_metal_toolchain.sh
 
       # The nightly release workflow seeds this cache on main. Caches saved here would
       # be scoped to this pull request and unreachable for every other one.
@@ -240,7 +246,7 @@ jobs:
   plugin-sdk-tests:
     needs: changes
     if: needs.changes.outputs.plugin_sdk == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -252,6 +258,9 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      - name: Ensure Metal toolchain
+        run: bash scripts/ensure_metal_toolchain.sh
+
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
 
@@ -259,7 +268,7 @@ jobs:
   # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
   # builds the universal Release binary and audits it. See docs/appstore/README.md.
   appstore:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       APPSTORE_DERIVED_DATA: build/appstore
@@ -275,6 +284,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Ensure Metal toolchain
+        run: bash scripts/ensure_metal_toolchain.sh
 
       - name: Install XcodeGen
         run: |

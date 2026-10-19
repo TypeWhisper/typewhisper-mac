@@ -6170,7 +6170,7 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating,
     }
 }
 
-private final class RunningAudioEngine: AVAudioEngine {
+private final class RunningAudioEngine: AVAudioEngine, @unchecked Sendable {
     override var isRunning: Bool { true }
 }
 

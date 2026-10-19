@@ -42,7 +42,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  XCODE_VERSION: "26.6"
+  XCODE_VERSION: "27.1"
   XCODEGEN_VERSION: "2.46.0"
   XCODEGEN_SHA256: 4d9e34b62172d645eed6457cac13fc222569974098ef4ee9c3368bedf0196806
   PROJECT: TypeWhisperAppStore.xcodeproj
@@ -97,7 +97,7 @@ jobs:
     name: Archive, export and upload
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     environment: app-store
     timeout-minutes: 120
     steps:
@@ -124,6 +124,9 @@ jobs:
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Ensure Metal toolchain
+        run: bash scripts/ensure_metal_toolchain.sh
 
       - name: Install XcodeGen
         run: |
