@@ -2703,6 +2703,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/speechmatics/",
       "releases": [
         {
+          "version": "1.0.10",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 199051,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechmatics-v1.0.10/SpeechmaticsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.9",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -2765,7 +2773,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 2
         }
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.webhook",
