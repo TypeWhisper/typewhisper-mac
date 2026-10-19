@@ -53,6 +53,8 @@ final class ServiceContainer: ObservableObject {
 
     // Services
     let managedPolicyService: ManagedPolicyService
+    let managedUpdateCoordinator: ManagedUpdateCoordinator
+    let launchAtLoginController: LaunchAtLoginPolicyController
     let modelManagerService: ModelManagerService
     let audioFileService: AudioFileService
     let audioRecordingService: AudioRecordingService
@@ -128,12 +130,16 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
 
+    private var managedPolicySubscription: AnyCancellable?
+
     private init() {
         // Managed preferences are read before any service that may consult them.
         managedPolicyService = ManagedPolicyService(
             source: AppConstants.isRunningTests ? EmptyManagedPolicySource() : ManagedPreferencesPolicySource()
         )
         managedPolicyService.refresh()
+        managedUpdateCoordinator = ManagedUpdateCoordinator(policyService: managedPolicyService)
+        launchAtLoginController = LaunchAtLoginPolicyController(snapshot: managedPolicyService.current)
 
         // Services
         let inputActivationGuard = AudioInputDeviceActivationGuard()
@@ -554,6 +560,21 @@ final class ServiceContainer: ObservableObject {
         watchFolderViewModel.observePluginManager()
     }
 
+    /// Applies policy effects that are not evaluated on use: the login item and, for a changed managed
+    /// license key, a new activation pass.
+    private func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot, previous: ManagedPolicySnapshot?) {
+        launchAtLoginController.apply(
+            snapshot,
+            setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
+        )
+        #if !APPSTORE
+        let key = ManagedPolicyKeys.managedLicenseKey
+        if let previous, previous.enforced(key) != snapshot.enforced(key) {
+            Task { await licenseService.validateIfNeeded() }
+        }
+        #endif
+    }
+
     func initialize() async {
         guard !AppConstants.isRunningTests else { return }
 
@@ -562,6 +583,13 @@ final class ServiceContainer: ObservableObject {
         defer { signposter.endInterval("Launch.initialize", initializeState) }
 
         managedPolicyService.startMonitoring()
+        applyManagedPolicy(managedPolicyService.current, previous: nil)
+        managedPolicySubscription = managedPolicyService.$current
+            .dropFirst()
+            .scan((ManagedPolicySnapshot?.none, managedPolicyService.current)) { ($0.1, $1) }
+            .sink { [weak self] previous, current in
+                self?.applyManagedPolicy(current, previous: previous)
+            }
 
         #if APPSTORE
         // Listen for App Store transactions as early as possible.

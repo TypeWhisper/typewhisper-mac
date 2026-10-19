@@ -296,10 +296,6 @@ enum AppConstants {
         bundledReleaseChannel()
     }
 
-    static var effectiveUpdateChannel: ReleaseChannel {
-        selectedUpdateChannel()
-    }
-
     static let defaultReleaseChannel: ReleaseChannel = {
         guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
               let channel = ReleaseChannel(rawValue: rawValue) else {

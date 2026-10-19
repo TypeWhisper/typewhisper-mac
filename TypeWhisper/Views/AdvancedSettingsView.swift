@@ -11,6 +11,7 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
+    @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
@@ -57,6 +58,13 @@ struct AdvancedSettingsView: View {
             Divider()
 
             Form {
+                if ManagedSettingsSection.isVisible(managedPolicyService.current) {
+                    ManagedSettingsSection(
+                        policyService: managedPolicyService,
+                        updateCoordinator: ServiceContainer.shared.managedUpdateCoordinator
+                    )
+                }
+
                 // MARK: - Support Diagnostics
                 Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
                 HStack {

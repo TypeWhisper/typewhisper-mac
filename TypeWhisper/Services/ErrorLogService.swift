@@ -659,7 +659,7 @@ final class ErrorLogService: ObservableObject {
             ),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
-                selectedUpdateChannel: AppConstants.effectiveUpdateChannel.rawValue,
+                selectedUpdateChannel: container.managedUpdateCoordinator.effectiveChannel.value.rawValue,
                 selectedLanguage: defaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: defaults.string(forKey: UserDefaultsKeys.selectedTask),
                 translationEnabled: defaults.bool(forKey: UserDefaultsKeys.translationEnabled),

@@ -10,7 +10,7 @@ private func completeApplicationRelaunch(_ application: NSRunningApplication?, _
 }
 
 struct GeneralSettingsView: View {
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @ObservedObject private var launchAtLogin = ServiceContainer.shared.launchAtLoginController
     @State private var appLanguage: String = {
         if let lang = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage) {
             return lang
@@ -70,14 +70,31 @@ struct GeneralSettingsView: View {
             }
 
                 Section(String(localized: "Startup")) {
-                Toggle(String(localized: "Launch at Login"), isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, newValue in
-                        toggleLaunchAtLogin(newValue)
-                    }
+                Toggle(String(localized: "Launch at Login"), isOn: Binding(
+                    get: { launchAtLogin.isEnabled || launchAtLogin.requiresApproval },
+                    set: { launchAtLogin.setUserChoice($0) }
+                ))
+                .disabled(launchAtLogin.isLocked)
 
                 Text(String(localized: "TypeWhisper will start automatically when you log in."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if launchAtLogin.isLocked {
+                    ManagedByOrganizationLabel()
+                }
+
+                if launchAtLogin.requiresApproval {
+                    HStack {
+                        Text(String(localized: "macOS needs your approval in Login Items before TypeWhisper can start at login."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button(String(localized: "Open Login Items")) {
+                            SMAppService.openSystemSettingsLoginItems()
+                        }
+                    }
+                }
             }
 
             }
@@ -86,6 +103,12 @@ struct GeneralSettingsView: View {
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 300)
+        // System Settings can change the login item while TypeWhisper runs, including after
+        // "Open Login Items" while this page stays open.
+        .onAppear { launchAtLogin.refreshStatus() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            launchAtLogin.refreshStatus()
+        }
         .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
             Button(String(localized: "Restart Now")) {
                 ApplicationRelauncher.relaunch()
@@ -96,18 +119,6 @@ struct GeneralSettingsView: View {
         }
     }
 
-    private func toggleLaunchAtLogin(_ enable: Bool) {
-        do {
-            if enable {
-                try SMAppService.mainApp.register()
-            } else {
-                try SMAppService.mainApp.unregister()
-            }
-        } catch {
-            // Revert toggle on failure
-            launchAtLogin = SMAppService.mainApp.status == .enabled
-        }
-    }
 }
 
 @MainActor

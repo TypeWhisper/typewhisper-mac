@@ -1,6 +1,622 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "App updates are paused until your organization's update settings can be applied." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App-Updates sind pausiert, bis die Update-Einstellungen deiner Organisation angewendet werden können."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織のアップデート設定を適用できるまで、アプリのアップデートは一時停止されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在可以应用你所在组织的更新设置之前，应用更新已暂停。"
+          }
+        }
+      }
+    },
+    "App updates are managed by your organization." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App-Updates werden von deiner Organisation verwaltet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのアップデートは組織によって管理されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用更新由你的组织管理。"
+          }
+        }
+      }
+    },
+    "Your organization has turned off app updates." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation hat App-Updates deaktiviert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織によってアプリのアップデートがオフにされています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织已关闭应用更新。"
+          }
+        }
+      }
+    },
+    "Your organization's update channel is not one of its allowed channels, so app updates are off." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Update-Kanal deiner Organisation gehört nicht zu ihren erlaubten Kanälen, deshalb sind App-Updates deaktiviert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定したアップデートチャンネルが許可されたチャンネルに含まれていないため、アプリのアップデートはオフになっています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织指定的更新渠道不在其允许的渠道中，因此应用更新已关闭。"
+          }
+        }
+      }
+    },
+    "Your organization does not allow updates on this channel. Choose an allowed channel." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation erlaubt keine Updates auf diesem Kanal. Wähle einen erlaubten Kanal."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織はこのチャンネルでのアップデートを許可していません。許可されたチャンネルを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织不允许在此渠道上更新。请选择允许的渠道。"
+          }
+        }
+      }
+    },
+    "A newer version is available. Your organization installs updates on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine neuere Version ist verfügbar. Deine Organisation installiert Updates auf diesem Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいバージョンが利用可能です。このMacのアップデートは組織がインストールします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新版本可用。此 Mac 上的更新由你的组织安装。"
+          }
+        }
+      }
+    },
+    "A newer version is available. Choose Check for Updates to install it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine neuere Version ist verfügbar. Wähle „Nach Updates suchen …“, um sie zu installieren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいバージョンが利用可能です。インストールするには「アップデートを確認...」を選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新版本可用。选择“检查更新…”进行安装。"
+          }
+        }
+      }
+    },
+    "macOS needs your approval in Login Items before TypeWhisper can start at login." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS braucht deine Freigabe unter „Anmeldeobjekte“, bevor TypeWhisper beim Anmelden starten kann."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperをログイン時に起動するには、「ログイン項目」での承認が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要在“登录项”中批准后，TypeWhisper 才能在登录时启动。"
+          }
+        }
+      }
+    },
+    "Open Login Items" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anmeldeobjekte öffnen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログイン項目を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开登录项"
+          }
+        }
+      }
+    },
+    "Managed by your organization." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von deiner Organisation verwaltet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織によって管理されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由你的组织管理。"
+          }
+        }
+      }
+    },
+    "Managed Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwaltete Einstellungen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理対象の設定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "受管理的设置"
+          }
+        }
+      }
+    },
+    "Setting" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellung"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        }
+      }
+    },
+    "Scope" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geltung"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適用範囲"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "范围"
+          }
+        }
+      }
+    },
+    "Value" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "値"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值"
+          }
+        }
+      }
+    },
+    "Policy Problems" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probleme mit Richtlinien"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポリシーの問題"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "策略问题"
+          }
+        }
+      }
+    },
+    "Last checked %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt geprüft: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最終確認: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上次检查：%@"
+          }
+        }
+      }
+    },
+    "TypeWhisper checks again every 30 seconds and when it becomes active." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper prüft alle 30 Sekunden erneut und sobald die App aktiv wird."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperは30秒ごと、およびアクティブになったときに再確認します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 每 30 秒以及在变为活动状态时会重新检查。"
+          }
+        }
+      }
+    },
+    "Refresh" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisieren"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新"
+          }
+        }
+      }
+    },
+    "The managed settings could not be read. Managed features wait until they can be read again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die verwalteten Einstellungen konnten nicht gelesen werden. Verwaltete Funktionen warten, bis sie wieder gelesen werden können."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理対象の設定を読み取れませんでした。再び読み取れるようになるまで、管理対象の機能は待機します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取受管理的设置。受管理的功能将等待，直到可以再次读取。"
+          }
+        }
+      }
+    },
+    "Your organization manages these settings on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation verwaltet diese Einstellungen auf diesem Mac."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacでは、組織がこれらの設定を管理しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织在此 Mac 上管理这些设置。"
+          }
+        }
+      }
+    },
+    "No settings are managed on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Mac werden keine Einstellungen verwaltet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで管理されている設定はありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 上没有受管理的设置。"
+          }
+        }
+      }
+    },
+    "Enforced" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erzwungen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "強制"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "强制"
+          }
+        }
+      }
+    },
+    "Invalid value; the setting stays blocked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiger Wert; die Einstellung bleibt gesperrt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無効な値です。この設定はブロックされたままです"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "值无效；该设置保持锁定"
+          }
+        }
+      }
+    },
+    "External" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extern"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外部"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外部"
+          }
+        }
+      }
+    },
+    "Check only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur prüfen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "確認のみ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅检查"
+          }
+        }
+      }
+    },
+    "User-initiated" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durch Nutzer"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ユーザーが開始"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户发起"
+          }
+        }
+      }
+    },
+    "Your organization limits the available update channels." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Organisation schränkt die verfügbaren Update-Kanäle ein."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織によって利用可能なアップデートチャンネルが制限されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织限制了可用的更新渠道。"
+          }
+        }
+      }
+    },
+    "TypeWhisper %@ is available." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper %@ ist verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper %@ が利用可能です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper %@ 现已可用。"
+          }
+        }
+      }
+    },
     "New in TypeWhisper" : {
       "localizations" : {
         "de" : {

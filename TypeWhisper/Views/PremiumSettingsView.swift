@@ -7,6 +7,7 @@ struct PremiumSettingsView: View {
     @ObservedObject private var syncController: CloudFolderSyncController
     @ObservedObject private var premiumAccount: PremiumAccountService
     @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
+    @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
 
     private let settingsNavigation: SettingsNavigationCoordinator
     private let windowPresenter: any PremiumSettingsWindowPresenting
@@ -67,6 +68,7 @@ struct PremiumSettingsView: View {
                         #if !APPSTORE
                         PremiumLockedFeatureOverview(
                             isSupporter: license.isSupporter,
+                            showsUnlock: !ManagedPromptPolicy.suppressesOptionalPrompts(managedPolicyService.current),
                             onUnlock: {
                                 settingsNavigation.navigateToLicense(target: .top)
                             }

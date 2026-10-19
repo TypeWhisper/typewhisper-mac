@@ -1,5 +1,7 @@
 # Managed license activation (TypeWhisper 1.6.1 and later)
 
+For update, startup, setup and prompt settings, see [managed settings](managed-settings.md).
+
 TypeWhisper can read a commercial license key from macOS preferences and activate
 it in the signed-in user's app session. Administrators do not need to call Polar
 or write to users' Keychains. This is not available in 1.6.0.
@@ -36,8 +38,11 @@ keys. Avoid putting real keys in interactive shell history or command-line logs.
 
 ## Activation lifecycle
 
-- Configuration is read at startup. Restart TypeWhisper after changing or removing
-  the profile. The License page also offers a retry action.
+- Configuration is read at startup. From TypeWhisper 1.8, a key delivered by a
+  configuration profile is read again whenever the profile changes, so a new,
+  changed or removed key takes effect within about 30 seconds without a restart.
+  Earlier versions, and a key written with `defaults write`, need a restart after a
+  change. The License page also offers a retry action.
 - The app stores the key and its Polar activation ID in that user's Keychain. It
   reuses the record across launches; it does not activate on every launch.
 - Multiple users on the same Mac have separate Keychain records and activations.
@@ -55,7 +60,8 @@ keys. Avoid putting real keys in interactive shell history or command-line logs.
   requests Polar rejects outright (for example HTTP 422) the app stops retrying that
   entry and logs it. The current activation is never deactivated by this cleanup.
   Activations that are still listed in Polar afterwards can be removed there.
-- Removing the setting restores manual license controls on the next launch. It does
+- Removing the setting restores manual license controls (right away for a profile
+  from TypeWhisper 1.8, otherwise on the next launch). It does
   not revoke or delete an existing activation. Queued cleanup of replaced
   activations continues. Deactivate the current activation manually or revoke it
   centrally through Polar; central changes are noticed on the normal validation
