@@ -63,6 +63,7 @@
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */; };
+		A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001308 /* ManagedPolicyTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
@@ -108,6 +109,9 @@
 		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000002 /* WhatsNewCoordinator.swift */; };
+		A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001302 /* ManagedPolicy.swift */; };
+		A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */; };
+		A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001306 /* ManagedPolicyService.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
 		1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000011 /* IOSCompanionPromoView.swift */; };
@@ -900,6 +904,10 @@
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
 		A11800000000000000000002 /* WhatsNewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinator.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001302 /* ManagedPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicy.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyValidator.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001306 /* ManagedPolicyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyService.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001308 /* ManagedPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
 		1F0550000000000000000011 /* IOSCompanionPromoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSCompanionPromoView.swift; sourceTree = "<group>"; };
@@ -2036,6 +2044,7 @@
 				BB00000000000000000332 /* DictationRuntimeContext.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */,
+				A1C0DE000000000000001302 /* ManagedPolicy.swift */,
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
 				91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */,
@@ -2144,6 +2153,8 @@
 				BB00000000000000000238 /* AudioRecorderService.swift */,
 				BB00000000000000000241 /* WatchFolderService.swift */,
 				BB00000000000000000244 /* ErrorLogService.swift */,
+				A1C0DE000000000000001306 /* ManagedPolicyService.swift */,
+				A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */,
 				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
 				BB00000000000000000247 /* SpeechFeedbackService.swift */,
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
@@ -3168,6 +3179,7 @@
 				C50700000000000000000002 /* MemoryServiceTests.swift */,
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */,
+				A1C0DE000000000000001308 /* ManagedPolicyTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */,
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
@@ -5145,6 +5157,7 @@
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
 				A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */,
+				A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */,
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
 				C23000000000000000000001 /* OpenAIPlugin.swift in Sources */,
 				C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */,
@@ -5457,6 +5470,9 @@
 				AA00000000000000000302 /* WelcomeSheet.swift in Sources */,
 				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
 				A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */,
+				A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */,
+				A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */,
+				A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
 				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
 				1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */,
