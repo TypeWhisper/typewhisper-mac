@@ -5,6 +5,9 @@ name: Mac App Store Upload
 # main only; the signing material lives in the protected `app-store` environment.
 # Nightly runs upload to the internal TestFlight group, but only when main
 # changed since the last successful nightly upload.
+# For a release, dispatch it on main with release_tag (for example v1.8.0): it
+# builds that tag, which must be on main, so the App Store build comes from the
+# same commit as the Sparkle release.
 # scripts/appstore/testflight-local.sh does the same on a Mac with the login keychain.
 
 on:
@@ -12,6 +15,10 @@ on:
     - cron: "30 2 * * *"
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: Optional release tag on main to build instead of main (for example v1.8.0 or v1.8.0-rc1)
+        required: false
+        type: string
       build_number:
         description: Optional build number (defaults to minutes since the Unix epoch)
         required: false
@@ -56,13 +63,22 @@ jobs:
       actions: read
     outputs:
       run: ${{ steps.check.outputs.run }}
+      ref: ${{ steps.check.outputs.ref }}
     steps:
       - name: Compare with the last successful nightly run
         id: check
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT: ${{ github.event_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          if [[ -n "$RELEASE_TAG" ]]; then
+            if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]]; then
+              echo "release_tag must look like v1.8.0 or v1.8.0-rc1, got: $RELEASE_TAG" >&2
+              exit 1
+            fi
+            echo "ref=refs/tags/$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          fi
           if [[ "$EVENT" != "schedule" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
@@ -89,6 +105,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ needs.changes.outputs.ref }}
+          # The release tag check needs main's history.
+          fetch-depth: ${{ needs.changes.outputs.ref && '0' || '1' }}
+
+      - name: Check release tag
+        if: needs.changes.outputs.ref != ''
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "$RELEASE_TAG is not on main." >&2
+            exit 1
+          fi
+          python3 scripts/check_app_version_sync.py --tag "$RELEASE_TAG"
 
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
