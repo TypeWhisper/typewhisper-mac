@@ -1658,6 +1658,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/gemini/",
       "releases": [
         {
+          "version": "1.1.7",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 463510,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.1.7/GeminiPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.6",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -1787,7 +1795,8 @@
       "categories": [
         "transcription",
         "llm"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.memory.file",
