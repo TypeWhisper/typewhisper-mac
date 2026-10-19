@@ -198,6 +198,7 @@ struct NotchIndicatorView: View {
         .frame(width: currentWidth)
         .background(alignment: .top) { notchBackground }
         .clipShape(NotchShape(bottomCornerRadius: bottomCornerRadius))
+        .indicatorPointerSurface()
         .mask(alignment: .top) {
             Rectangle()
                 .scaleEffect(x: 1, y: presentationRevealScale, anchor: .top)

@@ -149,6 +149,7 @@ struct MinimalIndicatorView: View {
     var body: some View {
         content
             .frame(width: currentWidth)
+            .indicatorPointerSurface()
             .scaleEffect(revealScale, anchor: isTop ? .top : .bottom)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
             .environment(\.colorScheme, viewModel.indicatorTheme.preferredColorScheme ?? systemColorScheme)

@@ -41,6 +41,8 @@ class NotchIndicatorPanel: NSPanel {
     private let indicatorVisibleInScreenCapturesProvider: () -> Bool
     private let countdownModel: CalendarMeetingCountdownModel
     private let notchGeometry = NotchGeometry()
+    private let pointerRegion: IndicatorPointerRegion
+    private let pointerTracker: IndicatorPointerTracker
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var showTask: Task<Void, Never>?
@@ -83,12 +85,19 @@ class NotchIndicatorPanel: NSPanel {
         displayModeProvider: @escaping () -> NotchIndicatorDisplay,
         indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
         countdownModel: CalendarMeetingCountdownModel = .init(),
+        pointerLocationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation },
         @ViewBuilder content: (NotchGeometry) -> Content
     ) {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
         self.countdownModel = countdownModel
+        let pointerRegion = IndicatorPointerRegion()
+        self.pointerRegion = pointerRegion
+        pointerTracker = IndicatorPointerTracker(
+            region: pointerRegion,
+            pointerLocationProvider: pointerLocationProvider
+        )
         let initialSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .notch,
             isFeedbackInteractive: false
@@ -115,7 +124,9 @@ class NotchIndicatorPanel: NSPanel {
             isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
 
-        let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
+        let hostingView = FirstMouseHostingView(
+            rootView: IndicatorPointerHost(region: pointerRegion, content: content(notchGeometry))
+        )
         hostingView.sizingOptions = []
         // The notch content lays itself out from NotchGeometry and never consumes
         // the safe area; opting out also drops NSHostingView's safe-area-corner
@@ -137,6 +148,10 @@ class NotchIndicatorPanel: NSPanel {
         // animates, so the bridge has nothing to animate. The container explicitly
         // centers and top-anchors the hosting view as the window changes size.
         contentView = IndicatorHostingContainerView(hostingView: hostingView, size: initialSize)
+        pointerTracker.hostingView = hostingView
+        pointerTracker.onChange = { [weak self] in
+            self?.updateMouseEventHandling()
+        }
     }
 
     override var canBecomeKey: Bool { false }
@@ -260,6 +275,9 @@ class NotchIndicatorPanel: NSPanel {
             countdownPresented: isMeetingCountdownPresented
         ) {
             show()
+            pointerTracker.setActive(
+                presentation.source == .recorder && presentation.state == .recording
+            )
         } else {
             dismiss()
         }
@@ -332,7 +350,7 @@ class NotchIndicatorPanel: NSPanel {
         // triggered from a display-cycle observer such as the screen-parameters
         // notification. The next regular display cycle picks up the new frame.
         setFrame(panelFrame, display: false)
-        ignoresMouseEvents = !isFeedbackInteractive
+        updateMouseEventHandling()
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
             displayMode: displayModeProvider(),
@@ -367,7 +385,7 @@ class NotchIndicatorPanel: NSPanel {
         message: String? = nil,
         actionTitle: String? = nil
     ) {
-        if !isInteractive && !isMeetingCountdownPresented {
+        if !isInteractive && !isMeetingCountdownPresented && !pointerRegion.isPointerInside {
             ignoresMouseEvents = true
         }
         // The message decides how tall the feedback surface is, so a changed
@@ -399,7 +417,14 @@ class NotchIndicatorPanel: NSPanel {
         updateVisibility(vm: vm, recorder: recorder)
     }
 
+    /// Takes the mouse only for feedback, the countdown, or while the pointer
+    /// is on a Recorder indicator; otherwise clicks pass through to other apps.
+    private func updateMouseEventHandling() {
+        ignoresMouseEvents = !(isFeedbackInteractive || pointerRegion.isPointerInside)
+    }
+
     func dismiss() {
+        pointerTracker.setActive(false)
         ignoresMouseEvents = true
         cachedScreen = nil
         showTask?.cancel()

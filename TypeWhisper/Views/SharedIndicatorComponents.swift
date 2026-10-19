@@ -205,10 +205,23 @@ struct IndicatorLeftStatus: View {
     let sizing: IndicatorSizing
     let dotPulse: Bool
     let hasActionFeedback: Bool
+    @Environment(\.isPointerOverIndicator) private var isPointerOverIndicator
 
     var body: some View {
+        // The Recorder has no other control on screen, so the recording dot
+        // turns into Stop while the pointer rests on the indicator. The button
+        // sits over the dot so the content next to it does not shift.
+        let showsRecorderStop = isPointerOverIndicator
+            && presentation.isRecorder
+            && presentation.state == .recording
         statusContent
+            .opacity(showsRecorderStop ? 0 : 1)
             .accessibilityHidden(true)
+            .overlay {
+                if showsRecorderStop {
+                    IndicatorRecorderStopButton(sizing: sizing)
+                }
+            }
     }
 
     @ViewBuilder
@@ -251,6 +264,160 @@ struct IndicatorLeftStatus: View {
                     .font(.system(size: sizing.symbolSize))
             }
         }
+    }
+}
+
+// MARK: - Recorder Stop on Hover
+
+struct IndicatorRecorderStopButton: View {
+    let sizing: IndicatorSizing
+    var action: () -> Void = { AudioRecorderViewModel.shared.stopRecording() }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "stop.circle.fill")
+                .resizable()
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, .red)
+                .frame(width: sizing.iconSize, height: sizing.iconSize)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Stop Recorder"))
+        .accessibilityLabel(String(localized: "Stop Recorder"))
+        .accessibilityIdentifier("indicator.recorder.stop")
+    }
+}
+
+extension EnvironmentValues {
+    /// True while the pointer is over the visible indicator surface.
+    @Entry var isPointerOverIndicator = false
+    /// Region the visible indicator surface reports its frame to.
+    @Entry var indicatorPointerRegion: IndicatorPointerRegion?
+}
+
+/// The visible surface of a click-through indicator panel and whether the
+/// pointer is over it. The panels are much larger than what they draw, so they
+/// only accept the mouse while the pointer is on this surface and never block
+/// clicks meant for the apps underneath.
+@MainActor
+final class IndicatorPointerRegion: ObservableObject {
+    static let coordinateSpaceName = "IndicatorPointerRegion"
+
+    /// Surface frame in the root view's coordinate space (top-left origin).
+    var surfaceFrame: CGRect = .zero
+    @Published fileprivate(set) var isPointerInside = false
+}
+
+/// Root of an indicator panel: sets up the coordinate space the surface frame
+/// is measured in and hands the hover state down to the content.
+struct IndicatorPointerHost<Content: View>: View {
+    @ObservedObject var region: IndicatorPointerRegion
+    let content: Content
+
+    var body: some View {
+        content
+            .environment(\.isPointerOverIndicator, region.isPointerInside)
+            .environment(\.indicatorPointerRegion, region)
+            .coordinateSpace(.named(IndicatorPointerRegion.coordinateSpaceName))
+    }
+}
+
+private struct IndicatorPointerSurfaceModifier: ViewModifier {
+    @Environment(\.indicatorPointerRegion) private var region
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGRect.self) { geometry in
+            geometry.frame(in: .named(IndicatorPointerRegion.coordinateSpaceName))
+        } action: { frame in
+            region?.surfaceFrame = frame
+        }
+    }
+}
+
+extension View {
+    /// Marks the view as the visible indicator surface that accepts the pointer.
+    func indicatorPointerSurface() -> some View {
+        modifier(IndicatorPointerSurfaceModifier())
+    }
+}
+
+/// Follows the pointer while a Recorder indicator is up and tells the panel
+/// when it enters or leaves the visible surface.
+@MainActor
+final class IndicatorPointerTracker {
+    weak var hostingView: NSView?
+    var onChange: () -> Void = {}
+
+    private let region: IndicatorPointerRegion
+    private let pointerLocationProvider: () -> NSPoint
+    private var globalMonitor: Any?
+    private var exitTimer: Timer?
+    private(set) var isActive = false
+
+    init(
+        region: IndicatorPointerRegion,
+        pointerLocationProvider: @escaping () -> NSPoint = { NSEvent.mouseLocation }
+    ) {
+        self.region = region
+        self.pointerLocationProvider = pointerLocationProvider
+    }
+
+    func setActive(_ active: Bool) {
+        guard isActive != active else {
+            if active { update() }
+            return
+        }
+        isActive = active
+        if active {
+            // Pointer moves over other apps, including over the transparent
+            // part of this panel, arrive here; a global monitor needs no
+            // Accessibility permission for mouse events.
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(
+                matching: [.mouseMoved, .leftMouseDragged]
+            ) { [weak self] _ in
+                DispatchQueue.main.async {
+                    self?.update()
+                }
+            }
+        } else if let globalMonitor {
+            NSEvent.removeMonitor(globalMonitor)
+            self.globalMonitor = nil
+        }
+        update()
+    }
+
+    func update() {
+        let isInside = isActive
+            && hostingView?.window?.isVisible == true
+            && surfaceScreenFrame().contains(pointerLocationProvider())
+        guard isInside != region.isPointerInside else { return }
+        region.isPointerInside = isInside
+        // Once the panel takes the mouse, moves over it no longer reach the
+        // global monitor, so a short timer notices when the pointer leaves.
+        exitTimer?.invalidate()
+        exitTimer = nil
+        if isInside {
+            let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.update()
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            exitTimer = timer
+        }
+        onChange()
+    }
+
+    func surfaceScreenFrame() -> CGRect {
+        guard let hostingView, let window = hostingView.window, !region.surfaceFrame.isEmpty else {
+            return .null
+        }
+        var frame = region.surfaceFrame
+        if !hostingView.isFlipped {
+            frame.origin.y = hostingView.bounds.height - frame.maxY
+        }
+        return window.convertToScreen(hostingView.convert(frame, to: nil))
     }
 }
 

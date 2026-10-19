@@ -2379,3 +2379,116 @@ final class LanguageLocalizationTests: XCTestCase {
         XCTAssertTrue(codes.contains("fr"))
     }
 }
+
+@MainActor
+final class IndicatorPointerTrackerTests: XCTestCase {
+    private var panel: NSPanel!
+    private var hostingView: NSView!
+
+    override func setUp() async throws {
+        panel = NSPanel(
+            contentRect: NSRect(x: 100, y: 200, width: 300, height: 100),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.alphaValue = 0
+        hostingView = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 100))
+        panel.contentView = hostingView
+        panel.orderFront(nil)
+    }
+
+    override func tearDown() async throws {
+        panel.orderOut(nil)
+        panel = nil
+        hostingView = nil
+    }
+
+    func testSurfaceFrameMapsTopLeftRootCoordinatesToScreen() {
+        let region = IndicatorPointerRegion()
+        region.surfaceFrame = CGRect(x: 10, y: 0, width: 50, height: 20)
+        let tracker = IndicatorPointerTracker(region: region, pointerLocationProvider: { .zero })
+        tracker.hostingView = hostingView
+
+        let frame = tracker.surfaceScreenFrame()
+
+        XCTAssertEqual(frame.minX, panel.frame.minX + 10)
+        XCTAssertEqual(frame.maxY, panel.frame.maxY)
+        XCTAssertEqual(frame.size, CGSize(width: 50, height: 20))
+    }
+
+    func testPointerOverSurfaceIsReportedOnlyWhileActive() {
+        let region = IndicatorPointerRegion()
+        region.surfaceFrame = CGRect(x: 10, y: 0, width: 50, height: 20)
+        var pointer = NSPoint(x: panel.frame.minX + 30, y: panel.frame.maxY - 10)
+        let tracker = IndicatorPointerTracker(region: region, pointerLocationProvider: { pointer })
+        tracker.hostingView = hostingView
+        var changes = 0
+        tracker.onChange = { changes += 1 }
+
+        tracker.update()
+        XCTAssertFalse(region.isPointerInside, "An inactive tracker never takes the pointer")
+
+        tracker.setActive(true)
+        XCTAssertTrue(region.isPointerInside, "Activation picks up a pointer already on the surface")
+        XCTAssertEqual(changes, 1)
+
+        // Transparent part of the panel, below the visible surface.
+        pointer = NSPoint(x: panel.frame.minX + 30, y: panel.frame.minY + 10)
+        tracker.update()
+        XCTAssertFalse(region.isPointerInside)
+        XCTAssertEqual(changes, 2)
+
+        pointer = NSPoint(x: panel.frame.minX + 30, y: panel.frame.maxY - 10)
+        tracker.update()
+        XCTAssertTrue(region.isPointerInside)
+
+        tracker.setActive(false)
+        XCTAssertFalse(region.isPointerInside)
+        XCTAssertEqual(changes, 4)
+    }
+
+    func testHiddenPanelNeverTakesThePointer() {
+        let region = IndicatorPointerRegion()
+        region.surfaceFrame = CGRect(x: 0, y: 0, width: 300, height: 100)
+        let tracker = IndicatorPointerTracker(
+            region: region,
+            pointerLocationProvider: { [panel] in NSPoint(x: panel!.frame.midX, y: panel!.frame.midY) }
+        )
+        tracker.hostingView = hostingView
+        panel.orderOut(nil)
+
+        tracker.setActive(true)
+
+        XCTAssertFalse(region.isPointerInside)
+        tracker.setActive(false)
+    }
+
+    func testPassiveOverlayPanelStaysClickThrough() throws {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("Overlay indicator panel tests require an available screen")
+        }
+        let resolver = IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
+        let overlay = OverlayIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            content: { EmptyView() }
+        )
+        overlay.alphaValue = 0
+        defer { overlay.dismiss() }
+        overlay.show()
+
+        XCTAssertTrue(overlay.ignoresMouseEvents, "The passive panel stays click-through")
+        overlay.dismiss()
+        XCTAssertTrue(overlay.ignoresMouseEvents)
+    }
+}
