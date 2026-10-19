@@ -12,7 +12,20 @@ if xcrun metal -v >/dev/null 2>&1; then
   exit 0
 fi
 
-xcodebuild -downloadComponent MetalToolchain
+downloaded=0
+for attempt in 1 2 3; do
+  echo "Downloading the Metal Toolchain, attempt $attempt of 3"
+  if xcodebuild -downloadComponent MetalToolchain; then
+    downloaded=1
+    break
+  fi
+  echo "Metal Toolchain download failed, retrying in 10s..."
+  sleep 10
+done
+if [ "$downloaded" -ne 1 ]; then
+  echo "error: the Metal Toolchain download failed 3 times" >&2
+  exit 1
+fi
 
 for _ in $(seq 1 30); do
   xcrun --kill-cache >/dev/null 2>&1 || true
