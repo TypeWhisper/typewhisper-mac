@@ -296,7 +296,7 @@ final class TranslationService: ObservableObject {
             // its deadline; finish(with:) lets the session result, the
             // timeout, and cancellation race for exactly one terminal
             // completion, and a late session result is safely ignored.
-            Task { [weak self] in
+            _ = Task { [weak self] in
                 try await Task.sleep(for: timeout)
                 guard let self, let pending = self.batchRequest, pending.requestId == requestId else { return }
                 Self.logger.error("Translation[\(requestId)] batch timed out, \(strict ? "throwing" : "returning source texts")")
@@ -480,7 +480,7 @@ final class TranslationService: ObservableObject {
             let timeout: Duration = needsInteractiveHost ? .seconds(90) : .seconds(15)
 
             // Timeout watchdog.
-            Task { [weak self] in
+            _ = Task { [weak self] in
                 try await Task.sleep(for: timeout)
                 guard let self else { return }
                 if self.activeRequestId == requestId, let pending = self.continuation {

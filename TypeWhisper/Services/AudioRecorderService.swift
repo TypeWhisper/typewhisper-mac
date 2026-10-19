@@ -647,11 +647,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private let micBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let micInputCaptureFactory: AudioInputCaptureFactory
     private let micInputActivationGuard: AudioInputDeviceActivating
-    private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
+    private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
     private var systemLevelSetter: SystemLevelSetter?
-    private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
+    private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(uncheckedState: nil)
     private var durationTimer: Timer?
     private var startTime: Date?
     private let systemAudioDiagnosticsLock = OSAllocatedUnfairLock(initialState: SystemAudioCaptureDiagnostics())
