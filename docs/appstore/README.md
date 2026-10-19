@@ -82,7 +82,7 @@ arm64, unsigned) for every pull request, so changes that break the `APPSTORE`
 build fail in the pull request that introduces them. The universal Release
 binary and the audit run in the TestFlight workflow and in `release-audit.sh`.
 
-`.github/workflows/appstore-testflight.yml` (manual or nightly at 02:30 UTC, `main` only) archives with
+`.github/workflows/appstore-testflight.yml` (manual or nightly at 02:30 UTC, `main` only; a manual run can build a release tag on `main`) archives with
 manual signing, audits the signed archive, exports a `.pkg` and uploads it to
 App Store Connect app `6759319267` when `confirm_upload` is set. Nightly runs upload
 to the internal TestFlight group whenever `main` changed since the last nightly
@@ -101,6 +101,29 @@ Both the workflow and `scripts/appstore/testflight-local.sh` create
 `scripts/appstore/create_app_store_profile.rb`. Active profiles are reused;
 recreate them only after capability changes (`recreate_profiles` input or
 `--recreate-profiles`), because recreating revokes them for every other signer.
+
+Both editions ship every release under the same version, built from the same
+commit. The direct app's version lives in `TypeWhisper.xcodeproj`, the App Store
+edition's in `AppStore/Config/AppStore.xcconfig`; bump both in one pull request.
+`scripts/check_app_version_sync.py` fails CI when they differ, and the direct
+release workflow refuses a tag that names another version. A release goes like this:
+
+1. Pick the release commit on `main`, run `scripts/appstore/release-audit.sh` and
+   tag it as a release candidate (`git tag v1.8.0-rc1 <commit>`, then push the tag).
+   Sparkle ships it on the release-candidate channel.
+   Sparkle reads `docs/release-notes/<version>.md` at the tag; App Store updates
+   take their "What's New" text from `fastlane/appstore-metadata/<locale>/release_notes.txt`.
+2. Run the TestFlight workflow on `main` with `release_tag: v1.8.0-rc1` and
+   `confirm_upload`. It builds the tag, which must be on `main`, and checks the
+   version again. Submit that build with manual release.
+3. If App Review needs code changes, tag the fix commit as the next candidate
+   (`v1.8.0-rc2`) and repeat step 2. The App Store version stays 1.8.0.
+4. After approval, tag the approved commit `v1.8.0` for the stable Sparkle release
+   and release the App Store version the same day. Release notes that change after
+   the candidate go into a draft GitHub release for that tag before pushing it.
+
+An urgent direct fix can skip the wait: tag it stable right away and submit the
+same commit to App Review afterwards.
 
 The localized store text of the macOS version (description, keywords,
 promotional text, URLs) and the App Review notes live in
