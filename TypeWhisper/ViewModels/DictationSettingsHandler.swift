@@ -29,8 +29,8 @@ final class DictationSettingsHandler {
     func requestMicPermission() {
         Task {
             _ = await audioRecordingService.requestMicrophonePermission()
-            DispatchQueue.main.async { [weak self] in
-                self?.onObjectWillChange?()
+            DispatchQueue.main.async {
+                self.onObjectWillChange?()
             }
             pollPermissionStatus()
         }
