@@ -515,7 +515,8 @@ jobs:
             git fetch origin gh-pages
             git reset --hard origin/gh-pages
 
-            python3 << PYEOF
+            # Inside the retry condition errexit is off, so a failed update must return explicitly.
+            python3 << PYEOF || return 1
           import json, os, re, sys, tempfile
 
           sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
@@ -694,11 +695,18 @@ jobs:
           }
 
           # Retry up to 5 times to handle concurrent pushes
+          updated=0
           for i in 1 2 3 4 5; do
             if update_registry; then
               echo "Successfully updated ${TARGET_REGISTRIES} (attempt $i)"
+              updated=1
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."
             sleep "$i"
           done
+          # A release whose feed entry was never published must not look successful.
+          if [ "$updated" -ne 1 ]; then
+            echo "Could not update ${TARGET_REGISTRIES} after 5 attempts"
+            exit 1
+          fi
