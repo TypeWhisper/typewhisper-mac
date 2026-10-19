@@ -3333,6 +3333,14 @@
       "homepageURL": "https://www.cartesia.ai/",
       "releases": [
         {
+          "version": "1.0.6",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 262369,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cartesia-v1.0.6/CartesiaPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.5",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -3386,7 +3394,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 2
         }
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.minerale.mistralai",
