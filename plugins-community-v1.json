@@ -2170,6 +2170,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/obsidian/",
       "releases": [
         {
+          "version": "1.1.1",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 303503,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.1.1/ObsidianPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.0",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
@@ -2223,7 +2231,8 @@
           "minOSVersion": "14.0",
           "downloadCount": 24
         }
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.openrouter",
