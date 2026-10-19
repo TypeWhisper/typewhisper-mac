@@ -1791,6 +1791,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/fireworks/",
       "releases": [
         {
+          "version": "1.0.7",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 207389,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-fireworks-v1.0.7/FireworksPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.6",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
@@ -1821,7 +1829,8 @@
       "categories": [
         "transcription",
         "llm"
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.gladia",
