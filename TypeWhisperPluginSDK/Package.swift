@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 
 import PackageDescription
 
@@ -8,9 +8,14 @@ let package = Package(
     products: [
         .library(name: "TypeWhisperPluginSDK", type: .dynamic, targets: ["TypeWhisperPluginSDK"]),
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
+        // The Xcode projects link FluidAudio through this product, so this manifest alone
+        // decides FluidAudio's traits.
+        .library(name: "TypeWhisperFluidAudio", targets: ["TypeWhisperFluidAudio"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.5"),
+        // No NemoTextProcessing trait: its text normalization is only used by FluidAudio's TTS
+        // and adds about 8 MB per architecture to every plugin that links FluidAudio.
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.5", traits: []),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "01dec7c9bdce3088a6b6b7ab9f2e403458195efb"),
         .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.10.1"),
         .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.5.0"),
@@ -23,6 +28,10 @@ let package = Package(
         .target(
             name: "TypeWhisperPluginSDKTesting",
             dependencies: ["TypeWhisperPluginSDK"]
+        ),
+        .target(
+            name: "TypeWhisperFluidAudio",
+            dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
         ),
         .target(
             name: "OpenAICompatiblePlugin",
