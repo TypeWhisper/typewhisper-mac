@@ -3292,6 +3292,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/improve-typewhisper/",
       "releases": [
         {
+          "version": "0.1.1",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 380723,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-contributor-v0.1.1/ContributorPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "0.1.0",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
@@ -3299,7 +3307,8 @@
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-contributor-v0.1.0/ContributorPlugin.zip",
           "minOSVersion": "14.0"
         }
-      ]
+      ],
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.cohere-transcribe",
