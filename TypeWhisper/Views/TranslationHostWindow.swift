@@ -22,8 +22,8 @@ final class TranslationHostWindow: NSWindow {
     private let offscreenRect = NSRect(x: -9999, y: -9999, width: 1, height: 1)
     private var isInteractiveMode = false
 
-    override var canBecomeKey: Bool { true }
-    override var canBecomeMain: Bool { true }
+    override var canBecomeKey: Bool { isInteractiveMode }
+    override var canBecomeMain: Bool { isInteractiveMode }
 
     init(translationService: TranslationService) {
         super.init(
@@ -39,7 +39,9 @@ final class TranslationHostWindow: NSWindow {
         backgroundColor = .clear
         alphaValue = 0.0
         level = Self.offscreenLevel
-        collectionBehavior = [.canJoinAllSpaces, .stationary]
+        // Normal-level windows join macOS window cycling by default, even
+        // when transparent and off-screen. This host is never a cycle target.
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
 
         let hostingView = NSHostingView(
             rootView: TranslationHostView(translationService: translationService)
@@ -73,6 +75,12 @@ final class TranslationHostWindow: NSWindow {
             }
             makeKeyAndOrderFront(nil)
         } else {
+            // Let AppKit relinquish focus after language-pack UI. Changing
+            // canBecomeKey/Main alone does not release an already-focused host.
+            // Order it back in below so SwiftUI can keep running translation tasks.
+            if isKeyWindow || isMainWindow {
+                orderOut(nil)
+            }
             let targetFrame = offscreenRect
             ignoresMouseEvents = true
             alphaValue = 0.0
