@@ -198,6 +198,11 @@ jobs:
               raise SystemExit(
                   f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
               )
+          # Managed settings decide on locality, so the catalog must not classify the plugin differently.
+          if metadata.get("locality") != manifest.get("locality"):
+              raise SystemExit(
+                  f"community metadata locality {metadata.get('locality')} does not match manifest locality {manifest.get('locality')}"
+              )
           PY
 
       - name: Validate release manifest
@@ -515,7 +520,8 @@ jobs:
             git fetch origin gh-pages
             git reset --hard origin/gh-pages
 
-            python3 << PYEOF
+            # Inside the retry condition errexit is off, so a failed update must return explicitly.
+            python3 << PYEOF || return 1
           import json, os, re, sys, tempfile
 
           sys.path.insert(0, os.path.join(os.environ["GITHUB_WORKSPACE"], "scripts"))
@@ -592,11 +598,16 @@ jobs:
               elif distribution_source == "community":
                   plugin.pop("categories", None)
 
-              for field in ["iconSystemName", "requiresAPIKey", "hosting", "locality", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
+              for field in ["iconSystemName", "requiresAPIKey", "hosting", "detailsURL", "homepageURL", "iconURL", "iconDarkURL"]:
                   if field in metadata and metadata[field] is not None:
                       plugin[field] = metadata[field]
                   else:
                       plugin.pop(field, None)
+              # The bundled manifest is what the host enforces, so the catalog publishes its locality.
+              if manifest.get("locality") is not None:
+                  plugin["locality"] = manifest["locality"]
+              else:
+                  plugin.pop("locality", None)
 
           def build_release():
               release = {
@@ -694,11 +705,18 @@ jobs:
           }
 
           # Retry up to 5 times to handle concurrent pushes
+          updated=0
           for i in 1 2 3 4 5; do
             if update_registry; then
               echo "Successfully updated ${TARGET_REGISTRIES} (attempt $i)"
+              updated=1
               break
             fi
             echo "Push failed (attempt $i), retrying in ${i}s..."
             sleep "$i"
           done
+          # A release whose feed entry was never published must not look successful.
+          if [ "$updated" -ne 1 ]; then
+            echo "Could not update ${TARGET_REGISTRIES} after 5 attempts"
+            exit 1
+          fi
