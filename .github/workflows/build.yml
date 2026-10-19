@@ -15,7 +15,7 @@ concurrency:
 env:
   SCHEME: TypeWhisper
   PROJECT: TypeWhisper.xcodeproj
-  XCODE_VERSION: "26.6"
+  XCODE_VERSION: "27.1"
 
 permissions:
   contents: read
@@ -77,7 +77,7 @@ jobs:
           echo "plugin_sdk=$plugin_sdk" | tee -a "$GITHUB_OUTPUT"
 
   release-build:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -184,7 +184,7 @@ jobs:
           retention-days: 14
 
   app-tests:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -240,7 +240,7 @@ jobs:
   plugin-sdk-tests:
     needs: changes
     if: needs.changes.outputs.plugin_sdk == 'true'
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -259,7 +259,7 @@ jobs:
   # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
   # builds the universal Release binary and audits it. See docs/appstore/README.md.
   appstore:
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       APPSTORE_DERIVED_DATA: build/appstore
