@@ -119,6 +119,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/",
       "releases": [
         {
+          "version": "1.1.12",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1-model-import",
+          "size": 21292474,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-qwen3-v1.1.12/Qwen3Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.1.11",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1-model-import",
@@ -154,7 +165,8 @@
           ],
           "downloadCount": 8
         }
-      ]
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.voxtral",
