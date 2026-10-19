@@ -15,7 +15,8 @@ fi
 downloaded=0
 for attempt in 1 2 3; do
   echo "Downloading the Metal Toolchain, attempt $attempt of 3"
-  if xcodebuild -downloadComponent MetalToolchain; then
+  # macOS has no timeout(1); the alarm survives exec and stops a stalled download after 5 minutes.
+  if perl -e 'alarm shift; exec @ARGV' 300 xcodebuild -downloadComponent MetalToolchain; then
     downloaded=1
     break
   fi
