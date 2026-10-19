@@ -750,6 +750,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/",
       "releases": [
         {
+          "version": "1.1.12",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 661553,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-compatible-v1.1.12/OpenAICompatiblePlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.1.11",
           "minHostVersion": "1.8.0",
           "sdkCompatibilityVersion": "v1",
@@ -896,7 +904,8 @@
       "categories": [
         "transcription",
         "llm"
-      ]
+      ],
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.qwen3",
