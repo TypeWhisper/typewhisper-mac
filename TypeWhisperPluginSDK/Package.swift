@@ -8,6 +8,9 @@ let package = Package(
     products: [
         .library(name: "TypeWhisperPluginSDK", type: .dynamic, targets: ["TypeWhisperPluginSDK"]),
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
+        // The Xcode projects link FluidAudio through this product, so this manifest alone
+        // decides FluidAudio's traits.
+        .library(name: "TypeWhisperFluidAudio", targets: ["TypeWhisperFluidAudio"]),
     ],
     dependencies: [
         // No NemoTextProcessing trait: its text normalization is only used by FluidAudio's TTS
@@ -25,6 +28,10 @@ let package = Package(
         .target(
             name: "TypeWhisperPluginSDKTesting",
             dependencies: ["TypeWhisperPluginSDK"]
+        ),
+        .target(
+            name: "TypeWhisperFluidAudio",
+            dependencies: [.product(name: "FluidAudio", package: "FluidAudio")]
         ),
         .target(
             name: "OpenAICompatiblePlugin",

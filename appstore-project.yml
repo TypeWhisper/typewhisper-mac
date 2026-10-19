@@ -30,9 +30,6 @@ packages:
   WhisperKit:
     url: https://github.com/argmaxinc/WhisperKit.git
     revision: 80d96762fa727f816ffceab76a6529cd12c2726f
-  FluidAudio:
-    url: https://github.com/FluidInference/FluidAudio.git
-    exactVersion: 0.17.5
   MLXAudio:
     url: https://github.com/Blaizzy/mlx-audio-swift.git
     revision: 01dec7c9bdce3088a6b6b7ab9f2e403458195efb
@@ -433,8 +430,8 @@ targets:
     templateAttributes:
       bundleId: com.typewhisper.parakeet
     dependencies:
-      - package: FluidAudio
-        product: FluidAudio
+      - package: TypeWhisperPluginSDK
+        product: TypeWhisperFluidAudio
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
@@ -443,8 +440,8 @@ targets:
     templateAttributes:
       bundleId: com.typewhisper.speaker-diarization
     dependencies:
-      - package: FluidAudio
-        product: FluidAudio
+      - package: TypeWhisperPluginSDK
+        product: TypeWhisperFluidAudio
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
