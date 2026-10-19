@@ -1740,6 +1740,7 @@ private struct WorkflowEditorPage: View {
                                 Text(effort.displayName).tag(effort.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
 
                         Text(
                             localizedAppText(
@@ -3047,7 +3048,10 @@ struct WorkflowDraft {
             )
         }
 
+        // An enforced pair replaces the override and locks its pickers; the saved override is kept
+        // for when the pair is removed and must not block other edits.
         if template == .dictation,
+           !pluginManager.selectionPolicy.enforcesTranscription,
            let transcriptionEngineId,
            !transcriptionEngineId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             guard let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {

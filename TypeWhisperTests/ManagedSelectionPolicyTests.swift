@@ -225,6 +225,87 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.managedLlmRecommendationApplied))
     }
 
+    func testRecommendedModelIsSelectedOnlyOnceItIsDownloaded() {
+        let engine = DownloadingPairEngine(downloaded: [])
+        let manager = PluginManager(appSupportDirectory: directory)
+        manager.loadedPlugins = [
+            loaded(engine, id: "com.typewhisper.tests.pair.downloads", locality: "local", categories: ["transcription"]),
+        ]
+        PluginManager.shared = manager
+        let modelManager = ModelManagerService()
+        modelManager.clearProviderSelection()
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            recommendedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.downloads", modelId: "large")
+        ))
+        defer { manager.applySelectionPolicy(.unmanaged) }
+
+        modelManager.restoreProviderSelection()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selections, [], "Checking readiness must not load the recommended model")
+        XCTAssertNil(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine))
+        XCTAssertFalse(UserDefaults.standard.bool(forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied))
+
+        engine.downloaded = ["large"]
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selections, ["large"])
+        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "downloads-engine")
+    }
+
+    func testRecommendedLlmPairWaitsForAReadyProvider() throws {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            recommendedLlm: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.llm", modelId: "model-a")
+        ))
+        let suite = "TypeWhisperTests.ManagedPairs.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        PairTestLLM.available = false
+        defer {
+            PairTestLLM.available = true
+            defaults.removePersistentDomain(forName: suite)
+            manager.applySelectionPolicy(.unmanaged)
+        }
+        let service = PromptProcessingService(userDefaults: defaults)
+        let builtInDefault = service.fallbackPriorityList
+
+        service.applyRecommendedLlmPairIfNeeded()
+
+        XCTAssertEqual(service.fallbackPriorityList, builtInDefault)
+        XCTAssertFalse(defaults.bool(forKey: UserDefaultsKeys.managedLlmRecommendationApplied))
+
+        PairTestLLM.available = true
+        service.applyRecommendedLlmPairIfNeeded()
+
+        XCTAssertEqual(service.fallbackPriorityList.map(\.providerId), ["Pair LLM"])
+        XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.managedLlmRecommendationApplied))
+    }
+
+    func testEnforcedPairKeepsAStaleWorkflowOverrideFromBlockingSaves() {
+        let manager = makeManager()
+        let workflowDirectory = directory.appendingPathComponent("Workflows", isDirectory: true)
+        let workflowService = WorkflowService(appSupportDirectory: workflowDirectory)
+        let hotkeyService = HotkeyService()
+        var draft = WorkflowDraft(template: .dictation)
+        draft.transcriptionEngineId = "removed-engine"
+        let missingEngine = "The selected transcription engine is not installed."
+
+        let unmanaged = draft.validationError(
+            hotkeyService: hotkeyService, workflowService: workflowService, pluginManager: manager, existingWorkflowId: nil
+        )
+        XCTAssertEqual(unmanaged, missingEngine)
+
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.local", modelId: "large")
+        ))
+        let enforced = draft.validationError(
+            hotkeyService: hotkeyService, workflowService: workflowService, pluginManager: manager, existingWorkflowId: nil
+        )
+        XCTAssertNotEqual(enforced, missingEngine, "The locked pickers cannot clear the override")
+        XCTAssertEqual(draft.transcriptionEngineId, "removed-engine", "The override is kept for later")
+    }
+
     private func makeManager() -> PluginManager {
         let manager = PluginManager(appSupportDirectory: directory)
         manager.loadedPlugins = [
@@ -286,16 +367,48 @@ private final class PairTestLLM: NSObject, LLMProviderPlugin, @unchecked Sendabl
     static let pluginId = "com.typewhisper.tests.pair-llm"
     static let pluginName = "Pair LLM"
     nonisolated(unsafe) static var models: [String?] = []
+    nonisolated(unsafe) static var available = true
 
     required override init() {}
 
     var providerName: String { "Pair LLM" }
-    var isAvailable: Bool { true }
+    var isAvailable: Bool { Self.available }
     var supportedModels: [PluginModelInfo] { [PluginModelInfo(id: "model-a", displayName: "A"), PluginModelInfo(id: "model-b", displayName: "B")] }
     func activate(host: HostServices) {}
     func deactivate() {}
     func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
         Self.models.append(model)
         return userText
+    }
+}
+
+private final class DownloadingPairEngine: NSObject, TranscriptionEnginePlugin, PluginDownloadedModelManaging, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.pair-downloads"
+    static let pluginName = "Downloading Pair Engine"
+
+    var downloaded: [String]
+    private(set) var selections: [String] = []
+
+    init(downloaded: [String]) {
+        self.downloaded = downloaded
+    }
+
+    required override init() {
+        downloaded = []
+    }
+
+    var providerId: String { "downloads-engine" }
+    var providerDisplayName: String { "Downloads Engine" }
+    var isConfigured: Bool { false }
+    var selectedModelId: String? { selections.last ?? "small" }
+    var transcriptionModels: [PluginModelInfo] { ["small", "large"].map { PluginModelInfo(id: $0, displayName: $0) } }
+    var downloadedModels: [PluginModelInfo] { downloaded.map { PluginModelInfo(id: $0, displayName: $0) } }
+    var supportsTranslation: Bool { false }
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func deleteDownloadedModel(_ modelId: String) async throws {}
+    func selectModel(_ modelId: String) { selections.append(modelId) }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
     }
 }

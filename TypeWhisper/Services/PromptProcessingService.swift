@@ -285,7 +285,8 @@ class PromptProcessingService: ObservableObject {
         let keepsBuiltInDefault = fallbackPriorityList.count == 1
             && fallbackPriorityList[0].providerId == Self.appleIntelligenceId
             && fallbackPriorityList[0].modelId == nil
-        guard keepsBuiltInDefault else { return }
+        // A provider that is not ready yet would fail every call; a later plugin change retries.
+        guard keepsBuiltInDefault, isProviderReady(providerId) else { return }
         userDefaults.set(true, forKey: UserDefaultsKeys.managedLlmRecommendationApplied)
         setFallbackPriorityList(
             [LLMFallbackPriorityItem(providerId: providerId, modelId: providerId == Self.appleIntelligenceId ? nil : modelId)],
