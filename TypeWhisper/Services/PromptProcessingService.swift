@@ -562,6 +562,8 @@ class PromptProcessingService: ObservableObject {
         }
 
         var failures: [LLMFallbackAttemptFailure] = []
+        // When the managed settings refuse every candidate, the refusal is the answer, not exhaustion.
+        var policyRefusals: [ManagedPolicyRefusal] = []
         var emptyResultCount = 0
         var emptyProviderIds: Set<String> = []
         var firstEmptyCandidate: LLMFallbackPriorityItem?
@@ -644,6 +646,9 @@ class PromptProcessingService: ObservableObject {
                     throw error
                 }
 
+                if let refusal = error as? ManagedPolicyRefusal {
+                    policyRefusals.append(refusal)
+                }
                 if case LLMFallbackAttemptError.emptyResult = error {
                     emptyResultCount += 1
                     emptyProviderIds.insert(providerId)
@@ -733,6 +738,9 @@ class PromptProcessingService: ObservableObject {
             }
         }
 
+        if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
+            throw refusal
+        }
         throw LLMFallbackExhaustedError(failures: failures)
     }
 

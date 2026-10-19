@@ -1094,6 +1094,12 @@ final class PluginRegistryService: ObservableObject {
             )
         }
 
+        // The catalog entry was judged before downloading; the bundle's own manifest decides, and
+        // a refused plugin must not be installed even though it would never load.
+        if let refusal = PluginManager.shared?.providerPolicy.packageRefusal(for: manifest) {
+            throw ManagedPolicyRefusal(reason: refusal)
+        }
+
         let destinationURL = Self.resolveInstallDestinationURL(
             currentURL: PluginManager.shared.bundleURL(for: manifest.id),
             builtInPluginsURL: Bundle.main.builtInPlugInsURL,

@@ -942,11 +942,6 @@ final class PluginManager: ObservableObject {
         let isEnabled = resolvedEnabledState(for: manifest, isBundledSource: isBundledSource)
         // A plugin the managed settings refuse is registered like a disabled one: none of its code runs.
         let policyRefusal = providerPolicy.packageRefusal(for: manifest)
-        if let policyRefusal {
-            policyRefusals[manifest.id] = policyRefusal
-        } else if policyRefusals[manifest.id] != nil {
-            policyRefusals.removeValue(forKey: manifest.id)
-        }
 
         if let existingIndex = loadedPlugins.firstIndex(where: { $0.manifest.id == manifest.id }) {
             let existing = loadedPlugins[existingIndex]
@@ -961,6 +956,13 @@ final class PluginManager: ObservableObject {
             }
             loadedPlugins.remove(at: existingIndex)
             logger.info("Replacing plugin \(manifest.id) from \(existing.sourceURL.lastPathComponent) with \(url.lastPathComponent)")
+        }
+
+        // Only the copy that is registered decides the plugin's refusal; a skipped copy must not change it.
+        if let policyRefusal {
+            policyRefusals[manifest.id] = policyRefusal
+        } else if policyRefusals[manifest.id] != nil {
+            policyRefusals.removeValue(forKey: manifest.id)
         }
 
         if !isEnabled || policyRefusal != nil {
