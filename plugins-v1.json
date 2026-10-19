@@ -3131,7 +3131,8 @@
       "author": "TypeWhisper",
       "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
       "descriptions": {
-        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
+        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden.",
+        "ja": "Supertonic 3 ONNX\u30e2\u30c7\u30eb\u306b\u3088\u308b\u5b9f\u9a13\u7684\u306a\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002\u30e2\u30c7\u30eb\u30a2\u30bb\u30c3\u30c8\u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u524d\u306bOpenRAIL-M\u30e2\u30c7\u30eb\u30e9\u30a4\u30bb\u30f3\u30b9\u3078\u306e\u540c\u610f\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "tts",
       "downloadCount": 228,
@@ -3140,6 +3141,17 @@
       "hosting": "local",
       "detailsURL": "https://www.typewhisper.com/addons/supertonic/",
       "releases": [
+        {
+          "version": "1.0.2",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 8605206,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-supertonic-v1.0.2/SupertonicPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.0.1",
           "minHostVersion": "1.4.0",
@@ -3164,7 +3176,11 @@
           ],
           "downloadCount": 17
         }
-      ]
+      ],
+      "categories": [
+        "tts"
+      ],
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.xai",
