@@ -226,7 +226,7 @@ deployment/macos/make-typewhisper-profile.py \
     --set AllowCloudTranscription=false --set AllowCloudTextProcessing=false \
     --set TranscriptionProviderId=com.typewhisper.parakeet \
     --set TranscriptionModelId=parakeet-tdt-0.6b-v3 \
-    --set AllowedUpdateChannels=stable --set UpdateMode=check-only \
+    --set SuppressOptionalPrompts=true \
     --recommend LaunchAtLogin=true \
     --domain com.typewhisper.mac --domain com.typewhisper.typewhisper-app \
     --organization "Example Corp" --output TypeWhisper.mobileconfig
