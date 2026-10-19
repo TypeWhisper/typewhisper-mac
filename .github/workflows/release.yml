@@ -186,6 +186,16 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # A manual run checks out the dispatch ref; an existing tag must name that commit.
+      - name: Check existing manual release tag commit
+        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        run: |
+          TAG_COMMIT="$(git rev-parse --verify --quiet "refs/tags/${RELEASE_TAG}^{commit}" || true)"
+          if [ -n "$TAG_COMMIT" ] && [ "$TAG_COMMIT" != "$(git rev-parse HEAD)" ]; then
+            echo "Release tag $RELEASE_TAG points to $TAG_COMMIT, not to the checked out $(git rev-parse HEAD)." >&2
+            exit 1
+          fi
+
       # The App Store edition ships the same version from the same commit.
       - name: Check release tag matches the app version
         run: python3 scripts/check_app_version_sync.py --tag "$RELEASE_TAG"

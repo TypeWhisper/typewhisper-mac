@@ -119,8 +119,8 @@ release workflow refuses a tag that names another version. A release goes like t
 3. If App Review needs code changes, tag the fix commit as the next candidate
    (`v1.8.0-rc2`) and repeat step 2. The App Store version stays 1.8.0.
 4. After approval, tag the approved commit `v1.8.0` for the stable Sparkle release
-   and release the App Store version the same day. A later commit is fine only if
-   it changes nothing but the release notes.
+   and release the App Store version the same day. Release notes that change after
+   the candidate go into a draft GitHub release for that tag before pushing it.
 
 An urgent direct fix can skip the wait: tag it stable right away and submit the
 same commit to App Review afterwards.
