@@ -302,7 +302,7 @@ extension EnvironmentValues {
 /// clicks meant for the apps underneath.
 @MainActor
 final class IndicatorPointerRegion: ObservableObject {
-    static let coordinateSpaceName = "IndicatorPointerRegion"
+    nonisolated static let coordinateSpaceName = "IndicatorPointerRegion"
 
     /// Surface frame in the root view's coordinate space (top-left origin).
     var surfaceFrame: CGRect = .zero
