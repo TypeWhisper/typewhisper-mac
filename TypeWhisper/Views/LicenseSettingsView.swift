@@ -4,6 +4,7 @@ import SwiftUI
 struct LicenseSettingsView: View {
     private enum ScrollAnchor: Hashable {
         case top
+        case purchase
         case supporter
         case activationKey
     }
@@ -21,12 +22,11 @@ struct LicenseSettingsView: View {
     @State private var activationNotice: String?
     @FocusState private var focusedField: FocusField?
 
-    private let planColumns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
-    private let planDescriptionMinHeight: CGFloat = 52
-
-    private var shouldShowCommercialSection: Bool {
-        license.requiresCommercialLicense || license.licenseStatus == .active
-    }
+    @State private var purchaseCadence: CommercialPurchaseCadence = .monthly
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var planColumnsPerRow = 4
+    /// Counts clicks on a plan, so choosing the current plan again still scrolls.
+    @State private var planChoiceCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,19 +35,24 @@ struct LicenseSettingsView: View {
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
+                    VStack(alignment: .leading, spacing: 0) {
                         Color.clear
                             .frame(height: 0)
                             .id(ScrollAnchor.top)
 
+                        heroSection
+
                         if license.isLicenseManaged {
                             managedLicenseSection
                         } else {
-                            planSelectionSection
-                        }
+                            planTableSection
 
-                        if shouldShowCommercialSection && !license.isLicenseManaged {
-                            commercialSection
+                            if license.licenseStatus == .active {
+                                activeLicenseSection
+                            } else if license.requiresCommercialLicense {
+                                purchaseSection
+                                    .id(ScrollAnchor.purchase)
+                            }
                         }
 
                         supporterSection
@@ -58,7 +63,14 @@ struct LicenseSettingsView: View {
                                 .id(ScrollAnchor.activationKey)
                         }
                     }
-                    .padding(SettingsLayoutMetrics.pagePadding)
+                    .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                    .frame(maxWidth: 980, alignment: .topLeading)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.width
+                    } action: { width in
+                        // Four plans side by side need room for their facts.
+                        planColumnsPerRow = width >= 760 ? 4 : 2
+                    }
                 }
                 .frame(minWidth: 560, minHeight: 360)
                 .onChange(of: activationNotice) { _, notice in
@@ -81,22 +93,67 @@ struct LicenseSettingsView: View {
                     guard request.tab == .license else { return }
                     handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
                 }
+                .onChange(of: planChoiceCount) { _, _ in
+                    scrollToPurchase(after: license.usageIntent, proxy: proxy)
+                }
             }
         }
     }
 
-    private var managedLicenseSection: some View {
-        SettingsCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Label(localizedAppText("Managed by your organization", de: "Von deiner Organisation verwaltet"), systemImage: "building.2")
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                Text(localizedAppText(
+    // MARK: - Hero
+
+    /// The page opens like the pricing page of the website: a label, one
+    /// headline, the lede and the waveform logo. Its content follows the
+    /// license state, so a licensed Mac reads its tier first.
+    @ViewBuilder
+    private var heroSection: some View {
+        if license.isLicenseManaged {
+            LicenseHeroView(
+                eyebrow: localizedAppText("Managed license", de: "Verwaltete Lizenz"),
+                headline: localizedAppText("Managed by your organization", de: "Von deiner Organisation verwaltet"),
+                lede: localizedAppText(
                     "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry.",
                     de: "Deine Administration stellt die Lizenz bereit. TypeWhisper aktiviert sie automatisch ohne manuelle Schlüsseleingabe."
-                ))
-                .foregroundStyle(.secondary)
+                ),
+                statusSymbol: "building.2",
+                statusColor: .secondary
+            )
+        } else if license.licenseStatus == .active {
+            LicenseHeroView(
+                eyebrow: localizedAppText("Licensed", de: "Lizenziert"),
+                headline: license.licenseTier.map(activeTierTitle) ?? localizedAppText("Licensed", de: "Lizenziert"),
+                lede: activeCommercialDescription,
+                statusSymbol: "checkmark.seal.fill",
+                statusColor: .green,
+                trustItems: trustItems
+            )
+        } else {
+            LicenseHeroView(
+                eyebrow: localizedAppText("Licensing", de: "Lizenzierung"),
+                headline: localizedAppText(
+                    "Open source under GPLv3. Premium when you need it.",
+                    de: "Open Source unter GPLv3. Premium, wenn du es brauchst."
+                ),
+                lede: localizedAppText(
+                    "Core dictation stays free and open source. A commercial license unlocks Sync Dictionary & Snippets, Learn from Corrections, non-GPL terms, procurement, and support.",
+                    de: "Der Diktier-Core bleibt kostenlos und Open Source. Eine kommerzielle Lizenz schaltet „Wörterbuch & Snippets synchronisieren“, „Aus Korrekturen lernen“, Nicht-GPL-Bedingungen, Beschaffung und Support frei."
+                ),
+                trustItems: trustItems
+            )
+        }
+    }
 
+    private var trustItems: [String] {
+        [
+            localizedAppText("Local first", de: "Lokal zuerst"),
+            localizedAppText("Local engines keep audio on your Mac", de: "Lokale Engines behalten Audio auf deinem Mac"),
+            localizedAppText("The core app stays open source", de: "Die Kern-App bleibt Open Source"),
+        ]
+    }
+
+    private var managedLicenseSection: some View {
+        licenseSection(eyebrow: String(localized: "Status")) {
+            VStack(alignment: .leading, spacing: 12) {
                 if license.isActivating {
                     ProgressView()
                         .controlSize(.small)
@@ -125,251 +182,239 @@ struct LicenseSettingsView: View {
         }
     }
 
-    private var planSelectionSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(localizedAppText("Choose the plan that fits.", de: "Wähle den passenden Plan."))
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+    // MARK: - Plans
 
-            Text(localizedAppText(
-                "Everything stays on this page. Pick the plan that matches how you use TypeWhisper.",
-                de: "Alles bleibt auf dieser Seite. Wähle den Plan, der zu deiner Nutzung von TypeWhisper passt."
-            ))
-            .foregroundStyle(.secondary)
-
-            LazyVGrid(columns: planColumns, spacing: 12) {
-                planSelectionButton(
-                    title: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
-                    price: localizedAppText("Free", de: "Kostenlos"),
-                    description: localizedAppText(
-                        "Install and run the GPL version as-is, including personal or internal use.",
-                        de: "Installiere und nutze die GPL-Version unverändert, auch privat oder intern."
-                    ),
-                    systemImage: "checkmark.circle",
-                    selected: license.usageIntent == .personalOSS && license.licenseTier != .enterprise,
-                    accent: .green
-                ) {
-                    license.setUsageIntent(.personalOSS)
-                }
-
-                planSelectionButton(
-                    title: localizedAppText("Individual", de: "Einzelnutzer"),
-                    price: localizedAppText("from 5 EUR/mo", de: "ab 5 EUR/Monat"),
-                    description: localizedAppText(
-                        "Non-GPL terms, procurement, support, or proprietary distribution for one person.",
-                        de: "Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung für eine Person."
-                    ),
-                    systemImage: "briefcase",
-                    selected: license.usageIntent == .workSolo && license.licenseTier != .enterprise,
-                    accent: .accentColor
-                ) {
-                    license.setUsageIntent(.workSolo)
-                }
-
-                planSelectionButton(
-                    title: String(localized: "Team"),
-                    price: localizedAppText("from 19 EUR/mo", de: "ab 19 EUR/Monat"),
-                    description: localizedAppText(
-                        "Procurement, support, managed seats, and up to 10 devices.",
-                        de: "Beschaffung, Support, verwaltete Plätze und bis zu 10 Geräte."
-                    ),
-                    systemImage: "person.3",
-                    selected: license.usageIntent == .team && license.licenseTier != .enterprise,
-                    accent: .accentColor
-                ) {
-                    license.setUsageIntent(.team)
-                }
-
-                planSelectionButton(
-                    title: localizedAppText("Enterprise", de: "Unternehmensplan"),
-                    price: localizedAppText("from 199 EUR/mo", de: "ab 199 EUR/Monat"),
-                    description: localizedAppText(
-                        "Up to 50 devices, a reply within one business day, and help with rollout and security reviews.",
-                        de: "Bis zu 50 Geräte, Antwort innerhalb eines Arbeitstags und Hilfe bei Rollout und Security-Reviews."
-                    ),
-                    systemImage: "building.2",
-                    selected: license.usageIntent == .enterprise || license.licenseTier == .enterprise,
-                    accent: .orange
-                ) {
-                    license.setUsageIntent(.enterprise)
-                }
-            }
+    /// The plans side by side like a price list: hairlines instead of boxes,
+    /// the chosen plan carries the accent. Choosing a plan records how this
+    /// Mac is used, as before.
+    private var planTableSection: some View {
+        licenseSection(eyebrow: localizedAppText("Plans", de: "Pläne")) {
+            LicensePlanTableView(columns: planColumns, perRow: planColumnsPerRow)
         }
     }
 
-    private var sharedActivationSection: some View {
-        SettingsCard {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(localizedAppText("Already have a key?", de: "Bereits einen Schlüssel?"))
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-
-                Text(localizedAppText(
-                    "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise.",
-                    de: "Gib hier einen beliebigen TypeWhisper-Schlüssel ein. Die App erkennt automatisch, ob es ein Supporter-, Einzelnutzer-, Team- oder Unternehmensschlüssel ist."
-                ))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-                keyActivationField(
-                    input: $licenseKeyInput,
-                    isActivating: license.isActivating,
-                    error: license.activationError
-                ) {
-                    await activateDetectedKey()
-                }
-
-                if let activationNotice {
-                    Label(activationNotice, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                        .font(.caption)
-                }
-
-                Button {
-                    openURL(URL(string: AppConstants.Polar.customerPortalURL))
-                } label: {
-                    Label(localizedAppText("Manage Purchases", de: "Käufe verwalten"), systemImage: "arrow.up.right.square")
-                }
-                .buttonStyle(.link)
-                .modifier(PointingHandCursorModifier())
-
-                Text(localizedAppText(
-                    "Use this if you already bought a commercial or supporter license and want to manage it in Polar.",
-                    de: "Nutze das, wenn du bereits eine kommerzielle oder Supporter-Lizenz gekauft hast und sie in Polar verwalten möchtest."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+    private var planColumns: [LicensePlanColumnModel] {
+        // "Your plan" names the tier this Mac is licensed for; the selection
+        // only records how it is used and can differ from it.
+        let licensedTier = license.licenseStatus == .active ? license.licenseTier : nil
+        let perMonth = localizedAppText("per month", de: "pro Monat")
+        func monthlyPrice(_ tier: LicenseTier) -> String {
+            commercialPurchaseOptionCopy(for: tier, cadence: .monthly)?.price ?? ""
         }
+        return [
+            LicensePlanColumnModel(
+                id: .personalOSS,
+                name: localizedAppText("GPLv3 / OSS", de: "GPLv3 / OSS"),
+                price: localizedAppText("Free", de: "Kostenlos"),
+                priceUnit: localizedAppText("No account needed", de: "Kein Konto nötig"),
+                audience: localizedAppText("Personal or internal use", de: "Persönliche oder interne Nutzung"),
+                facts: [
+                    localizedAppText("Dictation, local engines, workflows, and add-ons", de: "Diktat, lokale Engines, Workflows und Add-ons"),
+                    localizedAppText("Community support on Discord", de: "Community-Support auf Discord"),
+                    localizedAppText("Full source code on GitHub", de: "Voller Quellcode auf GitHub"),
+                ],
+                selected: license.usageIntent == .personalOSS,
+                isLicensed: false,
+                action: { choosePlan(.personalOSS) }
+            ),
+            LicensePlanColumnModel(
+                id: .workSolo,
+                name: localizedAppText("Individual", de: "Einzelnutzer"),
+                price: monthlyPrice(.individual),
+                priceUnit: perMonth,
+                audience: localizedAppText("For one person", de: "Für eine Person"),
+                facts: [
+                    localizedAppText("Up to 3 devices", de: "Bis zu 3 Geräte"),
+                    localizedAppText("Sync Dictionary & Snippets, Learn from Corrections", de: "Wörterbuch & Snippets synchronisieren, Aus Korrekturen lernen"),
+                    localizedAppText("Non-GPL terms, invoices, and support", de: "Nicht-GPL-Bedingungen, Rechnungen und Support"),
+                ],
+                selected: license.usageIntent == .workSolo,
+                isLicensed: licensedTier == .individual,
+                action: { choosePlan(.workSolo) }
+            ),
+            LicensePlanColumnModel(
+                id: .team,
+                name: String(localized: "Team"),
+                price: monthlyPrice(.team),
+                priceUnit: perMonth,
+                audience: localizedAppText("For small teams", de: "Für kleine Teams"),
+                facts: [
+                    localizedAppText("Up to 10 devices", de: "Bis zu 10 Geräte"),
+                    localizedAppText("Everything in Individual included", de: "Alles aus Einzelnutzer enthalten"),
+                    localizedAppText("One invoice for the whole team", de: "Eine Rechnung für das ganze Team"),
+                ],
+                selected: license.usageIntent == .team,
+                isLicensed: licensedTier == .team,
+                action: { choosePlan(.team) }
+            ),
+            LicensePlanColumnModel(
+                id: .enterprise,
+                name: localizedAppText("Enterprise", de: "Unternehmensplan"),
+                price: monthlyPrice(.enterprise),
+                priceUnit: perMonth,
+                audience: localizedAppText("For organizations", de: "Für Organisationen"),
+                facts: [
+                    localizedAppText("Up to 50 devices", de: "Bis zu 50 Geräte"),
+                    localizedAppText("Everything in Team included", de: "Alles aus Team enthalten"),
+                    localizedAppText("Reply within one business day", de: "Antwort innerhalb eines Arbeitstags"),
+                    localizedAppText("Help with rollout and security reviews", de: "Hilfe bei Rollout und Security-Reviews"),
+                ],
+                selected: license.usageIntent == .enterprise,
+                isLicensed: licensedTier == .enterprise,
+                action: { choosePlan(.enterprise) }
+            ),
+        ]
     }
 
+    // MARK: - Purchase
+
+    /// One card for the chosen plan: pick how to pay, see one price, buy.
     @ViewBuilder
-    private var commercialSection: some View {
-        if license.licenseStatus == .active {
-            activeCommercialSection
-        } else {
-            inactiveCommercialSection
-        }
-    }
+    private var purchaseSection: some View {
+        if let tier = selectedCommercialTier {
+            let cadences = commercialPurchaseCadences(for: tier)
+            let cadence = cadences.contains(purchaseCadence) ? purchaseCadence : .monthly
 
-    private var inactiveCommercialSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(localizedAppText("Pricing in short", de: "Preise im Überblick"))
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
+            licenseSection(eyebrow: localizedAppText("Purchase", de: "Kauf")) {
+                VStack(alignment: .leading, spacing: 14) {
+                    if license.licenseStatus == .expired {
+                        Label(commercialStatusTitle, systemImage: commercialStatusSymbol)
+                            .foregroundStyle(commercialStatusColor)
+                            .font(.callout.weight(.semibold))
+                    }
 
-                    if let selectedCommercialTier {
-                        LazyVGrid(columns: planColumns, alignment: .leading, spacing: 12) {
-                            ForEach(commercialPurchaseCadences(for: selectedCommercialTier), id: \.self) { cadence in
-                                if let pricing = commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: cadence),
-                                   let description = purchaseDescription(for: selectedCommercialTier, cadence: cadence) {
-                                    purchaseOptionCard(
-                                        for: selectedCommercialTier,
-                                        cadence: cadence,
-                                        pricing: pricing,
-                                        description: description
+                    SettingsCard {
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack(alignment: .firstTextBaseline) {
+                                Text(businessTierDisplayName(tier))
+                                    .font(.title3.weight(.semibold))
+                                    .accessibilityAddTraits(.isHeader)
+
+                                Spacer(minLength: 16)
+
+                                Picker(
+                                    localizedAppText("Billing", de: "Abrechnung"),
+                                    selection: Binding(
+                                        get: { cadence },
+                                        set: { purchaseCadence = $0 }
                                     )
+                                ) {
+                                    ForEach(cadences, id: \.self) { option in
+                                        Text(cadenceTitle(option)).tag(option)
+                                    }
+                                }
+                                .pickerStyle(.segmented)
+                                .labelsHidden()
+                                .fixedSize()
+                            }
+
+                            if let pricing = commercialPurchaseOptionCopy(for: tier, cadence: cadence) {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                        Text(pricing.price)
+                                            .font(.system(size: 34, weight: .semibold))
+                                            .kerning(-0.5)
+                                            .monospacedDigit()
+                                        Text(pricing.billingLabel)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                        // The monthly detail only restates the price.
+                                        if cadence != .monthly {
+                                            Text(pricing.detail)
+                                                .font(.callout.weight(.medium))
+                                                .foregroundStyle(cadence == .yearly ? Color.accentColor : Color.secondary)
+                                        }
+                                    }
+                                    .accessibilityElement(children: .combine)
+
+                                    if let description = purchaseDescription(for: tier, cadence: cadence) {
+                                        Text(description)
+                                            .font(.callout)
+                                            .foregroundStyle(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
+                                    }
+                                }
+
+                                HStack(alignment: .firstTextBaseline, spacing: 14) {
+                                    Button {
+                                        openURL(commercialCheckoutURL(for: tier, cadence: cadence))
+                                    } label: {
+                                        Label(localizedAppText("Get this license", de: "Lizenz holen"), systemImage: "arrow.up.right")
+                                            .labelStyle(.titleAndIcon)
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                    .controlSize(.large)
+                                    .modifier(PointingHandCursorModifier())
+
+                                    Text(localizedAppText(
+                                        "Pay what you want from the listed price. Checkout opens at polar.sh in your browser.",
+                                        de: "Zahl, was du willst, ab dem angegebenen Preis. Der Kauf öffnet sich bei polar.sh im Browser."
+                                    ))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
-                        }
 
-                        Text(purchaseOptionsNote(for: selectedCommercialTier))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if selectedCommercialTier == .enterprise {
-                            Button {
-                                openURL(AppConstants.Website.licensingEmailURL)
-                            } label: {
-                                Label(
-                                    localizedAppText("More than 50 devices? Contact sales", de: "Mehr als 50 Geräte? Vertrieb kontaktieren"),
-                                    systemImage: "envelope"
-                                )
+                            if tier == .enterprise {
+                                Button {
+                                    openURL(AppConstants.Website.licensingEmailURL)
+                                } label: {
+                                    Label(
+                                        localizedAppText("More than 50 devices? Contact sales", de: "Mehr als 50 Geräte? Vertrieb kontaktieren"),
+                                        systemImage: "envelope"
+                                    )
+                                }
+                                .buttonStyle(.link)
+                                .modifier(PointingHandCursorModifier())
                             }
-                            .buttonStyle(.link)
-                            .modifier(PointingHandCursorModifier())
                         }
-
-                        pricingWebsiteLink
                     }
-                }
-            }
 
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label(commercialStatusTitle, systemImage: commercialStatusSymbol)
-                        .foregroundStyle(commercialStatusColor)
-                        .font(.headline)
-
-                    Text(commercialStatusDescription)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    pricingWebsiteLink
                 }
             }
         }
     }
 
-    private var activeCommercialSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Label(localizedAppText("Licensed", de: "Lizenziert"), systemImage: "checkmark.seal.fill")
-                            .foregroundStyle(.green)
-                            .font(.headline)
+    private func cadenceTitle(_ cadence: CommercialPurchaseCadence) -> String {
+        switch cadence {
+        case .monthly: localizedAppText("Monthly", de: "Monatlich")
+        case .yearly: localizedAppText("Yearly", de: "Jährlich")
+        case .lifetime: localizedAppText("Lifetime", de: "Dauerlizenz")
+        }
+    }
 
-                        if let tier = license.licenseTier {
-                            Text(activeTierLabel(for: tier))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Text(activeCommercialDescription)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(localizedAppText("Manage this Mac and your subscription", de: "Diesen Mac und dein Abo verwalten"))
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
-
-                    pricingWebsiteLink
-
+    private var activeLicenseSection: some View {
+        licenseSection(eyebrow: localizedAppText("Your license", de: "Deine Lizenz")) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
                     actionButton(title: localizedAppText("Manage Subscription", de: "Abo verwalten"), systemImage: "arrow.up.right.square") {
                         openURL(URL(string: AppConstants.Polar.customerPortalURL))
                     }
 
-                    Text(localizedAppText(
-                        "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel.",
-                        de: "Öffnet das Polar.sh-Kundenportal, in dem du dein Abo verwalten, Zahlungsmethoden aktualisieren oder kündigen kannst."
-                    ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
                     actionButton(title: localizedAppText("Deactivate License on This Mac", de: "Lizenz auf diesem Mac deaktivieren"), systemImage: "trash", role: .destructive) {
                         Task { await license.deactivateLicense() }
                     }
-
-                    Text(localizedAppText(
-                        "Removes the license from this device. You can reactivate it on another Mac.",
-                        de: "Entfernt die Lizenz von diesem Gerät. Du kannst sie auf einem anderen Mac erneut aktivieren."
-                    ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if let error = license.deactivationError {
-                        Label(error, systemImage: "exclamationmark.triangle")
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                            .accessibilityLabel(String(localized: "Error: \(error)"))
-                    }
                 }
+                .fixedSize()
+
+                Text(localizedAppText(
+                    "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel. Deactivating removes the license from this device; you can reactivate it on another Mac.",
+                    de: "Öffnet das Polar.sh-Kundenportal, in dem du dein Abo verwalten, Zahlungsmethoden aktualisieren oder kündigen kannst. Das Deaktivieren entfernt die Lizenz von diesem Gerät; du kannst sie auf einem anderen Mac erneut aktivieren."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                if let error = license.deactivationError {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                        .accessibilityLabel(String(localized: "Error: \(error)"))
+                }
+
+                pricingWebsiteLink
             }
         }
     }
@@ -393,12 +438,8 @@ struct LicenseSettingsView: View {
     // MARK: - Supporter
 
     private var supporterSection: some View {
-        SettingsCard {
+        licenseSection(eyebrow: localizedAppText("Supporter", de: "Supporter")) {
             VStack(alignment: .leading, spacing: 12) {
-                Text(localizedAppText("Supporter", de: "Supporter"))
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-
                 Text(supporterDescriptionText)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -424,6 +465,7 @@ struct LicenseSettingsView: View {
                             Task { await license.deactivateSupporterLicense() }
                         }
                     }
+                    .fixedSize()
 
                     if let error = license.supporterDeactivationError {
                         Label(error, systemImage: "exclamationmark.triangle")
@@ -450,29 +492,96 @@ struct LicenseSettingsView: View {
                         }
                     } else {
                         Text(localizedAppText(
-                            "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web.",
-                            de: "Wenn du bereits einen Supporter-Schlüssel gekauft hast, gib ihn oben ein. GitHub Sponsors kannst du weiter im Web bestätigen."
+                            "If you already bought a supporter key, enter it below. GitHub Sponsors can still be claimed on the web.",
+                            de: "Wenn du bereits einen Supporter-Schlüssel gekauft hast, gib ihn unten ein. GitHub Sponsors kannst du weiter im Web bestätigen."
                         ))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    actionButton(
-                        title: localizedAppText("Claim GitHub Sponsors status on the web", de: "GitHub-Sponsors-Status im Web bestätigen"),
-                        systemImage: "link"
-                    ) {
-                        openURL(supporterDiscord.githubSponsorsURL)
-                    }
                 }
 
+                // Active supporters can still move to another tier.
                 HStack(spacing: 12) {
                     supporterTierButton(tier: .bronze, price: "10")
                     supporterTierButton(tier: .silver, price: "25")
                     supporterTierButton(tier: .gold, price: "50")
                 }
+                .frame(maxWidth: 420)
+
+                if !license.isSupporter {
+                    Button {
+                        openURL(supporterDiscord.githubSponsorsURL)
+                    } label: {
+                        Label(
+                            localizedAppText("Claim GitHub Sponsors status on the web", de: "GitHub-Sponsors-Status im Web bestätigen"),
+                            systemImage: "link"
+                        )
+                    }
+                    .buttonStyle(.link)
+                    .modifier(PointingHandCursorModifier())
+                }
             }
         }
+    }
+
+    // MARK: - License key
+
+    private var sharedActivationSection: some View {
+        licenseSection(eyebrow: localizedAppText("License key", de: "Lizenzschlüssel")) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(localizedAppText(
+                    "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise.",
+                    de: "Gib hier einen beliebigen TypeWhisper-Schlüssel ein. Die App erkennt automatisch, ob es ein Supporter-, Einzelnutzer-, Team- oder Unternehmensschlüssel ist."
+                ))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                keyActivationField(
+                    input: $licenseKeyInput,
+                    isActivating: license.isActivating,
+                    error: license.activationError
+                ) {
+                    await activateDetectedKey()
+                }
+                .frame(maxWidth: 520)
+
+                if let activationNotice {
+                    Label(activationNotice, systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.caption)
+                }
+
+                Button {
+                    openURL(URL(string: AppConstants.Polar.customerPortalURL))
+                } label: {
+                    Label(localizedAppText("Manage Purchases", de: "Käufe verwalten"), systemImage: "arrow.up.right.square")
+                }
+                .buttonStyle(.link)
+                .modifier(PointingHandCursorModifier())
+
+                Text(localizedAppText(
+                    "Use this if you already bought a commercial or supporter license and want to manage it in Polar.",
+                    de: "Nutze das, wenn du bereits eine kommerzielle oder Supporter-Lizenz gekauft hast und sie in Polar verwalten möchtest."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// A section of the page: a hairline, a small label and the content.
+    private func licenseSection<Content: View>(
+        eyebrow: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            LicenseHairline()
+                .padding(.bottom, 8)
+            LicenseEyebrow(eyebrow)
+            content()
+        }
+        .padding(.bottom, 28)
     }
 
     // MARK: - Shared Key Activation
@@ -644,80 +753,6 @@ struct LicenseSettingsView: View {
         }
     }
 
-    private func planSelectionButton(
-        title: String,
-        price: String,
-        description: String,
-        systemImage: String,
-        selected: Bool,
-        accent: Color,
-        trailingLabel: String? = nil,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button {
-            action()
-        } label: {
-            planSummaryCard(
-                title: title,
-                price: price,
-                description: description,
-                systemImage: systemImage,
-                selected: selected,
-                accent: accent,
-                trailingLabel: trailingLabel
-            )
-        }
-        .buttonStyle(.plain)
-        // The border and the check mark show the chosen plan only visually.
-        .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func planSummaryCard(
-        title: String,
-        price: String,
-        description: String,
-        systemImage: String,
-        selected: Bool,
-        accent: Color,
-        trailingLabel: String? = nil
-    ) -> some View {
-        PlanSelectionCardView(
-            title: title,
-            price: price,
-            description: description,
-            systemImage: systemImage,
-            selected: selected,
-            accent: accent,
-            trailingLabel: trailingLabel,
-            descriptionMinHeight: planDescriptionMinHeight
-        )
-        .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private func purchaseOptionCard(
-        eyebrow: String,
-        title: String,
-        pricing: CommercialPurchaseOptionCopy,
-        description: String,
-        systemImage: String,
-        accent: Color,
-        badge: String? = nil,
-        emphasized: Bool = false,
-        action: @escaping () -> Void
-    ) -> some View {
-        PurchaseOptionCardView(
-            eyebrow: eyebrow,
-            title: title,
-            pricing: pricing,
-            description: description,
-            systemImage: systemImage,
-            accent: accent,
-            badge: badge,
-            emphasized: emphasized,
-            action: action
-        )
-    }
-
     @ViewBuilder
     private func actionButton(
         title: String,
@@ -746,28 +781,6 @@ struct LicenseSettingsView: View {
             return localizedAppText("License expired or revoked", de: "Lizenz abgelaufen oder widerrufen")
         case .unlicensed:
             return localizedAppText("No active commercial license", de: "Keine aktive kommerzielle Lizenz")
-        }
-    }
-
-    private var commercialStatusDescription: String {
-        switch license.usageIntent {
-        case .personalOSS:
-            return ""
-        case .workSolo:
-            return localizedAppText(
-                "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 3 devices.",
-                de: "Der Einzelnutzer-Plan deckt eine Person ab, die Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung auf bis zu 3 Geräten braucht."
-            )
-        case .team:
-            return localizedAppText(
-                "Team covers procurement-friendly licensing, support, managed seats, and up to 10 devices.",
-                de: "Team deckt beschaffungsfreundliche Lizenzierung, Support, verwaltete Plätze und bis zu 10 Geräte ab."
-            )
-        case .enterprise:
-            return localizedAppText(
-                "Enterprise covers up to 50 devices with a reply within one business day and help with rollout and security reviews. For more devices, contact sales.",
-                de: "Der Unternehmensplan deckt bis zu 50 Geräte ab, mit Antwort innerhalb eines Arbeitstags und Hilfe bei Rollout und Security-Reviews. Für mehr Geräte kontaktiere den Vertrieb."
-            )
         }
     }
 
@@ -867,65 +880,6 @@ struct LicenseSettingsView: View {
         }
     }
 
-    private func purchaseOptionsNote(for tier: LicenseTier) -> String {
-        if commercialPurchaseCadences(for: tier).contains(.lifetime) {
-            return localizedAppText(
-                "Monthly and yearly renew automatically; a year costs ten monthly prices. Lifetime is a one-time purchase for the same tier.",
-                de: "Monats- und Jahresabo verlängern sich automatisch; ein Jahr kostet zehn Monatspreise. Die Dauerlizenz ist ein einmaliger Kauf für dasselbe Paket."
-            )
-        }
-        return localizedAppText(
-            "Enterprise is available as a monthly or yearly subscription; a year costs ten monthly prices.",
-            de: "Den Unternehmensplan gibt es als Monats- oder Jahresabo; ein Jahr kostet zehn Monatspreise."
-        )
-    }
-
-    private func purchaseOptionCard(
-        for tier: LicenseTier,
-        cadence: CommercialPurchaseCadence,
-        pricing: CommercialPurchaseOptionCopy,
-        description: String
-    ) -> some View {
-        let open = { openURL(commercialCheckoutURL(for: tier, cadence: cadence)) }
-
-        return Group {
-            switch cadence {
-            case .monthly:
-                purchaseOptionCard(
-                    eyebrow: localizedAppText("Flexible", de: "Flexibel"),
-                    title: localizedAppText("Monthly subscription", de: "Monatsabo"),
-                    pricing: pricing,
-                    description: description,
-                    systemImage: "calendar",
-                    accent: .accentColor,
-                    action: open
-                )
-            case .yearly:
-                purchaseOptionCard(
-                    eyebrow: localizedAppText("Billed yearly", de: "Jährliche Abrechnung"),
-                    title: localizedAppText("Yearly subscription", de: "Jahresabo"),
-                    pricing: pricing,
-                    description: description,
-                    systemImage: "calendar.badge.clock",
-                    accent: .green,
-                    action: open
-                )
-            case .lifetime:
-                purchaseOptionCard(
-                    eyebrow: localizedAppText("One-time purchase", de: "Einmalkauf"),
-                    title: localizedAppText("Lifetime", de: "Dauerlizenz"),
-                    pricing: pricing,
-                    description: description,
-                    systemImage: "infinity",
-                    accent: Color(red: 0.96, green: 0.69, blue: 0.22),
-                    badge: localizedAppText("Best Value", de: "Bestes Angebot"),
-                    emphasized: true,
-                    action: open
-                )
-            }
-        }
-    }
-
     private var selectedCommercialTier: LicenseTier? {
         switch license.usageIntent {
         case .personalOSS:
@@ -992,6 +946,14 @@ struct LicenseSettingsView: View {
         }
     }
 
+    /// "Individual, Lifetime": the tier of the active license as a headline.
+    private func activeTierTitle(_ tier: LicenseTier) -> String {
+        let lifetimeSuffix = license.licenseIsLifetime
+            ? localizedAppText(", Lifetime", de: ", Dauerlizenz", ja: "、永久ライセンス")
+            : ""
+        return "\(businessTierDisplayName(tier))\(lifetimeSuffix)"
+    }
+
     private func activeTierLabel(for tier: LicenseTier) -> String {
         let lifetimeSuffix = license.licenseIsLifetime
             ? localizedAppText(", Lifetime", de: ", Dauerlizenz", ja: "、永久ライセンス")
@@ -1006,6 +968,27 @@ struct LicenseSettingsView: View {
 
     private func openClaimURL(_ url: URL?) async {
         openURL(url)
+    }
+
+    /// Choosing a paid plan brings its purchase card into view, which sits
+    /// below the plans and is often outside the window.
+    private func choosePlan(_ intent: UsageIntent) {
+        license.setUsageIntent(intent)
+        planChoiceCount += 1
+    }
+
+    private func scrollToPurchase(after intent: UsageIntent, proxy: ScrollViewProxy) {
+        guard intent != .personalOSS,
+              !license.isLicenseManaged,
+              license.licenseStatus != .active,
+              license.requiresCommercialLicense else { return }
+
+        // The purchase card appears with this change; scroll once it is laid out.
+        DispatchQueue.main.async {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo(ScrollAnchor.purchase, anchor: .top)
+            }
+        }
     }
 
     private func handleNavigation(_ target: LicenseSettingsNavigationTarget, proxy: ScrollViewProxy) {
@@ -1171,222 +1154,259 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
     }
 }
 
-private struct PurchaseOptionCardView: View {
-    let eyebrow: String
-    let title: String
-    let pricing: CommercialPurchaseOptionCopy
-    let description: String
-    let systemImage: String
-    let accent: Color
-    let badge: String?
-    let emphasized: Bool
-    let action: () -> Void
+// MARK: - Page building blocks
 
-    @State private var isHovering = false
+/// Small blue label above a section, set like the mono labels of the website.
+private struct LicenseEyebrow: View {
+    let text: String
+
+    init(_ text: String) {
+        self.text = text
+    }
+
+    var body: some View {
+        Text(text)
+            .font(.system(.caption, design: .monospaced).weight(.semibold))
+            .kerning(1.2)
+            .textCase(.uppercase)
+            .foregroundStyle(Color.accentColor)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+private struct LicenseHairline: View {
+    var body: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.1))
+            .frame(height: 1)
+    }
+}
+
+/// The three-bar mark of the website as a bullet.
+private struct LicenseBarMark: View {
+    private let heights: [CGFloat] = [0.45, 1.0, 0.65]
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 1.5) {
+            ForEach(heights.indices, id: \.self) { index in
+                Capsule(style: .continuous)
+                    .fill(Color.accentColor)
+                    .frame(width: 2, height: 10 * heights[index])
+            }
+        }
+        .frame(width: 12, height: 10)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Label, headline, lede and the waveform logo; optionally a status symbol
+/// beside the label and a row of trust points below.
+private struct LicenseHeroView: View {
+    let eyebrow: String
+    let headline: String
+    let lede: String
+    var statusSymbol: String? = nil
+    var statusColor: Color = .green
+    var trustItems: [String] = []
+
+    @State private var isLogoHovering = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Button(action: action) {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: emphasized
-                                        ? [accent.opacity(isHovering ? 0.25 : 0.22), accent.opacity(isHovering ? 0.08 : 0.05), .clear]
-                                        : [accent.opacity(isHovering ? 0.17 : 0.14), accent.opacity(isHovering ? 0.06 : 0.04), .clear],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(
-                                accent.opacity(emphasized
-                                    ? (isHovering ? 0.56 : 0.45)
-                                    : (isHovering ? 0.34 : 0.22)
-                                ),
-                                lineWidth: isHovering ? 1.2 : 1
-                            )
-                    }
-
-                if emphasized {
-                    Circle()
-                        .fill(accent.opacity(isHovering ? 0.15 : 0.12))
-                        .frame(width: 84, height: 84)
-                        .blur(radius: isHovering ? 18 : 16)
-                        .offset(x: 16, y: -12)
-                }
-
+        VStack(alignment: .leading, spacing: 22) {
+            HStack(alignment: .top, spacing: 24) {
                 VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(alignment: .top, spacing: 12) {
-                                ZStack {
-                                    Circle()
-                                        .fill(accent.opacity(emphasized ? 0.2 : 0.13))
-                                        .frame(width: 34, height: 34)
-
-                                    Image(systemName: systemImage)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(accent)
-                                }
-                                .accessibilityHidden(true)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(eyebrow)
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(accent)
-
-                                    Text(title)
-                                        .font(.headline)
-                                        .foregroundStyle(.primary)
-                                }
-                            }
-
-                            Text(description)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer(minLength: 8)
-
-                        VStack(alignment: .trailing, spacing: 6) {
-                            Text(pricing.price)
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(.primary)
-
-                            Text(pricing.billingLabel)
+                    HStack(spacing: 6) {
+                        if let statusSymbol {
+                            Image(systemName: statusSymbol)
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(accent)
+                                .foregroundStyle(statusColor)
+                                .accessibilityHidden(true)
                         }
-                        .padding(.top, 22)
+                        LicenseEyebrow(eyebrow)
                     }
 
-                    Text(pricing.detail)
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(emphasized ? accent : .secondary)
-                }
-                .padding(14)
-                .frame(maxWidth: .infinity, minHeight: 152, alignment: .leading)
+                    Text(headline)
+                        .font(.system(size: 30, weight: .semibold))
+                        .kerning(-0.6)
+                        .lineSpacing(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // Narrow enough that the headline breaks after its first sentence.
+                        .frame(maxWidth: 460, alignment: .leading)
+                        .accessibilityAddTraits(.isHeader)
 
-                if let badge {
-                    Text(badge)
-                        .font(.caption2.weight(.bold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(accent.opacity(0.18))
-                        )
-                        .foregroundStyle(accent)
-                        .padding(12)
+                    Text(lede)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 560, alignment: .leading)
                 }
+
+                Spacer(minLength: 0)
+
+                // Decorative; the bars pulse on hover like the logo on the About page.
+                WaveformLogoView(isActive: isLogoHovering && !reduceMotion)
+                    .frame(width: 64, height: 64)
+                    .padding(.top, 6)
+                    .onHover { isLogoHovering = $0 }
+                    .accessibilityHidden(true)
             }
-            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .offset(y: isHovering && !reduceMotion ? -1 : 0)
-            .shadow(
-                color: accent.opacity(emphasized
-                    ? (isHovering ? 0.14 : 0.10)
-                    : (isHovering ? 0.08 : 0.04)
-                ),
-                radius: emphasized ? (isHovering ? 10 : 8) : (isHovering ? 6 : 4),
-                y: isHovering ? 4 : (emphasized ? 3 : 1)
-            )
-            .animation(.easeOut(duration: 0.14), value: isHovering)
+
+            if !trustItems.isEmpty {
+                HStack(alignment: .firstTextBaseline, spacing: 20) {
+                    ForEach(trustItems, id: \.self) { item in
+                        HStack(alignment: .firstTextBaseline, spacing: 7) {
+                            LicenseBarMark()
+                            Text(item)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .combine)
+            }
         }
-        .buttonStyle(.plain)
-        .modifier(PointingHandCursorModifier())
-        .onHover { hovering in
-            isHovering = hovering
+        .padding(.top, 26)
+        .padding(.bottom, 28)
+    }
+}
+
+/// One plan of the price list. Choosing it records the usage intent.
+private struct LicensePlanColumnModel: Identifiable {
+    let id: UsageIntent
+    let name: String
+    let price: String
+    let priceUnit: String
+    let audience: String
+    let facts: [String]
+    let selected: Bool
+    /// The active license covers this plan.
+    let isLicensed: Bool
+    let action: () -> Void
+}
+
+/// Plans side by side, separated by hairlines; two rows on narrow pages.
+private struct LicensePlanTableView: View {
+    let columns: [LicensePlanColumnModel]
+    let perRow: Int
+
+    private var rows: [[LicensePlanColumnModel]] {
+        let count = max(1, perRow)
+        return stride(from: 0, to: columns.count, by: count).map { start in
+            Array(columns[start..<min(start + count, columns.count)])
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
+                if rowIndex > 0 {
+                    LicenseHairline()
+                }
+                HStack(alignment: .top, spacing: 0) {
+                    ForEach(Array(row.enumerated()), id: \.element.id) { index, column in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Color.primary.opacity(0.1))
+                                .frame(width: 1)
+                                .frame(maxHeight: .infinity)
+                        }
+                        LicensePlanColumnView(model: column)
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                // The hairline closes the row at the top; the accent rule of
+                // the chosen plan draws over it.
+                .background(alignment: .top) { LicenseHairline() }
+            }
         }
     }
 }
 
-private struct PlanSelectionCardView: View {
-    let title: String
-    let price: String
-    let description: String
-    let systemImage: String
-    let selected: Bool
-    let accent: Color
-    let trailingLabel: String?
-    let descriptionMinHeight: CGFloat
+private struct LicensePlanColumnView: View {
+    let model: LicensePlanColumnModel
 
     @State private var isHovering = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var statusTitle: String {
+        if model.isLicensed {
+            return localizedAppText("Your plan", de: "Dein Plan")
+        }
+        if model.selected {
+            return localizedAppText("Selected", de: "Ausgewählt")
+        }
+        return localizedAppText("Choose", de: "Auswählen")
+    }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: selected
-                                    ? [accent.opacity(isHovering ? 0.10 : 0.08), accent.opacity(isHovering ? 0.04 : 0.02), .clear]
-                                    : [accent.opacity(isHovering ? 0.05 : 0.0), .clear, .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(
-                            selected
-                                ? accent.opacity(isHovering ? 0.92 : 0.80)
-                                : accent.opacity(isHovering ? 0.28 : 0.08),
-                            lineWidth: selected ? (isHovering ? 1.8 : 1.5) : (isHovering ? 1.2 : 1)
-                        )
-                }
+        Button(action: model.action) {
+            VStack(alignment: .leading, spacing: 0) {
+                // The accent rule names the chosen plan without a box.
+                Rectangle()
+                    .fill(model.selected ? Color.accentColor : Color.clear)
+                    .frame(height: 2)
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top) {
-                    Label(title, systemImage: systemImage)
+                VStack(alignment: .leading, spacing: 14) {
+                    Text(model.name)
                         .font(.headline)
-                    Spacer()
-                    if selected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(accent)
-                            .accessibilityHidden(true)
-                    } else if let trailingLabel {
-                        Text(trailingLabel)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(accent)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(model.price)
+                            .font(.system(size: 26, weight: .semibold))
+                            .kerning(-0.4)
+                            .monospacedDigit()
+                        Text(model.priceUnit)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+
+                    Text(model.audience)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 7) {
+                        ForEach(model.facts, id: \.self) { fact in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                LicenseBarMark()
+                                Text(fact)
+                                    .font(.caption)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }
+
+                    Spacer(minLength: 4)
+
+                    HStack(spacing: 5) {
+                        if model.selected || model.isLicensed {
+                            Image(systemName: "checkmark")
+                                .font(.caption2.weight(.bold))
+                                .accessibilityHidden(true)
+                        }
+                        Text(statusTitle)
+                    }
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(model.selected || model.isLicensed ? Color.primary : Color.accentColor)
                 }
-
-                Text(price)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, minHeight: descriptionMinHeight, alignment: .topLeading)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 18)
             }
-            .padding(16)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(
+                model.selected
+                    ? Color.accentColor.opacity(0.06)
+                    : Color.primary.opacity(isHovering ? 0.03 : 0)
+            )
+            .contentShape(Rectangle())
         }
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .offset(y: isHovering && !reduceMotion ? -1 : 0)
-        .shadow(
-            color: (selected ? accent : .black).opacity(isHovering ? 0.12 : 0.05),
-            radius: isHovering ? 7 : 4,
-            y: isHovering ? 4 : 1
-        )
-        .animation(.easeOut(duration: 0.14), value: isHovering)
+        .buttonStyle(.plain)
         .modifier(PointingHandCursorModifier())
-        .onHover { hovering in
-            isHovering = hovering
-        }
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: isHovering)
+        // The rule and the check mark show the chosen plan only visually.
+        .accessibilityAddTraits(model.selected ? .isSelected : [])
     }
 }
 
