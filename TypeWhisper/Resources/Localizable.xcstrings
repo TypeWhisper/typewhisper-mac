@@ -6,7 +6,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "年1回請求"
+            "value" : "年払い"
           }
         },
         "zh-Hans" : {
@@ -156,13 +156,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同じ3デバイスのIndividual階層を年1回請求。"
+            "value" : "3台のデバイスに対応する同じIndividual階層を、年1回のお支払いで利用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同一 3 台设备个人版，每年计费一次。"
+            "value" : "同样的个人版，支持 3 台设备，每年计费一次。"
           }
         }
       }
@@ -172,13 +172,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最大50台のデバイスの同じEnterprise階層を年1回請求。"
+            "value" : "最大50台のデバイスに対応する同じEnterprise階層を、年1回のお支払いで利用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同一最多 50 台设备企业版，每年计费一次。"
+            "value" : "同样的企业版，最多支持 50 台设备，每年计费一次。"
           }
         }
       }
@@ -188,13 +188,13 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最大10台のデバイスの同じTeam階層を年1回請求。"
+            "value" : "最大10台のデバイスに対応する同じTeam階層を、年1回のお支払いで利用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同一最多 10 台设备团队版，每年计费一次。"
+            "value" : "同样的团队版，最多支持 10 台设备，每年计费一次。"
           }
         }
       }
