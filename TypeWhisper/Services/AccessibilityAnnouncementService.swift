@@ -8,10 +8,28 @@ class AccessibilityAnnouncementService {
     var isVoiceOverEnabled: () -> Bool = { NSWorkspace.shared.isVoiceOverEnabled }
     /// Delivers an announcement. Tests replace this to observe the messages.
     var post: (_ message: String, _ isUrgent: Bool) -> Void = { message, isUrgent in
+        AccessibilityNotification.Announcement(
+            AccessibilityAnnouncementService.announcement(message, isUrgent: isUrgent)
+        ).post()
+    }
+
+    /// The announcement text with its speech priority. As documented for the
+    /// announcement priorities, high interrupts current speech and is not
+    /// interrupted itself, so errors and warnings are heard in full. Default also
+    /// interrupts current speech but gives way to the next announcement, so a newer
+    /// status or a newly highlighted entry replaces an older one instead of queueing.
+    nonisolated static func announcement(_ message: String, isUrgent: Bool) -> AttributedString {
         var announcement = AttributedString(message)
-        // Errors interrupt; status updates wait until VoiceOver finishes speaking.
         announcement.accessibilitySpeechAnnouncementPriority = isUrgent ? .high : .default
-        AccessibilityNotification.Announcement(announcement).post()
+        return announcement
+    }
+
+    /// Speaks the entry a list highlights while VoiceOver's cursor stays elsewhere,
+    /// such as a palette driven by the arrow keys. Each highlight replaces the
+    /// previous one and is not held back by the duplicate filter.
+    static func announceHighlight(_ label: String) {
+        guard NSWorkspace.shared.isVoiceOverEnabled, !label.isEmpty else { return }
+        AccessibilityNotification.Announcement(announcement(label, isUrgent: false)).post()
     }
 
     /// Current time, replaceable in tests.

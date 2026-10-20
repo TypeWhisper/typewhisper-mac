@@ -281,13 +281,14 @@ private struct SelectionPaletteContentView: View {
     }
 
     /// The arrow keys move a highlight that VoiceOver's cursor does not follow,
-    /// so the highlighted entry is spoken instead.
+    /// so the highlighted entry is spoken instead. Each announcement replaces the
+    /// previous one, so fast navigation does not queue up stale entries.
     private func announceHighlightedItem(at index: Int) {
-        guard NSWorkspace.shared.isVoiceOverEnabled,
-              model.filteredItems.indices.contains(index) else { return }
+        guard model.filteredItems.indices.contains(index) else { return }
         let item = model.filteredItems[index]
-        let label = item.subtitle.map { "\(item.title), \($0)" } ?? item.title
-        AccessibilityNotification.Announcement(label).post()
+        AccessibilityAnnouncementService.announceHighlight(
+            item.subtitle.map { "\(item.title), \($0)" } ?? item.title
+        )
     }
 }
 

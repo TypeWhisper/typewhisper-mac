@@ -1,3 +1,4 @@
+import Accessibility
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -220,7 +221,22 @@ final class AccessibilityAnnouncementServiceTests: XCTestCase {
         XCTAssertEqual(recorder.announcements.map { $0.message }, ["Text inserted"])
     }
 
-    func testErrorsInterruptAndStatusUpdatesWait() {
+    /// High priority is heard in full; default priority gives way to the next
+    /// announcement, so a newer status or palette highlight replaces an older one.
+    func testErrorsUseHighPriorityAndOtherAnnouncementsTheReplaceablePriority() {
+        XCTAssertEqual(
+            AccessibilityAnnouncementService.announcement("Error", isUrgent: true)
+                .accessibilitySpeechAnnouncementPriority,
+            .high
+        )
+        XCTAssertEqual(
+            AccessibilityAnnouncementService.announcement("Polish Dictation", isUrgent: false)
+                .accessibilitySpeechAnnouncementPriority,
+            .default
+        )
+    }
+
+    func testErrorsAndWarningsAreUrgentAndStatusUpdatesAreNot() {
         let (service, recorder) = makeService()
 
         service.announceFeedback("Copied to clipboard", isError: false)
