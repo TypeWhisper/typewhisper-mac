@@ -5,6 +5,70 @@ private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
     replacement.isEmpty ? "\"\"" : replacement
 }
 
+/// Spoken stand-in for the arrow between wrong and correct text.
+private var dictionaryReplacedWithText: String {
+    localizedAppText("replaced with", de: "ersetzt durch", ja: "置き換え先", zh: "替换为")
+}
+
+/// Spoken form of a correction ("teh, replaced with the"); the strikethrough and arrow are visual only.
+private func dictionaryCorrectionAccessibilityText(original: String, replacement: String) -> String {
+    guard !replacement.isEmpty else {
+        return localizedAppText(
+            "\(original), removed",
+            de: "\(original), wird entfernt",
+            ja: "\(original)、削除",
+            zh: "\(original)，删除"
+        )
+    }
+    return localizedAppText(
+        "\(original), replaced with \(replacement)",
+        de: "\(original), ersetzt durch \(replacement)",
+        ja: "\(original)を\(replacement)に置き換え",
+        zh: "\(original)，替换为\(replacement)"
+    )
+}
+
+private func dictionaryBoostingAccessibilityText(label: String, value: String) -> String {
+    let setting = value.isEmpty ? label : "\(label) \(value)"
+    return localizedAppText(
+        "Boosting: \(setting)",
+        de: "Boosting: \(setting)",
+        ja: "認識の優先度調整: \(setting)",
+        zh: "增强：\(setting)"
+    )
+}
+
+/// One sentence for a dictionary entry card: type, text, and every badge as words.
+private func dictionaryEntryAccessibilitySummary(_ row: DictionaryEntryRow, includesType: Bool = true) -> String {
+    var parts: [String] = []
+    if includesType {
+        parts.append(row.type.displayName)
+    }
+    if row.type == .correction, let replacement = row.replacement {
+        parts.append(dictionaryCorrectionAccessibilityText(original: row.original, replacement: replacement))
+    } else {
+        parts.append(row.original)
+        parts.append(dictionaryBoostingAccessibilityText(
+            label: row.termBoostingLabel,
+            value: row.formattedCtcMinSimilarity
+        ))
+    }
+    if row.isRegex {
+        parts.append(String(localized: "Regular expression"))
+    }
+    if row.caseSensitive {
+        parts.append(String(localized: "Case sensitive"))
+    }
+    if row.source == .autoLearned {
+        parts.append(String(localized: "Auto-learned"))
+    }
+    return parts.joined(separator: ", ")
+}
+
+private var dictionaryAddAliasTitle: String {
+    localizedAppText("Add Alias", de: "Variante hinzufügen", ja: "別表記を追加", zh: "添加变体")
+}
+
 struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
@@ -197,11 +261,13 @@ struct DictionarySettingsView: View {
             } label: {
                 Label(String(localized: "Correction"), systemImage: "plus")
             }
+            .accessibilityLabel(String(localized: "Add Correction"))
             Button {
                 viewModel.startCreating(type: .term)
             } label: {
                 Label(String(localized: "Term"), systemImage: "plus")
             }
+            .accessibilityLabel(String(localized: "Add Term"))
         }
 
         Menu {
@@ -234,6 +300,12 @@ struct DictionarySettingsView: View {
         }
         .menuStyle(.borderlessButton)
         .frame(width: 28)
+        .accessibilityLabel(localizedAppText(
+            "More Dictionary Actions",
+            de: "Weitere Wörterbuch-Aktionen",
+            ja: "辞書のその他の操作",
+            zh: "更多词典操作"
+        ))
     }
 
     @ViewBuilder
@@ -423,6 +495,7 @@ struct DictionarySettingsView: View {
                 : "line.3.horizontal.decrease.circle")
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             if viewModel.hasActiveSearch {
                 Text(localizedAppText("No search results", de: "Keine Suchergebnisse"))
@@ -515,6 +588,8 @@ struct DictionarySettingsView: View {
                     Spacer()
                 }
                 .padding(.vertical, 12)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(String(localized: "Loading community packs..."))
 
             case .error(let message):
                 HStack {
@@ -560,6 +635,7 @@ struct DictionarySettingsView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 16)
                 .padding(.bottom, 4)
+                .accessibilityAddTraits(.isHeader)
         }
         .task {
             await termPackRegistryService.fetchRegistry()
@@ -621,6 +697,7 @@ private struct DictionaryTrainingSheet: View {
                     systemImage: "waveform.and.mic"
                 )
                 .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
                 Spacer()
                 Text(stageLabel)
                     .font(.caption)
@@ -628,10 +705,29 @@ private struct DictionaryTrainingSheet: View {
             }
 
             if let snapshot = service.engineSnapshot {
+                let languageName = languageLabel(snapshot.languageSelection)
                 HStack(spacing: 16) {
                     Label(snapshot.engineName, systemImage: "cpu")
+                        .accessibilityLabel(localizedAppText(
+                            "Engine: \(snapshot.engineName)",
+                            de: "Engine: \(snapshot.engineName)",
+                            ja: "エンジン: \(snapshot.engineName)",
+                            zh: "引擎：\(snapshot.engineName)"
+                        ))
                     Label(snapshot.modelName, systemImage: "shippingbox")
-                    Label(languageLabel(snapshot.languageSelection), systemImage: "globe")
+                        .accessibilityLabel(localizedAppText(
+                            "Model: \(snapshot.modelName)",
+                            de: "Modell: \(snapshot.modelName)",
+                            ja: "モデル: \(snapshot.modelName)",
+                            zh: "模型：\(snapshot.modelName)"
+                        ))
+                    Label(languageName, systemImage: "globe")
+                        .accessibilityLabel(localizedAppText(
+                            "Language: \(languageName)",
+                            de: "Sprache: \(languageName)",
+                            ja: "言語: \(languageName)",
+                            zh: "语言：\(languageName)"
+                        ))
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -697,8 +793,9 @@ private struct DictionaryTrainingSheet: View {
     private func trainingSampleCard(_ sample: DictionaryTrainingSample) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(localizedAppText("Sample", de: "Beispiel") + " \(sampleNumber(sample.id))")
+                Text(sampleTitle(sample.id))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 sampleStateLabel(sample.state)
             }
@@ -767,6 +864,12 @@ private struct DictionaryTrainingSheet: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(.separator, lineWidth: 1)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(sampleTitle(sample.id))
+    }
+
+    private func sampleTitle(_ id: UUID) -> String {
+        localizedAppText("Sample", de: "Beispiel") + " \(sampleNumber(id))"
     }
 
     private var reviewStage: some View {
@@ -825,6 +928,7 @@ private struct DictionaryTrainingSheet: View {
 
             Image(systemName: "arrow.right")
                 .foregroundStyle(.secondary)
+                .accessibilityLabel(dictionaryReplacedWithText)
             Text(service.canonicalWord)
                 .fontWeight(.medium)
                 .frame(minWidth: 100, alignment: .leading)
@@ -832,6 +936,7 @@ private struct DictionaryTrainingSheet: View {
         }
         .padding(12)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
     }
 
     private var summaryStage: some View {
@@ -944,6 +1049,7 @@ private struct DictionaryTrainingSheet: View {
                 ProgressView().controlSize(.small)
                 Text(localizedAppText("Preparing", de: "Vorbereitung"))
             }
+            .accessibilityElement(children: .combine)
         case .recording:
             Label(localizedAppText("Recording", de: "Aufnahme"), systemImage: "record.circle.fill")
                 .foregroundStyle(.red)
@@ -952,6 +1058,7 @@ private struct DictionaryTrainingSheet: View {
                 ProgressView().controlSize(.small)
                 Text(localizedAppText("Transcribing", de: "Transkription"))
             }
+            .accessibilityElement(children: .combine)
         case .completed:
             Label(localizedAppText("Complete", de: "Fertig"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -959,6 +1066,7 @@ private struct DictionaryTrainingSheet: View {
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
                 .lineLimit(2)
+                .accessibilityLabel(String(localized: "Error: \(message)"))
         }
     }
 
@@ -987,6 +1095,7 @@ private struct DictionaryTrainingSheet: View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
             .foregroundStyle(.red)
             .font(.callout)
+            .accessibilityLabel(String(localized: "Error: \(message)"))
     }
 }
 
@@ -1058,6 +1167,7 @@ private struct DictionaryEngineSupportSection: View {
                 Text(String(localized: "Engine Support"))
                     .font(.callout)
                     .fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
                 Text(String(localized: "Terms depend on engine support. Corrections always run after transcription."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1079,6 +1189,7 @@ private struct DictionaryEngineSupportSection: View {
                                 .foregroundStyle(row.tint)
                                 .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
                         }
+                        .accessibilityElement(children: .combine)
 
                         if let detailText = row.detailText {
                             Text(detailText)
@@ -1125,11 +1236,13 @@ private struct DictionaryTermsSettingSuggestionBanner: View {
             Image(systemName: "text.badge.checkmark")
                 .font(.title3)
                 .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText("Improve Dictionary Terms", de: "Begriffe besser erkennen"))
                     .font(.callout)
                     .fontWeight(.semibold)
+                    .accessibilityAddTraits(.isHeader)
                 Text(suggestion.summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -1179,15 +1292,18 @@ private struct DictionaryTermsSettingActionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
         case .failed(let message):
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
                 Text(message)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .help(message)
+                    .accessibilityLabel(String(localized: "Error: \(message)"))
                 Button(localizedAppText("Retry", de: "Erneut versuchen"), action: enable)
                     .controlSize(.small)
             }
@@ -1202,6 +1318,7 @@ private struct TermPackCardView: View {
     @ObservedObject var viewModel: DictionaryViewModel
     @State private var isExpanded = false
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isActivated: Bool {
         viewModel.isPackActivated(pack)
@@ -1218,6 +1335,7 @@ private struct TermPackCardView: View {
                     .font(.title3)
                     .foregroundStyle(isActivated ? Color.accentColor : .secondary)
                     .frame(width: 28)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
@@ -1246,6 +1364,7 @@ private struct TermPackCardView: View {
                             Text("-")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
                             Text(String(localized: "by \(author)"))
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
@@ -1276,7 +1395,7 @@ private struct TermPackCardView: View {
                 .accessibilityLabel(String(localized: "Enable \(pack.name)"))
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -1327,6 +1446,11 @@ private struct TermPackCardView: View {
                                 .padding(.vertical, 4)
                                 .background(Color.orange.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(dictionaryCorrectionAccessibilityText(
+                                    original: correction.original,
+                                    replacement: correction.replacement
+                                ))
                             }
                         }
                     }
@@ -1345,6 +1469,8 @@ private struct TermPackCardView: View {
         .onHover { hovering in
             isHovering = hovering
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(pack.name)
     }
 }
 
@@ -1398,13 +1524,7 @@ private struct DictionaryCardView: View {
             }
 
             if row.caseSensitive {
-                Text("Aa")
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .foregroundStyle(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                DictionaryCaseSensitiveBadge()
             }
 
             if row.source == .autoLearned {
@@ -1413,7 +1533,7 @@ private struct DictionaryCardView: View {
 
             Spacer()
 
-            if let addAlias, row.type == .correction, !(row.replacement?.isEmpty ?? true) {
+            if let addAlias, canAddAlias {
                 Button {
                     addAlias()
                 } label: {
@@ -1447,7 +1567,17 @@ private struct DictionaryCardView: View {
         .onTapGesture {
             editEntry()
         }
+        // The row reads as one switch; editing, aliases and deleting, which sighted
+        // users reach by clicking or through the context menu, become named actions.
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(dictionaryEntryAccessibilitySummary(row))
+        .accessibilityActions {
+            Button(String(localized: "Edit"), action: editEntry)
+            if let addAlias, canAddAlias {
+                Button(dictionaryAddAliasTitle, action: addAlias)
+            }
+            Button(String(localized: "Delete"), action: deleteEntry)
+        }
         .contextMenu {
             Button(String(localized: "Edit")) {
                 editEntry()
@@ -1462,6 +1592,10 @@ private struct DictionaryCardView: View {
                 deleteEntry()
             }
         }
+    }
+
+    private var canAddAlias: Bool {
+        row.type == .correction && !(row.replacement?.isEmpty ?? true)
     }
 }
 
@@ -1528,7 +1662,12 @@ private struct DictionaryCorrectionGroupCardView: View {
             }
             .buttonStyle(.borderless)
             .help(localizedAppText("Add alias", de: "Variante hinzufügen"))
-            .accessibilityLabel(localizedAppText("Add alias", de: "Variante hinzufügen"))
+            .accessibilityLabel(localizedAppText(
+                "Add alias for \(group.replacementDisplayText)",
+                de: "Variante für \(group.replacementDisplayText) hinzufügen",
+                ja: "\(group.replacementDisplayText)の別表記を追加",
+                zh: "为\(group.replacementDisplayText)添加变体"
+            ))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -1540,6 +1679,8 @@ private struct DictionaryCorrectionGroupCardView: View {
             RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Correction") + ": " + group.replacementDisplayText)
         .contextMenu {
             Button(localizedAppText("Add Alias", de: "Variante hinzufügen")) {
                 addAlias()
@@ -1560,6 +1701,7 @@ private struct DictionaryCorrectionAliasRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             Text(row.original)
                 .font(.callout)
@@ -1572,13 +1714,7 @@ private struct DictionaryCorrectionAliasRow: View {
             }
 
             if row.caseSensitive {
-                Text("Aa")
-                    .font(.caption2)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(Color.secondary.opacity(0.12))
-                    .foregroundStyle(.secondary)
-                    .clipShape(RoundedRectangle(cornerRadius: 3))
+                DictionaryCaseSensitiveBadge()
             }
 
             if row.source == .autoLearned {
@@ -1601,6 +1737,12 @@ private struct DictionaryCorrectionAliasRow: View {
         .contentShape(Rectangle())
         .onTapGesture {
             editEntry()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(dictionaryEntryAccessibilitySummary(row, includesType: false))
+        .accessibilityActions {
+            Button(String(localized: "Edit"), action: editEntry)
+            Button(String(localized: "Delete"), action: deleteEntry)
         }
         .contextMenu {
             Button(String(localized: "Edit")) {
@@ -1625,6 +1767,20 @@ private struct DictionaryRegexBadge: View {
             .clipShape(RoundedRectangle(cornerRadius: 3))
             .help(String(localized: "Regular expression"))
             .accessibilityLabel(String(localized: "Regular expression"))
+    }
+}
+
+private struct DictionaryCaseSensitiveBadge: View {
+    var body: some View {
+        Text("Aa")
+            .font(.caption2)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(Color.secondary.opacity(0.12))
+            .foregroundStyle(.secondary)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .help(String(localized: "Case sensitive"))
+            .accessibilityLabel(String(localized: "Case sensitive"))
     }
 }
 
@@ -1658,6 +1814,8 @@ private struct DictionaryBoostingBadge: View {
         .padding(.vertical, 3)
         .background(Color.secondary.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 4))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dictionaryBoostingAccessibilityText(label: label, value: value))
     }
 }
 
@@ -1686,11 +1844,21 @@ private struct DictionaryEditorSheet: View {
             : String(localized: "Edit Correction")
     }
 
+    private var originalFieldTitle: String {
+        if viewModel.editType == .term {
+            return String(localized: "Term")
+        }
+        return viewModel.editIsRegex
+            ? String(localized: "Regex pattern")
+            : String(localized: "Wrong Text")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding()
@@ -1708,13 +1876,10 @@ private struct DictionaryEditorSheet: View {
                 GroupBox(viewModel.editType == .term ? String(localized: "Term") : String(localized: "Correction")) {
                     VStack(alignment: .leading, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(viewModel.editType == .term
-                                 ? String(localized: "Term")
-                                 : viewModel.editIsRegex
-                                    ? String(localized: "Regex pattern")
-                                    : String(localized: "Wrong Text"))
+                            Text(originalFieldTitle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             TextField(
                                 viewModel.editType == .term
                                     ? String(localized: "e.g. Kubernetes")
@@ -1725,11 +1890,13 @@ private struct DictionaryEditorSheet: View {
                             )
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedField, equals: .original)
+                            .accessibilityLabel(originalFieldTitle)
 
                             if let error = viewModel.editValidationError {
                                 Text(error)
                                     .font(.caption)
                                     .foregroundStyle(.red)
+                                    .accessibilityLabel(String(localized: "Error: \(error)"))
                             }
                         }
 
@@ -1738,10 +1905,12 @@ private struct DictionaryEditorSheet: View {
                                 Text(String(localized: "Correct Text"))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .accessibilityHidden(true)
                                 TextField(String(localized: "e.g. Kubernetes"), text: $viewModel.editReplacement)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .replacement)
                                     .disabled(viewModel.lockedCorrectionReplacement != nil)
+                                    .accessibilityLabel(String(localized: "Correct Text"))
 
                                 if viewModel.lockedCorrectionReplacement != nil {
                                     Text(localizedAppText(
@@ -1786,17 +1955,26 @@ private struct DictionaryEditorSheet: View {
                                     Text(String(localized: "Threshold"))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
 
                                     Slider(
                                         value: $viewModel.editAdvancedCtcMinSimilarity,
                                         in: DictionaryViewModel.minimumAdvancedCtcMinSimilarity...DictionaryViewModel.maximumAdvancedCtcMinSimilarity
                                     )
+                                    .accessibilityLabel(localizedAppText(
+                                        "Threshold",
+                                        de: "Schwellenwert",
+                                        ja: "しきい値",
+                                        zh: "阈值"
+                                    ))
+                                    .accessibilityValue(String(format: "%.2f", viewModel.editAdvancedCtcMinSimilarity))
 
                                     Text(String(format: "%.2f", viewModel.editAdvancedCtcMinSimilarity))
                                         .font(.caption)
                                         .monospacedDigit()
                                         .frame(width: 36, alignment: .trailing)
                                         .foregroundStyle(.secondary)
+                                        .accessibilityHidden(true)
                                 }
                             }
                         }
