@@ -5,6 +5,8 @@ import TypeWhisperPluginSDK
 enum TranscriptionEngineError: LocalizedError {
     case noEngineSelected
     case engineUnavailable(engineName: String?, reason: String?)
+    /// The managed settings refuse this engine; `reason` is localized.
+    case managedPolicyRefused(engineName: String?, reason: String)
     case modelNotLoaded
     case appleSpeechModelNotLoaded
     case transcriptionFailed(String)
@@ -24,6 +26,9 @@ enum TranscriptionEngineError: LocalizedError {
                 Self.sentence(reason),
                 String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation."),
             ].compactMap { $0 }.joined(separator: " ")
+        case .managedPolicyRefused(let engineName, let reason):
+            [String(localized: "\(engineName ?? Self.defaultEngineName) is not available."), Self.sentence(reason)]
+                .compactMap { $0 }.joined(separator: " ")
         case .modelNotLoaded:
             String(localized: "The selected model is not ready yet. Download or load it on the engine's settings page, or choose another model under Settings > Dictation.")
         case .appleSpeechModelNotLoaded:
@@ -312,6 +317,10 @@ final class ModelManagerService: ObservableObject {
     /// Returns nil when the engine exists and is usable; model readiness is checked in transcribe().
     func transcriptionReadinessError(providerId: String?) -> TranscriptionEngineError? {
         guard let providerId else { return .noEngineSelected }
+        if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forProviderId: providerId) {
+            let name = PluginManager.shared.installedTranscriptionPlugin(for: providerId)?.manifest.name
+            return .managedPolicyRefused(engineName: name, reason: refusal)
+        }
         guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return .engineUnavailable(engineName: nil, reason: String(localized: "It is not installed or is disabled."))
         }
@@ -813,6 +822,10 @@ final class ModelManagerService: ObservableObject {
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var transfersAutoUnloadProtection = false
@@ -984,6 +997,10 @@ final class ModelManagerService: ObservableObject {
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?
@@ -1147,6 +1164,10 @@ final class ModelManagerService: ObservableObject {
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?

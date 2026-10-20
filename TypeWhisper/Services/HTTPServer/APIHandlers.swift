@@ -674,6 +674,9 @@ final class APIHandlers: @unchecked Sendable {
                 ))
             }
         } catch {
+            if let refusal = Self.managedPolicyRefusal(in: error) {
+                return .error(status: 403, message: refusal, code: "forbidden")
+            }
             // A strict translation preempted by a newer request is transient:
             // report it as retryable instead of a generic server error.
             #if canImport(Translation)
@@ -683,6 +686,20 @@ final class APIHandlers: @unchecked Sendable {
             #endif
             return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
         }
+    }
+
+    /// The reason the managed settings refused a request, if they did.
+    static func managedPolicyRefusal(in error: Error) -> String? {
+        if let refusal = error as? ManagedPolicyRefusal {
+            return refusal.reason
+        }
+        if let refusal = error as? PluginModelDownloadRefusedError {
+            return refusal.reason
+        }
+        if case TranscriptionEngineError.managedPolicyRefused(_, let reason)? = error as? TranscriptionEngineError {
+            return reason
+        }
+        return nil
     }
 
     // MARK: - Engine/Model Override Resolution
@@ -723,6 +740,10 @@ final class APIHandlers: @unchecked Sendable {
         let resolvedEngineId: String?
         if let engine {
             guard let match = engines.first(where: { $0.providerId == engine }) else {
+                // Refused engines leave the list, so name the policy instead of an unknown engine.
+                if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forProviderId: engine) {
+                    return .reject(.error(status: 403, message: refusal, code: "forbidden"))
+                }
                 return .reject(.error(status: 400, message: "Unknown engine '\(engine)'"))
             }
             resolvedEngineId = match.providerId
@@ -731,6 +752,9 @@ final class APIHandlers: @unchecked Sendable {
                 engine.modelCatalog.contains(where: { $0.id == model })
             }
             if matches.isEmpty {
+                if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forModelId: model) {
+                    return .reject(.error(status: 403, message: refusal, code: "forbidden"))
+                }
                 return .reject(.error(status: 400, message: "Unknown model '\(model)'"))
             }
             if matches.count > 1 {

@@ -27,7 +27,7 @@ private enum PassiveLoadedModelRestoreContext {
     }
 }
 
-final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, @unchecked Sendable {
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     /// Whether this plugin backs the engine the user actually has selected,
@@ -51,8 +51,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
 
+    private let policyStore: ManagedPolicySnapshotStore
+    private let locality: PluginLocality?
+
     init(
         pluginId: String,
+        locality: PluginLocality? = nil,
+        policyStore: ManagedPolicySnapshotStore = .shared,
         eventBus: EventBusProtocol,
         ruleNamesProvider: @escaping @MainActor () -> [String],
         workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
@@ -60,7 +65,9 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     ) {
         self.pluginId = pluginId
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
-        self.eventBus = eventBus
+        self.policyStore = policyStore
+        self.locality = locality
+        self.eventBus = ManagedPolicyEventBus(base: eventBus, pluginId: pluginId, locality: locality, store: policyStore)
         self.ruleNamesProvider = ruleNamesProvider
         self.workflowProvider = workflowProvider
 
@@ -70,6 +77,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
         // Create directory if needed
         try? FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Managed settings
+
+    /// Read on the plugin's own threads, so it comes from the thread-safe snapshot store.
+    var modelDownloadRefusal: String? {
+        policyStore.providerPolicy.modelDownloadRefusal
     }
 
     // MARK: - Keychain
@@ -165,22 +179,33 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
     // MARK: - App Context
 
+    /// Whether the managed settings let this plugin receive text and context, such as the
+    /// active app, rule names and workflows. Checked on every read, so a policy change
+    /// applies at once.
+    private var mayReceiveContext: Bool {
+        policyStore.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) == nil
+    }
+
     var activeAppBundleId: String? {
-        NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard mayReceiveContext else { return nil }
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
 
     var activeAppName: String? {
-        NSWorkspace.shared.frontmostApplication?.localizedName
+        guard mayReceiveContext else { return nil }
+        return NSWorkspace.shared.frontmostApplication?.localizedName
     }
 
     // MARK: - Rules
 
     var availableRuleNames: [String] {
-        readMainActor(ruleNamesProvider)
+        guard mayReceiveContext else { return [] }
+        return readMainActor(ruleNamesProvider)
     }
 
     var availableWorkflows: [PluginWorkflowInfo] {
-        readMainActor(workflowProvider)
+        guard mayReceiveContext else { return [] }
+        return readMainActor(workflowProvider)
     }
 
     // MARK: - Capabilities
@@ -273,6 +298,55 @@ enum ScreenshotPluginFixture {
             return nil
         default:
             return nil
+        }
+    }
+}
+
+/// Keeps transcripts and other content off plugins the managed settings do not let receive text.
+/// Events without content, such as recording start and stop, still arrive.
+struct ManagedPolicyEventBus: EventBusProtocol {
+    let base: EventBusProtocol
+    let pluginId: String
+    let locality: PluginLocality?
+    var store: ManagedPolicySnapshotStore = .shared
+
+    @discardableResult
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
+        let pluginId = pluginId
+        let locality = locality
+        let store = store
+        return base.subscribe { event in
+            // Checked per event, so a policy that changes while the plugin runs applies at once.
+            guard store.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) != nil else {
+                await handler(event)
+                return
+            }
+            if let event = event.withoutContext {
+                await handler(event)
+            }
+        }
+    }
+
+    func unsubscribe(id: UUID) {
+        base.unsubscribe(id: id)
+    }
+}
+
+extension TypeWhisperEvent {
+    /// The event for a plugin that may not receive text: lifecycle events lose the active app,
+    /// and events that carry transcript, inserted or corrected text, or files with it are
+    /// withheld (nil).
+    var withoutContext: TypeWhisperEvent? {
+        switch self {
+        case .recordingStarted(let payload):
+            .recordingStarted(RecordingStartedPayload(timestamp: payload.timestamp))
+        case .recordingStopped:
+            self
+        case .transcriptionFailed(let payload):
+            .transcriptionFailed(TranscriptionFailedPayload(timestamp: payload.timestamp, error: payload.error))
+        case .transcriptionCompleted, .textInserted, .textCorrectionCommitted, .actionCompleted,
+             .partialTranscriptionUpdate, .recorderTranscriptReady:
+            nil
         }
     }
 }

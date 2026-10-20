@@ -104,6 +104,8 @@ enum AutomaticRecoveryFallbackErrorPolicy {
             switch transcriptionError {
             case .noEngineSelected,
                  .engineUnavailable(_, _),
+                 // The recovery engine is checked against the managed settings in turn.
+                 .managedPolicyRefused(_, _),
                  .modelNotLoaded,
                  .appleSpeechModelNotLoaded,
                  .transcriptionFailed(_),
@@ -5288,6 +5290,9 @@ final class DictationViewModel: ObservableObject {
                 return .dictation
             case .engineUnavailable(_, _), .appleSpeechModelNotLoaded:
                 return engineSettingsTab(providerId: providerId)
+            case .managedPolicyRefused(_, _):
+                // Settings > Advanced lists what the organization manages.
+                return .advanced
             case .transcriptionFailed(_), .modelDownloadFailed(_):
                 return nil
             }

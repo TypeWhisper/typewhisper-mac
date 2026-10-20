@@ -73,6 +73,9 @@ extension ServiceContainer {
             self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
         seedScreenshotPluginSettings(language: language)
+        // Screenshot runs skip initialize(), so apply the plugin restrictions of an installed
+        // profile here, before the scan, as a normal launch does.
+        pluginManager.applyProviderPolicy(ManagedProviderPolicy(snapshot: managedPolicyService.current))
         pluginManager.scanAndLoadPlugins()
 
         statisticsViewModel.refresh()
@@ -403,7 +406,8 @@ extension ServiceContainer {
                     "zh": "将处理后的笔记直接发送到 Obsidian 仓库。",
                 ],
                 categories: ["action"],
-                hosting: .local
+                hosting: .local,
+                locality: .configurable
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.parakeet",
@@ -470,7 +474,8 @@ extension ServiceContainer {
         description: String,
         descriptions: [String: String],
         categories: [String],
-        hosting: PluginHosting
+        hosting: PluginHosting,
+        locality: PluginLocality? = nil
     ) -> RegistryPlugin {
         RegistryPlugin(
             id: id,
@@ -492,7 +497,8 @@ extension ServiceContainer {
             requiresAPIKey: hosting == .cloud,
             hosting: hosting,
             descriptions: descriptions,
-            downloadCount: 1_250
+            downloadCount: 1_250,
+            locality: (locality ?? (hosting == .cloud ? .cloud : .local)).rawValue
         )
     }
 

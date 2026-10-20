@@ -135,7 +135,8 @@ final class ServiceContainer: ObservableObject {
     private init() {
         // Managed preferences are read before any service that may consult them.
         managedPolicyService = ManagedPolicyService(
-            source: AppConstants.isRunningTests ? EmptyManagedPolicySource() : ManagedPreferencesPolicySource()
+            source: AppConstants.isRunningTests ? EmptyManagedPolicySource() : ManagedPreferencesPolicySource(),
+            snapshotStore: .shared
         )
         managedPolicyService.refresh()
         managedUpdateCoordinator = ManagedUpdateCoordinator(policyService: managedPolicyService)
@@ -560,9 +561,11 @@ final class ServiceContainer: ObservableObject {
         watchFolderViewModel.observePluginManager()
     }
 
-    /// Applies policy effects that are not evaluated on use: the login item and, for a changed managed
-    /// license key, a new activation pass.
+    /// Applies policy effects that are not evaluated on use: the plugin restrictions, the login item
+    /// and, for a changed managed license key, a new activation pass.
     private func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot, previous: ManagedPolicySnapshot?) {
+        // Runs before plugins are scanned at launch, so refused plugins never load.
+        pluginManager.applyProviderPolicy(ManagedProviderPolicy(snapshot: snapshot))
         launchAtLoginController.apply(
             snapshot,
             setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
