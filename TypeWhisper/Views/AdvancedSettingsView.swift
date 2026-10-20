@@ -20,6 +20,8 @@ struct AdvancedSettingsView: View {
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
+    @StateObject private var copyConfirmation = ActionConfirmation(duration: .seconds(2))
+    @StateObject private var diagnosticsExportConfirmation = ActionConfirmation(duration: .seconds(4))
 
     @State private var showBackupError = false
     @State private var backupErrorMessage = ""
@@ -81,6 +83,10 @@ struct AdvancedSettingsView: View {
                         "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
                         de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
                     ), topic: localizedAppText("Export Diagnostics", de: "Diagnose exportieren"))
+
+                    if let message = diagnosticsExportConfirmation.message {
+                        ActionConfirmationLabel(message: message)
+                    }
                 }
             }
 
@@ -492,8 +498,14 @@ struct AdvancedSettingsView: View {
                 }
 
                 if viewModel.isRunning && viewModel.requiresAuthentication, let apiToken = viewModel.currentAPIToken {
-                    Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌")) {
-                        copyToPasteboard(apiToken)
+                    HStack {
+                        Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌")) {
+                            copyToPasteboard(apiToken, source: Self.apiTokenCopySource)
+                        }
+
+                        if let message = copyConfirmation.message(for: Self.apiTokenCopySource) {
+                            ActionConfirmationLabel(message: message)
+                        }
                     }
                 }
 
@@ -795,8 +807,11 @@ struct AdvancedSettingsView: View {
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                 Spacer()
+                if let message = copyConfirmation.message(for: command) {
+                    ActionConfirmationLabel(message: message)
+                }
                 Button {
-                    copyToPasteboard(command)
+                    copyToPasteboard(command, source: command)
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.caption)
@@ -819,11 +834,13 @@ struct AdvancedSettingsView: View {
         )
     }
 
-    private func copyToPasteboard(_ string: String) {
+    private static let apiTokenCopySource = "api-token"
+
+    /// Confirms the copy next to the button that did it, and for VoiceOver.
+    private func copyToPasteboard(_ string: String, source: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(string, forType: .string)
-        // Copying has no visible feedback; confirm it for VoiceOver users.
-        ServiceContainer.shared.accessibilityAnnouncementService.announce(String(localized: "Copied to clipboard"))
+        copyConfirmation.show(String(localized: "Copied to clipboard"), source: source)
     }
 
     // MARK: - Support Diagnostics
@@ -840,6 +857,9 @@ struct AdvancedSettingsView: View {
             Task { @MainActor in
                 do {
                     try await errorLogService.exportDiagnostics(to: url)
+                    diagnosticsExportConfirmation.show(
+                        String(localized: "Diagnostics exported to \(url.lastPathComponent)")
+                    )
                 } catch {
                     diagnosticsExportErrorMessage = error.localizedDescription
                     showDiagnosticsExportError = true
