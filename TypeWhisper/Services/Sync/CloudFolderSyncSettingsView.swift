@@ -1547,12 +1547,28 @@ final class CloudFolderSyncController: ObservableObject {
     }()
 }
 
+/// Announces a background sync error once instead of on every failed retry, and
+/// again when it comes back after a sync has succeeded or the user started one.
+struct SyncErrorAnnouncementFilter {
+    private var lastAnnounced: String?
+
+    mutating func shouldAnnounce(_ message: String?) -> Bool {
+        guard let message, message != lastAnnounced else { return false }
+        lastAnnounced = message
+        return true
+    }
+
+    mutating func reset() {
+        lastAnnounced = nil
+    }
+}
+
 struct CloudFolderSyncSettingsView: View {
     @ObservedObject var controller: CloudFolderSyncController
     @State private var confirmingSyncFolderDeletion = false
     @State private var showingSyncDevices = false
     @State private var confirmingHistorySync = false
-    @State private var lastAnnouncedError: String?
+    @State private var errorAnnouncementFilter = SyncErrorAnnouncementFilter()
 
     private var modePicker: some View {
         Picker(String(localized: "premium.window.sync.modePicker"), selection: Binding(
@@ -1676,7 +1692,7 @@ struct CloudFolderSyncSettingsView: View {
                         }
 
                         Button {
-                            lastAnnouncedError = nil
+                            errorAnnouncementFilter.reset()
                             Task {
                                 await controller.syncNow()
                                 announceStatus()
@@ -1738,11 +1754,14 @@ struct CloudFolderSyncSettingsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // Results and errors only appear in the labels above, so VoiceOver
-        // users hear them. A repeated background error is announced once.
+        // users hear them. A repeated background error is announced once,
+        // until a sync succeeds again.
         .onChange(of: controller.errorMessage) { _, message in
-            guard let message, message != lastAnnouncedError else { return }
-            lastAnnouncedError = message
+            guard errorAnnouncementFilter.shouldAnnounce(message), let message else { return }
             ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
+        }
+        .onChange(of: controller.lastSyncDate) { _, date in
+            if date != nil { errorAnnouncementFilter.reset() }
         }
         .sheet(isPresented: $showingSyncDevices) {
             PremiumSyncDevicesView(controller: controller)
@@ -1752,7 +1771,7 @@ struct CloudFolderSyncSettingsView: View {
             isPresented: $confirmingSyncFolderDeletion
         ) {
             Button(String(localized: "premium.window.sync.deleteConfirmationAction"), role: .destructive) {
-                lastAnnouncedError = nil
+                errorAnnouncementFilter.reset()
                 Task {
                     await controller.deletePrivateSyncFolder()
                     announceStatus()

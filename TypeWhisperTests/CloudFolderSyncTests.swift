@@ -5404,3 +5404,20 @@ final class CloudFolderSyncTests: XCTestCase {
         return decoder
     }()
 }
+
+/// A failing background sync is announced once, and again after a sync succeeded.
+final class SyncErrorAnnouncementFilterTests: XCTestCase {
+    func testRepeatedErrorIsAnnouncedOnceUntilASyncSucceeds() {
+        var filter = SyncErrorAnnouncementFilter()
+
+        XCTAssertTrue(filter.shouldAnnounce("The network connection was lost."))
+        // Each retry clears the error first; the same failure is not repeated.
+        XCTAssertFalse(filter.shouldAnnounce(nil))
+        XCTAssertFalse(filter.shouldAnnounce("The network connection was lost."))
+        XCTAssertTrue(filter.shouldAnnounce("The sync folder is not available."))
+
+        // After a successful sync the same failure is new again.
+        filter.reset()
+        XCTAssertTrue(filter.shouldAnnounce("The sync folder is not available."))
+    }
+}
