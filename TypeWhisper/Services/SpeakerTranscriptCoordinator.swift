@@ -194,8 +194,19 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         case timingMissing
     }
 
+    /// How a detection run ended. A failed or cancelled run keeps an earlier
+    /// transcript, so the transcript alone does not tell whether the run worked.
+    enum Outcome: Equatable {
+        case succeeded
+        case failed
+        case cancelled
+    }
+
     /// Records whose speakers are being detected or wait for it.
     @Published private(set) var stages: [UUID: Stage] = [:]
+    /// How the last run of each record ended. Set before its stage is removed;
+    /// absent while a run is queued or when a sync replaced the record meanwhile.
+    @Published private(set) var outcomes: [UUID: Outcome] = [:]
     /// Progress of a model download started from the settings; nil when none runs.
     @Published private(set) var modelDownloadProgress: Double?
     @Published private(set) var modelError: String?
@@ -317,6 +328,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         }
         guard tasks[recordID] == nil else { return nil }
 
+        outcomes[recordID] = nil
         stages[recordID] = .waiting
         if record.speakerTranscript == nil {
             historyService.setSpeakerTranscriptState(.pending, forRecordID: recordID)
@@ -448,6 +460,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         // Waiting behind another recording would keep the cancelled one
         // queued until that recording is done, so it leaves the queue now.
         guard !runningRecordIDs.contains(recordID) else { return }
+        outcomes[recordID] = .cancelled
         stages[recordID] = nil
         tasks[recordID] = nil
         finishWithoutResult(recordID: recordID)
@@ -467,6 +480,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
               let provider,
               let record = historyService.record(withID: recordID),
               let audioURL = historyService.audioFileURL(for: record) else {
+            outcomes[recordID] = Task.isCancelled ? .cancelled : .failed
             finishWithoutResult(recordID: recordID)
             return
         }
@@ -578,9 +592,11 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 forRecordID: recordID
             ) else {
                 speakerLogger.info("Speaker detection found no speakers")
+                outcomes[recordID] = .failed
                 finishWithoutResult(recordID: recordID)
                 return
             }
+            outcomes[recordID] = .succeeded
             if let ownID = numbering[SpeakerChannelAttribution.ownSpeakerLabel],
                transcript.speakerIDs.contains(ownID),
                historyService.record(withID: recordID)?.speakerNames?.displayName(for: ownID) == nil {
@@ -599,10 +615,12 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             )
         } catch is CancellationError {
             guard isCurrent() else { return }
+            outcomes[recordID] = .cancelled
             finishWithoutResult(recordID: recordID)
         } catch {
             guard isCurrent() else { return }
             speakerLogger.error("Speaker detection failed: \(error.localizedDescription, privacy: .public)")
+            outcomes[recordID] = .failed
             finishWithoutResult(recordID: recordID)
         }
     }

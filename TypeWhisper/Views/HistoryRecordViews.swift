@@ -74,7 +74,7 @@ struct HistoryRecordRow: View {
         if record.appName != nil {
             parts.append(record.source.displayName)
         }
-        parts.append(record.timestamp.formatted(.relative(presentation: .named, unitsStyle: .wide)))
+        parts.append(HistoryAccessibilityText.relativeTime(record.timestamp))
         if record.durationSeconds > 0 {
             parts.append(HistoryAccessibilityText.duration(record.durationSeconds))
         }
@@ -288,12 +288,30 @@ struct HistoryRecordDetailView: View {
     }
 
     /// Detection runs in the background and only changes the page, so
-    /// VoiceOver users hear when it is done.
+    /// VoiceOver users hear how it ended. A failed or cancelled run keeps an
+    /// earlier transcript, so the run's own outcome decides the message.
     private func announceSpeakerDetectionResult() {
-        let message = hasSpeakerTranscript
-            ? localizedAppText("Speakers detected", de: "Sprecher erkannt", ja: "話者を検出しました", zh: "已检测到说话人")
-            : String(localized: "speakers.status.failed")
-        ServiceContainer.shared.accessibilityAnnouncementService.announce(message)
+        guard let outcome = coordinator.outcomes[record.id] else { return }
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(
+            Self.speakerDetectionAnnouncement(for: outcome),
+            isUrgent: outcome == .failed
+        )
+    }
+
+    static func speakerDetectionAnnouncement(for outcome: SpeakerTranscriptCoordinator.Outcome) -> String {
+        switch outcome {
+        case .succeeded:
+            localizedAppText("Speakers detected", de: "Sprecher erkannt", ja: "話者を検出しました", zh: "已检测到说话人")
+        case .failed:
+            String(localized: "speakers.status.failed")
+        case .cancelled:
+            localizedAppText(
+                "Speaker detection cancelled",
+                de: "Sprechererkennung abgebrochen",
+                ja: "話者の検出をキャンセルしました",
+                zh: "已取消说话人检测"
+            )
+        }
     }
 
     private var showsSpeakerTranscript: Bool {
@@ -590,7 +608,15 @@ struct HistoryRecordDetailView: View {
 }
 
 /// Spoken forms of values that the History shows in a compact visual form.
-private enum HistoryAccessibilityText {
+enum HistoryAccessibilityText {
+    /// Spoken units follow the app language, like the localized words around them.
+    static var locale: Locale { Locale(identifier: preferredAppLanguageCode()) }
+
+    /// "2 months ago", in the app language.
+    static func relativeTime(_ date: Date) -> String {
+        date.formatted(.relative(presentation: .named, unitsStyle: .wide).locale(locale))
+    }
+
     /// Rows show a single line, so VoiceOver reads the beginning of a long
     /// text; the detail pane has the full text.
     static func preview(_ text: String, limit: Int = 160) -> String {
@@ -604,7 +630,7 @@ private enum HistoryAccessibilityText {
     static func duration(_ seconds: Double) -> String {
         // Truncated like the visible "0:06".
         let spoken = Duration.seconds(seconds.rounded(.towardZero))
-            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide))
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide).locale(locale))
         return localizedAppText(
             "Duration \(spoken)",
             de: "Dauer \(spoken)",

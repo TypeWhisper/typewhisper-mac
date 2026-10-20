@@ -1909,3 +1909,27 @@ private final class ControlledDiffPresentationLoader {
         heldRequests.remove(at: index).continuation.resume()
     }
 }
+
+/// The words VoiceOver reads for a History row follow the app language, also in their units.
+final class HistoryAccessibilityTextTests: XCTestCase {
+    func testDurationAndRelativeTimeUseTheAppLanguage() {
+        let key = UserDefaultsKeys.preferredAppLanguage
+        let previous = UserDefaults.standard.object(forKey: key)
+        defer {
+            if let previous {
+                UserDefaults.standard.set(previous, forKey: key)
+            } else {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }
+        UserDefaults.standard.set("de", forKey: key)
+
+        XCTAssertEqual(HistoryAccessibilityText.locale.identifier, "de")
+        let duration = HistoryAccessibilityText.duration(65)
+        XCTAssertTrue(duration.hasPrefix("Dauer "), duration)
+        XCTAssertTrue(duration.contains("Minute"), duration)
+        XCTAssertTrue(duration.contains("Sekunden"), duration)
+        let relative = HistoryAccessibilityText.relativeTime(Date().addingTimeInterval(-2 * 3_600))
+        XCTAssertTrue(relative.contains("Stunden"), relative)
+    }
+}
