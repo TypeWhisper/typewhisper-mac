@@ -203,9 +203,7 @@ struct OverlayIndicatorView: View {
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 IndicatorMotion.popIn($revealScale)
-                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                    dotPulse = true
-                }
+                IndicatorMotion.startRecordingPulse($dotPulse)
                 expandTranscriptPreviewIfNeeded()
             } else {
                 dotPulse = false

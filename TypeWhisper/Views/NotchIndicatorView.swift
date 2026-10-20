@@ -243,9 +243,7 @@ struct NotchIndicatorView: View {
         }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
-                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
-                    dotPulse = true
-                }
+                IndicatorMotion.startRecordingPulse($dotPulse)
             } else {
                 dotPulse = false
                 textExpanded = false
