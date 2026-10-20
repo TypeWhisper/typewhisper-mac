@@ -1185,6 +1185,7 @@ private struct WorkflowEditorPage: View {
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
     #endif
     @StateObject private var websiteSuggestionStore = WorkflowWebsiteSuggestionStore()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(workflow: Workflow?) {
         self.workflow = workflow
@@ -1281,6 +1282,7 @@ private struct WorkflowEditorPage: View {
                         .font(.subheadline.weight(.semibold))
                     TextField(localizedAppText("Workflow name", de: "Workflow-Name"), text: $draft.name)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Workflow name", de: "Workflow-Name"))
                 }
 
                 if draft.template == .dictation {
@@ -1323,7 +1325,7 @@ private struct WorkflowEditorPage: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.16)) {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
                             isAdvancedExpanded.toggle()
                         }
                     } label: {
@@ -1337,11 +1339,14 @@ private struct WorkflowEditorPage: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
+                                .accessibilityHidden(true)
                         }
                         .padding(.vertical, 10)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
+                    .accessibilityValue(workflowDisclosureState(isExpanded: isAdvancedExpanded))
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: 14) {
@@ -1368,6 +1373,7 @@ private struct WorkflowEditorPage: View {
                                     HStack(spacing: 8) {
                                         TextField(localizedAppText("e.g. Auto, Markdown, RTF, JSON, plain text", de: "z. B. Auto, Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
                                             .textFieldStyle(.roundedBorder)
+                                            .accessibilityLabel(localizedAppText("Output Format", de: "Ausgabeformat"))
 
                                         Menu {
                                             ForEach(WorkflowOutputFormatPreset.all) { preset in
@@ -1435,6 +1441,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(localizedAppText("Action Target", de: "Action-Ziel"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             Picker(
                 localizedAppText("Target", de: "Ziel"),
@@ -1491,6 +1498,7 @@ private struct WorkflowEditorPage: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             if engines.isEmpty {
                 Text(
@@ -1559,6 +1567,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             Picker(
                 localizedAppText("Whisper Mode", de: "Whisper-Modus"),
@@ -1642,6 +1651,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(localizedAppText("Spoken Language", de: "Gesprochene Sprache"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
             LanguageSelectionEditor(
                 selection: $draft.inputLanguageSelection,
                 availableLanguages: settingsViewModel.availableLanguages,
@@ -1666,6 +1676,7 @@ private struct WorkflowEditorPage: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(localizedAppText("Translation Mode", de: "Übersetzungsmodus"))
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
                 Picker(localizedAppText("Translation Mode", de: "Übersetzungsmodus"), selection: $draft.translationProcessor) {
                     ForEach(WorkflowTranslationProcessor.allCases, id: \.self) { processor in
                         Text(processor.label).tag(processor)
@@ -1712,6 +1723,7 @@ private struct WorkflowEditorPage: View {
                         .font(.subheadline.weight(.semibold))
                     TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Target Language", de: "Zielsprache"))
                 }
             }
         }
@@ -1723,6 +1735,7 @@ private struct WorkflowEditorPage: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(localizedAppText("LLM Override", de: "LLM-Override"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             if providers.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -1925,6 +1938,7 @@ private struct WorkflowEditorPage: View {
             Image(systemName: "list.bullet.rectangle")
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedAppText("Manual", de: "Manuell"))
@@ -1946,6 +1960,7 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 
     private var automaticTriggerEditor: some View {
@@ -2071,6 +2086,7 @@ private struct WorkflowEditorPage: View {
             HStack(alignment: .top, spacing: 10) {
                 TextField(String(localized: "docs.github.com"), text: $websiteInput)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(localizedAppText("Website", de: "Website"))
                     .onSubmit {
                         addWebsiteInput()
                     }
@@ -2189,6 +2205,7 @@ private struct WorkflowEditorPage: View {
             Image(systemName: "infinity")
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedAppText("Always", de: "Immer"))
@@ -2210,6 +2227,7 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 
     private var websiteSuggestions: [String] {
@@ -2223,15 +2241,15 @@ private struct WorkflowEditorPage: View {
             pluginManager: pluginManager,
             existingWorkflowId: workflow?.id
         ) {
-            validationMessage = validationError
+            presentValidationMessage(validationError)
             return
         }
 
         guard let trigger = draft.resolvedTrigger() else {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "The selected trigger is incomplete.",
                 de: "Der ausgewählte Trigger ist unvollständig."
-            )
+            ))
             return
         }
 
@@ -2261,6 +2279,13 @@ private struct WorkflowEditorPage: View {
         navigation.goBackToList()
     }
 
+    /// Shows a validation problem and announces it, because the banner appears at the top of
+    /// the scrolled editor where a VoiceOver user would not otherwise notice it.
+    private func presentValidationMessage(_ message: String) {
+        validationMessage = message
+        AccessibilityNotification.Announcement(message).post()
+    }
+
     private func installedAppName(for bundleId: String) -> String {
         profilesViewModel.installedApps.first(where: { $0.id == bundleId })?.name
             ?? workflowAppDisplayName(for: bundleId)
@@ -2280,29 +2305,29 @@ private struct WorkflowEditorPage: View {
 
     private func addRecordedHotkey(_ hotkey: UnifiedHotkey) {
         if draft.containsEquivalentHotkey(hotkey) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This shortcut is already part of the workflow.",
                 de: "Dieser Shortcut ist bereits Teil des Workflows."
-            )
+            ))
             return
         }
 
         if let workflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: workflow?.id),
            let conflictWorkflow = workflowService.workflow(id: workflowId) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
                 ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
-            )
+            ))
             return
         }
 
         if let slot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This hotkey is already used by the global slot “\(slot.rawValue)”.",
                 de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet.",
                 ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。"
-            )
+            ))
             return
         }
 
@@ -2322,6 +2347,7 @@ private struct WorkflowEditorPage: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 34, height: 34)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(definition.name)
@@ -2339,6 +2365,7 @@ private struct WorkflowEditorPage: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.accentColor.opacity(0.08))
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var workflowProviderOverrideBinding: Binding<String?> {
@@ -2490,6 +2517,11 @@ private struct WorkflowTemplateCard: View {
             }
         }
         .buttonStyle(.plain)
+        // The selection is otherwise only shown by the tint and the checkmark.
+        .accessibilityLabel(definition.name)
+        .accessibilityHint(definition.description)
+        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -2507,10 +2539,12 @@ private struct WorkflowSelectionRow: View {
                     .resizable()
                     .frame(width: 20, height: 20)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .accessibilityHidden(true)
             } else if let iconSystemName {
                 Image(systemName: iconSystemName)
                     .foregroundStyle(.secondary)
                     .frame(width: 20)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -2526,6 +2560,7 @@ private struct WorkflowSelectionRow: View {
                         .truncationMode(.middle)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             Spacer()
 
@@ -2536,6 +2571,8 @@ private struct WorkflowSelectionRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help(String(localized: "Remove"))
+            .accessibilityLabel(String(localized: "Remove \(title)"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -2571,6 +2608,8 @@ private struct WorkflowTextEditorField: View {
                     .padding(.top, editorTopPadding)
                     .padding(.bottom, editorBottomPadding)
                     .background(Color.clear)
+                    .accessibilityLabel(title)
+                    .accessibilityHint(placeholder)
 
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(placeholder)
@@ -2580,6 +2619,7 @@ private struct WorkflowTextEditorField: View {
                         .padding(.top, placeholderTopInset)
                         .padding(.trailing, 12)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .background {
@@ -2615,6 +2655,7 @@ private struct WorkflowAppPickerSheet: View {
             HStack {
                 Text(localizedAppText("Select Apps", de: "Apps auswählen"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding()
@@ -2624,8 +2665,11 @@ private struct WorkflowAppPickerSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField(localizedAppText("Search Apps…", de: "Apps durchsuchen…"), text: $searchText)
                     .textFieldStyle(.plain)
+                    .accessibilityLabel(localizedAppText("Search Apps…", de: "Apps durchsuchen…"))
+                    .accessibilityAddTraits(.isSearchField)
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -2634,6 +2678,8 @@ private struct WorkflowAppPickerSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help(String(localized: "Clear search"))
+                    .accessibilityLabel(String(localized: "Clear search"))
                 }
             }
             .padding(8)
@@ -2641,21 +2687,32 @@ private struct WorkflowAppPickerSheet: View {
             Divider()
 
             List(filteredApps) { app in
-                HStack {
-                    if let icon = app.icon {
-                        Image(nsImage: icon)
-                    }
-                    Text(app.name)
-                    Spacer()
-                    if selectedBundleIdentifiers.contains(app.id) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
+                let isSelected = selectedBundleIdentifiers.contains(app.id)
+
+                // A plain button keeps the row's look but makes it reachable by keyboard and
+                // VoiceOver, which a tap gesture alone is not.
+                Button {
                     toggleSelection(app.id)
+                } label: {
+                    HStack {
+                        if let icon = app.icon {
+                            Image(nsImage: icon)
+                                .accessibilityHidden(true)
+                        }
+                        Text(app.name)
+                        Spacer()
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(app.name)
+                .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
             .listStyle(.inset)
 
@@ -2693,6 +2750,7 @@ private struct WorkflowSectionCard<Content: View>: View {
             VStack(alignment: .leading, spacing: compact ? 3 : 4) {
                 Text(title)
                     .font(compact ? Font.subheadline.weight(.semibold) : Font.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
                     .font(compact ? .caption : .subheadline)
                     .foregroundStyle(.secondary)
@@ -2746,6 +2804,7 @@ private struct ValidationBanner: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline)
         }
@@ -2755,7 +2814,16 @@ private struct ValidationBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.orange.opacity(0.12))
         }
+        .accessibilityElement(children: .combine)
     }
+}
+
+/// The spoken state of a custom disclosure button, which otherwise only shows it by the
+/// direction of its chevron.
+private func workflowDisclosureState(isExpanded: Bool) -> String {
+    isExpanded
+        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠")
 }
 
 private struct MissingWorkflowPage: View {
