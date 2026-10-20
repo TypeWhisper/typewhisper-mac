@@ -2450,7 +2450,12 @@ private struct AvailablePluginRow: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Open details for \(plugin.name)", de: "Details für \(plugin.name) öffnen", ja: "\(plugin.name)の詳細を開く"))
+                    .accessibilityLabel(localizedAppText(
+                        "Open details for \(plugin.name)",
+                        de: "Details für \(plugin.name) öffnen",
+                        ja: "\(plugin.name)の詳細を開く",
+                        zh: "打开“\(plugin.name)”的详细信息"
+                    ))
                 }
             }
         }

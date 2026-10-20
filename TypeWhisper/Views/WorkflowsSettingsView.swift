@@ -914,7 +914,7 @@ private struct WorkflowRow: View {
 
     private var statusText: String {
         workflow.isEnabled
-            ? localizedAppText("Enabled", de: "Aktiv")
+            ? localizedAppText("Enabled", de: "Aktiviert")
             : localizedAppText("Disabled", de: "Deaktiviert")
     }
 

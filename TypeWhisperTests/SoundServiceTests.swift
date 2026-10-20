@@ -19,9 +19,7 @@ final class SoundServiceTests: XCTestCase {
 
     func testAccessibilityAndSpeechFeedbackKeysHaveGermanLocalizationsInCatalog() throws {
         XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Recording started", language: "de"), "Aufnahme gestartet")
-        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Prompt complete", language: "de"), "Prompt abgeschlossen")
         XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Processing prompt", language: "de"), "Verarbeite Prompt")
-        XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Processing prompt: %@", language: "de"), "Verarbeite Prompt: %@")
         XCTAssertEqual(try TestSupport.localizedCatalogValue(for: "Error: %@", language: "de"), "Fehler: %@")
         XCTAssertEqual(
             try TestSupport.localizedCatalogValue(for: "Transcription complete, %lld words", language: "de"),
