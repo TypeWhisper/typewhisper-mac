@@ -320,9 +320,13 @@ propose Accessibility, the microphone and local network access but never grants 
 silently. The
 [app settings example](../../deployment/macos/examples/TypeWhisper-AppSettings-Privacy.json)
 proposes Accessibility and the microphone for both editions; adapt its
-`OrganizationJustification`. Deliver it with an MDM that supports declarative device
-management, and keep the privacy profile for earlier macOS versions and for PostEvent,
-Input Monitoring and Screen Recording.
+`OrganizationJustification`. The prompt lists only permissions the user has not been
+asked for yet and does not appear once they have seen all of them, so deploy the
+declaration before users first launch TypeWhisper. Deliver it with an MDM that supports
+declarative device management and give it a new `ServerToken` whenever you change it,
+or the Mac keeps the previous version; most MDMs set the token themselves. Keep the
+privacy profile for earlier macOS versions and for PostEvent, Input Monitoring and
+Screen Recording.
 
 | Permission | Used for | PPPC |
 | --- | --- | --- |
