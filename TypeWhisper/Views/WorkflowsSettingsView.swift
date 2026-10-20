@@ -86,6 +86,7 @@ private struct LLMFallbackProviderMenuOption: Identifiable {
 private struct MyWorkflowsPage: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
+    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var searchText = ""
@@ -238,6 +239,10 @@ private struct MyWorkflowsPage: View {
             let providers = promptProcessingService.availableProviders
 
             VStack(alignment: .leading, spacing: 8) {
+                if let enforced = pluginManager.enforcedLlmResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
+
                 if promptProcessingService.fallbackPriorityList.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(
@@ -1434,6 +1439,10 @@ private struct WorkflowEditorPage: View {
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
 
+                if let enforced = pluginManager.enforcedTranscriptionResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
+
                 Text(
                     draft.transcriptionEngineId == nil
                         ? localizedAppText(
@@ -1676,6 +1685,10 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+
+                if let enforced = pluginManager.enforcedLlmResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
 
                 Text(
                     draft.providerId == nil
