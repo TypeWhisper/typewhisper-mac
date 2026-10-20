@@ -255,6 +255,10 @@ private struct SelectionPaletteContentView: View {
                                 .onTapGesture {
                                     model.selectItem(item)
                                 }
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction {
+                                    model.selectItem(item)
+                                }
                             }
                         }
                         .padding(.vertical, 4)
@@ -262,6 +266,7 @@ private struct SelectionPaletteContentView: View {
                     }
                     .onChange(of: model.selectedIndex) { _, newValue in
                         proxy.scrollTo(newValue, anchor: .center)
+                        announceHighlightedItem(at: newValue)
                     }
                 }
             }
@@ -273,6 +278,16 @@ private struct SelectionPaletteContentView: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+    }
+
+    /// The arrow keys move a highlight that VoiceOver's cursor does not follow,
+    /// so the highlighted entry is spoken instead.
+    private func announceHighlightedItem(at index: Int) {
+        guard NSWorkspace.shared.isVoiceOverEnabled,
+              model.filteredItems.indices.contains(index) else { return }
+        let item = model.filteredItems[index]
+        let label = item.subtitle.map { "\(item.title), \($0)" } ?? item.title
+        AccessibilityNotification.Announcement(label).post()
     }
 }
 
