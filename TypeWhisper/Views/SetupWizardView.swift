@@ -1066,6 +1066,7 @@ struct SetupWizardView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度"))
         .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)"))
+        .accessibilityAddTraits([.isStaticText, .updatesFrequently])
     }
 
     private func recommendationCardIsInteractive(
@@ -1341,6 +1342,7 @@ struct SetupWizardView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(localizedAppText("Your hotkey", de: "Dein Hotkey", ja: "現在のショートカットキー", zh: "你的快捷键"))
             .accessibilityValue(primaryHotkeyLabel)
+            .accessibilityAddTraits(.isStaticText)
 
             TextEditor(text: $trialText)
                 .font(.body)

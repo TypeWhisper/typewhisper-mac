@@ -393,6 +393,7 @@ struct HomeSettingsView: View {
                     ja: "任意のアプリで\(primaryHotkeyLabel)を押して開始します。",
                     zh: "在任意应用中按 \(primaryHotkeyLabel) 开始。"
                 ))
+                .accessibilityAddTraits(.isStaticText)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
