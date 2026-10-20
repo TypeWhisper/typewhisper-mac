@@ -2243,6 +2243,151 @@ final class MenuBarLogoMarkImageTests: XCTestCase {
                 === MenuBarLogoMarkImage.cachedImage(isRecordingActive: true)
         )
         XCTAssertFalse(MenuBarLogoMarkImage.cachedImage(isRecordingActive: true).isTemplate)
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: true, increaseContrast: true)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: true, increaseContrast: true)
+        )
+        XCTAssertTrue(
+            MenuBarLogoMarkImage.cachedImage(isRecordingActive: false, increaseContrast: true)
+                === MenuBarLogoMarkImage.cachedImage(isRecordingActive: false)
+        )
+    }
+
+    /// Compares only the alpha channel, so the result does not depend on color:
+    /// the recording icon must have a different silhouette, not just a red tint.
+    func testRecordingIconFillsTheAreaAroundTheBarsSoItsShapeChanges() throws {
+        let slot = CGRect(origin: .zero, size: MenuBarLogoMarkImage.size)
+        // The gaps between the idle bars and the margin around them, kept inside
+        // the badge's rounded corners and clear of anti-aliased bar edges.
+        let barArea = MenuBarLogoMarkImage.barRects(in: slot).map { $0.insetBy(dx: -0.5, dy: -0.5) }
+        let badgeInterior = NSBezierPath(
+            roundedRect: MenuBarLogoMarkImage.recordingBadgeRect(in: slot).insetBy(dx: 1, dy: 1),
+            xRadius: 3,
+            yRadius: 3
+        )
+        let isAroundTheBars: (CGPoint) -> Bool = { point in
+            badgeInterior.contains(point) && !barArea.contains { $0.contains(point) }
+        }
+
+        for increaseContrast in [false, true] {
+            let idle = try Self.renderedPixels(MenuBarLogoMarkImage.image(isRecordingActive: false))
+            let recording = try Self.renderedPixels(
+                MenuBarLogoMarkImage.image(isRecordingActive: true, increaseContrast: increaseContrast)
+            )
+
+            XCTAssertLessThan(idle.alphaCoverage(where: isAroundTheBars), 0.01, "Idle icon draws outside its bars")
+            XCTAssertGreaterThan(
+                recording.alphaCoverage(where: isAroundTheBars),
+                0.99,
+                "Recording icon does not fill the area around the bars"
+            )
+            XCTAssertGreaterThan(
+                recording.alphaCoverage { _ in true },
+                idle.alphaCoverage { _ in true } * 2
+            )
+        }
+    }
+
+    /// The bars must stay visible inside the badge: white bars with at least the
+    /// 3:1 contrast WCAG asks for graphics, and 4.5:1 with Increase Contrast.
+    func testRecordingBadgeKeepsTheBarsLegible() throws {
+        let slot = CGRect(origin: .zero, size: MenuBarLogoMarkImage.size)
+        let badge = MenuBarLogoMarkImage.recordingBadgeRect(in: slot)
+        let bars = MenuBarLogoMarkImage.recordingBarRects(in: slot)
+
+        XCTAssertEqual(bars.count, 5)
+        for bar in bars {
+            XCTAssertTrue(badge.insetBy(dx: 1, dy: 1).contains(bar))
+        }
+
+        for increaseContrast in [false, true] {
+            let pixels = try Self.renderedPixels(
+                MenuBarLogoMarkImage.image(isRecordingActive: true, increaseContrast: increaseContrast)
+            )
+            let middleBar = bars[2]
+            let barCenter = CGPoint(x: middleBar.midX, y: middleBar.midY)
+            let gapCenter = CGPoint(x: (bars[1].maxX + bars[2].minX) / 2, y: middleBar.midY)
+            let badgeMargin = CGPoint(x: badge.minX + 1, y: badge.midY)
+
+            XCTAssertEqual(pixels.alpha(at: barCenter), 1, accuracy: 0.01)
+            XCTAssertEqual(pixels.alpha(at: badgeMargin), 1, accuracy: 0.01)
+            XCTAssertGreaterThan(pixels.relativeLuminance(at: barCenter), 0.95)
+
+            let barContrast = (pixels.relativeLuminance(at: barCenter) + 0.05)
+                / (pixels.relativeLuminance(at: badgeMargin) + 0.05)
+            XCTAssertGreaterThanOrEqual(barContrast, increaseContrast ? 4.5 : 3, "Contrast \(barContrast)")
+            XCTAssertLessThan(pixels.relativeLuminance(at: gapCenter), pixels.relativeLuminance(at: barCenter))
+        }
+    }
+
+    /// The icon drawn at 2x into an sRGB bitmap.
+    private struct RenderedPixels {
+        let bitmap: NSBitmapImageRep
+        let scale: CGFloat
+
+        func alphaCoverage(where include: (CGPoint) -> Bool) -> Double {
+            var covered = 0.0
+            var count = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    // Pixel centers in image points, with y growing upwards as in the drawing.
+                    let point = CGPoint(
+                        x: (CGFloat(x) + 0.5) / scale,
+                        y: (CGFloat(bitmap.pixelsHigh - 1 - y) + 0.5) / scale
+                    )
+                    guard include(point) else { continue }
+                    count += 1
+                    covered += Double(bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0)
+                }
+            }
+            return count == 0 ? 0 : covered / Double(count)
+        }
+
+        func alpha(at point: CGPoint) -> Double {
+            Double(color(at: point)?.alphaComponent ?? 0)
+        }
+
+        /// WCAG relative luminance of the sRGB pixel.
+        func relativeLuminance(at point: CGPoint) -> Double {
+            guard let color = color(at: point)?.usingColorSpace(.sRGB) else { return 0 }
+            func linear(_ component: CGFloat) -> Double {
+                let value = Double(component)
+                return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(color.redComponent)
+                + 0.7152 * linear(color.greenComponent)
+                + 0.0722 * linear(color.blueComponent)
+        }
+
+        private func color(at point: CGPoint) -> NSColor? {
+            let x = Int(point.x * scale)
+            let y = bitmap.pixelsHigh - 1 - Int(point.y * scale)
+            return bitmap.colorAt(x: x, y: y)
+        }
+    }
+
+    private static func renderedPixels(_ image: NSImage, scale: CGFloat = 2) throws -> RenderedPixels {
+        let size = image.size
+        let bitmap = try XCTUnwrap(NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * scale),
+            pixelsHigh: Int(size.height * scale),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        )?.retagging(with: .sRGB))
+        bitmap.size = size
+        let context = try XCTUnwrap(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: CGRect(origin: .zero, size: size))
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        return RenderedPixels(bitmap: bitmap, scale: scale)
     }
 }
 

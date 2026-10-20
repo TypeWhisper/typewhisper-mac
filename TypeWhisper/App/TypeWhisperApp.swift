@@ -310,6 +310,7 @@ private final class MenuBarIconModel: ObservableObject {
 
 private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @StateObject private var icon = MenuBarIconModel()
 
     private var title: String {
@@ -321,7 +322,10 @@ private struct MenuBarExtraLabel: View {
     }
 
     var body: some View {
-        Image(nsImage: MenuBarLogoMarkImage.cachedImage(isRecordingActive: isRecordingActive))
+        Image(nsImage: MenuBarLogoMarkImage.cachedImage(
+            isRecordingActive: isRecordingActive,
+            increaseContrast: colorSchemeContrast == .increased
+        ))
             .resizable()
             .renderingMode(isRecordingActive ? .original : .template)
             .frame(width: 18, height: 18)
@@ -356,33 +360,74 @@ private struct ManagedWindowOpenerRegistrar: View {
 enum MenuBarLogoMarkImage {
     static let size = CGSize(width: 18, height: 18)
     private static let relativeBarHeights: [CGFloat] = [0.5, 0.75, 1.0, 0.75, 0.5]
+    private static let recordingBadgeInset: CGFloat = 0.5
+    private static let recordingBadgeCornerRadius: CGFloat = 4
+    /// Space between the badge edge and the square that holds the bars.
+    private static let recordingBarInset: CGFloat = 2
 
     @MainActor private static let idleImage = image(isRecordingActive: false)
     @MainActor private static let recordingImage = image(isRecordingActive: true)
+    @MainActor private static let increasedContrastRecordingImage = image(
+        isRecordingActive: true,
+        increaseContrast: true
+    )
 
-    /// Both states are drawn once; the status item swaps between them.
-    @MainActor static func cachedImage(isRecordingActive: Bool) -> NSImage {
-        isRecordingActive ? recordingImage : idleImage
+    /// Each state is drawn once; the status item swaps between them.
+    @MainActor static func cachedImage(isRecordingActive: Bool, increaseContrast: Bool = false) -> NSImage {
+        guard isRecordingActive else { return idleImage }
+        return increaseContrast ? increasedContrastRecordingImage : recordingImage
     }
 
-    static func image(isRecordingActive: Bool) -> NSImage {
-        let image = NSImage(size: size)
-        image.lockFocus()
+    /// Idle: the five logo bars as a template image. Recording: a filled red badge
+    /// with the bars in white, so the icon changes its shape and not only its color.
+    static func image(isRecordingActive: Bool, increaseContrast: Bool = false) -> NSImage {
+        let image = NSImage(size: size, flipped: false) { rect in
+            NSGraphicsContext.current?.shouldAntialias = true
+            if isRecordingActive {
+                let badge = recordingBadgeRect(in: rect)
+                recordingBadgeColor(increaseContrast: increaseContrast).setFill()
+                NSBezierPath(
+                    roundedRect: badge,
+                    xRadius: recordingBadgeCornerRadius,
+                    yRadius: recordingBadgeCornerRadius
+                ).fill()
+                NSColor.white.setFill()
+                fillBars(recordingBarRects(in: rect))
+            } else {
+                NSColor.black.setFill()
+                fillBars(barRects(in: rect))
+            }
+            return true
+        }
+        image.isTemplate = !isRecordingActive
+        return image
+    }
 
-        NSGraphicsContext.current?.shouldAntialias = true
-        (isRecordingActive ? NSColor.systemRed : NSColor.black).setFill()
+    static func recordingBadgeRect(in rect: CGRect) -> CGRect {
+        rect.insetBy(dx: recordingBadgeInset, dy: recordingBadgeInset)
+    }
 
-        for rect in barRects(in: CGRect(origin: .zero, size: size)) {
+    /// The logo bars in their usual proportions, scaled down to fit inside the badge.
+    static func recordingBarRects(in rect: CGRect) -> [CGRect] {
+        barRects(in: recordingBadgeRect(in: rect).insetBy(dx: recordingBarInset, dy: recordingBarInset))
+    }
+
+    /// System red. With Increase Contrast, a darker red keeps the white bars at
+    /// about 5:1 and the badge at least 3:1 against light and dark menu bars.
+    static func recordingBadgeColor(increaseContrast: Bool) -> NSColor {
+        increaseContrast
+            ? NSColor(srgbRed: 215 / 255, green: 0, blue: 21 / 255, alpha: 1)
+            : .systemRed
+    }
+
+    private static func fillBars(_ rects: [CGRect]) {
+        for rect in rects {
             NSBezierPath(
                 roundedRect: rect,
                 xRadius: rect.width / 2,
                 yRadius: rect.width / 2
             ).fill()
         }
-
-        image.unlockFocus()
-        image.isTemplate = !isRecordingActive
-        return image
     }
 
     static func barRects(in rect: CGRect) -> [CGRect] {
