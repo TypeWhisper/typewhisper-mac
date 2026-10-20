@@ -1090,7 +1090,7 @@ struct RecordingSettingsView: View {
                         .foregroundStyle(.orange)
                 }
             }
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel(deviceName)
             .accessibilityValue(microphonePriorityAccessibilityValue(index: index, isAvailable: isAvailable))
 
@@ -1297,9 +1297,10 @@ struct RecordingSettingsView: View {
                         .foregroundStyle(.green)
                     }
                     .padding(.vertical, 4)
-                    .accessibilityElement(children: .ignore)
+                    .accessibilityElement(children: .combine)
                     .accessibilityLabel(AudioWaveformView.levelAccessibilityLabel)
                     .accessibilityValue(AudioWaveformView.levelAccessibilityValue(audioDevice.previewAudioLevel))
+                    .accessibilityAddTraits(.updatesFrequently)
                 }
 
                 Button(audioDevice.isPreviewActive
