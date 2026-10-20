@@ -175,8 +175,11 @@ struct KeyboardActivatableCard: ViewModifier {
                     // `.activate` puts the card in the Tab order only when keyboard navigation
                     // is on, the same rule macOS applies to buttons.
                     .focusable(interactions: .activate)
-                    .onKeyPress(keys: [.space, .return]) { _ in
-                        action()
+                    .onKeyPress(keys: [.space, .return], phases: [.down, .repeat]) { press in
+                        // A held key repeats; one press opens the card once.
+                        if press.phase == .down {
+                            action()
+                        }
                         return .handled
                     }
                     // The card already offers this action to VoiceOver; the layer would only add
