@@ -23,7 +23,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "\\S"
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
         }
       ]
     },
@@ -47,7 +47,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "\\S"
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
         }
       ]
     },
@@ -71,7 +71,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "\\S"
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
         }
       ]
     },
@@ -95,7 +95,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "\\S"
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
         }
       ]
     },
@@ -122,7 +122,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1024,
-            "pattern": "\\S"
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
           },
           "maxItems": 256
         }
@@ -151,7 +151,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1024,
-            "pattern": "\\S"
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
           },
           "maxItems": 256
         }
@@ -180,7 +180,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 1024,
-            "pattern": "\\S"
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
           },
           "maxItems": 256
         }
@@ -451,7 +451,8 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 1024,
-          "pattern": "\\S"
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$",
+          "format": "password"
         }
       ]
     },
@@ -488,7 +489,7 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1024,
-                  "pattern": "\\S"
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
                 }
               ]
             },
@@ -512,7 +513,7 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1024,
-                  "pattern": "\\S"
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
                 }
               ]
             },
@@ -536,7 +537,7 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1024,
-                  "pattern": "\\S"
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
                 }
               ]
             },
@@ -560,7 +561,7 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 1024,
-                  "pattern": "\\S"
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
                 }
               ]
             },

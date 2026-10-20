@@ -234,8 +234,8 @@ def main(argv: list[str] | None = None) -> int:
             parse_assignments(args.recommend, recommended=True),
             domains=args.domain or ["com.typewhisper.mac"],
             identifier=args.identifier,
-            name=args.name,
-            organization=args.organization,
+            name=parse_text("--name", args.name),
+            organization=parse_text("--organization", args.organization) if args.organization is not None else None,
             scope=args.scope,
             notes=notes,
         )
@@ -244,8 +244,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     for note in notes:
         print(f"note: {note}", file=sys.stderr)
-    with args.output.open("wb") as file:
-        plistlib.dump(profile, file)
+    # Serialized first, so a failure cannot leave a partly written profile behind.
+    data = plistlib.dumps(profile)
+    args.output.write_bytes(data)
     print(f"Wrote {args.output}")
     return 0
 

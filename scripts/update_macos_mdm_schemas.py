@@ -67,7 +67,9 @@ GENERATOR = load_generator()
 APP_STORE_IGNORED = GENERATOR.APP_STORE_IGNORED
 # The app trims text and refuses it when it is blank or too long (ManagedPolicyValidator), and an
 # invalid enforced value blocks its setting, so the editor refuses such values up front.
-TEXT_CONSTRAINTS = {"type": "string", "minLength": 1, "maxLength": GENERATOR.MAXIMUM_TEXT_LENGTH, "pattern": "\\S"}
+# The pattern refuses Unicode control characters (category Cc) and requires one non-blank character.
+TEXT_PATTERN = "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+TEXT_CONSTRAINTS = {"type": "string", "minLength": 1, "maxLength": GENERATOR.MAXIMUM_TEXT_LENGTH, "pattern": TEXT_PATTERN}
 
 
 def load_keys():
@@ -96,6 +98,9 @@ def jamf_property(name, kind, maximum, order):
         configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
     elif kind == "text":
         configured.update(TEXT_CONSTRAINTS)
+        if name == "ManagedLicenseKey":
+            # JSON Editor, which Jamf Pro uses for custom schemas, masks password fields.
+            configured["format"] = "password"
     # "Not Configured" keeps Jamf Pro from writing a value for keys the administrator leaves alone.
     return {
         "title": title,

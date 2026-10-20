@@ -220,6 +220,17 @@ class GeneratorTests(unittest.TestCase):
         self.assertEqual(status, 2)
         self.assertIn("none of the values apply to the App Store edition", stderr)
 
+    def test_invalid_metadata_leaves_an_existing_profile_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "profile.mobileconfig"
+            output.write_bytes(b"previous")
+            stderr = io.StringIO()
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                status = GENERATOR.main(["--set", "UpdateMode=0", "--name", "Bad\u0007Name", "--output", str(output)])
+            self.assertEqual(status, 2)
+            self.assertIn("--name must not contain control characters", stderr.getvalue())
+            self.assertEqual(output.read_bytes(), b"previous")
+
     def test_refuses_invalid_input(self):
         cases = [
             (["--set", "updateMode=external"], "did you mean UpdateMode?"),
@@ -336,7 +347,17 @@ class SchemaTests(unittest.TestCase):
             # A blank enforced value would be invalid in the app and block its setting.
             self.assertEqual(configured["minLength"], 1, name)
             self.assertEqual(configured["maxLength"], GENERATOR.MAXIMUM_TEXT_LENGTH, name)
-            self.assertEqual(configured["pattern"], "\\S", name)
+            self.assertEqual(configured["pattern"], SCHEMAS.TEXT_PATTERN, name)
+        if name == "ManagedLicenseKey":
+            self.assertEqual(configured["format"], "password")
+
+    def test_text_pattern_refuses_what_the_app_refuses(self):
+        pattern = re.compile(SCHEMAS.TEXT_PATTERN)
+        for value in ("parakeet-tdt-0.6b-v3", "com.typewhisper.parakeet:local", "a b"):
+            self.assertIsNotNone(pattern.search(value), value)
+        # Blank values and Unicode control characters, which ManagedPolicyValidator rejects.
+        for value in ("", "   ", "a\u0007b", "a\u0085b", "\tvalue"):
+            self.assertIsNone(pattern.search(value), repr(value))
 
     def test_jamf_schemas_describe_the_catalog(self):
         for domain in EDITION_DOMAINS:
