@@ -130,6 +130,7 @@ struct PremiumAccessSettingsView: View {
                     )
                     .font(.headline)
                     .foregroundStyle(access.hasAnyPremiumAccess ? .green : .secondary)
+                    .accessibilityAddTraits(.isHeader)
 
                     Text(accessTitle)
                         .font(.callout)
@@ -152,6 +153,7 @@ struct PremiumAccessSettingsView: View {
                             systemImage: "person.crop.circle"
                         )
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                         Spacer()
 
@@ -228,12 +230,19 @@ struct PremiumAccessSettingsView: View {
                     if premiumAccount.isWorking {
                         ProgressView()
                             .controlSize(.small)
+                            .accessibilityLabel(localizedAppText(
+                                "Please wait",
+                                de: "Bitte warten",
+                                ja: "お待ちください",
+                                zh: "请稍候"
+                            ))
                     }
 
                     if let errorMessage = premiumAccount.errorMessage {
                         Label(errorMessage, systemImage: "exclamationmark.triangle")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                            .accessibilityLabel(String(localized: "Error: \(errorMessage)"))
                     }
                 }
             }
@@ -370,6 +379,7 @@ struct PremiumCorrectionLearningSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "premium.window.learning.lastActivity"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     if let attempt = correctionLearningService.latestAttempt {
                         HStack(alignment: .top, spacing: 10) {
@@ -423,6 +433,7 @@ struct PremiumCorrectionLearningSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(String(localized: "premium.window.learning.examplesTitle"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     Text(String(localized: "premium.window.learning.examplesHelp"))
                         .font(.caption)
