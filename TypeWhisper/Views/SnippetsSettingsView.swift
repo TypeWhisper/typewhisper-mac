@@ -142,6 +142,9 @@ private struct SnippetCardView: View {
         .onTapGesture {
             viewModel.startEditing(snippet)
         }
+        .keyboardActivatableCard {
+            viewModel.startEditing(snippet)
+        }
         // The card reads as one switch; Edit and Delete, which sighted users reach by
         // clicking or through the context menu, become named actions.
         .accessibilityElement(children: .combine)

@@ -364,6 +364,15 @@ struct FileTranscriptionView: View {
                     }
                 }
             }
+            // A finished file shows or hides its transcript with Space or Return, as on click.
+            .keyboardActivatableCard(
+                cornerRadius: SettingsLayoutMetrics.compactCornerRadius,
+                isEnabled: item.state == .done && item.result != nil
+            ) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    expandedFileId = expandedFileId == item.id ? nil : item.id
+                }
+            }
 
             if expandedFileId == item.id, let result = item.result {
                 Text(result.text)
