@@ -314,6 +314,14 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         return nil
     }
 
+    /// Whether a run for the record starts by transcribing it again, for the
+    /// segment or word timing it lacks, instead of detecting speakers right
+    /// away. Follows the order of `run(recordID:speakerCount:)`.
+    func runStartsWithTranscription(for record: TranscriptionRecord) -> Bool {
+        if record.timedTextGranularity == .none { return timingSource != nil }
+        return record.speakerWords.isEmpty && wordTimingSource != nil
+    }
+
     /// Queues speaker detection for a record with audio and timing.
     /// - Parameter speakerCount: A fixed number of speakers, or nil to detect it.
     /// - Returns: Why detection could not start, or nil when it was queued.

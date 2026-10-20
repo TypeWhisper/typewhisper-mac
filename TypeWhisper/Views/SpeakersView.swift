@@ -351,7 +351,9 @@ struct SpeakersView: View {
     private func phase(of record: TranscriptionRecord) -> SpeakerRecordingRow.Phase {
         switch coordinator.stages[record.id] {
         case .waiting:
-            return .working(step: 2, detail: String(localized: "speakers.status.waiting"), fraction: nil)
+            // The step the record runs next: a record without timing is transcribed first.
+            let step = coordinator.runStartsWithTranscription(for: record) ? 1 : 2
+            return .working(step: step, detail: String(localized: "speakers.status.waiting"), fraction: nil)
         case .transcribing:
             return .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
         case .downloadingModels:
