@@ -99,9 +99,8 @@ struct SpeakerRecordingRow: View {
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityStatus)
         .accessibilityAddTraits(onOpen != nil ? .isButton : .isStaticText)
-        .accessibilityAction {
-            onOpen?()
-        }
+        // Only rows that open something offer a default action; file-intake rows do not.
+        .modifier(SpeakerRowOpenAction(onOpen: onOpen))
         .accessibilityActions {
             if let onRetry {
                 Button(String(localized: "speakers.action.tryAgain"), action: onRetry)
@@ -514,5 +513,19 @@ struct SpeakerPersonCard: View {
     private func commit(_ service: SpeakerVoiceProfileService) {
         if nameDraft != profile.name { service.renameProfile(profile.id, to: nameDraft) }
         nameDraft = service.store.profile(withID: profile.id)?.name ?? profile.name
+    }
+}
+
+/// The default VoiceOver action of a recording row, only when the row opens something.
+private struct SpeakerRowOpenAction: ViewModifier {
+    let onOpen: (() -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let onOpen {
+            content.accessibilityAction(.default, onOpen)
+        } else {
+            content
+        }
     }
 }
