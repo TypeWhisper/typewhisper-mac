@@ -73,6 +73,9 @@ extension ServiceContainer {
             self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
         seedScreenshotPluginSettings(language: language)
+        // Screenshot runs skip initialize(), so apply the plugin restrictions of an installed
+        // profile here, before the scan, as a normal launch does.
+        pluginManager.applyProviderPolicy(ManagedProviderPolicy(snapshot: managedPolicyService.current))
         pluginManager.scanAndLoadPlugins()
 
         statisticsViewModel.refresh()
