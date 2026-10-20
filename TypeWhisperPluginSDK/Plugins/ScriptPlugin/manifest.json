@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.script",
     "name": "Script Runner",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
