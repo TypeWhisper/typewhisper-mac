@@ -1549,6 +1549,7 @@ struct CloudFolderSyncSettingsView: View {
     @State private var confirmingSyncFolderDeletion = false
     @State private var showingSyncDevices = false
     @State private var confirmingHistorySync = false
+    @State private var lastAnnouncedError: String?
 
     private var modePicker: some View {
         Picker(String(localized: "premium.window.sync.modePicker"), selection: Binding(
@@ -1576,6 +1577,7 @@ struct CloudFolderSyncSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "premium.window.sync.modeTitle"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     // Long mode names do not fit side by side in a narrow window.
                     ViewThatFits(in: .horizontal) {
@@ -1624,6 +1626,7 @@ struct CloudFolderSyncSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "premium.window.sync.statusTitle"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     statusRow(title: String(localized: "premium.window.sync.provider"), value: controller.provider.displayName, systemImage: "cloud")
                     statusRow(title: String(localized: "premium.window.sync.folder"), value: controller.selectedFolderDisplayName, systemImage: "folder")
@@ -1638,11 +1641,14 @@ struct CloudFolderSyncSettingsView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.tertiary)
                                 .padding(.leading, 6)
+                                .accessibilityHidden(true)
                             Spacer(minLength: 0)
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "premium.window.sync.devices"))
+                    .accessibilityValue(controller.deviceCount.formatted())
                     .accessibilityIdentifier("premium.sync.devices")
                 }
             }
@@ -1651,6 +1657,7 @@ struct CloudFolderSyncSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "premium.window.sync.actionsTitle"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     HStack(spacing: 8) {
                         // Choosing a folder switches to Cloud Folder; in the other modes the
@@ -1666,7 +1673,11 @@ struct CloudFolderSyncSettingsView: View {
                         }
 
                         Button {
-                            Task { await controller.syncNow() }
+                            lastAnnouncedError = nil
+                            Task {
+                                await controller.syncNow()
+                                announceStatus()
+                            }
                         } label: {
                             if controller.isSyncing {
                                 Label(String(localized: "premium.window.sync.syncing"), systemImage: "arrow.triangle.2.circlepath")
@@ -1723,6 +1734,13 @@ struct CloudFolderSyncSettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        // Results and errors only appear in the labels above, so VoiceOver
+        // users hear them. A repeated background error is announced once.
+        .onChange(of: controller.errorMessage) { _, message in
+            guard let message, message != lastAnnouncedError else { return }
+            lastAnnouncedError = message
+            ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
+        }
         .sheet(isPresented: $showingSyncDevices) {
             PremiumSyncDevicesView(controller: controller)
         }
@@ -1731,7 +1749,11 @@ struct CloudFolderSyncSettingsView: View {
             isPresented: $confirmingSyncFolderDeletion
         ) {
             Button(String(localized: "premium.window.sync.deleteConfirmationAction"), role: .destructive) {
-                Task { await controller.deletePrivateSyncFolder() }
+                lastAnnouncedError = nil
+                Task {
+                    await controller.deletePrivateSyncFolder()
+                    announceStatus()
+                }
             }
             Button(String(localized: "premium.common.cancel"), role: .cancel) {}
         } message: {
@@ -1755,6 +1777,7 @@ struct CloudFolderSyncSettingsView: View {
             Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
                 .frame(width: 18)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1763,6 +1786,15 @@ struct CloudFolderSyncSettingsView: View {
                 .lineLimit(2)
                 .textSelection(.enabled)
         }
+        // "Last Sync, Oct 20, 2026" as one element.
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Announces the result of an action the user started; errors are
+    /// announced when they appear.
+    private func announceStatus() {
+        guard controller.errorMessage == nil, let status = controller.statusMessage else { return }
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(status)
     }
 
     private var lastSyncText: String {
@@ -1838,6 +1870,8 @@ private struct PremiumSyncDeviceRow: View {
                 .font(.title3)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 28)
+                .accessibilityLabel(device.platformDisplayName)
+                .accessibilityHidden(device.displayName == device.platformDisplayName)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
