@@ -5,38 +5,24 @@
 	<key>PayloadContent</key>
 	<array>
 		<dict>
-			<key>PayloadContent</key>
-			<dict>
-				<key>com.typewhisper.mac</key>
-				<dict>
-					<key>Forced</key>
-					<array>
-						<dict>
-							<key>mcx_preference_settings</key>
-							<dict>
-								<key>LaunchAtLogin</key>
-								<true/>
-								<key>SkipOnboardingWhenReady</key>
-								<true/>
-								<key>SuppressOptionalPrompts</key>
-								<true/>
-								<key>UpdateMode</key>
-								<integer>0</integer>
-							</dict>
-						</dict>
-					</array>
-				</dict>
-			</dict>
+			<key>LaunchAtLogin</key>
+			<true/>
 			<key>PayloadDisplayName</key>
 			<string>TypeWhisper managed settings (com.typewhisper.mac)</string>
 			<key>PayloadIdentifier</key>
 			<string>com.typewhisper.mdm.deployment-updates.com.typewhisper.mac</string>
 			<key>PayloadType</key>
-			<string>com.apple.ManagedClient.preferences</string>
+			<string>com.typewhisper.mac</string>
 			<key>PayloadUUID</key>
 			<string>04150118-4BF1-5C60-881B-C72F8B6BB684</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
+			<key>SkipOnboardingWhenReady</key>
+			<true/>
+			<key>SuppressOptionalPrompts</key>
+			<true/>
+			<key>UpdateMode</key>
+			<integer>0</integer>
 		</dict>
 	</array>
 	<key>PayloadDescription</key>

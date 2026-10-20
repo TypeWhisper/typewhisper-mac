@@ -5,49 +5,35 @@
 	<key>PayloadContent</key>
 	<array>
 		<dict>
-			<key>PayloadContent</key>
-			<dict>
-				<key>com.typewhisper.mac</key>
-				<dict>
-					<key>Forced</key>
-					<array>
-						<dict>
-							<key>mcx_preference_settings</key>
-							<dict>
-								<key>AllowPluginDownloads</key>
-								<false/>
-								<key>AllowedLlmProviders</key>
-								<array>
-									<string>com.typewhisper.openai</string>
-									<string>com.typewhisper.apple-intelligence</string>
-								</array>
-								<key>AllowedTranscriptionProviders</key>
-								<array>
-									<string>com.typewhisper.parakeet</string>
-									<string>com.typewhisper.openai</string>
-								</array>
-								<key>Recommended</key>
-								<dict>
-									<key>TranscriptionModelId</key>
-									<string>gpt-4o-transcribe</string>
-									<key>TranscriptionProviderId</key>
-									<string>com.typewhisper.openai</string>
-								</dict>
-							</dict>
-						</dict>
-					</array>
-				</dict>
-			</dict>
+			<key>AllowPluginDownloads</key>
+			<false/>
+			<key>AllowedLlmProviders</key>
+			<array>
+				<string>com.typewhisper.openai</string>
+				<string>com.typewhisper.apple-intelligence</string>
+			</array>
+			<key>AllowedTranscriptionProviders</key>
+			<array>
+				<string>com.typewhisper.parakeet</string>
+				<string>com.typewhisper.openai</string>
+			</array>
 			<key>PayloadDisplayName</key>
 			<string>TypeWhisper managed settings (com.typewhisper.mac)</string>
 			<key>PayloadIdentifier</key>
 			<string>com.typewhisper.mdm.approved-cloud.com.typewhisper.mac</string>
 			<key>PayloadType</key>
-			<string>com.apple.ManagedClient.preferences</string>
+			<string>com.typewhisper.mac</string>
 			<key>PayloadUUID</key>
 			<string>778F8148-74B4-5069-9742-3D05DE5CB0A9</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
+			<key>Recommended</key>
+			<dict>
+				<key>TranscriptionModelId</key>
+				<string>gpt-4o-transcribe</string>
+				<key>TranscriptionProviderId</key>
+				<string>com.typewhisper.openai</string>
+			</dict>
 		</dict>
 	</array>
 	<key>PayloadDescription</key>

@@ -5,78 +5,50 @@
 	<key>PayloadContent</key>
 	<array>
 		<dict>
-			<key>PayloadContent</key>
-			<dict>
-				<key>com.typewhisper.mac</key>
-				<dict>
-					<key>Forced</key>
-					<array>
-						<dict>
-							<key>mcx_preference_settings</key>
-							<dict>
-								<key>Recommended</key>
-								<dict>
-									<key>LaunchAtLogin</key>
-									<true/>
-									<key>SuppressOptionalPrompts</key>
-									<true/>
-									<key>TranscriptionModelId</key>
-									<string>parakeet-tdt-0.6b-v3</string>
-									<key>TranscriptionProviderId</key>
-									<string>com.typewhisper.parakeet</string>
-								</dict>
-							</dict>
-						</dict>
-					</array>
-				</dict>
-			</dict>
 			<key>PayloadDisplayName</key>
 			<string>TypeWhisper managed settings (com.typewhisper.mac)</string>
 			<key>PayloadIdentifier</key>
 			<string>com.typewhisper.mdm.recommended.com.typewhisper.mac</string>
 			<key>PayloadType</key>
-			<string>com.apple.ManagedClient.preferences</string>
+			<string>com.typewhisper.mac</string>
 			<key>PayloadUUID</key>
 			<string>3285150E-3D9C-5331-9BD3-CD3FC8D5F105</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
+			<key>Recommended</key>
+			<dict>
+				<key>LaunchAtLogin</key>
+				<true/>
+				<key>SuppressOptionalPrompts</key>
+				<true/>
+				<key>TranscriptionModelId</key>
+				<string>parakeet-tdt-0.6b-v3</string>
+				<key>TranscriptionProviderId</key>
+				<string>com.typewhisper.parakeet</string>
+			</dict>
 		</dict>
 		<dict>
-			<key>PayloadContent</key>
-			<dict>
-				<key>com.typewhisper.typewhisper-app</key>
-				<dict>
-					<key>Forced</key>
-					<array>
-						<dict>
-							<key>mcx_preference_settings</key>
-							<dict>
-								<key>Recommended</key>
-								<dict>
-									<key>LaunchAtLogin</key>
-									<true/>
-									<key>SuppressOptionalPrompts</key>
-									<true/>
-									<key>TranscriptionModelId</key>
-									<string>parakeet-tdt-0.6b-v3</string>
-									<key>TranscriptionProviderId</key>
-									<string>com.typewhisper.parakeet</string>
-								</dict>
-							</dict>
-						</dict>
-					</array>
-				</dict>
-			</dict>
 			<key>PayloadDisplayName</key>
 			<string>TypeWhisper managed settings (com.typewhisper.typewhisper-app)</string>
 			<key>PayloadIdentifier</key>
 			<string>com.typewhisper.mdm.recommended.com.typewhisper.typewhisper-app</string>
 			<key>PayloadType</key>
-			<string>com.apple.ManagedClient.preferences</string>
+			<string>com.typewhisper.typewhisper-app</string>
 			<key>PayloadUUID</key>
 			<string>B6BE8D97-C05E-5D53-A1D7-B81856D95A36</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
+			<key>Recommended</key>
+			<dict>
+				<key>LaunchAtLogin</key>
+				<true/>
+				<key>SuppressOptionalPrompts</key>
+				<true/>
+				<key>TranscriptionModelId</key>
+				<string>parakeet-tdt-0.6b-v3</string>
+				<key>TranscriptionProviderId</key>
+				<string>com.typewhisper.parakeet</string>
+			</dict>
 		</dict>
 	</array>
 	<key>PayloadDescription</key>

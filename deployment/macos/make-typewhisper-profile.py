@@ -3,7 +3,8 @@
 
 The macOS counterpart to deployment/windows/Set-TypeWhisperPolicy.ps1 in TypeWhisper for
 Windows. Values are checked against the keys TypeWhisper understands (docs/mdm/managed-settings.md)
-before the profile is written, so a typo fails here instead of on the Macs.
+before the profile is written, so a typo fails here instead of on the Macs. Each payload sets the
+managed preferences of one domain, so System Settings lists every setting with its value.
 
 Examples:
 
@@ -159,13 +160,15 @@ def build_profile(
     payloads = []
     # A repeated domain would add a second payload with the same identifier and UUID.
     for domain in dict.fromkeys(domains):
+        # A payload whose type is the domain forces its other keys, like the custom settings
+        # payload, and System Settings shows them as a list of settings instead of a property list.
         payloads.append({
-            "PayloadType": "com.apple.ManagedClient.preferences",
+            "PayloadType": domain,
             "PayloadVersion": 1,
             "PayloadIdentifier": f"{identifier}.{domain}",
             "PayloadUUID": stable_uuid(identifier, domain),
             "PayloadDisplayName": f"TypeWhisper managed settings ({domain})",
-            "PayloadContent": {domain: {"Forced": [{"mcx_preference_settings": settings}]}},
+            **settings,
         })
     profile = {
         "PayloadType": "Configuration",

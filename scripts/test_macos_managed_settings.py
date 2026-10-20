@@ -135,6 +135,11 @@ class CatalogTests(unittest.TestCase):
             self.assertIn(f"`{name}`", documentation, name)
 
 
+def payload_settings(payload):
+    """The settings of a payload whose type is a preference domain: every key but the payload's own."""
+    return {key: value for key, value in payload.items() if not key.startswith("Payload")}
+
+
 class GeneratorTests(unittest.TestCase):
     def generate(self, *arguments):
         with tempfile.TemporaryDirectory() as directory:
@@ -146,8 +151,8 @@ class GeneratorTests(unittest.TestCase):
             return status, profile, stderr.getvalue()
 
     def settings(self, profile, domain="com.typewhisper.mac"):
-        payload = next(item for item in profile["PayloadContent"] if domain in item["PayloadContent"])
-        return payload["PayloadContent"][domain]["Forced"][0]["mcx_preference_settings"]
+        payload = next(item for item in profile["PayloadContent"] if item["PayloadType"] == domain)
+        return payload_settings(payload)
 
     def test_writes_enforced_and_recommended_values(self):
         status, profile, _ = self.generate(
@@ -166,14 +171,14 @@ class GeneratorTests(unittest.TestCase):
             "AllowedPlugins": [],
             "Recommended": {"UpdateChannel": 2, "LaunchAtLogin": True},
         })
-        self.assertEqual(profile["PayloadContent"][0]["PayloadType"], "com.apple.ManagedClient.preferences")
+        self.assertEqual(profile["PayloadContent"][0]["PayloadType"], "com.typewhisper.mac")
 
     def test_writes_one_payload_per_domain_with_stable_identifiers(self):
         arguments = ["--set", "SuppressOptionalPrompts=true", "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1]]
         _, first, _ = self.generate(*arguments)
         _, second, _ = self.generate(*arguments)
         self.assertEqual(first, second)
-        self.assertEqual([next(iter(item["PayloadContent"])) for item in first["PayloadContent"]], list(EDITION_DOMAINS))
+        self.assertEqual([item["PayloadType"] for item in first["PayloadContent"]], list(EDITION_DOMAINS))
         uuids = [first["PayloadUUID"]] + [item["PayloadUUID"] for item in first["PayloadContent"]]
         self.assertEqual(len(set(uuids)), 3)
 
@@ -182,7 +187,7 @@ class GeneratorTests(unittest.TestCase):
             "--set", "SuppressOptionalPrompts=true",
             "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
         )
-        self.assertEqual([next(iter(item["PayloadContent"])) for item in profile["PayloadContent"]], list(EDITION_DOMAINS))
+        self.assertEqual([item["PayloadType"] for item in profile["PayloadContent"]], list(EDITION_DOMAINS))
 
     def test_refuses_invalid_input(self):
         cases = [
@@ -215,11 +220,9 @@ class ProfileTests(unittest.TestCase):
                 uuids = [profile["PayloadUUID"]]
                 for payload in profile["PayloadContent"]:
                     uuids.append(payload["PayloadUUID"])
-                    if payload["PayloadType"] == "com.apple.ManagedClient.preferences":
+                    if payload["PayloadType"] in GENERATOR.DOMAINS:
                         seen_preferences = True
-                        for domain, content in payload["PayloadContent"].items():
-                            self.assertIn(domain, GENERATOR.DOMAINS)
-                            self.check_settings(domain, content["Forced"][0]["mcx_preference_settings"])
+                        self.check_settings(payload["PayloadType"], payload_settings(payload))
                     elif payload["PayloadType"] == "com.apple.servicemanagement":
                         for rule in payload["Rules"]:
                             self.assertIn(rule["RuleValue"], EDITION_DOMAINS)

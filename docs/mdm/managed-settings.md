@@ -1,8 +1,8 @@
 # Managed settings on macOS (TypeWhisper 1.8 and later)
 
-Administrators configure TypeWhisper through configuration profiles with a custom
-settings payload (`com.apple.ManagedClient.preferences`), the mechanism Iru, Jamf
-and other MDMs use for app preferences. The key names, values and precedence match
+Administrators configure TypeWhisper through configuration profiles that set
+managed preferences for its preference domain, the mechanism Iru, Jamf and other
+MDMs use for app preferences. The key names, values and precedence match
 the [registry policies of TypeWhisper for Windows](https://github.com/TypeWhisper/typewhisper-win/blob/main/docs/enterprise/windows-managed-settings.md),
 so one set of decisions applies to both platforms. Example profiles, a profile
 generator and schemas for Jamf Pro and profile editors are in
@@ -26,39 +26,45 @@ recommendation, then the application default. TypeWhisper never writes these val
 and never stores the effective result over a user's own setting, so removing a value
 brings the user's setting back.
 
+Each payload names the domain as its `PayloadType` and holds the settings next to
+its own `Payload` keys. System Settings then lists every setting with its value when
+the profile is installed:
+
 ```xml
-<key>PayloadContent</key>
 <dict>
-    <key>com.typewhisper.mac</key>
+    <key>PayloadType</key>
+    <string>com.typewhisper.mac</string>
+    <key>PayloadVersion</key>
+    <integer>1</integer>
+    <key>PayloadIdentifier</key>
+    <string>com.example.typewhisper.com.typewhisper.mac</string>
+    <key>PayloadUUID</key>
+    <string>0D5A3A6E-9C1B-4F3A-8E2D-6B7C1F0A2E41</string>
+    <key>PayloadDisplayName</key>
+    <string>TypeWhisper managed settings</string>
+    <key>UpdateMode</key>
+    <integer>1</integer>
+    <key>AllowedUpdateChannels</key>
+    <array>
+        <string>stable</string>
+    </array>
+    <key>SuppressOptionalPrompts</key>
+    <true/>
+    <key>Recommended</key>
     <dict>
-        <key>Forced</key>
-        <array>
-            <dict>
-                <key>mcx_preference_settings</key>
-                <dict>
-                    <key>UpdateMode</key>
-                    <integer>1</integer>
-                    <key>AllowedUpdateChannels</key>
-                    <array>
-                        <string>stable</string>
-                    </array>
-                    <key>SuppressOptionalPrompts</key>
-                    <true/>
-                    <key>Recommended</key>
-                    <dict>
-                        <key>LaunchAtLogin</key>
-                        <true/>
-                    </dict>
-                </dict>
-            </dict>
-        </array>
+        <key>LaunchAtLogin</key>
+        <true/>
     </dict>
 </dict>
 ```
 
 The surrounding profile is the same as in the
-[license example](TypeWhisper-License.mobileconfig). Device and user scope both
-work.
+[examples](../../deployment/macos/examples). The custom settings payload
+(`com.apple.ManagedClient.preferences`) with the values under `Forced` >
+`mcx_preference_settings`, as in the [license example](TypeWhisper-License.mobileconfig),
+works the same way. Device and user scope both work. macOS copies some keys of the
+profile itself into the domain, such as `PayloadUUID` and `_manualProfile`;
+TypeWhisper ignores keys that start with `Payload` or `_`.
 
 - Booleans are `<true/>` or `<false/>`; `<integer>1</integer>` is not a Boolean.
 - Enumerations are integers.
