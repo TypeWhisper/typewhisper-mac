@@ -605,6 +605,57 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertNil(engine.transientModelId)
     }
 
+    /// The host's pass and the bundled plugins' own code, with the plugin's saved values in a
+    /// store that stands in for its `plugin.<id>.*` defaults.
+    func testBundledEnginesReturnToTheirSavedSelectionWhenThePairIsRemoved() throws {
+        let cases: [(id: String, providerId: String, users: String, enforced: String, make: () -> TranscriptionEnginePlugin)] = [
+            ("com.typewhisper.parakeet", "parakeet", "parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", {
+                let plugin = ParakeetPlugin()
+                plugin.restoresModelOnActivate = false
+                return plugin
+            }),
+            ("com.typewhisper.whisperkit", "whisper", "openai_whisper-tiny", "openai_whisper-large-v3_turbo", { WhisperKitPlugin() }),
+        ]
+        for testCase in cases {
+            for saved in [nil, testCase.users] {
+                let host = PairPluginHost(directory: directory, defaults: saved.map { ["selectedModel": $0] } ?? [:])
+                let manager = PluginManager(appSupportDirectory: directory)
+                PluginManager.shared = manager
+                func launch() -> TranscriptionEnginePlugin {
+                    let plugin = testCase.make()
+                    plugin.activate(host: host)
+                    manager.loadedPlugins = [loaded(plugin, id: testCase.id, locality: "local", categories: ["transcription"])]
+                    return plugin
+                }
+                var plugin = launch()
+                let modelManager = ModelManagerService()
+                modelManager.selectProvider(testCase.providerId)
+
+                manager.applySelectionPolicy(ManagedSelectionPolicy(
+                    enforcedTranscription: ManagedSelectionPair(providerId: testCase.id, modelId: testCase.enforced)
+                ))
+                modelManager.restoreProviderSelection()
+                XCTAssertEqual(plugin.selectedModelId, testCase.enforced, testCase.id)
+
+                // A relaunch while the profile is installed applies the model again.
+                plugin.deactivate()
+                plugin = launch()
+                XCTAssertEqual(plugin.selectedModelId, saved, "\(testCase.id): the enforced model was saved")
+                ModelManagerService().restoreProviderSelection()
+                XCTAssertEqual(plugin.selectedModelId, testCase.enforced, testCase.id)
+
+                manager.applySelectionPolicy(.unmanaged)
+                ModelManagerService().restoreProviderSelection()
+
+                XCTAssertEqual(plugin.selectedModelId, saved, testCase.id)
+                XCTAssertEqual(host.value(forKey: "selectedModel"), saved, testCase.id)
+                XCTAssertNil(host.value(forKey: "loadedModel"), testCase.id)
+                XCTAssertTrue(retainedModels().isEmpty, testCase.id)
+                plugin.deactivate()
+            }
+        }
+    }
+
     private func makeTransientManager(_ engines: [TransientPairEngine]) -> (PluginManager, ModelManagerService) {
         let manager = PluginManager(appSupportDirectory: directory)
         let main = engines[0]
@@ -821,4 +872,38 @@ private final class TransientPairEngine: NSObject, TransientModelSelectionProvid
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "ok", detectedLanguage: language)
     }
+}
+
+/// Stands in for the host services of a bundled plugin; nothing reaches the keychain or real defaults.
+private final class PairPluginHost: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var defaults: [String: Any]
+    let pluginDataDirectory: URL
+    let eventBus: EventBusProtocol = PairPluginEventBus()
+    var activeAppBundleId: String? { nil }
+    var activeAppName: String? { nil }
+    var availableRuleNames: [String] { [] }
+    var shouldRestoreLoadedModelsPassively: Bool { false }
+
+    init(directory: URL, defaults: [String: Any]) {
+        pluginDataDirectory = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        self.defaults = defaults
+    }
+
+    func value(forKey key: String) -> String? {
+        userDefault(forKey: key) as? String
+    }
+
+    func storeSecret(key: String, value: String) throws {}
+    func loadSecret(key: String) -> String? { nil }
+    func userDefault(forKey key: String) -> Any? { lock.withLock { defaults[key] } }
+    func setUserDefault(_ value: Any?, forKey key: String) { lock.withLock { defaults[key] = value } }
+    func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
+}
+
+private final class PairPluginEventBus: EventBusProtocol, @unchecked Sendable {
+    @discardableResult
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
+    func unsubscribe(id: UUID) {}
 }
