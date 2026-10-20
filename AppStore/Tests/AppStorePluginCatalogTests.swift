@@ -36,6 +36,14 @@ final class AppStorePluginCatalogTests: XCTestCase {
         XCTAssertTrue(AppStorePluginCatalog.isInstalled("com.typewhisper.parakeet", userDefaults: defaults))
     }
 
+    func testCatalogEntriesCarryTheBundledManifestLocality() {
+        let plugins = AppStorePluginCatalog.registryPlugins()
+
+        // Managed settings judge installs by this value; without it every plugin counts as non-local.
+        XCTAssertEqual(plugins.first { $0.id == "com.typewhisper.parakeet" }?.locality, "local")
+        XCTAssertEqual(plugins.filter { $0.locality == nil }.map(\.id), [])
+    }
+
     func testSpeakerDetectionIsBundledButNotListedInTheMarketplace() {
         let speakerID = SpeakerTranscriptCoordinator.bundledPluginID
 

@@ -770,6 +770,9 @@ final class APIHandlers: @unchecked Sendable {
                 engine.modelCatalog.contains(where: { $0.id == model })
             }
             if matches.isEmpty {
+                if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forModelId: model) {
+                    return .reject(.error(status: 403, message: refusal, code: "forbidden"))
+                }
                 return .reject(.error(status: 400, message: "Unknown model '\(model)'"))
             }
             if matches.count > 1 {
