@@ -145,7 +145,8 @@ struct HomeSettingsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(title), \(value)"))
+        // "—" while there is no data is read as "No data", as on the Statistics page.
+        .accessibilityLabel(Text("\(title), \(statisticsSpokenValue(value))"))
         .accessibilityAddTraits(.isButton)
     }
 

@@ -543,7 +543,7 @@ private struct StatisticsStatCard: View {
 }
 
 /// The cards show "—" while there is no data; VoiceOver would read it as "em dash".
-private func statisticsSpokenValue(_ value: String) -> String {
+func statisticsSpokenValue(_ value: String) -> String {
     value == "—" ? localizedAppText("No data", de: "Keine Daten", ja: "データなし", zh: "无数据") : value
 }
 
