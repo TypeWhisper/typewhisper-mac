@@ -100,6 +100,7 @@ struct MCPClientSettingsView: View {
                     HStack(spacing: 12) {
                         Image(systemName: server.transport == .stdio ? "terminal" : "network")
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.name).font(.headline)
                             Text(
@@ -119,6 +120,7 @@ struct MCPClientSettingsView: View {
                             serverEditor = server
                         }
                         .buttonStyle(.bordered)
+                        .accessibilityLabel(Text("Edit \(server.name)", bundle: bundle))
                         Button(role: .destructive) {
                             plugin.removeServer(id: server.id)
                             refreshToken += 1
@@ -126,7 +128,7 @@ struct MCPClientSettingsView: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel(Text("Remove MCP server", bundle: bundle))
+                        .accessibilityLabel(Text("Remove \(server.name)", bundle: bundle))
                     }
                     .padding(.vertical, 4)
                 }
@@ -171,6 +173,7 @@ struct MCPClientSettingsView: View {
                     HStack(spacing: 12) {
                         Image(systemName: action.symbolName)
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(action.name).font(.headline)
                             Text("\(serverName(for: action.serverID)) · \(action.toolName)")
@@ -189,6 +192,7 @@ struct MCPClientSettingsView: View {
                             actionEditor = action
                         }
                         .buttonStyle(.bordered)
+                        .accessibilityLabel(Text("Edit \(action.name)", bundle: bundle))
                         Button(role: .destructive) {
                             plugin.removeAction(id: action.id)
                             refreshToken += 1
@@ -196,7 +200,7 @@ struct MCPClientSettingsView: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
-                        .accessibilityLabel(Text("Remove MCP action", bundle: bundle))
+                        .accessibilityLabel(Text("Remove \(action.name)", bundle: bundle))
                     }
                     .padding(.vertical, 4)
                 }
@@ -228,7 +232,11 @@ struct MCPClientSettingsView: View {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: entry.status == .success ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                             .foregroundStyle(entry.status == .success ? .green : .orange)
-                            .accessibilityHidden(true)
+                            .accessibilityLabel(
+                                entry.status == .success
+                                    ? Text("Succeeded", bundle: bundle)
+                                    : Text("Failed", bundle: bundle)
+                            )
                         VStack(alignment: .leading, spacing: 3) {
                             Text(entry.actionName ?? entry.serverName).font(.headline)
                             Text(entry.summary).textSelection(.enabled)

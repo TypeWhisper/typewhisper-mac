@@ -1088,6 +1088,8 @@ private struct SaluteSpeechSettingsView: View {
     @State private var showBalanceDatePicker = false
     @State private var usageErrorMessage: String?
 
+    private var authorizationKeyTitle: String { String(localized: "Authorization Key") }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
@@ -1099,9 +1101,11 @@ private struct SaluteSpeechSettingsView: View {
                         TextField("Base64 ClientID:ClientSecret", text: $authorizationKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("Authorization Key"))
                     } else {
                         SecureField("Base64 ClientID:ClientSecret", text: $authorizationKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Authorization Key"))
                     }
 
                     Button {
@@ -1110,6 +1114,7 @@ private struct SaluteSpeechSettingsView: View {
                         Image(systemName: showAuthorizationKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showAuthorizationKey ? Text("Hide \(authorizationKeyTitle)") : Text("Show \(authorizationKeyTitle)"))
 
                     if plugin.isConfigured {
                         Button("Remove") {
@@ -1118,6 +1123,7 @@ private struct SaluteSpeechSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove \(authorizationKeyTitle)"))
                     } else {
                         Button("Save") {
                             saveAuthorizationKey()
@@ -1125,6 +1131,7 @@ private struct SaluteSpeechSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(authorizationKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save \(authorizationKeyTitle)"))
                     }
                 }
 
@@ -1139,6 +1146,7 @@ private struct SaluteSpeechSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.red)
+                            .accessibilityLabel(Text("Error"))
                         Text(settingsErrorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
@@ -1284,6 +1292,7 @@ private struct SaluteSpeechSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Error"))
                     Text(usageErrorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)
@@ -1302,6 +1311,7 @@ private struct SaluteSpeechSettingsView: View {
                 TextField("Minutes", text: $balanceRemainingInput)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 120)
+                    .accessibilityLabel(Text("Studio remaining"))
 
                 Text("min")
                     .foregroundStyle(.secondary)

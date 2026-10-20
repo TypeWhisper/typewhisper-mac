@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Remove credentials": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdaten entfernen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "認証情報を削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除凭据"
+          }
+        }
+      }
+    },
     "Cloud Speech-to-Text API is not enabled for this Google Cloud project. Enable speech.googleapis.com in Google Cloud, wait a few minutes, and retry.": {
       "localizations": {
         "de": {

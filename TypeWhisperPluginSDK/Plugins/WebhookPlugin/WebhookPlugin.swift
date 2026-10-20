@@ -614,7 +614,7 @@ private struct WebhookRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(webhook.name.isEmpty ? webhook.url : webhook.name)
+                Text(displayName)
                     .font(.body.weight(.medium))
 
                 if !webhook.url.isEmpty {
@@ -641,11 +641,13 @@ private struct WebhookRow: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .labelsHidden()
+            .accessibilityLabel(Text("Enable \(displayName)", bundle: bundle))
 
             Button(action: onEdit) {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(Text("Edit \(displayName)", bundle: bundle))
 
             Button(role: .destructive) {
                 service.removeWebhook(id: webhook.id)
@@ -653,8 +655,13 @@ private struct WebhookRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(Text("Delete \(displayName)", bundle: bundle))
         }
         .padding(.vertical, 4)
+    }
+
+    private var displayName: String {
+        webhook.name.isEmpty ? webhook.url : webhook.name
     }
 
     private var workflowScopeDescription: String {
@@ -679,6 +686,7 @@ private struct DeliveryLogRow: View {
         HStack {
             Image(systemName: entry.success ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(entry.success ? .green : .red)
+                .accessibilityLabel(entry.success ? Text("Succeeded", bundle: bundle) : Text("Failed", bundle: bundle))
             VStack(alignment: .leading) {
                 Text(entry.webhookName.isEmpty ? entry.url : entry.webhookName)
                     .font(.caption)

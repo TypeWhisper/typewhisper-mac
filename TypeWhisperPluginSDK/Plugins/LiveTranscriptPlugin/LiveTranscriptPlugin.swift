@@ -767,6 +767,7 @@ private struct LiveTranscriptSettingsView: View {
                             .onChange(of: fontSize) { _, newValue in
                                 plugin.updateFontSizePreference(newValue)
                             }
+                            .accessibilityLabel(Text("Font size", bundle: bundle))
                         Text("\(Int(fontSize))pt")
                             .monospacedDigit()
                             .frame(width: 40, alignment: .trailing)
@@ -791,6 +792,7 @@ private struct LiveTranscriptSettingsView: View {
                             in: LiveTranscriptAppearance.windowWidthRange,
                             step: 20
                         )
+                            .accessibilityLabel(Text("Width", bundle: bundle))
                         Text("\(Int(plugin._windowWidth))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
@@ -808,6 +810,7 @@ private struct LiveTranscriptSettingsView: View {
                             in: LiveTranscriptAppearance.windowHeightRange,
                             step: 20
                         )
+                            .accessibilityLabel(Text("Height", bundle: bundle))
                         Text("\(Int(plugin._windowHeight))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
@@ -824,6 +827,8 @@ private struct LiveTranscriptSettingsView: View {
                             .onChange(of: backgroundOpacity) { _, newValue in
                                 plugin.updateBackgroundOpacityPreference(newValue)
                             }
+                            .accessibilityLabel(Text("Background opacity", bundle: bundle))
+                            .accessibilityValue(Text(backgroundOpacity, format: .percent.precision(.fractionLength(0))))
                         Text("\(Int(backgroundOpacity * 100))%")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
@@ -858,6 +863,7 @@ private struct LiveTranscriptSettingsView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(Text("Clear shortcut", bundle: bundle))
                         }
                     }
                 }

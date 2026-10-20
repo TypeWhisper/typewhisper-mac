@@ -3479,7 +3479,7 @@ private struct OpenAISettingsView: View {
                     Text("Transcription Model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Transcription Model", selection: $selectedModel) {
+                    Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -3512,6 +3512,7 @@ private struct OpenAISettingsView: View {
                         .onChange(of: transcriptionContext) {
                             plugin.setTranscriptionContext(transcriptionContext)
                         }
+                        .accessibilityLabel(Text("Transcription Context", bundle: bundle))
 
                         Text("Language hints and dictionary terms are added automatically.", bundle: bundle)
                             .font(.caption)
@@ -3520,7 +3521,7 @@ private struct OpenAISettingsView: View {
 
                     if plugin.transcriptionModelIsRealtime(selectedModel)
                         && plugin.transcriptionModelUsesContextAwareHints(selectedModel) {
-                        Picker("Live Transcription Delay", selection: $liveTranscriptionDelay) {
+                        Picker(String(localized: "Live Transcription Delay", bundle: bundle), selection: $liveTranscriptionDelay) {
                             ForEach(OpenAILiveTranscriptionDelay.allCases, id: \.self) { delay in
                                 Text(LocalizedStringKey(delay.displayName), bundle: bundle).tag(delay)
                             }
@@ -3582,9 +3583,11 @@ private struct OpenAISettingsView: View {
                     TextField("API Key", text: $apiKeyInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
+                        .accessibilityLabel(Text("API Key", bundle: bundle))
                 } else {
                     SecureField("API Key", text: $apiKeyInput)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("API Key", bundle: bundle))
                 }
 
                 Button {
@@ -3593,6 +3596,7 @@ private struct OpenAISettingsView: View {
                     Image(systemName: showApiKey ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                 if OpenAIAPIKeyField.showsRemove(
                     storedKey: plugin._apiKey,
@@ -3607,6 +3611,7 @@ private struct OpenAISettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .foregroundStyle(.red)
+                    .accessibilityLabel(Text("Remove API key", bundle: bundle))
                 } else {
                     Button(String(localized: "Save", bundle: bundle)) {
                         saveApiKey()
@@ -3614,6 +3619,7 @@ private struct OpenAISettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel(Text("Save API key", bundle: bundle))
                 }
             }
             // Lock the row until the result arrives so it always describes the key in the field.
@@ -3630,6 +3636,7 @@ private struct OpenAISettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(result ? .green : .red)
+                        .accessibilityHidden(true)
                     Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(result ? .green : .red)
@@ -3677,6 +3684,7 @@ private struct OpenAISettingsView: View {
                     .buttonStyle(.bordered)
                     .foregroundStyle(.red)
                     .disabled(oauthBusy)
+                    .accessibilityLabel(Text("Remove ChatGPT login", bundle: bundle))
                 }
             }
 
@@ -3693,6 +3701,7 @@ private struct OpenAISettingsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     Text("ChatGPT login connected", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.green)
@@ -3725,7 +3734,7 @@ private struct OpenAISettingsView: View {
             Text("Text-to-Speech Voice", bundle: bundle)
                 .font(.headline)
 
-            Picker("Text-to-Speech Voice", selection: $selectedVoiceId) {
+            Picker(String(localized: "Text-to-Speech Voice", bundle: bundle), selection: $selectedVoiceId) {
                 ForEach(plugin.availableVoices, id: \.id) { voice in
                     Text(voice.displayName).tag(voice.id)
                 }
@@ -3740,6 +3749,7 @@ private struct OpenAISettingsView: View {
                 .onChange(of: ttsInstructions) {
                     plugin.setTTSInstructions(ttsInstructions)
                 }
+                .accessibilityLabel(Text("Voice instructions", bundle: bundle))
         }
     }
 
@@ -3763,9 +3773,10 @@ private struct OpenAISettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(isRefreshingLLMModels)
+                .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
             }
 
-            Picker("LLM Model", selection: $selectedLLMModel) {
+            Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                 ForEach(plugin.supportedModels, id: \.id) { model in
                     Text(model.displayName).tag(model.id)
                 }
@@ -3820,7 +3831,7 @@ private struct OpenAISettingsView: View {
         VStack(alignment: .leading, spacing: 12) {
             if !supportedReasoningEfforts.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("Reasoning Effort", selection: $selectedReasoningEffort) {
+                    Picker(String(localized: "Reasoning Effort", bundle: bundle), selection: $selectedReasoningEffort) {
                         ForEach(supportedReasoningEfforts, id: \.self) { effort in
                             Text(LocalizedStringKey(effort.localizedKey), bundle: bundle).tag(effort)
                         }
@@ -3861,6 +3872,7 @@ private struct OpenAISettingsView: View {
                             .onChange(of: llmTemperatureValue) {
                                 plugin.setLLMTemperatureValue(llmTemperatureValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
                     }
 
                     if llmTemperatureMode == .custom,

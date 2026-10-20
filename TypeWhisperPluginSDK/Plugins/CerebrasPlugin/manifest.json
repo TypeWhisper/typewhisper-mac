@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.cerebras",
     "name": "Cerebras",
-    "version": "1.0.6",
+    "version": "1.0.7",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

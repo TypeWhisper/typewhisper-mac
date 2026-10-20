@@ -1249,9 +1249,11 @@ private struct DeepgramSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -1260,6 +1262,7 @@ private struct DeepgramSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -1270,6 +1273,7 @@ private struct DeepgramSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -1277,6 +1281,7 @@ private struct DeepgramSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -1291,6 +1296,7 @@ private struct DeepgramSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -1306,7 +1312,7 @@ private struct DeepgramSettingsView: View {
                     Text("Model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Model", selection: $selectedModel) {
+                    Picker(String(localized: "Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -1356,6 +1362,7 @@ private struct DeepgramSettingsView: View {
                                 .onChange(of: customBaseURL) {
                                     plugin.setCustomBaseURL(customBaseURL)
                                 }
+                                .accessibilityLabel(Text("Custom Base URL", bundle: bundle))
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
@@ -1368,6 +1375,7 @@ private struct DeepgramSettingsView: View {
                                 .onChange(of: customAuthHeader) {
                                     plugin.setCustomAuthHeader(customAuthHeader)
                                 }
+                                .accessibilityLabel(Text("Custom Auth Header", bundle: bundle))
                         }
 
                         Text("For Cloudflare AI Gateway or custom proxies", bundle: bundle)

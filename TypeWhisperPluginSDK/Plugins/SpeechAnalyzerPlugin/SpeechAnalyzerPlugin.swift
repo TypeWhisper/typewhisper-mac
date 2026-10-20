@@ -681,6 +681,7 @@ private struct SpeechAnalyzerSettingsView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityHidden(true)
                     let modelName = models.first(where: { $0.id == loadedId })?.displayName ?? loadedId
                     Text("Active: \(modelName)", bundle: bundle)
                         .font(.callout)
@@ -693,6 +694,7 @@ private struct SpeechAnalyzerSettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Unload \(modelName)", bundle: bundle))
                 }
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 8).fill(.green.opacity(0.1)))
@@ -711,6 +713,7 @@ private struct SpeechAnalyzerSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -721,6 +724,7 @@ private struct SpeechAnalyzerSettingsView: View {
 
             TextField(String(localized: "Search languages...", bundle: bundle), text: $searchText)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(Text("Search languages", bundle: bundle))
 
             if models.isEmpty {
                 HStack(spacing: 8) {
@@ -786,6 +790,7 @@ private struct SpeechAnalyzerSettingsView: View {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.green)
                     .font(.caption)
+                    .accessibilityLabel(Text("Active", bundle: bundle))
             } else if modelDef.id == onDemandModelId, modelState == .notLoaded {
                 PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
@@ -801,6 +806,7 @@ private struct SpeechAnalyzerSettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
                 .disabled(modelState == .downloading)
+                .accessibilityLabel(Text("Select \(modelDef.displayName)", bundle: bundle))
             }
         }
         .padding(.vertical, 2)

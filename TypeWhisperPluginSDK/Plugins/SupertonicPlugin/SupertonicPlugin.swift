@@ -403,9 +403,11 @@ private struct SupertonicSettingsView: View {
                 HStack(spacing: 8) {
                     ProgressView(value: progress)
                         .frame(width: 160)
+                        .accessibilityLabel(Text("Downloading model", bundle: bundle))
                     Text("\(Int(progress * 100))%")
                         .font(.caption)
                         .monospacedDigit()
+                        .accessibilityHidden(true)
                 }
             case .error(let message):
                 Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -463,6 +465,7 @@ private struct SupertonicSettingsView: View {
                 .onChange(of: speed) { _, newValue in
                     plugin.setSpeed(newValue)
                 }
+                .accessibilityLabel(Text("Speed", bundle: bundle))
 
             Picker(String(localized: "Quality", bundle: bundle), selection: $quality) {
                 ForEach(SupertonicQuality.allCases, id: \.self) { quality in
@@ -488,12 +491,14 @@ private struct SupertonicSettingsView: View {
             HStack(spacing: 8) {
                 SecureField("hf_...", text: $hfTokenInput)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
 
                 Button(String(localized: "Save", bundle: bundle)) {
                     validateAndSaveHuggingFaceToken()
                 }
                 .controlSize(.small)
                 .disabled(hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidatingToken)
+                .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
 
                 if plugin.huggingFaceToken != nil {
                     Button(String(localized: "Remove", bundle: bundle)) {
@@ -502,6 +507,7 @@ private struct SupertonicSettingsView: View {
                         plugin.clearHuggingFaceToken()
                     }
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                 }
             }
 

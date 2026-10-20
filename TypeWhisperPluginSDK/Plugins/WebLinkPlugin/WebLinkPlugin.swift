@@ -803,11 +803,13 @@ private struct WebLinkSettingsView: View {
                     .truncationMode(.middle)
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .accessibilityLabel(Text(webLinkLocalized("Installed")))
             } else {
                 Text(webLinkLocalized("Not installed"))
                     .foregroundStyle(.secondary)
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
             }
         }
     }

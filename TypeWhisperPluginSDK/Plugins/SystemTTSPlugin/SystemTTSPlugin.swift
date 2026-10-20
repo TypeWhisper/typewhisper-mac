@@ -337,6 +337,8 @@ private struct SystemTTSSettingsView: View {
                         in: 100...300,
                         step: 5
                     )
+                        .accessibilityLabel(Text("Speed"))
+                        .accessibilityValue(plugin.selectedRateWPM == nil ? Text(String(localized: "System Default")) : Text("\(Int(rateWPM)) WPM"))
 
                     Button(String(localized: "Use System Default Speed")) {
                         rateWPM = 175

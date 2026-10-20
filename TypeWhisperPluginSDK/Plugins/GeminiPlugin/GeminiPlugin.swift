@@ -2100,9 +2100,11 @@ private struct GeminiSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -2111,6 +2113,7 @@ private struct GeminiSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isAvailable {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -2121,6 +2124,7 @@ private struct GeminiSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -2128,6 +2132,7 @@ private struct GeminiSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -2142,6 +2147,7 @@ private struct GeminiSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -2167,9 +2173,10 @@ private struct GeminiSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
                     }
 
-                    Picker("Model", selection: $selectedLLMModel) {
+                    Picker(String(localized: "Model", bundle: bundle), selection: $selectedLLMModel) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -2202,9 +2209,10 @@ private struct GeminiSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh transcription models", bundle: bundle))
                     }
 
-                    Picker("Transcription Model", selection: $selectedTranscriptionModel) {
+                    Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedTranscriptionModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -2266,6 +2274,7 @@ private struct GeminiSettingsView: View {
                             .onChange(of: llmTemperatureValue) {
                                 plugin.setLLMTemperatureValue(llmTemperatureValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
                     }
                 }
             }

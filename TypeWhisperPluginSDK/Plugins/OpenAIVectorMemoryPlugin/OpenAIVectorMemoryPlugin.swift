@@ -309,6 +309,8 @@ private struct OpenAIVectorMemorySettingsView: View {
     @State private var isKeyVisible = false
     @State private var searchText = ""
 
+    private var apiKeyTitle: String { String(localized: "API Key") }
+
     var filteredMemories: [MemoryEntry] {
         if searchText.isEmpty { return memories }
         return memories.filter { $0.content.localizedCaseInsensitiveContains(searchText) }
@@ -319,18 +321,23 @@ private struct OpenAIVectorMemorySettingsView: View {
             HStack(spacing: 8) {
                 if isKeyVisible {
                     TextField("sk-...", text: $apiKey).textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("API Key"))
                 } else {
                     SecureField("sk-...", text: $apiKey).textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("API Key"))
                 }
                 Button { isKeyVisible.toggle() } label: {
                     Image(systemName: isKeyVisible ? "eye.slash" : "eye")
                 }.buttonStyle(.borderless)
+                    .accessibilityLabel(isKeyVisible ? Text("Hide \(apiKeyTitle)") : Text("Show \(apiKeyTitle)"))
                 Button(String(localized: "Save")) { plugin.setApiKey(apiKey) }
+                    .accessibilityLabel(Text("Save \(apiKeyTitle)"))
             }
 
             HStack {
                 Image(systemName: plugin.isReady ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .foregroundStyle(plugin.isReady ? .green : .red).font(.caption)
+                    .accessibilityHidden(true)
                 Text(plugin.isReady ? String(localized: "Connected") : String(localized: "Not configured")).font(.caption)
                 if let storeId = plugin.getStoreId() {
                     Text("(\(storeId.prefix(12))...)").font(.caption).foregroundStyle(.tertiary)
@@ -340,9 +347,11 @@ private struct OpenAIVectorMemorySettingsView: View {
                 Button(role: .destructive) { plugin.clearAllSync(); memories = [] } label: {
                     Image(systemName: "trash").font(.caption)
                 }.buttonStyle(.borderless).disabled(memories.isEmpty)
+                    .accessibilityLabel(Text("Clear All"))
             }
 
             TextField(String(localized: "Search memories..."), text: $searchText).textFieldStyle(.roundedBorder)
+                .accessibilityLabel(Text("Search memories..."))
 
             if filteredMemories.isEmpty {
                 ContentUnavailableView {

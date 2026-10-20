@@ -636,6 +636,7 @@ private struct FillerWordsSettingsView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(.separator, lineWidth: 1)
                 )
+                .accessibilityLabel(Text("Filler words"))
 
             HStack {
                 Text("\(store.wordCount) words")
