@@ -65,10 +65,6 @@ private func dictionaryEntryAccessibilitySummary(_ row: DictionaryEntryRow, incl
     return parts.joined(separator: ", ")
 }
 
-private var dictionaryAddAliasTitle: String {
-    localizedAppText("Add Alias", de: "Variante hinzufügen", ja: "別表記を追加", zh: "添加变体")
-}
-
 struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
@@ -589,6 +585,7 @@ struct DictionarySettingsView: View {
                 }
                 .padding(.vertical, 12)
                 .accessibilityElement(children: .ignore)
+                .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel(String(localized: "Loading community packs..."))
 
             case .error(let message):
@@ -1447,6 +1444,7 @@ private struct TermPackCardView: View {
                                 .background(Color.orange.opacity(0.1))
                                 .clipShape(RoundedRectangle(cornerRadius: 4))
                                 .accessibilityElement(children: .ignore)
+                                .accessibilityAddTraits(.isStaticText)
                                 .accessibilityLabel(dictionaryCorrectionAccessibilityText(
                                     original: correction.original,
                                     replacement: correction.replacement
@@ -1567,15 +1565,13 @@ private struct DictionaryCardView: View {
         .onTapGesture {
             editEntry()
         }
-        // The row reads as one switch; editing, aliases and deleting, which sighted
-        // users reach by clicking or through the context menu, become named actions.
+        // The row reads as one switch; editing and deleting, which sighted users reach
+        // by clicking or through the context menu, become named actions. The combined
+        // row already offers the Add Alias button as an action.
         .accessibilityElement(children: .combine)
         .accessibilityLabel(dictionaryEntryAccessibilitySummary(row))
         .accessibilityActions {
             Button(String(localized: "Edit"), action: editEntry)
-            if let addAlias, canAddAlias {
-                Button(dictionaryAddAliasTitle, action: addAlias)
-            }
             Button(String(localized: "Delete"), action: deleteEntry)
         }
         .contextMenu {
@@ -1815,6 +1811,7 @@ private struct DictionaryBoostingBadge: View {
         .background(Color.secondary.opacity(0.10))
         .clipShape(RoundedRectangle(cornerRadius: 4))
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(dictionaryBoostingAccessibilityText(label: label, value: value))
     }
 }

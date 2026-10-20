@@ -306,6 +306,10 @@ struct StatisticsView: View {
             }
             }
         }
+        // Keeps the rows with their card; side by side, VoiceOver would interleave
+        // apps and models by position.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Top Apps"))
     }
 
     // MARK: - Heatmap
@@ -484,6 +488,8 @@ struct StatisticsView: View {
             }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Models Used"))
     }
 
     // MARK: - Empty state
@@ -532,8 +538,13 @@ private struct StatisticsStatCard: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
+        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? statisticsSpokenValue(value))"))
     }
+}
+
+/// The cards show "—" while there is no data; VoiceOver would read it as "em dash".
+private func statisticsSpokenValue(_ value: String) -> String {
+    value == "—" ? localizedAppText("No data", de: "Keine Daten", ja: "データなし", zh: "无数据") : value
 }
 
 struct StatisticsMetricCard: View {
@@ -567,6 +578,7 @@ struct StatisticsMetricCard: View {
     }
 
     private var trendAwareAccessibilityLabel: Text {
+        let value = statisticsSpokenValue(value)
         guard let trend else {
             return Text("\(title), \(value)")
         }

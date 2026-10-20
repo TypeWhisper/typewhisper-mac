@@ -126,6 +126,7 @@ struct AudioRecorderView: View {
                         .foregroundStyle(.red)
                         .font(.callout)
                         .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityLabel(String(localized: "Error: \(error)"))
                 }
 
@@ -134,6 +135,7 @@ struct AudioRecorderView: View {
                         .foregroundStyle(.orange)
                         .font(.callout)
                         .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityLabel(localizedAppText(
                             "Warning: \(warning)",
                             de: "Warnung: \(warning)",
@@ -153,6 +155,7 @@ struct AudioRecorderView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .ignore)
+                    .accessibilityAddTraits(.isStaticText)
                     .accessibilityLabel(String(localized: "recorder.transcribing"))
                 }
             }
@@ -407,6 +410,7 @@ struct AudioRecorderView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -449,6 +453,7 @@ private struct LevelMeterRow: View {
             .frame(height: 6)
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(localizedAppText(
             "\(label) input level",
             de: "Eingangspegel \(label)",
@@ -585,6 +590,7 @@ private struct RecordingRow: View {
                             ? String(localized: "recorder.transcribing")
                             : String(localized: "recorder.retranscribing"))
                         .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
                         .accessibilityLabel(item.transcript == nil
                             ? String(localized: "recorder.transcribing")
                             : String(localized: "recorder.retranscribing"))

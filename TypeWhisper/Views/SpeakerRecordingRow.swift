@@ -98,7 +98,7 @@ struct SpeakerRecordingRow: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
         .accessibilityValue(accessibilityStatus)
-        .accessibilityAddTraits(onOpen != nil ? .isButton : [])
+        .accessibilityAddTraits(onOpen != nil ? .isButton : .isStaticText)
         .accessibilityAction {
             onOpen?()
         }
