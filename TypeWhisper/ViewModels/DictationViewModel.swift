@@ -2653,7 +2653,11 @@ final class DictationViewModel: ObservableObject {
             ? nil
             : String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
-        accessibilityAnnouncementService.announceRecordingStopped()
+        // A push-to-talk recording interrupted by other keys is discarded without
+        // transcription; its discard banner is announced instead.
+        if pendingPushToTalkDiscardMessage == nil {
+            accessibilityAnnouncementService.announceRecordingStopped()
+        }
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
             await finalizeStopDictation(

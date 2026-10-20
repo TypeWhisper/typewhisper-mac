@@ -10312,6 +10312,38 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.state, .recording)
     }
 
+    /// A push-to-talk recording discarded because other keys were pressed is never
+    /// transcribed, so VoiceOver hears only the discard, not "transcribing".
+    @MainActor
+    func testDiscardedPushToTalkRecordingIsNotAnnouncedAsTranscribing() async throws {
+        final class Announcements {
+            var messages: [String] = []
+        }
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let announcer = AccessibilityAnnouncementService()
+        let announcements = Announcements()
+        announcer.isVoiceOverEnabled = { true }
+        announcer.post = { message, _ in announcements.messages.append(message) }
+        let context = Self.makeDictationContext(
+            appSupportDirectory: directory,
+            accessibilityAnnouncementService: announcer
+        )
+        defer { context.dictationViewModel.state = .idle }
+
+        context.dictationViewModel.state = .recording
+        context.hotkeyService.onPushToTalkInterruption?()
+        context.hotkeyService.onDictationStop?()
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertTrue(announcements.messages.isEmpty, "\(announcements.messages)")
+
+        for _ in 0..<200 where context.dictationViewModel.actionFeedbackMessage == nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let discard = try XCTUnwrap(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(announcements.messages, [discard])
+    }
+
     @MainActor
     func testRawRestoreWaitsForItsDeferredPersistenceWithHistoryEnabled() async throws {
         try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true)
