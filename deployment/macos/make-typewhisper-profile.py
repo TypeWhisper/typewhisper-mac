@@ -28,7 +28,9 @@ from __future__ import annotations
 
 import argparse
 import plistlib
+import re
 import sys
+import unicodedata
 import uuid
 from pathlib import Path
 
@@ -71,6 +73,9 @@ APP_STORE_DOMAINS = ("com.typewhisper.typewhisper-app", "com.typewhisper.typewhi
 APP_STORE_IGNORED = frozenset({"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads", "ManagedLicenseKey"})
 MAXIMUM_TEXT_LENGTH = 1024
 MAXIMUM_LIST_ENTRIES = 256
+UPDATE_CHANNEL_ENTRIES = ("stable", "daily", "release-candidate", "none")
+# Reverse-DNS style, as configuration profiles require for PayloadIdentifier.
+IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+")
 
 
 class ProfileError(ValueError):
@@ -83,7 +88,8 @@ def parse_text(name: str, raw: str) -> str:
         raise ProfileError(f"{name} must not be empty")
     if len(text) > MAXIMUM_TEXT_LENGTH:
         raise ProfileError(f"{name} must not exceed {MAXIMUM_TEXT_LENGTH} characters")
-    if any(ord(character) < 32 or ord(character) == 127 for character in text):
+    # The app rejects every scalar in Unicode's control category, not only ASCII controls.
+    if any(unicodedata.category(character) == "Cc" for character in text):
         raise ProfileError(f"{name} must not contain control characters")
     return text
 
@@ -117,7 +123,7 @@ def parse_value(name: str, raw: str):
         if len(items) > MAXIMUM_LIST_ENTRIES:
             raise ProfileError(f"{name} must not exceed {MAXIMUM_LIST_ENTRIES} entries")
         if name == "AllowedUpdateChannels":
-            unknown = [item for item in items if item not in ("stable", "daily", "release-candidate", "none")]
+            unknown = [item for item in items if item not in UPDATE_CHANNEL_ENTRIES]
             if unknown:
                 raise ProfileError(f"{name} entries must be stable, daily, release-candidate or none")
         return items
@@ -168,6 +174,8 @@ def build_profile(
 ) -> dict:
     if not enforced and not recommended:
         raise ProfileError("set at least one value with --set or --recommend")
+    if not IDENTIFIER_PATTERN.fullmatch(identifier):
+        raise ProfileError(f"--identifier must be reverse-DNS style, for example com.example.typewhisper, got {identifier!r}")
     payloads = []
     # A repeated domain would add a second payload with the same identifier and UUID.
     for domain in dict.fromkeys(domains):

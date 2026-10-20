@@ -242,8 +242,9 @@ Lists are comma-separated, and an empty value (`--set AllowedPlugins=`) denies
 everything. `UpdateMode` accepts `external`, `check-only` or `user-initiated`,
 `UpdateChannel` `stable`, `daily` or `release-candidate`. The generator refuses
 unknown keys (with the intended spelling for a key in the wrong case), restrictions
-passed to `--recommend` and incomplete pairs. Keep `--identifier` stable to replace
-a deployed profile instead of adding a second one. The profile's UUIDs derive from
+passed to `--recommend` and incomplete pairs. Keep `--identifier`, a reverse-DNS
+style name such as `com.example.typewhisper`, stable to replace a deployed profile
+instead of adding a second one. The profile's UUIDs derive from
 the identifier, so regenerating it with new values keeps them.
 
 Restrictive keys apply only to the domains you include. To manage both editions,

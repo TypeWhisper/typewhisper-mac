@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DEPLOYMENT = ROOT / "deployment" / "macos"
 DOCUMENTATION_URL = "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
 PROFILE_MANIFEST_VERSION = 1
-PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 10, 19)
+PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 10, 20)
 EDITIONS = {
     "com.typewhisper.mac": "TypeWhisper",
     "com.typewhisper.typewhisper-app": "TypeWhisper (App Store)",
@@ -85,6 +85,8 @@ def jamf_property(name, kind, maximum, order):
     if kind == "enumeration":
         configured["enum"] = list(range(maximum + 1))
         configured["options"] = {"enum_titles": ENUMERATION_TITLES[name]}
+    elif name == "AllowedUpdateChannels":
+        configured["items"] = {"type": "string", "title": "Channel", "enum": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}
     elif kind == "list":
         configured["items"] = {"type": "string", "title": "ID"}
     # "Not Configured" keeps Jamf Pro from writing a value for keys the administrator leaves alone.
@@ -136,6 +138,8 @@ def manifest_setting(name, kind, maximum):
     if kind == "enumeration":
         setting["pfm_range_list"] = list(range(maximum + 1))
         setting["pfm_range_list_titles"] = ENUMERATION_TITLES[name]
+    elif name == "AllowedUpdateChannels":
+        setting["pfm_subkeys"] = [{"pfm_name": "Channel", "pfm_type": "string", "pfm_range_list": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}]
     elif kind == "list":
         setting["pfm_subkeys"] = [{"pfm_name": "ID", "pfm_type": "string"}]
     if name == "ManagedLicenseKey":

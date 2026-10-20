@@ -117,6 +117,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_schema_script_matches_the_app(self):
         self.assertEqual(GENERATOR.APP_STORE_IGNORED, APP_STORE_IGNORED)
+        self.assertEqual(set(GENERATOR.UPDATE_CHANNEL_ENTRIES), {"stable", "daily", "release-candidate", "none"})
         self.assertEqual(SCHEMAS.APP_STORE_IGNORED, GENERATOR.APP_STORE_IGNORED)
         self.assertEqual(len(APP_STORE_IGNORED), 5)
         self.assertEqual(set(SCHEMAS.DESCRIPTIONS), set(CATALOG))
@@ -229,6 +230,9 @@ class GeneratorTests(unittest.TestCase):
             (["--set", "TranscriptionProviderId=com.typewhisper.parakeet"], "must be set together"),
             (["--set", "LlmModelId= "], "must not be empty"),
             (["--set", "UpdateMode=0", "--set", "UpdateMode=1"], "set twice"),
+            (["--set", "TranscriptionProviderId=a\u0085b", "--set", "TranscriptionModelId=m"], "control characters"),
+            (["--set", "UpdateMode=0", "--identifier", "TypeWhisper settings"], "reverse-DNS"),
+            (["--set", "UpdateMode=0", "--identifier", ""], "reverse-DNS"),
             ([], "at least one value"),
         ]
         for arguments, message in cases:
@@ -300,6 +304,8 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(len(configured["options"]["enum_titles"]), maximum + 1, name)
         if kind == "list":
             self.assertEqual(configured["items"]["type"], "string", name)
+        if name == "AllowedUpdateChannels":
+            self.assertEqual(configured["items"]["enum"], list(GENERATOR.UPDATE_CHANNEL_ENTRIES))
 
     def test_jamf_schemas_describe_the_catalog(self):
         for domain in EDITION_DOMAINS:
@@ -335,6 +341,9 @@ class SchemaTests(unittest.TestCase):
                             self.assertEqual(len(key["pfm_range_list_titles"]), maximum + 1, name)
                 if "ManagedLicenseKey" in settings:
                     self.assertTrue(settings["ManagedLicenseKey"].get("pfm_sensitive"))
+                if "AllowedUpdateChannels" in settings:
+                    entries = settings["AllowedUpdateChannels"]["pfm_subkeys"][0]["pfm_range_list"]
+                    self.assertEqual(entries, list(GENERATOR.UPDATE_CHANNEL_ENTRIES))
 
 
 if __name__ == "__main__":

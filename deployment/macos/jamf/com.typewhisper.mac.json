@@ -332,7 +332,13 @@
           "type": "array",
           "items": {
             "type": "string",
-            "title": "ID"
+            "title": "Channel",
+            "enum": [
+              "stable",
+              "daily",
+              "release-candidate",
+              "none"
+            ]
           }
         }
       ]

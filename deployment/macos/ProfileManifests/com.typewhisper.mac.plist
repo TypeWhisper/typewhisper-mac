@@ -13,7 +13,7 @@
 	<key>pfm_format_version</key>
 	<integer>1</integer>
 	<key>pfm_last_modified</key>
-	<date>2026-10-19T00:00:00Z</date>
+	<date>2026-10-20T00:00:00Z</date>
 	<key>pfm_platforms</key>
 	<array>
 		<string>macOS</string>
@@ -318,7 +318,14 @@
 			<array>
 				<dict>
 					<key>pfm_name</key>
-					<string>ID</string>
+					<string>Channel</string>
+					<key>pfm_range_list</key>
+					<array>
+						<string>stable</string>
+						<string>daily</string>
+						<string>release-candidate</string>
+						<string>none</string>
+					</array>
 					<key>pfm_type</key>
 					<string>string</string>
 				</dict>
