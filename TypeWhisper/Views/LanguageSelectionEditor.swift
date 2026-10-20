@@ -441,6 +441,7 @@ struct LanguageCodeBadge: View {
                 .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(descriptor.accessibilityLabel)
     }
 }

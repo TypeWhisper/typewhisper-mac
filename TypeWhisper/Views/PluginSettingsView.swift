@@ -1897,6 +1897,7 @@ private struct SourceBadge: View {
             .background(RoundedRectangle(cornerRadius: 6).fill(source.tint.opacity(0.14)))
             .foregroundStyle(source.tint)
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(source.accessibilityTitle)
     }
 }
@@ -1955,6 +1956,7 @@ private struct PluginCategoryBadge: View {
             .background(RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.12)))
             .foregroundStyle(.secondary)
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(category.badgeTitle)
     }
 }
@@ -2547,6 +2549,7 @@ private struct PluginInstallStateView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(localizedAppText(
                 "Installing \(name)",
                 de: "\(name) wird installiert",
@@ -2574,6 +2577,7 @@ private struct PluginInstallStateView: View {
                     .lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(String(localized: "Error: \(message)"))
         }
     }
@@ -2635,6 +2639,7 @@ private struct PluginSettingsActivityView: View {
                     .lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(accessibilityMessage)
             .accessibilityValue("\(Int(progress * 100))%")
         } else {
@@ -2652,6 +2657,7 @@ private struct PluginSettingsActivityView: View {
                     .lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(accessibilityMessage)
         }
     }
