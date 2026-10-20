@@ -4,6 +4,7 @@ import SwiftUI
 struct LicenseSettingsView: View {
     private enum ScrollAnchor: Hashable {
         case top
+        case purchase
         case supporter
         case activationKey
     }
@@ -22,6 +23,7 @@ struct LicenseSettingsView: View {
     @FocusState private var focusedField: FocusField?
 
     @State private var purchaseCadence: CommercialPurchaseCadence = .monthly
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var planColumnsPerRow = 4
 
     var body: some View {
@@ -47,6 +49,7 @@ struct LicenseSettingsView: View {
                                 activeLicenseSection
                             } else if license.requiresCommercialLicense {
                                 purchaseSection
+                                    .id(ScrollAnchor.purchase)
                             }
                         }
 
@@ -87,6 +90,9 @@ struct LicenseSettingsView: View {
                 .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
                     guard request.tab == .license else { return }
                     handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
+                }
+                .onChange(of: license.usageIntent) { _, intent in
+                    scrollToPurchase(after: intent, proxy: proxy)
                 }
             }
         }
@@ -948,6 +954,22 @@ struct LicenseSettingsView: View {
 
     private func openClaimURL(_ url: URL?) async {
         openURL(url)
+    }
+
+    /// Choosing a paid plan brings its purchase card into view, which sits
+    /// below the plans and is often outside the window.
+    private func scrollToPurchase(after intent: UsageIntent, proxy: ScrollViewProxy) {
+        guard intent != .personalOSS,
+              !license.isLicenseManaged,
+              license.licenseStatus != .active,
+              license.requiresCommercialLicense else { return }
+
+        // The purchase card appears with this change; scroll once it is laid out.
+        DispatchQueue.main.async {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                proxy.scrollTo(ScrollAnchor.purchase, anchor: .top)
+            }
+        }
     }
 
     private func handleNavigation(_ target: LicenseSettingsNavigationTarget, proxy: ScrollViewProxy) {
