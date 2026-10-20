@@ -154,6 +154,54 @@ extension SettingsEmptyState where Action == EmptyView {
     }
 }
 
+/// Makes a card that opens on click reachable from the keyboard: with keyboard navigation on,
+/// Tab focuses it like a button, the focus ring follows the card's shape, and Space or Return
+/// performs the click action. Apply it before the card's accessibility modifiers so VoiceOver
+/// keeps reading the card as one element with its named actions.
+struct KeyboardActivatableCard: ViewModifier {
+    let cornerRadius: CGFloat
+    var isEnabled = true
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            // The focus sits on a layer behind the card rather than on the card itself: a
+            // focused control inside the card, such as its switch, then keeps Space and Return,
+            // and Tab still reaches the card before its controls.
+            content.background {
+                Color.clear
+                    // The focus ring follows this shape; it has to be set before `focusable`.
+                    .contentShape(.focusEffect, RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    // `.activate` puts the card in the Tab order only when keyboard navigation
+                    // is on, the same rule macOS applies to buttons.
+                    .focusable(interactions: .activate)
+                    .onKeyPress(keys: [.space, .return], phases: [.down, .repeat]) { press in
+                        // A held key repeats; one press opens the card once.
+                        if press.phase == .down {
+                            action()
+                        }
+                        return .handled
+                    }
+                    // The card already offers this action to VoiceOver; the layer would only add
+                    // an unnamed element.
+                    .accessibilityHidden(true)
+            }
+        } else {
+            content
+        }
+    }
+}
+
+extension View {
+    func keyboardActivatableCard(
+        cornerRadius: CGFloat = SettingsLayoutMetrics.cardCornerRadius,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
+        modifier(KeyboardActivatableCard(cornerRadius: cornerRadius, isEnabled: isEnabled, action: action))
+    }
+}
+
 /// A short, visible confirmation for an action that otherwise changes nothing on
 /// screen, such as copying or exporting. VoiceOver hears the same text.
 @MainActor
