@@ -228,6 +228,13 @@ enum UserDefaultsKeys {
     static let launchAtLoginUserChoice = "launchAtLoginUserChoice"
     /// Set once a recommended `LaunchAtLogin` value has been applied to a new profile.
     static let managedLaunchAtLoginRecommendationApplied = "managedLaunchAtLoginRecommendationApplied"
+    /// Engine provider ID → the model the user had selected before an enforced transcription pair
+    /// changed it; restored once the pair is removed.
+    static let managedTranscriptionModelRetention = "managedTranscriptionModelRetention"
+    /// Set once a recommended transcription pair has become the initial selection.
+    static let managedTranscriptionRecommendationApplied = "managedTranscriptionRecommendationApplied"
+    /// Set once a recommended LLM pair has become the initial default language model.
+    static let managedLlmRecommendationApplied = "managedLlmRecommendationApplied"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"

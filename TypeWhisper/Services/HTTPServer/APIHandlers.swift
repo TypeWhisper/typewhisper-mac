@@ -731,6 +731,24 @@ final class APIHandlers: @unchecked Sendable {
         model: String?,
         awaitDownload: Bool
     ) -> OverrideResolution {
+        // An enforced pair decides the engine and model; a request for anything else is refused,
+        // and so is every request while the pair cannot be used.
+        if let enforced = PluginManager.shared.enforcedTranscriptionResolution {
+            if let reason = enforced.unavailableReason {
+                return .reject(.error(status: 403, message: reason, code: "forbidden"))
+            }
+            let matchesEngine = engine.map { $0.caseInsensitiveCompare(enforced.resolvedProviderId ?? "") == .orderedSame } ?? true
+            let matchesModel = model.map { $0.caseInsensitiveCompare(enforced.resolvedModelId ?? "") == .orderedSame } ?? true
+            guard matchesEngine, matchesModel, enforced.resolvedProviderId != nil else {
+                return .reject(.error(
+                    status: 403,
+                    message: "Your organization requires a specific transcription engine and model",
+                    code: "forbidden"
+                ))
+            }
+            return .use(ResolvedOverride(engineId: nil, modelId: nil))
+        }
+
         if engine == nil, model == nil {
             return .use(ResolvedOverride(engineId: nil, modelId: nil))
         }

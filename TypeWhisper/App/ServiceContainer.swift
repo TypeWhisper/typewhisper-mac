@@ -566,6 +566,12 @@ final class ServiceContainer: ObservableObject {
     private func applyManagedPolicy(_ snapshot: ManagedPolicySnapshot, previous: ManagedPolicySnapshot?) {
         // Runs before plugins are scanned at launch, so refused plugins never load.
         pluginManager.applyProviderPolicy(ManagedProviderPolicy(snapshot: snapshot))
+        pluginManager.applySelectionPolicy(ManagedSelectionPolicy(snapshot: snapshot))
+        if previous != nil {
+            // At launch these run after the plugins are loaded.
+            modelManagerService.restoreProviderSelection()
+            promptProcessingService.applyRecommendedLlmPairIfNeeded()
+        }
         launchAtLoginController.apply(
             snapshot,
             setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)

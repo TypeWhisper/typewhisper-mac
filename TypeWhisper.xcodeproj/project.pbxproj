@@ -64,6 +64,7 @@
 		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
 		A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */; };
 		A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001308 /* ManagedPolicyTests.swift */; };
+		A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */; };
 		A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */; };
 		A1C0DE000000000000001315 /* ManagedSettingsPoliciesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001316 /* ManagedSettingsPoliciesTests.swift */; };
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
@@ -114,6 +115,7 @@
 		A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001302 /* ManagedPolicy.swift */; };
 		A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */; };
 		A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001306 /* ManagedPolicyService.swift */; };
+		A1C0DE000000000000001321 /* ManagedSelectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001322 /* ManagedSelectionPolicy.swift */; };
 		A1C0DE000000000000001317 /* ManagedProviderPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001318 /* ManagedProviderPolicy.swift */; };
 		A1C0DE000000000000001309 /* ManagedSettingsPolicies.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001310 /* ManagedSettingsPolicies.swift */; };
 		A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001312 /* ManagedSettingsIntegration.swift */; };
@@ -914,8 +916,10 @@
 		A1C0DE000000000000001302 /* ManagedPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicy.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyValidator.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001306 /* ManagedPolicyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyService.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001322 /* ManagedSelectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSelectionPolicy.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001318 /* ManagedProviderPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedProviderPolicy.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001308 /* ManagedPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyTests.swift; sourceTree = "<group>"; };
+		A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSelectionPolicyTests.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedProviderPolicyTests.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001310 /* ManagedSettingsPolicies.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsPolicies.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001312 /* ManagedSettingsIntegration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsIntegration.swift; sourceTree = "<group>"; };
@@ -2169,6 +2173,7 @@
 				BB00000000000000000241 /* WatchFolderService.swift */,
 				BB00000000000000000244 /* ErrorLogService.swift */,
 				A1C0DE000000000000001306 /* ManagedPolicyService.swift */,
+				A1C0DE000000000000001322 /* ManagedSelectionPolicy.swift */,
 				A1C0DE000000000000001318 /* ManagedProviderPolicy.swift */,
 				A1C0DE000000000000001312 /* ManagedSettingsIntegration.swift */,
 				A1C0DE000000000000001310 /* ManagedSettingsPolicies.swift */,
@@ -3199,6 +3204,7 @@
 				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
 				A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */,
 				A1C0DE000000000000001308 /* ManagedPolicyTests.swift */,
+				A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */,
 				A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */,
 				A1C0DE000000000000001316 /* ManagedSettingsPoliciesTests.swift */,
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
@@ -5179,6 +5185,7 @@
 				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
 				A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */,
 				A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */,
+				A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */,
 				A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */,
 				A1C0DE000000000000001315 /* ManagedSettingsPoliciesTests.swift in Sources */,
 				F0A1B2C3D4E5F60718293A4B /* GeminiPlugin.swift in Sources */,
@@ -5497,6 +5504,7 @@
 				A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */,
 				A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */,
 				A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */,
+				A1C0DE000000000000001321 /* ManagedSelectionPolicy.swift in Sources */,
 				A1C0DE000000000000001317 /* ManagedProviderPolicy.swift in Sources */,
 				A1C0DE000000000000001309 /* ManagedSettingsPolicies.swift in Sources */,
 				A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */,

@@ -24,7 +24,7 @@ struct ManagedSettingsSection: View {
     var body: some View {
         let snapshot = policyService.current
         let rows = Self.rows(snapshot)
-        let problems = Self.problems(snapshot, updatePolicy: updateCoordinator.policy)
+        let problems = Self.problems(snapshot, updatePolicy: updateCoordinator.policy) + Self.pairProblems()
 
         Section(String(localized: "Managed Settings")) {
             Text(Self.summary(snapshot))
@@ -143,6 +143,16 @@ struct ManagedSettingsSection: View {
         }
         #endif
         return problems
+    }
+
+    /// Enforced pairs that name a provider or model that cannot be used, with the reason.
+    @MainActor
+    static func pairProblems(pluginManager: PluginManager? = PluginManager.shared) -> [String] {
+        guard let pluginManager else { return [] }
+        return [
+            pluginManager.enforcedTranscriptionResolution?.unavailableReason.map { "\(ManagedPolicyKeys.transcriptionProviderId): \($0)" },
+            pluginManager.enforcedLlmResolution?.unavailableReason.map { "\(ManagedPolicyKeys.llmProviderId): \($0)" },
+        ].compactMap { $0 }
     }
 
     static func display(_ value: ManagedPolicyValue, for definition: ManagedPolicyDefinition) -> String {

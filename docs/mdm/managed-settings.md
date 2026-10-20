@@ -93,6 +93,8 @@ diagnostics contain the same information; the license key appears only as `[set]
 | `AllowedUpdateChannels` | Array | enforced | Entries `stable`, `daily`, `release-candidate`. The picker offers only these channels, and checks on any other channel are refused. An empty array, or `none`, turns app updates off. An enforced `UpdateChannel` outside the list is a policy problem that turns updates off; TypeWhisper never switches channels on its own. |
 | `LaunchAtLogin` | Boolean | enforced or recommended | Enforced registers or removes TypeWhisper's login item and locks the setting. The state before enforcement is restored once the value is removed. Recommended applies once, to a user who has not completed setup and has not chosen. See [login items](#login-items). |
 | `SkipOnboardingWhenReady` | Boolean | enforced | `true` keeps the setup wizard closed when a transcription engine is ready, the microphone and (outside the App Store edition) Accessibility are granted, and a dictation shortcut exists. Otherwise setup opens at the first missing step instead of the welcome page. Nothing is marked as completed, so setup returns if a prerequisite goes missing or the value is removed. |
+| `TranscriptionProviderId`, `TranscriptionModelId` | String pair | enforced or recommended | Enforced fixes the transcription engine and model for every entry point; see [provider and model pairs](#provider-and-model-pairs). Recommended is the initial selection of a user who never chose an engine. Both values must be set at the same scope. |
+| `LlmProviderId`, `LlmModelId` | String pair | enforced or recommended | Enforced replaces the provider and model of every language model call: workflows, prompts, the fallback list, translation by language model and the text processing API. Recommended replaces the built-in default language model of a user who never changed it. Both values must be set at the same scope. |
 | `AllowCloudTranscription` | Boolean | enforced | `false` keeps audio on the Mac: only plugins whose locality is `local` transcribe. Dictation, file transcription, the Recorder, watch folders, recovery, history re-transcription and the HTTP API refuse a refused engine with the reason (the API answers 403) instead of sending audio. |
 | `AllowCloudTextProcessing` | Boolean | enforced | `false` keeps transcripts, prompts, dictionary terms and context on the Mac: language models, post-processors, actions, speech output, memory plugins and event subscribers that are not local receive nothing. Dictionary terms are not sent as prompt text to a transcription engine that is not local. |
 | `AllowedTranscriptionProviders` | Array | enforced | Provider IDs that may receive audio (see [provider IDs](#provider-ids)). Applies to every entry point, including workflow and API overrides. |
@@ -106,8 +108,33 @@ The App Store edition is updated by the App Store and has its plugins built in:
 `UpdateMode`, `UpdateChannel`, `AllowedUpdateChannels`, `AllowPluginDownloads` and
 `ManagedLicenseKey` do not apply there and are listed as policy problems.
 
-The provider and model pair keys (`TranscriptionProviderId`, `TranscriptionModelId`,
-`LlmProviderId`, `LlmModelId`) are validated and listed but have no effect yet.
+## Provider and model pairs
+
+A pair names a provider by its [provider ID](#provider-ids) and a model by the ID the
+provider lists, for example `com.typewhisper.parakeet` with
+`parakeet-tdt-0.6b-v3`, or `com.typewhisper.groq` with `whisper-large-v3`.
+
+An **enforced transcription pair** is used by dictation, its live preview, file
+transcription, the Recorder, watch folders, recovery, history re-transcription and
+the HTTP API, regardless of the selected engine, workflow overrides or per-feature
+engines. An API request that asks for another engine or model gets 403. The engine and
+model pickers are locked. The user's own engine selection is kept and applies again
+once the pair is removed; the model the user had selected in that engine is restored
+then as well. If the engine had no model selected, the enforced model stays selected,
+because plugins cannot clear a selection.
+
+An **enforced LLM pair** replaces the provider and model of every language model call.
+The workflow editor and the fallback list keep their saved selections but are locked.
+
+A pair that cannot be used never falls back to another provider: a provider that is not
+installed, turned off, refused by another key, or a model it does not offer, blocks
+the affected feature with the reason, and Settings > Advanced > Managed Settings lists
+the problem. With `AllowModelDownloads` set to `false`, deploy the model files with the
+app. An incomplete pair (one of the two keys) is invalid and blocks the feature until
+it is complete.
+
+A **recommended pair** is applied once, when the user has not chosen an engine (or has
+kept the built-in default language model) and the provider and model are ready.
 
 ## Provider IDs
 

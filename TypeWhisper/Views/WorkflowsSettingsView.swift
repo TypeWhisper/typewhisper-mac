@@ -86,6 +86,7 @@ private struct LLMFallbackProviderMenuOption: Identifiable {
 private struct MyWorkflowsPage: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
+    @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var searchText = ""
@@ -238,6 +239,10 @@ private struct MyWorkflowsPage: View {
             let providers = promptProcessingService.availableProviders
 
             VStack(alignment: .leading, spacing: 8) {
+                if let enforced = pluginManager.enforcedLlmResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
+
                 if promptProcessingService.fallbackPriorityList.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(
@@ -251,6 +256,7 @@ private struct MyWorkflowsPage: View {
                     }
                 } else {
                     fallbackPriorityList
+                        .disabled(promptProcessingService.isFallbackListLocked)
                 }
 
                 HStack(alignment: .center, spacing: 12) {
@@ -262,6 +268,7 @@ private struct MyWorkflowsPage: View {
                         .controlSize(.small)
                     } else if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
+                            .disabled(promptProcessingService.isFallbackListLocked)
                     }
 
                     Spacer(minLength: 0)
@@ -650,13 +657,17 @@ private struct LLMFallbackPriorityRow: View {
 
     @ViewBuilder
     private var selectionFields: some View {
-        providerPicker
-        if showsModelPicker {
-            modelPicker
+        // An enforced LLM pair replaces the fallback list; the saved rows stay as they are.
+        Group {
+            providerPicker
+            if showsModelPicker {
+                modelPicker
+            }
+            if showsEffortPicker {
+                effortPicker
+            }
         }
-        if showsEffortPicker {
-            effortPicker
-        }
+        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
     }
 
     private var providerPicker: some View {
@@ -1428,6 +1439,11 @@ private struct WorkflowEditorPage: View {
                         Text(engine.providerDisplayName).tag(engine.providerId as String?)
                     }
                 }
+                .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
+
+                if let enforced = pluginManager.enforcedTranscriptionResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
 
                 Text(
                     draft.transcriptionEngineId == nil
@@ -1456,6 +1472,7 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
 
                         Text(
                             localizedAppText(
@@ -1669,6 +1686,11 @@ private struct WorkflowEditorPage: View {
                         Text(provider.displayName).tag(provider.id as String?)
                     }
                 }
+                .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+
+                if let enforced = pluginManager.enforcedLlmResolution {
+                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                }
 
                 Text(
                     draft.providerId == nil
@@ -1697,6 +1719,7 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
 
                         Text(
                             localizedAppText(
@@ -1732,6 +1755,7 @@ private struct WorkflowEditorPage: View {
                                 Text(effort.displayName).tag(effort.id as String?)
                             }
                         }
+                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
 
                         Text(
                             localizedAppText(
@@ -3039,7 +3063,10 @@ struct WorkflowDraft {
             )
         }
 
+        // An enforced pair replaces the override and locks its pickers; the saved override is kept
+        // for when the pair is removed and must not block other edits.
         if template == .dictation,
+           !pluginManager.selectionPolicy.enforcesTranscription,
            let transcriptionEngineId,
            !transcriptionEngineId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             guard let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {
