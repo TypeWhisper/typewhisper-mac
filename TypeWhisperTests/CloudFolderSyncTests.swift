@@ -1517,6 +1517,7 @@ final class CloudFolderSyncTests: XCTestCase {
             defaults: defaults
         )
         defer { controller.deactivate() }
+        controller.errorMessage = "The last sync failed."
 
         await controller.deletePrivateSyncFolder()
         store.notifyLocalChange()
@@ -1524,6 +1525,9 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertEqual(controller.mode, .off)
         XCTAssertFalse(FileManager.default.fileExists(atPath: packageURL.path))
+        // The earlier error no longer applies, so the deletion result is shown and announced.
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertNotNil(controller.statusMessage)
     }
 
     func testICloudBridgeMirrorCopiesBothDirectionsAndKeepsNewestContent() throws {

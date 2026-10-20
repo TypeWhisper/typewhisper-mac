@@ -1505,6 +1505,9 @@ final class CloudFolderSyncController: ObservableObject {
         guard !isSyncing else { return }
         let deletedMode = mode
         guard let folderURL = activeFolderURL(for: deletedMode) else { return }
+        // An error of an earlier sync no longer applies once the folder is deleted;
+        // a deletion error below replaces it.
+        errorMessage = nil
         scheduledSyncTask?.cancel()
         scheduledSyncTask = nil
         stopICloudObservation()
