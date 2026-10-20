@@ -10270,6 +10270,55 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.state = .idle
     }
 
+    /// A rejected undo or restore during a recording plays the error sound but must
+    /// not show a banner, which would end the recording. The indicator shows it in
+    /// place of its status for a moment instead, so it is not only audible.
+    @MainActor
+    func testRejectedUndoDuringRecordingShowsABriefIndicatorWarning() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let viewModel = context.dictationViewModel
+        let originalSoundFeedback = viewModel.soundFeedbackEnabled
+        defer {
+            viewModel.soundFeedbackEnabled = originalSoundFeedback
+            viewModel.state = .idle
+        }
+        viewModel.soundFeedbackEnabled = false
+        viewModel.testingSetRejectedShortcutWarningDuration(.milliseconds(200))
+
+        viewModel.state = .recording
+        viewModel.undoLastDictation()
+        let warning = try XCTUnwrap(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertEqual(viewModel.indicatorWarningMessage, warning)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.actionFeedbackMessage)
+
+        // It disappears on its own while the recording goes on.
+        for _ in 0..<100 where viewModel.rejectedShortcutWarningMessage != nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertNil(viewModel.indicatorWarningMessage)
+        XCTAssertEqual(viewModel.state, .recording)
+
+        // A restore rejected during the transcription shows it too, and it ends with that state.
+        viewModel.testingSetRejectedShortcutWarningDuration(.seconds(30))
+        viewModel.state = .processing
+        viewModel.restoreRawTranscript()
+        XCTAssertNotNil(viewModel.indicatorWarningMessage)
+        viewModel.state = .inserting
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        viewModel.state = .processing
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage, "A warning from an earlier state came back")
+
+        // Without an active recording, the existing error banner is used instead.
+        viewModel.state = .idle
+        viewModel.undoLastDictation()
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertNotNil(viewModel.actionFeedbackMessage)
+    }
+
     /// The indicator banner appears next to the app the user works in, so VoiceOver
     /// users only notice it through an announcement.
     @MainActor

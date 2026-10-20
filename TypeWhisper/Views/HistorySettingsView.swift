@@ -8,6 +8,7 @@ struct HistorySettingsView: View {
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @State private var confirmingHistorySync = false
     @State private var confirmingClearHistory = false
+    @StateObject private var restoreDeleteConfirmation = ActionConfirmation(duration: .seconds(4))
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,11 +78,13 @@ struct HistorySettingsView: View {
 
                 Section(String(localized: "Restore & Delete")) {
                     Button(String(localized: "Restore Automatically Removed History")) {
-                        syncController.historySyncPreferences?.restoreSuppressedHistory()
-                        Task { await syncController.syncNow() }
+                        restoreAutomaticallyRemovedHistory()
                     }
                     Button(String(localized: "Delete History"), role: .destructive) {
                         confirmingClearHistory = true
+                    }
+                    if let message = restoreDeleteConfirmation.message {
+                        ActionConfirmationLabel(message: message)
                     }
                     Text(String(localized: "Restoring re-imports synchronized entries removed only by local retention. Deleting history while sync is enabled removes it from all synchronized devices."))
                         .font(.caption)
@@ -111,11 +114,49 @@ struct HistorySettingsView: View {
             titleVisibility: .visible
         ) {
             Button(String(localized: "Delete"), role: .destructive) {
-                ServiceContainer.shared.historyService.clearAll()
+                if ServiceContainer.shared.historyService.clearAll() {
+                    restoreDeleteConfirmation.show(String(localized: "History deleted."))
+                } else {
+                    restoreDeleteConfirmation.show(
+                        String(localized: "History could not be deleted."),
+                        isError: true
+                    )
+                }
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
             Text(clearHistoryMessage)
+        }
+    }
+
+    /// Says what happened: nothing to restore, restored by a sync that just finished,
+    /// or restored with the next sync when history sync is off or already running.
+    private func restoreAutomaticallyRemovedHistory() {
+        guard let preferences = syncController.historySyncPreferences,
+              !preferences.suppressedRecordIDs.isEmpty else {
+            restoreDeleteConfirmation.show(String(localized: "No automatically removed history to restore."))
+            return
+        }
+        preferences.restoreSuppressedHistory()
+
+        let restoredLater = String(localized: "Automatically removed history will be restored with the next sync.")
+        guard preferences.isEnabled, syncController.mode != .off, !syncController.isSyncing else {
+            // A running sync repeats once it finishes, which restores the entries.
+            Task { await syncController.syncNow() }
+            restoreDeleteConfirmation.show(restoredLater)
+            return
+        }
+
+        let previousSyncDate = syncController.lastSyncDate
+        Task {
+            await syncController.syncNow()
+            if syncController.lastSyncDate != previousSyncDate {
+                restoreDeleteConfirmation.show(String(localized: "Automatically removed history restored."))
+            } else if let errorMessage = syncController.errorMessage {
+                restoreDeleteConfirmation.show(errorMessage, isError: true)
+            } else {
+                restoreDeleteConfirmation.show(restoredLater)
+            }
         }
     }
 

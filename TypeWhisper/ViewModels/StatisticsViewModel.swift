@@ -73,6 +73,9 @@ final class StatisticsViewModel: ObservableObject {
     @Published var averageWPM: String = "—"
     @Published var appsUsed: Int = 0
     @Published var timeSaved: String = "—"
+    /// Whole minutes behind `timeSaved`, or nil while there is no data. VoiceOver
+    /// reads these with their unit, since "2m" alone can be read as two metres.
+    @Published var timeSavedMinutes: Int?
     @Published var chartData: [ActivityDataPoint] = []
     @Published var wordsTrend: Double?
     @Published var wpmTrend: Double?
@@ -147,6 +150,7 @@ final class StatisticsViewModel: ObservableObject {
         averageWPM = stats.wpm
         appsUsed = stats.apps
         timeSaved = stats.timeSaved
+        timeSavedMinutes = stats.savedMinutes
 
         if let days = selectedTimePeriod.days {
             let prevStats = computeStats(for: usageStatisticsService.previousPeriodSummary(days: days, endingAt: now))
@@ -172,6 +176,7 @@ final class StatisticsViewModel: ObservableObject {
         let rawWPM: Double
         let apps: Int
         let timeSaved: String
+        let savedMinutes: Int?
         let rawSavedMinutes: Double
     }
 
@@ -204,18 +209,37 @@ final class StatisticsViewModel: ObservableObject {
 
         let rawSavedMinutes = summary.rawSavedMinutes
         let timeSaved: String
+        let savedMinutes: Int?
         if rawSavedMinutes > 0 {
             let mins = Int(rawSavedMinutes)
+            savedMinutes = mins
             if mins >= 60 {
                 timeSaved = String(localized: "\(mins / 60)h \(mins % 60)m")
             } else {
                 timeSaved = String(localized: "\(mins)m")
             }
         } else {
+            savedMinutes = nil
             timeSaved = "—"
         }
 
-        return PeriodStats(words: words, wpm: wpm, rawWPM: rawWPM, apps: apps, timeSaved: timeSaved, rawSavedMinutes: rawSavedMinutes)
+        return PeriodStats(
+            words: words,
+            wpm: wpm,
+            rawWPM: rawWPM,
+            apps: apps,
+            timeSaved: timeSaved,
+            savedMinutes: savedMinutes,
+            rawSavedMinutes: rawSavedMinutes
+        )
+    }
+
+    /// "2 minutes" or "1 hour, 5 minutes" for the compact "2m" and "1h 5m" on the cards.
+    /// Nil while there is no data.
+    nonisolated static func spokenTimeSaved(minutes: Int?, locale: Locale) -> String? {
+        guard let minutes else { return nil }
+        return Duration.seconds(minutes * 60)
+            .formatted(.units(allowed: [.hours, .minutes], width: .wide).locale(locale))
     }
 
     nonisolated static func trendPercent(current: Double, previous: Double) -> Double? {

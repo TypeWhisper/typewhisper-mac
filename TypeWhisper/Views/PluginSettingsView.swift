@@ -1351,26 +1351,25 @@ struct PluginSettingsView: View {
             .accessibilityHidden(true)
     }
 
+    /// The filter menus use toggles and pickers, so the selection is a checked menu
+    /// item that VoiceOver reads as such, not a checkmark image in place of the icon.
     private var discoverCapabilityMenu: some View {
         Menu {
-            Button {
-                selectedCapabilityFilters.removeAll()
-            } label: {
-                Label(localizedAppText("All functions", de: "Alle Funktionen"), systemImage: selectedCapabilityFilters.isEmpty ? "checkmark" : "line.3.horizontal.decrease.circle")
-            }
+            Toggle(
+                localizedAppText("All functions", de: "Alle Funktionen"),
+                systemImage: "line.3.horizontal.decrease.circle",
+                isOn: allCapabilitiesSelected
+            )
 
             if !discoverCapabilityOptions.isEmpty {
                 Divider()
 
                 ForEach(discoverCapabilityOptions, id: \.self) { category in
-                    Button {
-                        toggleCapabilityFilter(category)
-                    } label: {
-                        Label(
-                            category.badgeTitle,
-                            systemImage: selectedCapabilityFilters.contains(category) ? "checkmark" : category.iconSystemName
-                        )
-                    }
+                    Toggle(
+                        category.badgeTitle,
+                        systemImage: category.iconSystemName,
+                        isOn: capabilityFilterSelected(category)
+                    )
                 }
             }
         } label: {
@@ -1423,24 +1422,19 @@ struct PluginSettingsView: View {
 
     private var discoverHostingMenu: some View {
         Menu {
-            Button {
-                discoverHostingFilter = .all
-            } label: {
-                Label(
-                    DiscoverHostingFilter.all.title,
-                    systemImage: discoverHostingFilter == .all ? "checkmark" : DiscoverHostingFilter.all.systemImage
-                )
-            }
+            Picker(Self.hostingFilterAccessibilityLabel, selection: $discoverHostingFilter) {
+                Label(DiscoverHostingFilter.all.title, systemImage: DiscoverHostingFilter.all.systemImage)
+                    .tag(DiscoverHostingFilter.all)
 
-            Divider()
+                Divider()
 
-            ForEach([DiscoverHostingFilter.local, .cloud], id: \.self) { hosting in
-                Button {
-                    discoverHostingFilter = hosting
-                } label: {
-                    Label(hosting.title, systemImage: discoverHostingFilter == hosting ? "checkmark" : hosting.systemImage)
+                ForEach([DiscoverHostingFilter.local, .cloud], id: \.self) { hosting in
+                    Label(hosting.title, systemImage: hosting.systemImage)
+                        .tag(hosting)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
         } label: {
             discoverMenuLabel(discoverHostingFilter.title, systemImage: discoverHostingFilter.systemImage)
                 .accessibilityLabel(Self.hostingFilterAccessibilityLabel)
@@ -1454,13 +1448,14 @@ struct PluginSettingsView: View {
 
     private var discoverSortMenu: some View {
         Menu {
-            ForEach(DiscoverSort.allCases, id: \.self) { sort in
-                Button {
-                    discoverSort = sort
-                } label: {
-                    Label(sort.title, systemImage: discoverSort == sort ? "checkmark" : "arrow.up.arrow.down")
+            Picker(Self.sortAccessibilityLabel, selection: $discoverSort) {
+                ForEach(DiscoverSort.allCases, id: \.self) { sort in
+                    Label(sort.title, systemImage: "arrow.up.arrow.down")
+                        .tag(sort)
                 }
             }
+            .pickerStyle(.inline)
+            .labelsHidden()
         } label: {
             discoverMenuLabel(discoverSort.title, systemImage: "arrow.up.arrow.down")
                 .accessibilityLabel(Self.sortAccessibilityLabel)
@@ -1497,12 +1492,30 @@ struct PluginSettingsView: View {
         return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能")
     }
 
-    private func toggleCapabilityFilter(_ category: PluginCategory) {
-        if selectedCapabilityFilters.contains(category) {
-            selectedCapabilityFilters.remove(category)
-        } else {
-            selectedCapabilityFilters.insert(category)
-        }
+    /// Checked while no function is selected. Choosing it clears the selection;
+    /// unchecking it directly does nothing, as the empty selection is "all".
+    private var allCapabilitiesSelected: Binding<Bool> {
+        Binding(
+            get: { selectedCapabilityFilters.isEmpty },
+            set: { isOn in
+                if isOn {
+                    selectedCapabilityFilters.removeAll()
+                }
+            }
+        )
+    }
+
+    private func capabilityFilterSelected(_ category: PluginCategory) -> Binding<Bool> {
+        Binding(
+            get: { selectedCapabilityFilters.contains(category) },
+            set: { isOn in
+                if isOn {
+                    selectedCapabilityFilters.insert(category)
+                } else {
+                    selectedCapabilityFilters.remove(category)
+                }
+            }
+        )
     }
 
     private func normalizeCapabilityFilters() {
@@ -2660,6 +2673,11 @@ private struct PluginSettingsActivityView: View {
     var body: some View {
         if let progress = activity.progress {
             HStack(spacing: 6) {
+                // Not only red: an error also shows the warning sign, as it does without progress.
+                if activity.isError {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                }
                 ProgressView(value: progress)
                     .frame(width: 80)
                 Text("\(Int(progress * 100))%")
@@ -2696,7 +2714,7 @@ private struct PluginSettingsActivityView: View {
         }
     }
 
-    /// The red color alone marks an error, so VoiceOver says it.
+    /// VoiceOver says "Error" instead of relying on the red color and the icon.
     private var accessibilityMessage: String {
         activity.isError ? String(localized: "Error: \(activity.message)") : activity.message
     }

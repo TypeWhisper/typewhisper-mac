@@ -778,7 +778,9 @@ final class HistoryService: ObservableObject {
         onRecordsDeleted?(ids)
     }
 
-    func clearAll() {
+    /// Returns false when the records could not be read, so nothing was deleted.
+    @discardableResult
+    func clearAll() -> Bool {
         clearGeneration += 1
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
@@ -791,8 +793,10 @@ final class HistoryService: ObservableObject {
             save()
             refreshRecentRecords()
             onRecordsDeleted?(ids)
+            return true
         } catch {
             logger.error("Failed to clear records: \(error.localizedDescription)")
+            return false
         }
     }
 

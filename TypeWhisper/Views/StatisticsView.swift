@@ -128,7 +128,11 @@ struct StatisticsView: View {
                 title: String(localized: "Time Saved"),
                 value: viewModel.timeSaved,
                 systemImage: "clock.badge.checkmark",
-                trend: viewModel.timeSavedTrend
+                trend: viewModel.timeSavedTrend,
+                accessibilityValue: StatisticsViewModel.spokenTimeSaved(
+                    minutes: viewModel.timeSavedMinutes,
+                    locale: HistoryAccessibilityText.locale
+                )
             )
         }
     }
@@ -552,6 +556,8 @@ struct StatisticsMetricCard: View {
     let value: String
     let systemImage: String
     var trend: Double?
+    /// Overrides `value` for VoiceOver, e.g. "2 minutes" instead of the compact "2m".
+    var accessibilityValue: String?
 
     var body: some View {
         SettingsCard {
@@ -578,7 +584,7 @@ struct StatisticsMetricCard: View {
     }
 
     private var trendAwareAccessibilityLabel: Text {
-        let value = statisticsSpokenValue(value)
+        let value = accessibilityValue ?? statisticsSpokenValue(value)
         guard let trend else {
             return Text("\(title), \(value)")
         }

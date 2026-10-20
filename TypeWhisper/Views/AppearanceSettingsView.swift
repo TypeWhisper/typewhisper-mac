@@ -170,6 +170,18 @@ struct AppearanceSettingsView: View {
                         Text(String(localized: "Errors still appear briefly so you can react to them."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        // Both visual cues are off by choice; say so instead of overriding it.
+                        if !showMenuBarIcon {
+                            Label {
+                                Text(String(localized: "The menu bar icon is hidden too, so nothing on screen shows that a recording is running."))
+                            } icon: {
+                                Image(systemName: "eye.slash")
+                                    .accessibilityHidden(true)
+                            }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
                     }
 
                     Picker(String(localized: "Display"), selection: $dictation.notchIndicatorDisplay) {
