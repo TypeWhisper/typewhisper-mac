@@ -412,6 +412,58 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.finalText, "Hello there")
     }
 
+    /// The Speakers page shows a waiting record at the step it runs next.
+    func testAWaitingRecordStartsWithTranscriptionOnlyWhenItLacksTiming() throws {
+        let coordinator = makeCoordinator()
+
+        let untimedID = UUID()
+        XCTAssertTrue(history.addRecord(
+            id: untimedID,
+            rawText: "Hello there",
+            finalText: "Hello there",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test"
+        ))
+        let untimed = try XCTUnwrap(history.record(withID: untimedID))
+        XCTAssertFalse(coordinator.runStartsWithTranscription(for: untimed), "Without a timing pass it cannot start")
+
+        let segment = TimedTextEntry(text: "Hello", start: 0, end: 1, utf16Location: 0, utf16Length: 5)
+        func addTimedRecord(words: [TranscriptionWord]) throws -> TranscriptionRecord {
+            let id = UUID()
+            XCTAssertTrue(history.addSpeakerRecord(
+                id: id,
+                text: "Hello",
+                title: nil,
+                source: .importedFile,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test",
+                timedText: [segment],
+                granularity: .segment,
+                words: words
+            ))
+            return try XCTUnwrap(history.record(withID: id))
+        }
+        let segmentsOnly = try addTimedRecord(words: [])
+        let withWords = try addTimedRecord(words: [TranscriptionWord(text: "Hello", start: 0, end: 1)])
+
+        XCTAssertFalse(coordinator.runStartsWithTranscription(for: segmentsOnly))
+        XCTAssertFalse(coordinator.runStartsWithTranscription(for: withWords))
+
+        coordinator.timingSource = { _, _ in
+            TranscriptionResult(text: "", detectedLanguage: nil, duration: 1, processingTime: 0, engineUsed: "test", segments: [])
+        }
+        XCTAssertTrue(coordinator.runStartsWithTranscription(for: untimed))
+        XCTAssertFalse(coordinator.runStartsWithTranscription(for: segmentsOnly), "Segment timing needs no first pass")
+
+        coordinator.wordTimingSource = { _, _ in [] }
+        XCTAssertTrue(coordinator.runStartsWithTranscription(for: segmentsOnly), "The second pass adds word timing first")
+        XCTAssertFalse(coordinator.runStartsWithTranscription(for: withWords), "Word timing goes straight to detection")
+    }
+
     func testRecordingWithoutTimestampsIsKeptAndTranscribedAgainForDetection() async throws {
         provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
         let coordinator = makeCoordinator()
@@ -888,5 +940,43 @@ final class SpeakerChannelAttributionTests: XCTestCase {
             PluginSpeakerTurn(speakerLabel: SpeakerChannelAttribution.ownSpeakerLabel, start: 9.9, end: 12),
         ])
         XCTAssertEqual(SpeakerChannelAttribution.combining(turns, ownSpeech: []), turns)
+    }
+}
+
+/// The Speakers row, and the VoiceOver value read from it, show the step a record runs next.
+@MainActor
+final class SpeakerRecordingRowPhaseTests: XCTestCase {
+    private let transcribe = String(localized: "speakers.page.step.transcribe")
+    private let detect = String(localized: "speakers.page.step.detect")
+
+    func testAWaitingRecordShowsTheStepItsRunStartsWith() {
+        let waiting = String(localized: "speakers.status.waiting")
+
+        let transcribedFirst = SpeakerRecordingRow.Phase.speakerDetection(.waiting, startsWithTranscription: true)
+        XCTAssertEqual(transcribedFirst, .working(step: 1, detail: waiting, fraction: nil))
+        let spokenTranscribedFirst = SpeakerRecordingRow.accessibilityStatus(detail: "", phase: transcribedFirst)
+        XCTAssertTrue(spokenTranscribedFirst.contains(transcribe), spokenTranscribedFirst)
+        XCTAssertFalse(spokenTranscribedFirst.contains(detect), spokenTranscribedFirst)
+
+        let detectedRightAway = SpeakerRecordingRow.Phase.speakerDetection(.waiting, startsWithTranscription: false)
+        XCTAssertEqual(detectedRightAway, .working(step: 2, detail: waiting, fraction: nil))
+        let spokenDetectedRightAway = SpeakerRecordingRow.accessibilityStatus(detail: "", phase: detectedRightAway)
+        XCTAssertTrue(spokenDetectedRightAway.contains(detect), spokenDetectedRightAway)
+        XCTAssertFalse(spokenDetectedRightAway.contains(transcribe), spokenDetectedRightAway)
+    }
+
+    func testARunningRecordShowsTheStageItIsIn() {
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.transcribing, startsWithTranscription: false),
+            .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
+        )
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.downloadingModels(0.3), startsWithTranscription: true),
+            .working(step: 2, detail: String(localized: "speakers.status.downloadingModel"), fraction: nil)
+        )
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.detecting(0.5), startsWithTranscription: true),
+            .working(step: 2, detail: "", fraction: 0.5)
+        )
     }
 }
