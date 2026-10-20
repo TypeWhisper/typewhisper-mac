@@ -87,6 +87,7 @@ struct AboutSettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(updatePolicy.isChannelLocked)
+                .managedLockAccessibilityHint(isLocked: updatePolicy.isChannelLocked, reason: nil)
 
                 Text(selectedUpdateChannel.updateDescription)
                     .font(.caption)
@@ -110,6 +111,7 @@ struct AboutSettingsView: View {
                         UpdateChecker.shared?.checkForUpdates()
                     }
                     .disabled(checkRefusal != nil || UpdateChecker.shared?.canCheckForUpdates() != true)
+                    .managedLockAccessibilityHint(isLocked: checkRefusal != nil, reason: checkRefusal)
                     Spacer()
                 }
             }

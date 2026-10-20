@@ -269,6 +269,10 @@ private struct MyWorkflowsPage: View {
                     } else if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
                             .disabled(promptProcessingService.isFallbackListLocked)
+                            .managedLockAccessibilityHint(
+                                isLocked: promptProcessingService.isFallbackListLocked,
+                                reason: pluginManager.enforcedLlmResolution?.unavailableReason
+                            )
                     }
 
                     Spacer(minLength: 0)
@@ -589,7 +593,16 @@ private struct LLMFallbackPriorityRow: View {
             ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
             zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)"
         )
-        return [name, statusText].joined(separator: ", ")
+        var parts = [name, statusText]
+        // The list is disabled under an enforced LLM pair; a hint on this container
+        // would replace its role description, so the reason is part of the name.
+        if promptProcessingService.isFallbackListLocked {
+            parts.append(
+                PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                    ?? ManagedByOrganizationLabel.defaultText
+            )
+        }
+        return parts.joined(separator: ", ")
     }
 
     var body: some View {
@@ -671,9 +684,10 @@ private struct LLMFallbackPriorityRow: View {
         // on the row's content it would be repeated on every control.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityRowLabel)
+        // A locked list cannot be reordered, so it offers no move actions either.
         .modifier(ReorderAccessibilityActions(
-            canMoveUp: canMoveUp,
-            canMoveDown: canMoveDown,
+            canMoveUp: canMoveUp && !promptProcessingService.isFallbackListLocked,
+            canMoveDown: canMoveDown && !promptProcessingService.isFallbackListLocked,
             moveUp: { onMove(item, -1) },
             moveDown: { onMove(item, 1) }
         ))
@@ -692,6 +706,10 @@ private struct LLMFallbackPriorityRow: View {
             }
         }
         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+        .managedLockAccessibilityHint(
+            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+        )
     }
 
     private var providerPicker: some View {
@@ -1532,6 +1550,10 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
+                .managedLockAccessibilityHint(
+                    isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
+                    reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
+                )
 
                 if let enforced = pluginManager.enforcedTranscriptionResolution {
                     ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1565,6 +1587,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
+                            reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(
@@ -1784,6 +1810,10 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                .managedLockAccessibilityHint(
+                    isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                    reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                )
 
                 if let enforced = pluginManager.enforcedLlmResolution {
                     ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1817,6 +1847,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(
@@ -1853,6 +1887,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(

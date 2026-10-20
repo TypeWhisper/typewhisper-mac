@@ -1227,6 +1227,10 @@ struct RecordingSettingsView: View {
                         }
                     }
                     .disabled(pluginManager.selectionPolicy.enforcesTranscription)
+                    .managedLockAccessibilityHint(
+                        isLocked: pluginManager.selectionPolicy.enforcesTranscription,
+                        reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
+                    )
 
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1253,6 +1257,10 @@ struct RecordingSettingsView: View {
                                 }
                             }
                             .disabled(pluginManager.selectionPolicy.enforcesTranscription)
+                            .managedLockAccessibilityHint(
+                                isLocked: pluginManager.selectionPolicy.enforcesTranscription,
+                                reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
+                            )
                         }
                     }
 

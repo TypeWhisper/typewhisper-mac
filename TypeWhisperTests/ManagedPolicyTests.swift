@@ -335,6 +335,23 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         XCTAssertEqual(unreadable.issues.count, 1)
     }
 
+    /// VoiceOver reads each row of the Managed Settings table as one line.
+    @MainActor
+    func testManagedSettingsRowsReadAsOneLine() {
+        let snapshot = validate(forced: [
+            "AllowCloudTranscription": .boolean(false),
+            "AllowPluginDownloads": .integer(0),
+        ])
+
+        let labels = ManagedSettingsSection.rows(snapshot).map(ManagedSettingsSection.accessibilityLabel(for:))
+
+        XCTAssertEqual(labels, [
+            "AllowCloudTranscription, \(String(localized: "Enforced")), \(String(localized: "Off"))",
+            "AllowPluginDownloads, \(String(localized: "Enforced")), "
+                + String(localized: "Invalid value; the setting stays blocked"),
+        ])
+    }
+
     private func validate(forced: [String: ManagedPolicyRawValue]) -> ManagedPolicySnapshot {
         validate(ManagedPolicyReading(forcedValues: forced))
     }

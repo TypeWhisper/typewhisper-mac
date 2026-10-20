@@ -901,6 +901,7 @@ struct PluginSettingsView: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
                 .disabled(restartRequired || registryService.isBulkUpdating || policyRefusal != nil)
+                .managedLockAccessibilityHint(isLocked: policyRefusal != nil, reason: policyRefusal)
                 .padding(.top, 4)
 
                 if let policyRefusal {
@@ -2409,6 +2410,7 @@ private struct AvailablePluginRow: View {
                 .foregroundStyle(.tertiary)
             }
             .accessibilityElement(children: .combine)
+            .modifier(PolicyRefusalAccessibilityValue(text: policyRefusalAccessibilityText))
             .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 12)
@@ -2421,7 +2423,8 @@ private struct AvailablePluginRow: View {
                 if let policyRefusal {
                     ManagedByOrganizationLabel(text: String(localized: "Not allowed by your organization"))
                         .help(policyRefusal)
-                        .accessibilityHint(policyRefusal)
+                        // Read with the card's description instead, together with the reason.
+                        .accessibilityHidden(true)
                 } else if case .error = installState {
                     Button(String(localized: "Retry")) {
                         onInstall()
@@ -2455,7 +2458,19 @@ private struct AvailablePluginRow: View {
         .padding(.vertical, 12)
         // One stop per card for VoiceOver; its info and buttons stay reachable inside.
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(plugin.name)
+        .accessibilityLabel(cardAccessibilityLabel)
+    }
+
+    /// The card is named after the plugin; a plugin the organization refuses says so up front.
+    private var cardAccessibilityLabel: String {
+        guard policyRefusal != nil else { return plugin.name }
+        return "\(plugin.name), \(String(localized: "Not allowed by your organization"))"
+    }
+
+    /// The refusal and its reason, read after the card's description.
+    private var policyRefusalAccessibilityText: String? {
+        guard let policyRefusal else { return nil }
+        return "\(String(localized: "Not allowed by your organization")): \(policyRefusal)"
     }
 
     private var retryInstallAccessibilityLabel: String {
@@ -2465,6 +2480,20 @@ private struct AvailablePluginRow: View {
             ja: "\(plugin.name)のインストールを再試行",
             zh: "重试安装\(plugin.name)"
         )
+    }
+}
+
+/// Adds the managed-settings refusal to a combined description, only when there is one.
+private struct PolicyRefusalAccessibilityValue: ViewModifier {
+    let text: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let text {
+            content.accessibilityValue(text)
+        } else {
+            content
+        }
     }
 }
 
