@@ -633,7 +633,11 @@ final class PluginRegistryService: ObservableObject {
         for (pluginId, state) in installStates.sorted(by: { $0.key < $1.key }) where previous[pluginId] != state {
             switch state {
             case .error(let message):
-                accessibilityAnnouncementService.announceError(message)
+                // Named, so two plugins failing alike are both heard and each says which one failed.
+                let name = registry.first { $0.id == pluginId }?.name
+                    ?? PluginManager.shared?.loadedPlugins.first { $0.manifest.id == pluginId }?.manifest.name
+                    ?? pluginId
+                accessibilityAnnouncementService.announceError("\(name): \(message)")
             case .restartRequired:
                 accessibilityAnnouncementService.announce(String(localized: "Restart TypeWhisper to finish updating."))
             case .downloading, .extracting:
