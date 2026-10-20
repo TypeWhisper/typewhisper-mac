@@ -193,7 +193,13 @@ struct LicenseSettingsView: View {
 
     private var planColumns: [LicensePlanColumnModel] {
         let tier = license.licenseTier
+        // "Your plan" names the tier this Mac is licensed for; the selection
+        // only records how it is used and can differ from it.
+        let licensedTier = license.licenseStatus == .active ? tier : nil
         let perMonth = localizedAppText("per month", de: "pro Monat")
+        func monthlyPrice(_ tier: LicenseTier) -> String {
+            commercialPurchaseOptionCopy(for: tier, cadence: .monthly)?.price ?? ""
+        }
         return [
             LicensePlanColumnModel(
                 id: .personalOSS,
@@ -207,12 +213,13 @@ struct LicenseSettingsView: View {
                     localizedAppText("Full source code on GitHub", de: "Voller Quellcode auf GitHub"),
                 ],
                 selected: license.usageIntent == .personalOSS && tier != .enterprise,
+                isLicensed: false,
                 action: { license.setUsageIntent(.personalOSS) }
             ),
             LicensePlanColumnModel(
                 id: .workSolo,
                 name: localizedAppText("Individual", de: "Einzelnutzer"),
-                price: "5 EUR",
+                price: monthlyPrice(.individual),
                 priceUnit: perMonth,
                 audience: localizedAppText("For one person", de: "Für eine Person"),
                 facts: [
@@ -221,12 +228,13 @@ struct LicenseSettingsView: View {
                     localizedAppText("Non-GPL terms, invoices, and support", de: "Nicht-GPL-Bedingungen, Rechnungen und Support"),
                 ],
                 selected: license.usageIntent == .workSolo && tier != .enterprise,
+                isLicensed: licensedTier == .individual,
                 action: { license.setUsageIntent(.workSolo) }
             ),
             LicensePlanColumnModel(
                 id: .team,
                 name: String(localized: "Team"),
-                price: "19 EUR",
+                price: monthlyPrice(.team),
                 priceUnit: perMonth,
                 audience: localizedAppText("For small teams", de: "Für kleine Teams"),
                 facts: [
@@ -235,12 +243,13 @@ struct LicenseSettingsView: View {
                     localizedAppText("One invoice for the whole team", de: "Eine Rechnung für das ganze Team"),
                 ],
                 selected: license.usageIntent == .team && tier != .enterprise,
+                isLicensed: licensedTier == .team,
                 action: { license.setUsageIntent(.team) }
             ),
             LicensePlanColumnModel(
                 id: .enterprise,
                 name: localizedAppText("Enterprise", de: "Unternehmensplan"),
-                price: "199 EUR",
+                price: monthlyPrice(.enterprise),
                 priceUnit: perMonth,
                 audience: localizedAppText("For organizations", de: "Für Organisationen"),
                 facts: [
@@ -250,6 +259,7 @@ struct LicenseSettingsView: View {
                     localizedAppText("Help with rollout and security reviews", de: "Hilfe bei Rollout und Security-Reviews"),
                 ],
                 selected: license.usageIntent == .enterprise || tier == .enterprise,
+                isLicensed: licensedTier == .enterprise,
                 action: { license.setUsageIntent(.enterprise) }
             ),
         ]
@@ -488,14 +498,17 @@ struct LicenseSettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
+                }
 
-                    HStack(spacing: 12) {
-                        supporterTierButton(tier: .bronze, price: "10")
-                        supporterTierButton(tier: .silver, price: "25")
-                        supporterTierButton(tier: .gold, price: "50")
-                    }
-                    .frame(maxWidth: 420)
+                // Active supporters can still move to another tier.
+                HStack(spacing: 12) {
+                    supporterTierButton(tier: .bronze, price: "10")
+                    supporterTierButton(tier: .silver, price: "25")
+                    supporterTierButton(tier: .gold, price: "50")
+                }
+                .frame(maxWidth: 420)
 
+                if !license.isSupporter {
                     Button {
                         openURL(supporterDiscord.githubSponsorsURL)
                     } label: {
@@ -1261,6 +1274,8 @@ private struct LicensePlanColumnModel: Identifiable {
     let audience: String
     let facts: [String]
     let selected: Bool
+    /// The active license covers this plan.
+    let isLicensed: Bool
     let action: () -> Void
 }
 
@@ -1307,6 +1322,16 @@ private struct LicensePlanColumnView: View {
 
     @State private var isHovering = false
 
+    private var statusTitle: String {
+        if model.isLicensed {
+            return localizedAppText("Your plan", de: "Dein Plan")
+        }
+        if model.selected {
+            return localizedAppText("Selected", de: "Ausgewählt")
+        }
+        return localizedAppText("Choose", de: "Auswählen")
+    }
+
     var body: some View {
         Button(action: model.action) {
             VStack(alignment: .leading, spacing: 0) {
@@ -1348,17 +1373,15 @@ private struct LicensePlanColumnView: View {
                     Spacer(minLength: 4)
 
                     HStack(spacing: 5) {
-                        if model.selected {
+                        if model.selected || model.isLicensed {
                             Image(systemName: "checkmark")
                                 .font(.caption2.weight(.bold))
                                 .accessibilityHidden(true)
                         }
-                        Text(model.selected
-                            ? localizedAppText("Your plan", de: "Dein Plan")
-                            : localizedAppText("Choose", de: "Auswählen"))
+                        Text(statusTitle)
                     }
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(model.selected ? Color.primary : Color.accentColor)
+                    .foregroundStyle(model.selected || model.isLicensed ? Color.primary : Color.accentColor)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
