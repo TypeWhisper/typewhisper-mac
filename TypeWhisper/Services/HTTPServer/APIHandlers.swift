@@ -740,6 +740,10 @@ final class APIHandlers: @unchecked Sendable {
         let resolvedEngineId: String?
         if let engine {
             guard let match = engines.first(where: { $0.providerId == engine }) else {
+                // Refused engines leave the list, so name the policy instead of an unknown engine.
+                if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forProviderId: engine) {
+                    return .reject(.error(status: 403, message: refusal, code: "forbidden"))
+                }
                 return .reject(.error(status: 400, message: "Unknown engine '\(engine)'"))
             }
             resolvedEngineId = match.providerId

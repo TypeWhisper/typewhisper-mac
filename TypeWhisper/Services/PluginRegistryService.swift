@@ -899,6 +899,12 @@ final class PluginRegistryService: ObservableObject {
                 return false
             }
 
+            // Judged again: the managed settings may have changed while the archive downloaded.
+            if let refusal = Self.installRefusal(for: plugin) {
+                installStates[plugin.id] = .error(refusal)
+                return false
+            }
+
             let installResult = try installBundle(
                 at: bundleURL,
                 expectedPluginId: plugin.id,
