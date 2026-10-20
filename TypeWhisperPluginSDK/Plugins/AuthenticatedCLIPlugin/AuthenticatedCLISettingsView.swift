@@ -73,6 +73,7 @@ struct AuthenticatedCLISettingsView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "lock.shield")
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
             Text(String(
                 localized: "Only the workflow instruction and transcript text are sent. Each request runs non-interactively in a temporary folder with tools, sessions, project rules, and update checks disabled where the CLI supports it.",
                 bundle: bundle
@@ -136,6 +137,7 @@ struct AuthenticatedCLISettingsView: View {
                 Button(String(localized: "Choose…", bundle: bundle)) {
                     chooseExecutable(for: status.kind)
                 }
+                .accessibilityLabel(Text("Choose executable for \(status.kind.displayName)", bundle: bundle))
                 if plugin.selectedPath(for: status.kind) != nil {
                     Button(String(localized: "Use automatic detection", bundle: bundle)) {
                         Task {
@@ -145,6 +147,7 @@ struct AuthenticatedCLISettingsView: View {
                             isRefreshing = false
                         }
                     }
+                    .accessibilityLabel(Text("Use automatic detection for \(status.kind.displayName)", bundle: bundle))
                 }
                 Spacer()
                 if let documentationURL = status.kind.documentationURL {

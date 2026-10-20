@@ -1,6 +1,50 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Custom append format": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigenes Anhangsformat"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム追記形式"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义追加格式"
+          }
+        }
+      }
+    },
+    "Daily note filename": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dateiname der Tagesnotiz"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日記メモのファイル名"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日笔记文件名"
+          }
+        }
+      }
+    },
     "You are an assistant that formats spoken dictation into a clean Obsidian-compatible markdown note. Structure the text with appropriate headings, bullet points, and paragraphs. Fix grammar and remove filler words while preserving the original meaning. Output only the formatted markdown, no explanations.": {
       "localizations": {
         "de": {

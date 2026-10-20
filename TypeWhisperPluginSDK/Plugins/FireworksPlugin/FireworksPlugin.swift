@@ -394,9 +394,11 @@ private struct FireworksSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -405,6 +407,7 @@ private struct FireworksSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -415,6 +418,7 @@ private struct FireworksSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -422,6 +426,7 @@ private struct FireworksSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -436,6 +441,7 @@ private struct FireworksSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -451,7 +457,7 @@ private struct FireworksSettingsView: View {
                     Text("Transcription Model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Transcription Model", selection: $selectedModel) {
+                    Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -480,9 +486,10 @@ private struct FireworksSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
                     }
 
-                    Picker("LLM Model", selection: $selectedLLMModel) {
+                    Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -496,6 +503,7 @@ private struct FireworksSettingsView: View {
                         TextField("accounts/fireworks/models/...", text: $customModelId)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("Custom model ID", bundle: bundle))
                         Button(String(localized: "Use", bundle: bundle)) {
                             let trimmed = customModelId.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !trimmed.isEmpty else { return }
@@ -506,6 +514,7 @@ private struct FireworksSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(customModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Use custom model ID", bundle: bundle))
                     }
 
                     Text("Enter any model ID from fireworks.ai/models", bundle: bundle)
@@ -542,6 +551,7 @@ private struct FireworksSettingsView: View {
                             .onChange(of: llmTemperatureValue) {
                                 plugin.setLLMTemperatureValue(llmTemperatureValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
                     }
                 }
             }

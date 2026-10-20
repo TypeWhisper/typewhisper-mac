@@ -186,6 +186,7 @@ private struct FileMemorySettingsView: View {
 
             TextField(String(localized: "Search memories..."), text: $searchText)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(Text("Search memories..."))
 
             if filteredMemories.isEmpty {
                 ContentUnavailableView {

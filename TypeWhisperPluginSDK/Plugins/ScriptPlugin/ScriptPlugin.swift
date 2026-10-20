@@ -498,7 +498,7 @@ private struct ScriptRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(script.name.isEmpty ? script.command : script.name)
+                Text(displayName)
                     .font(.body.weight(.medium))
 
                 if !script.command.isEmpty {
@@ -527,11 +527,13 @@ private struct ScriptRow: View {
             .toggleStyle(.switch)
             .controlSize(.small)
             .labelsHidden()
+            .accessibilityLabel(Text("Enable \(displayName)", bundle: bundle))
 
             Button(action: onEdit) {
                 Image(systemName: "pencil")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(Text("Edit \(displayName)", bundle: bundle))
 
             Button(role: .destructive) {
                 service.removeScript(id: script.id)
@@ -539,8 +541,13 @@ private struct ScriptRow: View {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
+            .accessibilityLabel(Text("Delete \(displayName)", bundle: bundle))
         }
         .padding(.vertical, 4)
+    }
+
+    private var displayName: String {
+        script.name.isEmpty ? script.command : script.name
     }
 }
 
@@ -549,10 +556,13 @@ private struct ScriptRow: View {
 private struct ExecutionLogRow: View {
     let entry: ExecutionLogEntry
 
+    private let bundle = Bundle(for: ScriptService.self)
+
     var body: some View {
         HStack {
             Image(systemName: entry.success ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(entry.success ? .green : .red)
+                .accessibilityLabel(entry.success ? Text("Succeeded", bundle: bundle) : Text("Failed", bundle: bundle))
             VStack(alignment: .leading) {
                 Text(entry.scriptName)
                     .font(.caption)

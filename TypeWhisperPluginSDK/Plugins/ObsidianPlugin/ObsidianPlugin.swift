@@ -931,6 +931,7 @@ private struct ObsidianSettingsView: View {
                                 plugin._subfolder = newValue
                                 plugin.saveSetting(newValue, forKey: "subfolder")
                             }
+                            .accessibilityLabel(Text("Subfolder:", bundle: bundle))
                     }
 
                     HStack {
@@ -943,6 +944,7 @@ private struct ObsidianSettingsView: View {
                                 plugin._filenameTemplate = newValue
                                 plugin.saveSetting(newValue, forKey: "filenameTemplate")
                             }
+                            .accessibilityLabel(Text("Filename:", bundle: bundle))
                     }
 
                     Text("Preview: \(previewFilename).md", bundle: bundle)
@@ -968,6 +970,7 @@ private struct ObsidianSettingsView: View {
                                 plugin._noteTemplate = newValue
                                 plugin.saveSetting(newValue, forKey: "noteTemplate")
                             }
+                            .accessibilityLabel(Text("Note Template", bundle: bundle))
 
                         Text("Placeholders: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}", bundle: bundle)
                             .font(.caption)
@@ -1004,13 +1007,14 @@ private struct ObsidianSettingsView: View {
                                     plugin._dailyNoteFormat = newValue
                                     plugin.saveSetting(newValue, forKey: "dailyNoteFormat")
                                 }
+                                .accessibilityLabel(Text("Daily note filename", bundle: bundle))
                         }
 
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
                                 Text("Append format:", bundle: bundle)
                                     .frame(width: 100, alignment: .trailing)
-                                Picker("Append format:", selection: $appendFormatSelection) {
+                                Picker(String(localized: "Append format:", bundle: bundle), selection: $appendFormatSelection) {
                                     Text("Timestamp section", bundle: bundle).tag(DailyNoteAppendPreset.timestamp.template)
                                     Text("Plain append", bundle: bundle).tag(DailyNoteAppendPreset.plain.template)
                                     Text("Bullet list", bundle: bundle).tag(DailyNoteAppendPreset.bullet.template)
@@ -1032,6 +1036,7 @@ private struct ObsidianSettingsView: View {
                                     plugin.saveSetting(newValue, forKey: "dailyNoteAppendTemplate")
                                     appendFormatSelection = DailyNoteAppendPreset.selection(for: newValue)
                                 }
+                                .accessibilityLabel(Text("Custom append format", bundle: bundle))
 
                             Text("Placeholders: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}", bundle: bundle)
                                 .font(.caption)
@@ -1072,6 +1077,7 @@ private struct ObsidianSettingsView: View {
                                     plugin._frontmatterTags = tags
                                     plugin.saveSetting(tags, forKey: "frontmatterTags")
                                 }
+                                .accessibilityLabel(Text("Tags:", bundle: bundle))
                         }
                     }
                 }

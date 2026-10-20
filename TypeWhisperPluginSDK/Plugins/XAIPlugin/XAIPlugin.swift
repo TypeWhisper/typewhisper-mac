@@ -1244,9 +1244,11 @@ private struct XAISettingsView: View {
                     TextField("API Key", text: $apiKeyInput)
                         .textFieldStyle(.roundedBorder)
                         .font(.system(.body, design: .monospaced))
+                        .accessibilityLabel(Text("API Key", bundle: bundle))
                 } else {
                     SecureField("API Key", text: $apiKeyInput)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("API Key", bundle: bundle))
                 }
 
                 Button {
@@ -1255,6 +1257,7 @@ private struct XAISettingsView: View {
                     Image(systemName: showAPIKey ? "eye.slash" : "eye")
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel(showAPIKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                 if plugin.isConfigured {
                     Button(String(localized: "Remove", bundle: bundle)) {
@@ -1265,6 +1268,7 @@ private struct XAISettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .foregroundStyle(.red)
+                    .accessibilityLabel(Text("Remove API key", bundle: bundle))
                 } else {
                     Button(String(localized: "Save", bundle: bundle)) {
                         saveAPIKey()
@@ -1307,9 +1311,10 @@ private struct XAISettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(isRefreshingModels)
+                .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
             }
 
-            Picker("LLM Model", selection: $selectedLLMModel) {
+            Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                 ForEach(plugin.supportedModels, id: \.id) { model in
                     Text(model.displayName).tag(model.id)
                 }
@@ -1335,9 +1340,10 @@ private struct XAISettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(isRefreshingVoices)
+                .accessibilityLabel(Text("Refresh voices", bundle: bundle))
             }
 
-            Picker("TTS Voice", selection: $selectedVoiceId) {
+            Picker(String(localized: "TTS Voice", bundle: bundle), selection: $selectedVoiceId) {
                 ForEach(plugin.availableVoices, id: \.id) { voice in
                     Text(voice.displayName).tag(voice.id)
                 }
@@ -1356,6 +1362,7 @@ private struct XAISettingsView: View {
                 .onChange(of: customVoiceId) {
                     plugin.setCustomVoiceId(customVoiceId)
                 }
+                .accessibilityLabel(Text("Custom Voice ID", bundle: bundle))
 
             Toggle(String(localized: "Low Latency", bundle: bundle), isOn: Binding(
                 get: { lowLatency },

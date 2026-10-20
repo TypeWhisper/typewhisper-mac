@@ -941,6 +941,7 @@ private struct CohereLocalSettingsView: View {
                     Image(systemName: "waveform.badge.mic")
                         .font(.title2)
                         .foregroundStyle(.tint)
+                        .accessibilityHidden(true)
                     Text("Cohere Transcribe (Local)", bundle: bundle)
                         .font(.title2)
                         .fontWeight(.semibold)
@@ -1004,6 +1005,7 @@ private struct CohereLocalSettingsView: View {
                             showDeleteConfirmation = true
                         }
                         .controlSize(.small)
+                        .accessibilityLabel(Text(String.localizedStringWithFormat(String(localized: "Remove %@", bundle: bundle), modelName(model))))
                     }
                 }
             }
@@ -1042,34 +1044,44 @@ private struct CohereLocalSettingsView: View {
             HStack(spacing: 8) {
                 ProgressView(value: progress)
                     .frame(width: 80)
+                    .accessibilityLabel(Text(String.localizedStringWithFormat(String(localized: "Downloading %@", bundle: bundle), modelName(model))))
                 Text("\(Int(progress * 100))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
 
         case .preparing:
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel(Text(String.localizedStringWithFormat(String(localized: "Loading %@", bundle: bundle), modelName(model))))
 
         case .ready:
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .accessibilityLabel(Text("Loaded", bundle: bundle))
                 Button(String(localized: "Unload", bundle: bundle)) {
                     plugin.unloadModel()
                     refresh()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text(String.localizedStringWithFormat(String(localized: "Unload %@", bundle: bundle), modelName(model))))
             }
 
         case .error:
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
+                    .accessibilityLabel(Text("Error", bundle: bundle))
                 loadButton(for: model)
             }
         }
+    }
+
+    private func modelName(_ model: CohereLocalModelDefinition) -> String {
+        CohereLocalPlugin.localizedString(model.displayName, bundle: bundle)
     }
 
     private func loadButton(for model: CohereLocalModelDefinition) -> some View {
@@ -1083,6 +1095,11 @@ private struct CohereLocalSettingsView: View {
         .buttonStyle(.borderedProminent)
         .controlSize(.small)
         .disabled(isBusy)
+        .accessibilityLabel(
+            downloadedModelIds.contains(model.id)
+                ? Text(String.localizedStringWithFormat(String(localized: "Load %@", bundle: bundle), modelName(model)))
+                : Text(String.localizedStringWithFormat(String(localized: "Download and load %@", bundle: bundle), modelName(model)))
+        )
     }
 
     private func load(_ model: CohereLocalModelDefinition) {
@@ -1116,9 +1133,11 @@ private struct CohereLocalSettingsView: View {
                     if showHuggingFaceToken {
                         TextField("hf_...", text: $huggingFaceTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     } else {
                         SecureField("hf_...", text: $huggingFaceTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     }
 
                     Button {
@@ -1127,6 +1146,7 @@ private struct CohereLocalSettingsView: View {
                         Image(systemName: showHuggingFaceToken ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showHuggingFaceToken ? Text("Hide Hugging Face token", bundle: bundle) : Text("Show Hugging Face token", bundle: bundle))
 
                     if plugin.huggingFaceToken != nil {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -1136,6 +1156,7 @@ private struct CohereLocalSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                     }
 
                     Button(String(localized: "Save", bundle: bundle)) {
@@ -1147,6 +1168,7 @@ private struct CohereLocalSettingsView: View {
                         PluginHuggingFaceTokenHelper.normalizedToken(huggingFaceTokenInput) == nil
                             || isValidatingHuggingFaceToken
                     )
+                    .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
                 }
 
                 if isValidatingHuggingFaceToken {
@@ -1247,6 +1269,7 @@ private struct CohereLocalSettingsView: View {
             Image(systemName: icon)
                 .frame(width: 18)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(text)
                 .font(.callout)
                 .foregroundStyle(.secondary)

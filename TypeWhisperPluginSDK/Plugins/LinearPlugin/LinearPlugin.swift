@@ -367,9 +367,11 @@ private struct LinearSettingsView: View {
                         TextField("lin_api_...", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("lin_api_...", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -378,6 +380,7 @@ private struct LinearSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -391,6 +394,7 @@ private struct LinearSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -398,6 +402,7 @@ private struct LinearSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -412,6 +417,7 @@ private struct LinearSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)

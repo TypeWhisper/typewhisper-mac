@@ -862,8 +862,10 @@ private struct MicrosoftAISettingsView: View {
                         Group {
                             if showAPIKey {
                                 TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
+                                    .accessibilityLabel(Text("API Key", bundle: bundle))
                             } else {
                                 SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
+                                    .accessibilityLabel(Text("API Key", bundle: bundle))
                             }
                         }
                         .textFieldStyle(.roundedBorder)
@@ -875,6 +877,7 @@ private struct MicrosoftAISettingsView: View {
                             Image(systemName: showAPIKey ? "eye.slash" : "eye")
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel(showAPIKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
                     }
                 }
 
@@ -893,6 +896,7 @@ private struct MicrosoftAISettingsView: View {
                             isConfigured = false
                             catalogStatus = nil
                         }
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     }
                 }
 
