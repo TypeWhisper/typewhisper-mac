@@ -95,23 +95,31 @@ struct HistorySpeakerDetectionRow: View {
 
     @ViewBuilder
     private func progress(_ stage: SpeakerTranscriptCoordinator.Stage) -> some View {
+        let status = Self.statusText(stage)
         VStack(alignment: .leading, spacing: 5) {
+            // The bar carries the status as its label, so VoiceOver reads
+            // "Detecting speakers…, 40 percent" as one element.
+            title(status)
+                .accessibilityHidden(true)
             switch stage {
-            case .waiting:
-                title(String(localized: "speakers.status.waiting"))
+            case .waiting, .transcribing:
                 ProgressView().progressViewStyle(.linear)
-            case .transcribing:
-                title(String(localized: "speakers.status.transcribing"))
-                ProgressView().progressViewStyle(.linear)
-            case .downloadingModels(let fraction):
-                title(String(localized: "speakers.status.downloadingModel"))
+                    .accessibilityLabel(status)
+            case .downloadingModels(let fraction), .detecting(let fraction):
                 ProgressView(value: fraction)
-            case .detecting(let fraction):
-                title(String(localized: "speakers.status.detecting"))
-                ProgressView(value: fraction)
+                    .accessibilityLabel(status)
             }
         }
         .controlSize(.small)
+    }
+
+    private static func statusText(_ stage: SpeakerTranscriptCoordinator.Stage) -> String {
+        switch stage {
+        case .waiting: String(localized: "speakers.status.waiting")
+        case .transcribing: String(localized: "speakers.status.transcribing")
+        case .downloadingModels: String(localized: "speakers.status.downloadingModel")
+        case .detecting: String(localized: "speakers.status.detecting")
+        }
     }
 
     private func notice(_ text: String) -> some View {

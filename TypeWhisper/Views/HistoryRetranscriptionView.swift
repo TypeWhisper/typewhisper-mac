@@ -20,6 +20,7 @@ struct HistoryRetranscriptionView: View {
     @State private var showPromotionConfirmation = false
     @State private var showDiscardConfirmation = false
     @State private var showDetails = false
+    @State private var cancelRequested = false
 
     private var container: ServiceContainer { .shared }
     private var engines: [any TranscriptionEnginePlugin] { PluginManager.shared?.transcriptionEngines ?? [] }
@@ -47,6 +48,7 @@ struct HistoryRetranscriptionView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(localized: "history.retranscribe.title")).font(.title2.bold())
+                    .accessibilityAddTraits(.isHeader)
                 Text(String(localized: "history.retranscribe.subtitle"))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -77,13 +79,12 @@ struct HistoryRetranscriptionView: View {
         .interactiveDismissDisabled(running)
         .confirmationDialog(String(localized: "history.retranscribe.promoteTitle"), isPresented: $showPromotionConfirmation) {
             Button(String(localized: "history.retranscribe.promote")) {
-                if let selectedVersionID { service.promote(selectedVersionID, in: record) }
+                promoteSelectedVersion()
             }
         } message: { Text(String(localized: "history.retranscribe.promoteMessage")) }
         .confirmationDialog(String(localized: "history.retranscribe.discardTitle"), isPresented: $showDiscardConfirmation) {
             Button(String(localized: "Delete"), role: .destructive) {
-                if let selectedVersionID { service.discard(selectedVersionID, in: record) }
-                selectedVersionID = candidates.last?.id
+                discardSelectedVersion()
             }
         }
         .onAppear {
@@ -108,7 +109,68 @@ struct HistoryRetranscriptionView: View {
         .onChange(of: workflowID) { _, _ in refreshPlan() }
         .onChange(of: record.transcriptionVersionsData) { _, _ in selectedVersionID = candidates.last?.id }
         .onChange(of: record.activeTranscriptionVersionID) { _, _ in selectedVersionID = candidates.last?.id }
+        .onChange(of: service.runningRecordID) { previousID, currentID in
+            guard previousID == record.id, currentID == nil else { return }
+            announceRunFinished()
+        }
+        .onChange(of: displayedError) { _, message in
+            guard let message else { return }
+            container.accessibilityAnnouncementService.announceError(message)
+        }
         .onDisappear { service.cancel() }
+    }
+
+    private var displayedError: String? { service.errorMessage ?? planError }
+
+    private var statusText: String {
+        service.isCancelling ? String(localized: "history.retranscribe.cancelling")
+            : String(localized: "history.retranscribe.running")
+    }
+
+    // MARK: VoiceOver announcements
+
+    /// The run, and choosing or deleting a result, only change the sheet's
+    /// content, so VoiceOver users hear the outcome. Errors are announced by
+    /// the error label's own change.
+    private func announceRunFinished() {
+        defer { cancelRequested = false }
+        guard service.errorMessage == nil else { return }
+        if cancelRequested {
+            announce(String(localized: "Cancelled"))
+        } else {
+            announce(localizedAppText(
+                "New result ready to compare",
+                de: "Neues Ergebnis zum Vergleichen bereit",
+                ja: "比較できる新しい結果があります",
+                zh: "新结果已可供比较"
+            ))
+        }
+    }
+
+    private func promoteSelectedVersion() {
+        guard let selectedVersionID else { return }
+        service.promote(selectedVersionID, in: record)
+        guard service.errorMessage == nil else { return }
+        announce(localizedAppText(
+            "This result is now the text of the entry",
+            de: "Dieses Ergebnis ist jetzt der Text des Eintrags",
+            ja: "この結果がエントリのテキストになりました",
+            zh: "此结果现已成为该条目的文本"
+        ))
+    }
+
+    private func discardSelectedVersion() {
+        if let selectedVersionID {
+            service.discard(selectedVersionID, in: record)
+            if service.errorMessage == nil {
+                announce(localizedAppText("Version deleted", de: "Version gelöscht", ja: "バージョンを削除しました", zh: "版本已删除"))
+            }
+        }
+        selectedVersionID = candidates.last?.id
+    }
+
+    private func announce(_ message: String) {
+        container.accessibilityAnnouncementService.announce(message)
     }
 
     // MARK: Step 1
@@ -139,7 +201,7 @@ struct HistoryRetranscriptionView: View {
                                 .disabled(running)
                         }
                     }
-                    if let message = service.errorMessage ?? planError {
+                    if let message = displayedError {
                         Label(message, systemImage: "xmark.octagon")
                             .foregroundStyle(.red).textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
@@ -147,13 +209,18 @@ struct HistoryRetranscriptionView: View {
                     HStack(spacing: 12) {
                         if running {
                             ProgressView().controlSize(.small)
-                            Text(service.isCancelling ? String(localized: "history.retranscribe.cancelling")
-                                 : String(localized: "history.retranscribe.running"))
+                                .accessibilityLabel(statusText)
+                            Text(statusText)
                                 .foregroundStyle(.secondary)
-                            Button(String(localized: "Cancel")) { service.cancel() }
-                                .disabled(service.isCancelling)
+                                .accessibilityHidden(true)
+                            Button(String(localized: "Cancel")) {
+                                cancelRequested = true
+                                service.cancel()
+                            }
+                            .disabled(service.isCancelling)
                         } else {
                             Button {
+                                cancelRequested = false
                                 service.start(record: record, request: request, cloudConfirmed: cloudConfirmed,
                                               downloadConfirmed: downloadConfirmed, confirmedPlan: plan)
                             } label: {
@@ -228,6 +295,8 @@ struct HistoryRetranscriptionView: View {
                 Label(String(localized: "history.retranscribe.inUse"), systemImage: "checkmark.circle.fill")
                     .font(.caption).foregroundStyle(.green)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -281,6 +350,7 @@ struct HistoryRetranscriptionView: View {
         } label: {
             Text(selectedVersion?.id == record.id
                  ? String(localized: "Original") : String(localized: "history.retranscribe.alternative"))
+                .accessibilityAddTraits(.isHeader)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
@@ -289,8 +359,10 @@ struct HistoryRetranscriptionView: View {
         VStack(spacing: 10) {
             if progress {
                 ProgressView().controlSize(.regular)
+                    .accessibilityLabel(message)
             } else {
                 Image(systemName: "text.badge.plus").font(.largeTitle).foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
             Text(message).multilineTextAlignment(.center).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -303,6 +375,7 @@ struct HistoryRetranscriptionView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(provenance(version)).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityLabel(provenanceParts(version).joined(separator: ", "))
             Text(version.finalText).textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -331,6 +404,13 @@ struct HistoryRetranscriptionView: View {
                 .background(Circle().fill(Color.accentColor))
             Text(title).font(.headline)
         }
+        // "Step 1 of 2, …" as one heading instead of a lone number.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            String.localizedStringWithFormat(String(localized: "Step %lld of %lld"), Int64(number), Int64(2))
+                + ", " + title
+        )
+        .accessibilityAddTraits(.isHeader)
     }
 
     private func engineName(_ version: HistoryTranscriptionVersion) -> String {
@@ -343,6 +423,10 @@ struct HistoryRetranscriptionView: View {
     }
 
     private func provenance(_ version: HistoryTranscriptionVersion) -> String {
+        provenanceParts(version).joined(separator: " · ")
+    }
+
+    private func provenanceParts(_ version: HistoryTranscriptionVersion) -> [String] {
         var parts: [String] = [engineName(version)]
         if let model = version.modelName ?? version.modelID { parts.append(model) }
         if let language = version.language { parts.append(localizedAppLanguageName(for: language)) }
@@ -350,7 +434,7 @@ struct HistoryRetranscriptionView: View {
             parts.append(version.workflowName ?? String(localized: "history.retranscribe.noWorkflow"))
         }
         parts.append(version.createdAt.formatted(date: .abbreviated, time: .shortened))
-        return parts.joined(separator: " · ")
+        return parts
     }
 
     private func refreshPlan() {
