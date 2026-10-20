@@ -25,6 +25,8 @@ struct LicenseSettingsView: View {
     @State private var purchaseCadence: CommercialPurchaseCadence = .monthly
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var planColumnsPerRow = 4
+    /// Counts clicks on a plan, so choosing the current plan again still scrolls.
+    @State private var planChoiceCount = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -91,8 +93,8 @@ struct LicenseSettingsView: View {
                     guard request.tab == .license else { return }
                     handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
                 }
-                .onChange(of: license.usageIntent) { _, intent in
-                    scrollToPurchase(after: intent, proxy: proxy)
+                .onChange(of: planChoiceCount) { _, _ in
+                    scrollToPurchase(after: license.usageIntent, proxy: proxy)
                 }
             }
         }
@@ -192,10 +194,9 @@ struct LicenseSettingsView: View {
     }
 
     private var planColumns: [LicensePlanColumnModel] {
-        let tier = license.licenseTier
         // "Your plan" names the tier this Mac is licensed for; the selection
         // only records how it is used and can differ from it.
-        let licensedTier = license.licenseStatus == .active ? tier : nil
+        let licensedTier = license.licenseStatus == .active ? license.licenseTier : nil
         let perMonth = localizedAppText("per month", de: "pro Monat")
         func monthlyPrice(_ tier: LicenseTier) -> String {
             commercialPurchaseOptionCopy(for: tier, cadence: .monthly)?.price ?? ""
@@ -212,9 +213,9 @@ struct LicenseSettingsView: View {
                     localizedAppText("Community support on Discord", de: "Community-Support auf Discord"),
                     localizedAppText("Full source code on GitHub", de: "Voller Quellcode auf GitHub"),
                 ],
-                selected: license.usageIntent == .personalOSS && tier != .enterprise,
+                selected: license.usageIntent == .personalOSS,
                 isLicensed: false,
-                action: { license.setUsageIntent(.personalOSS) }
+                action: { choosePlan(.personalOSS) }
             ),
             LicensePlanColumnModel(
                 id: .workSolo,
@@ -227,9 +228,9 @@ struct LicenseSettingsView: View {
                     localizedAppText("Sync Dictionary & Snippets, Learn from Corrections", de: "Wörterbuch & Snippets synchronisieren, Aus Korrekturen lernen"),
                     localizedAppText("Non-GPL terms, invoices, and support", de: "Nicht-GPL-Bedingungen, Rechnungen und Support"),
                 ],
-                selected: license.usageIntent == .workSolo && tier != .enterprise,
+                selected: license.usageIntent == .workSolo,
                 isLicensed: licensedTier == .individual,
-                action: { license.setUsageIntent(.workSolo) }
+                action: { choosePlan(.workSolo) }
             ),
             LicensePlanColumnModel(
                 id: .team,
@@ -242,9 +243,9 @@ struct LicenseSettingsView: View {
                     localizedAppText("Everything in Individual included", de: "Alles aus Einzelnutzer enthalten"),
                     localizedAppText("One invoice for the whole team", de: "Eine Rechnung für das ganze Team"),
                 ],
-                selected: license.usageIntent == .team && tier != .enterprise,
+                selected: license.usageIntent == .team,
                 isLicensed: licensedTier == .team,
-                action: { license.setUsageIntent(.team) }
+                action: { choosePlan(.team) }
             ),
             LicensePlanColumnModel(
                 id: .enterprise,
@@ -258,9 +259,9 @@ struct LicenseSettingsView: View {
                     localizedAppText("Reply within one business day", de: "Antwort innerhalb eines Arbeitstags"),
                     localizedAppText("Help with rollout and security reviews", de: "Hilfe bei Rollout und Security-Reviews"),
                 ],
-                selected: license.usageIntent == .enterprise || tier == .enterprise,
+                selected: license.usageIntent == .enterprise,
                 isLicensed: licensedTier == .enterprise,
-                action: { license.setUsageIntent(.enterprise) }
+                action: { choosePlan(.enterprise) }
             ),
         ]
     }
@@ -971,6 +972,11 @@ struct LicenseSettingsView: View {
 
     /// Choosing a paid plan brings its purchase card into view, which sits
     /// below the plans and is often outside the window.
+    private func choosePlan(_ intent: UsageIntent) {
+        license.setUsageIntent(intent)
+        planChoiceCount += 1
+    }
+
     private func scrollToPurchase(after intent: UsageIntent, proxy: ScrollViewProxy) {
         guard intent != .personalOSS,
               !license.isLicenseManaged,
