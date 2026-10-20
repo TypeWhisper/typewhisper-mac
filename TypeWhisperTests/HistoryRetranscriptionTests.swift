@@ -923,6 +923,40 @@ final class HistoryRetranscriptionTests: XCTestCase {
         }
     }
 
+    func testEnforcedPairReplacesTheRequestedEngineInThePlan() async throws {
+        let requested = HistoryComparisonRestoreEngine()
+        requested.providerID = "requested-engine"
+        let enforced = HistoryEnforcedTestEngine()
+        let environment = try makeEnvironment(plugins: [requested, enforced])
+        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: HistoryEnforcedTestEngine.pluginId, modelId: "any")
+        ))
+
+        let plan = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: requested.providerId),
+            manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [], promptProcessing: environment.promptProcessing
+        )
+
+        // The enforced engine sends audio off the Mac, so the plan asks before it runs.
+        XCTAssertTrue(plan.requiresCloudConfirmation)
+        XCTAssertEqual(plan.cloudProviders.count, 1)
+        XCTAssertTrue(plan.cloudProviders[0].contains(enforced.providerDisplayName))
+        let version = try await plan.run([0.1])
+        XCTAssertEqual(version.finalText, "enforced")
+        XCTAssertEqual(version.engineName, enforced.providerDisplayName)
+
+        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "any")
+        ))
+        XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: requested.providerId),
+            manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [], promptProcessing: environment.promptProcessing
+        ))
+        PluginManager.shared.applySelectionPolicy(.unmanaged)
+    }
+
     func testComparisonRetainsRequestedLanguageWhenEngineDoesNotDetectOne() async throws {
         let engine = HistoryComparisonTestEngine()
         let environment = try makeEnvironment(plugins: [engine])
@@ -1393,6 +1427,24 @@ private class HistoryComparisonTestEngine: NSObject, TranscriptionEnginePlugin, 
     func selectModel(_ modelId: String) {}
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         resultOverride ?? PluginTranscriptionResult(text: "test", detectedLanguage: language)
+    }
+}
+
+private final class HistoryEnforcedTestEngine: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.history-enforced"
+    static let pluginName = "History Enforced Engine"
+    required override init() {}
+    var providerId: String { "enforced-engine" }
+    var providerDisplayName: String { "Enforced Engine" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    var supportsTranslation: Bool { false }
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "enforced", detectedLanguage: language)
     }
 }
 

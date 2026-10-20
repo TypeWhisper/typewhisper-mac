@@ -81,6 +81,14 @@ enum HistoryRetranscriptionEnvironment {
         dictionary: DictionaryService, workflows: [Workflow],
         promptProcessing: PromptProcessingService, translationService: AnyObject? = nil
     ) throws -> HistoryRetranscriptionService.Plan {
+        var request = request
+        // An enforced pair replaces the requested engine and model, so the plan checks, discloses
+        // and records the pair that runs.
+        if let enforced = PluginManager.shared?.enforcedTranscriptionResolution {
+            guard let providerId = enforced.resolvedProviderId else { throw HistoryRetranscriptionError.unavailable }
+            request.engineID = providerId
+            request.modelID = nil
+        }
         guard let engine = PluginManager.shared?.transcriptionEngine(for: request.engineID),
               manager.canPrepareForTranscription(engine) else { throw HistoryRetranscriptionError.unavailable }
         let modelID = request.modelID ?? engine.selectedModelId

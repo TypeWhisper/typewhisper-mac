@@ -52,6 +52,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
 
     private let policyStore: ManagedPolicySnapshotStore
+    private let locality: PluginLocality?
 
     init(
         pluginId: String,
@@ -65,6 +66,7 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         self.pluginId = pluginId
         self.backsSelectedEngine = backsSelectedTranscriptionEngine
         self.policyStore = policyStore
+        self.locality = locality
         self.eventBus = ManagedPolicyEventBus(base: eventBus, pluginId: pluginId, locality: locality, store: policyStore)
         self.ruleNamesProvider = ruleNamesProvider
         self.workflowProvider = workflowProvider
@@ -177,22 +179,33 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
 
     // MARK: - App Context
 
+    /// Whether the managed settings let this plugin receive text and context, such as the
+    /// active app, rule names and workflows. Checked on every read, so a policy change
+    /// applies at once.
+    private var mayReceiveContext: Bool {
+        policyStore.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) == nil
+    }
+
     var activeAppBundleId: String? {
-        NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard mayReceiveContext else { return nil }
+        return NSWorkspace.shared.frontmostApplication?.bundleIdentifier
     }
 
     var activeAppName: String? {
-        NSWorkspace.shared.frontmostApplication?.localizedName
+        guard mayReceiveContext else { return nil }
+        return NSWorkspace.shared.frontmostApplication?.localizedName
     }
 
     // MARK: - Rules
 
     var availableRuleNames: [String] {
-        readMainActor(ruleNamesProvider)
+        guard mayReceiveContext else { return [] }
+        return readMainActor(ruleNamesProvider)
     }
 
     var availableWorkflows: [PluginWorkflowInfo] {
-        readMainActor(workflowProvider)
+        guard mayReceiveContext else { return [] }
+        return readMainActor(workflowProvider)
     }
 
     // MARK: - Capabilities
@@ -304,11 +317,13 @@ struct ManagedPolicyEventBus: EventBusProtocol {
         let store = store
         return base.subscribe { event in
             // Checked per event, so a policy that changes while the plugin runs applies at once.
-            if event.carriesContent,
-               store.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) != nil {
+            guard store.providerPolicy.textRefusal(pluginId: pluginId, locality: locality) != nil else {
+                await handler(event)
                 return
             }
-            await handler(event)
+            if let event = event.withoutContext {
+                await handler(event)
+            }
         }
     }
 
@@ -318,14 +333,20 @@ struct ManagedPolicyEventBus: EventBusProtocol {
 }
 
 extension TypeWhisperEvent {
-    /// Whether the event carries transcript, inserted or corrected text, or files with it.
-    var carriesContent: Bool {
+    /// The event for a plugin that may not receive text: lifecycle events lose the active app,
+    /// and events that carry transcript, inserted or corrected text, or files with it are
+    /// withheld (nil).
+    var withoutContext: TypeWhisperEvent? {
         switch self {
-        case .recordingStarted, .recordingStopped, .transcriptionFailed:
-            false
+        case .recordingStarted(let payload):
+            .recordingStarted(RecordingStartedPayload(timestamp: payload.timestamp))
+        case .recordingStopped:
+            self
+        case .transcriptionFailed(let payload):
+            .transcriptionFailed(TranscriptionFailedPayload(timestamp: payload.timestamp, error: payload.error))
         case .transcriptionCompleted, .textInserted, .textCorrectionCommitted, .actionCompleted,
              .partialTranscriptionUpdate, .recorderTranscriptReady:
-            true
+            nil
         }
     }
 }

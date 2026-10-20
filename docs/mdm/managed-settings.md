@@ -129,7 +129,8 @@ the HTTP API, regardless of the selected engine, workflow overrides or per-featu
 engines. An API request that asks for another engine or model gets 403. The engine and
 model pickers are locked. The user's own engine selection is kept and applies again
 once the pair is removed; the model the user had selected in that engine is restored
-then as well.
+then as well. If the engine had no model selected, the enforced model stays selected,
+because plugins cannot clear a selection.
 
 An **enforced LLM pair** replaces the provider and model of every language model call.
 The workflow editor and the fallback list keep their saved selections but are locked.
@@ -185,6 +186,10 @@ Known limits:
   run; they carry credentials, not transcripts.
 - Audio a streaming engine received before a stricter policy arrived cannot be
   recalled; the policy applies again at the next request.
+- A plugin refused as a whole never runs, so TypeWhisper learns its engine IDs only
+  from an earlier launch of TypeWhisper 1.8 or later. If the selected engine belongs
+  to such a plugin, dictation can report that no engine is selected instead of the
+  reason when no allowed engine is ready.
 - These keys govern TypeWhisper's behavior. They are not a network firewall: use
   your MDM's network controls for stronger guarantees.
 

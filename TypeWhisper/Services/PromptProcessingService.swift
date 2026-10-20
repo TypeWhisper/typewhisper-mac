@@ -296,11 +296,18 @@ class PromptProcessingService: ObservableObject {
 
     // MARK: - Fallback list management
 
+    /// An enforced LLM pair replaces the list for every call; the list stays as the user saved it
+    /// for when the pair is removed, so it cannot be edited meanwhile.
+    var isFallbackListLocked: Bool {
+        PluginManager.shared?.selectionPolicy.enforcesLlm == true
+    }
+
     func addLLMFallback(
         providerId: String,
         modelId: String? = nil,
         effortId: String? = nil
     ) {
+        guard !isFallbackListLocked else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -327,7 +334,8 @@ class PromptProcessingService: ObservableObject {
         modelId: String? = nil,
         effortId: String? = nil
     ) {
-        guard let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
+        guard !isFallbackListLocked,
+              let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -346,6 +354,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func removeLLMFallback(_ item: LLMFallbackPriorityItem) {
+        guard !isFallbackListLocked else { return }
         setFallbackPriorityList(
             fallbackPriorityList.filter { $0.id != item.id },
             normalizeProviderIds: false
@@ -353,7 +362,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func moveLLMFallbacks(from source: IndexSet, to destination: Int) {
-        guard !source.isEmpty else { return }
+        guard !isFallbackListLocked, !source.isEmpty else { return }
 
         var items = fallbackPriorityList
         let validSource = source.filter { items.indices.contains($0) }.sorted()

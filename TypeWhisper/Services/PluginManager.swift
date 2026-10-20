@@ -625,8 +625,8 @@ final class PluginManager: ObservableObject {
         if let refusal = transcriptionRefusal(for: engine.providerId, in: plugin) {
             return .unavailable(refusal)
         }
-        let models = engine.transcriptionModels
-        guard let modelId = Self.matchingModelId(pair.modelId, in: models.map(\.id)) else {
+        // The catalog lists every selectable model; some engines list only the loaded one as models.
+        guard let modelId = Self.matchingModelId(pair.modelId, in: engine.modelCatalog.map(\.id)) else {
             return .unavailable(String(localized: "The transcription model your organization requires is not offered by this provider."))
         }
         return .resolved(providerId: engine.providerId, modelId: modelId)
@@ -641,6 +641,10 @@ final class PluginManager: ObservableObject {
                 locality: .local
             ) {
                 return .unavailable(refusal)
+            }
+            // The built-in provider exists from macOS 26 on.
+            guard #available(macOS 26, *) else {
+                return .unavailable(String(localized: "The language model provider your organization requires needs macOS 26 or later."))
             }
             return .resolved(providerId: PromptProcessingService.appleIntelligenceId, modelId: pair.modelId)
         }

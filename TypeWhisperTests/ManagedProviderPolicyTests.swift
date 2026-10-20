@@ -452,6 +452,62 @@ final class ManagedPolicyEventBusTests: XCTestCase {
         XCTAssertEqual(received.events, ["started", "completed"])
     }
 
+    func testLifecycleEventsReachPluginsThatMayNotReceiveTextWithoutTheActiveApp() async {
+        let store = ManagedPolicySnapshotStore(snapshot(["AllowCloudTextProcessing": .boolean(false)]))
+        let base = RecordingBus()
+        let received = Received()
+        let bus = ManagedPolicyEventBus(base: base, pluginId: "com.typewhisper.webhook", locality: .configurable, store: store)
+        bus.subscribe { event in
+            switch event {
+            case .recordingStarted(let payload):
+                received.events.append("started \(payload.appName ?? "-") \(payload.bundleIdentifier ?? "-")")
+            case .transcriptionFailed(let payload):
+                received.events.append("failed \(payload.error) \(payload.appName ?? "-") \(payload.bundleIdentifier ?? "-")")
+            case .recordingStopped:
+                received.events.append("stopped")
+            default:
+                break
+            }
+        }
+        let handler = base.handlers[0]
+
+        await handler(.recordingStarted(RecordingStartedPayload(appName: "Mail", bundleIdentifier: "com.apple.mail")))
+        await handler(.recordingStopped(RecordingStoppedPayload(durationSeconds: 1)))
+        await handler(.transcriptionFailed(TranscriptionFailedPayload(error: "offline", appName: "Mail", bundleIdentifier: "com.apple.mail")))
+        XCTAssertEqual(received.events, ["started - -", "stopped", "failed offline - -"])
+
+        store.update(snapshot([:]))
+        await handler(.recordingStarted(RecordingStartedPayload(appName: "Mail", bundleIdentifier: "com.apple.mail")))
+        XCTAssertEqual(received.events.last, "started Mail com.apple.mail")
+    }
+
+    func testHostContextStaysOffPluginsThatMayNotReceiveText() {
+        let store = ManagedPolicySnapshotStore(snapshot(["AllowCloudTextProcessing": .boolean(false)]))
+        let workflowReads = Received()
+        let host = HostServicesImpl(
+            pluginId: "com.typewhisper.tests.context",
+            locality: .cloud,
+            policyStore: store,
+            eventBus: RecordingBus(),
+            ruleNamesProvider: { ["Polish"] },
+            workflowProvider: {
+                workflowReads.events.append("read")
+                return []
+            }
+        )
+
+        XCTAssertNil(host.activeAppName)
+        XCTAssertNil(host.activeAppBundleId)
+        XCTAssertEqual(host.availableRuleNames, [])
+        XCTAssertTrue(host.availableWorkflows.isEmpty)
+        XCTAssertEqual(workflowReads.events, [])
+
+        store.update(snapshot([:]))
+        XCTAssertEqual(host.availableRuleNames, ["Polish"])
+        _ = host.availableWorkflows
+        XCTAssertEqual(workflowReads.events, ["read"])
+    }
+
     func testHostServicesReportTheModelDownloadRefusal() {
         let store = ManagedPolicySnapshotStore(snapshot(["AllowModelDownloads": .boolean(false)]))
         let host = HostServicesImpl(

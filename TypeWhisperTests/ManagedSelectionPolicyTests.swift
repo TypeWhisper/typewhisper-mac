@@ -81,6 +81,50 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertNotNil(manager.resolveTranscriptionPair(ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "small")).unavailableReason)
     }
 
+    func testTranscriptionPairUsesTheFullModelCatalog() {
+        let manager = PluginManager(appSupportDirectory: directory)
+        manager.loadedPlugins = [
+            loaded(CatalogPairEngine(), id: "com.typewhisper.tests.pair.catalog", locality: "local", categories: ["transcription"]),
+        ]
+
+        // Nothing is loaded, so the engine lists no models; the catalog still names both.
+        XCTAssertEqual(
+            manager.resolveTranscriptionPair(ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.catalog", modelId: "LARGE")),
+            .resolved(providerId: "catalog-engine", modelId: "large")
+        )
+        XCTAssertNotNil(manager.resolveTranscriptionPair(ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.catalog", modelId: "missing")).unavailableReason)
+    }
+
+    func testEnforcedLlmPairLocksTheFallbackList() throws {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        let suite = "TypeWhisperTests.ManagedPairs.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            manager.applySelectionPolicy(.unmanaged)
+        }
+        let service = PromptProcessingService(userDefaults: defaults)
+        service.addLLMFallback(providerId: "Pair LLM", modelId: "model-a")
+        let saved = service.fallbackPriorityList
+        let first = try XCTUnwrap(saved.first)
+
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedLlm: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.llm", modelId: "model-b")
+        ))
+        XCTAssertTrue(service.isFallbackListLocked)
+        service.addLLMFallback(providerId: "Pair LLM", modelId: "model-b")
+        service.updateLLMFallback(first, providerId: "Pair LLM", modelId: "model-b")
+        service.moveLLMFallbacks(from: IndexSet(integer: 0), to: saved.count)
+        service.removeLLMFallback(first)
+        XCTAssertEqual(service.fallbackPriorityList, saved)
+
+        manager.applySelectionPolicy(.unmanaged)
+        XCTAssertFalse(service.isFallbackListLocked)
+        service.addLLMFallback(providerId: "Pair LLM", modelId: "model-b")
+        XCTAssertEqual(service.fallbackPriorityList.count, saved.count + 1)
+    }
+
     func testPairRefusedByAnotherRestrictionStaysUnavailable() {
         let manager = makeManager()
         manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTranscription: false))
@@ -385,6 +429,27 @@ private final class PairTestEngine: NSObject, TranscriptionEnginePlugin, @unchec
     var providerDisplayName: String { providerID }
     var isConfigured: Bool { true }
     var transcriptionModels: [PluginModelInfo] { models.map { PluginModelInfo(id: $0, displayName: $0) } }
+    var supportsTranslation: Bool { false }
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) { selectedModelId = modelId }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+private final class CatalogPairEngine: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.pair-catalog"
+    static let pluginName = "Catalog Pair Engine"
+    private(set) var selectedModelId: String?
+
+    required override init() {}
+
+    var providerId: String { "catalog-engine" }
+    var providerDisplayName: String { "Catalog Engine" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var availableModels: [PluginModelInfo] { ["small", "large"].map { PluginModelInfo(id: $0, displayName: $0) } }
     var supportsTranslation: Bool { false }
     func activate(host: HostServices) {}
     func deactivate() {}

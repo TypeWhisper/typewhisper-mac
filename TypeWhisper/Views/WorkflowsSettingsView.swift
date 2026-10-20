@@ -256,6 +256,7 @@ private struct MyWorkflowsPage: View {
                     }
                 } else {
                     fallbackPriorityList
+                        .disabled(promptProcessingService.isFallbackListLocked)
                 }
 
                 HStack(alignment: .center, spacing: 12) {
@@ -267,6 +268,7 @@ private struct MyWorkflowsPage: View {
                         .controlSize(.small)
                     } else if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
+                            .disabled(promptProcessingService.isFallbackListLocked)
                     }
 
                     Spacer(minLength: 0)
