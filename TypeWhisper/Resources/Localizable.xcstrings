@@ -1431,6 +1431,12 @@
             "value" : "Transkribiere diese Aufnahme noch einmal mit einer anderen Engine, einem anderen Modell, einer anderen Sprache oder einem Workflow und vergleiche. Der aktuelle Text bleibt unverändert, bis du „Ergebnis übernehmen“ wählst."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この録音を別のエンジン、モデル、言語、またはワークフローでもう一度文字起こしして比較します。「この結果を使用」を選ぶまで、現在のテキストは変わりません。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1452,6 +1458,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mit anderen Einstellungen erneut transkribieren"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別の設定でもう一度文字起こし"
           }
         },
         "zh-Hans" : {
@@ -1477,6 +1489,12 @@
             "value" : "Vergleichen und das bessere Ergebnis übernehmen"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較して、良い方の結果を残す"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1498,6 +1516,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "In Verwendung"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用中"
           }
         },
         "zh-Hans" : {
@@ -1523,6 +1547,12 @@
             "value" : "Gleicher Text wie die aktuelle Version."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のバージョンと同じテキストです。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1544,6 +1574,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Details"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "詳細"
           }
         },
         "zh-Hans" : {
@@ -1569,6 +1605,12 @@
             "value" : "Text kopieren"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストをコピー"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1590,6 +1632,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transkription läuft …"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こし中…"
           }
         },
         "zh-Hans" : {
@@ -1615,6 +1663,12 @@
             "value" : "Versionen vergleichen…"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョンを比較…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1636,6 +1690,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Audio: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声: %@"
           }
         },
         "zh-Hans" : {
@@ -1661,6 +1721,12 @@
             "value" : "Workflow-Text: %@"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローのテキスト: %@"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1682,6 +1748,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Workflow nicht erfasst"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローは記録されていません"
           }
         },
         "zh-Hans" : {
@@ -1707,6 +1779,12 @@
             "value" : "Rohtranskript (vor dem Workflow)"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未加工の文字起こし（ワークフロー適用前）"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1728,6 +1806,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erneut transkribieren…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再文字起こし…"
           }
         },
         "zh-Hans" : {
@@ -1753,6 +1837,12 @@
             "value" : "Gespeichertes Audio erneut transkribieren oder Versionen vergleichen. Offene Änderungen zuerst speichern."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された音声をもう一度文字起こしするか、保存済みのバージョンを比較します。未保存の編集は先に保存してください。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1774,6 +1864,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erneut transkribieren und vergleichen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再文字起こしと比較"
           }
         },
         "zh-Hans" : {
@@ -1799,6 +1895,12 @@
             "value" : "Beende zuerst die laufende Aufnahme oder Transkription."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に現在の録音または文字起こしを終えてください。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1820,6 +1922,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das gespeicherte Audio ist nicht verfügbar. Prüfe die Audio-Aufbewahrung und die Sync-Einstellungen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存された音声を利用できません。音声の保持期間と同期の設定を確認してください。"
           }
         },
         "zh-Hans" : {
@@ -1845,6 +1953,12 @@
             "value" : "Die gewählte Engine, das Modell oder der Workflow ist nicht verfügbar. Wähle ein installiertes Modell und einen eingerichteten Workflow."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択したエンジン、モデル、またはワークフローを利用できません。インストール済みのモデルと設定済みのワークフローを選んでください。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1866,6 +1980,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Es wurde kein verwendbarer Text zurückgegeben. Der ursprüngliche Eintrag bleibt erhalten."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用できるテキストが返されませんでした。元の項目は変更されていません。"
           }
         },
         "zh-Hans" : {
@@ -1891,6 +2011,12 @@
             "value" : "Dieser Eintrag oder sein Audio wurde während der Verarbeitung geändert. Starte einen neuen Vergleich."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "処理中にこの項目または音声が変更されました。新しい比較を開始してください。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1912,6 +2038,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bestätige vor dem Start die gewählte Cloud-Verarbeitung oder den Audio-Download."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開始する前に、選択したクラウド処理または音声のダウンロードを確認してください。"
           }
         },
         "zh-Hans" : {
@@ -1937,6 +2069,12 @@
             "value" : "Diese Version kann nicht geändert werden. Die ursprüngliche und die aktive Version sind geschützt."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンは変更できません。元のバージョンと使用中のバージョンは保護されています。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1958,6 +2096,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Aufnahme für den Vergleich aus meinem eingerichteten privaten Sync-Speicher herunterladen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この比較のために、設定済みのプライベート同期ストレージからこの録音をダウンロードする。"
           }
         },
         "zh-Hans" : {
@@ -1983,6 +2127,12 @@
             "value" : "Dieser Lauf sendet Daten an einen Cloud-Anbieter: %@. Das kann Nutzungskosten verursachen."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この実行ではデータをクラウドプロバイダーに送信します: %@。クラウド処理には利用料金がかかる場合があります。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2004,6 +2154,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ich stimme dem für diesen Lauf zu."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この実行について同意します。"
           }
         },
         "zh-Hans" : {
@@ -2029,6 +2185,12 @@
             "value" : "Abbruch läuft – der Anbieter wird noch beendet…"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル中 — プロバイダーの処理が終わるのを待っています…"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2050,6 +2212,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transkription läuft … Das kann einen Moment dauern."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こし中… しばらくお待ちください。"
           }
         },
         "zh-Hans" : {
@@ -2075,6 +2243,12 @@
             "value" : "Erneut transkribieren"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度文字起こし"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2096,6 +2270,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ergebnisse bleiben auf diesem Mac, bis du sie löschst oder der Verlaufseintrag abläuft. Suche, Exporte und Sync verwenden immer den aktuellen Text. Weitere Läufe zählen nicht als neue Diktate und ändern deine Statistik nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "結果は、削除するか履歴の項目の保存期間が過ぎるまでこのMacに残ります。検索、書き出し、同期では常に現在のテキストが使われます。追加の実行は新しい音声入力として数えられず、統計も変わりません。"
           }
         },
         "zh-Hans" : {
@@ -2121,6 +2301,12 @@
             "value" : "Dieses Ergebnis als Text dieses Eintrags übernehmen?"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結果をこの項目のテキストとして使用しますか？"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2142,6 +2328,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ergebnis übernehmen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この結果を使用"
           }
         },
         "zh-Hans" : {
@@ -2167,6 +2359,12 @@
             "value" : "Der aktuelle Text bleibt als Version erhalten, du kannst jederzeit zurückwechseln. Suche, Exporte und Sync verwenden dann den neuen Text."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のテキストはバージョンとして残るので、いつでも元に戻せます。検索、書き出し、同期では新しいテキストが使われます。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2188,6 +2386,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Diese Vergleichsversion löschen?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この比較バージョンを削除しますか？"
           }
         },
         "zh-Hans" : {
@@ -2213,6 +2417,12 @@
             "value" : "Version löschen"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョンを削除"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2234,6 +2444,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sprache automatisch erkennen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "言語を自動検出"
           }
         },
         "zh-Hans" : {
@@ -2259,6 +2475,12 @@
             "value" : "Kein Workflow"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローなし"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2280,6 +2502,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vergleichen mit"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "比較対象"
           }
         },
         "zh-Hans" : {
@@ -2305,6 +2533,12 @@
             "value" : "Aktueller Text"
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のテキスト"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2326,6 +2560,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Neues Ergebnis"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい結果"
           }
         },
         "zh-Hans" : {
@@ -2351,6 +2591,12 @@
             "value" : "Noch kein neues Ergebnis. Wähle oben die Einstellungen und klicke auf „Erneut transkribieren“."
           }
         },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだ新しい結果はありません。上で設定を選び、「もう一度文字起こし」をクリックしてください。"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -2372,6 +2618,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rohtranskript kopieren"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未加工の文字起こしをコピー"
           }
         },
         "zh-Hans" : {
@@ -8689,38 +8941,6 @@
         }
       }
     },
-    " Manual override can force it at any time." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " 手動のオーバーライドでいつでも強制的に適用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动覆盖可随时强制执行。"
-          }
-        }
-      }
-    },
-    " Manual override can still force it at any time." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " 手動のオーバーライドにより、引き続きいつでも強制的に適用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动覆盖仍可随时强制执行。"
-          }
-        }
-      }
-    },
     " or " : {
       "localizations" : {
         "ja" : {
@@ -9315,36 +9535,6 @@
         }
       }
     },
-    "%@, %lld updates" : {
-      "comment" : "A label that reads the destination title and the number of updates.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@, %2$lld Updates"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@, %2$lld updates"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@、%lld件の更新"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@，%2$lld 个更新"
-          }
-        }
-      }
-    },
     "%@, %lld:00, %@" : {
       "comment" : "A label that reads out the weekday, hour, and the tooltip text. The argument is the string “%lld dictations”.",
       "isCommentAutoGenerated" : true,
@@ -9495,29 +9685,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%d 个快捷短语"
-          }
-        }
-      }
-    },
-    "%d terms" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%d Begriffe"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%d件の用語"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%d 个词条"
           }
         }
       }
@@ -10875,29 +11042,6 @@
         }
       }
     },
-    "Active profile" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktives Profil"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アクティブなプロファイル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前配置文件"
-          }
-        }
-      }
-    },
     "Active roles: %@" : {
       "comment" : "A label displaying the roles that the user has in the Discord server. The argument is a list of roles separated by commas.",
       "isCommentAutoGenerated" : true,
@@ -10930,22 +11074,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "アクティブなルール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前规则"
-          }
-        }
-      }
-    },
-    "Active Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アクティブルール"
           }
         },
         "zh-Hans" : {
@@ -11165,22 +11293,6 @@
         }
       }
     },
-    "Add helpful headings when useful" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "必要に応じて見出しを追加する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要时添加有用的标题"
-          }
-        }
-      }
-    },
     "Add Microphone" : {
       "localizations" : {
         "de" : {
@@ -11243,29 +11355,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建快捷短语"
-          }
-        }
-      }
-    },
-    "Add Profile" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profil hinzufügen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロファイルを追加"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加配置文件"
           }
         }
       }
@@ -11352,38 +11441,6 @@
         }
       }
     },
-    "Adjust Prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを調整"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "调整提示词"
-          }
-        }
-      }
-    },
-    "Adjust Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールの調整"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "调整规则"
-          }
-        }
-      }
-    },
     "Adjust the current workflow without changing its template." : {
       "localizations" : {
         "ja" : {
@@ -11456,38 +11513,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "面向本地工具的高级自动化接口。默认已停用，仅绑定到 127.0.0.1。"
-          }
-        }
-      }
-    },
-    "Advanced Behavior" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "詳細な動作"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高级行为"
-          }
-        }
-      }
-    },
-    "Advanced Options" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "詳細オプション"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "高级选项"
           }
         }
       }
@@ -12090,22 +12115,6 @@
         }
       }
     },
-    "Among equally specific rules, the one ranked higher wins." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同じ具体性のルール間では、上位にランクされたものが優先されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在具体性相同的规则之间，排名靠前的优先适用。"
-          }
-        }
-      }
-    },
     "an app trigger" : {
       "localizations" : {
         "ja" : {
@@ -12172,22 +12181,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "API 密钥已配置"
-          }
-        }
-      }
-    },
-    "API Key Needed" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "APIキーが必要"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要 API 密钥"
           }
         }
       }
@@ -12288,22 +12281,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "应用和网站"
-          }
-        }
-      }
-    },
-    "App and website are optional. Leave both empty to create a global fallback rule." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリとWebサイトの設定は任意です。両方を空のままにすると、グローバルフォールバックルールが作成されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用和网站均为可选项。两者都留空时，将创建全局备用规则。"
           }
         }
       }
@@ -12414,22 +12391,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Apple Intelligence"
-          }
-        }
-      }
-    },
-    "Apple Intelligence must be enabled in System Settings." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "システム設定でApple Intelligenceを有効にする必要があります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "必须在“系统设置”中启用 Apple Intelligence。"
           }
         }
       }
@@ -12629,22 +12590,6 @@
         }
       }
     },
-    "Apps and websites are optional. Combining both creates the most specific rule. Leave both empty for a global fallback." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリとWebサイトは任意です。両方を組み合わせると最も具体的なルールが作成されます。両方を空のままにするとグローバルフォールバックになります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用和网站均为可选项。同时指定两者可创建更精确的规则；全部留空则作为全局备用规则。"
-          }
-        }
-      }
-    },
     "Apps Used" : {
       "localizations" : {
         "de" : {
@@ -12703,93 +12648,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "确定要卸载 %@ 吗？这将删除该插件及其数据。"
-          }
-        }
-      }
-    },
-    "as Code" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コードとして"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "作为代码"
-          }
-        }
-      }
-    },
-    "as HTML" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "HTMLとして"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "作为 HTML"
-          }
-        }
-      }
-    },
-    "as Markdown" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Markdownとして"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "作为 Markdown"
-          }
-        }
-      }
-    },
-    "as Plain Text" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プレーンテキストとして"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "作为纯文本"
-          }
-        }
-      }
-    },
-    "Assign a hotkey to always use this profile, regardless of the active app." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Weisen Sie ein Tastenkürzel zu, um dieses Profil immer zu verwenden, unabhängig von der aktiven App."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロファイルを常に使用するためのキーボードショートカットを割り当てます。アクティブなアプリに関係なく使用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置专用快捷键，无论当前使用哪个应用，都可直接启用此配置文件。"
           }
         }
       }
@@ -12927,22 +12785,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自动回车"
-          }
-        }
-      }
-    },
-    "Auto prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動プロンプト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动提示词"
           }
         }
       }
@@ -13350,29 +13192,6 @@
         }
       }
     },
-    "Automatically press Enter after inserting text. In chat apps this sends the message, in editors it adds a new line." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drückt nach dem Einfügen automatisch Enter. In Chat-Apps wird die Nachricht gesendet, in Editoren eine neue Zeile eingefügt."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "挿入後自動的にEnterを押します。チャットアプリではメッセージが送信され、エディタでは新しい行が挿入されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "插入文字后自动按下 Enter。在聊天应用中会发送消息，在编辑器中会插入新行。"
-          }
-        }
-      }
-    },
     "Automatically raises quiet microphone input before transcription. Useful for low-gain microphones, but very noisy rooms may sound louder too." : {
       "localizations" : {
         "ja" : {
@@ -13445,31 +13264,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可从工作流面板手动运行，听写结束后不会自动执行。"
-          }
-        }
-      }
-    },
-    "Available Plugins" : {
-      "comment" : "A section header for the list of available plugins.",
-      "extractionState" : "stale",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verfügbare Plugins"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "利用可能なプラグイン"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可用插件"
           }
         }
       }
@@ -13862,44 +13656,6 @@
         }
       }
     },
-    "Build reusable AI actions for Rules or the Prompt Palette." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Baue wiederverwendbare KI-Aktionen für Regeln oder die Prompt-Palette."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールやプロンプトパレット用の再利用可能なAIアクションを作成。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为规则或提示词面板构建可重用的 AI 操作。"
-          }
-        }
-      }
-    },
-    "Build reusable prompt actions with the same wizard style as Rules." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールと同じウィザード形式で、再利用可能なプロンプトアクションを作成します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以与规则相同的向导风格构建可重用的提示词操作。"
-          }
-        }
-      }
-    },
     "Built-in" : {
       "comment" : "A label indicating that a plugin is included with the app.",
       "isCommentAutoGenerated" : true,
@@ -13980,22 +13736,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内置用于翻译、撰写邮件和格式化等常见任务的提示词。"
-          }
-        }
-      }
-    },
-    "Bullet List" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "箇条書きリスト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "项目符号列表"
           }
         }
       }
@@ -14150,54 +13890,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "区分大小写"
-          }
-        }
-      }
-    },
-    "Change order via drag and drop" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ドラッグ＆ドロップで順序を変更"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拖放调整顺序"
-          }
-        }
-      }
-    },
-    "Change the order in the rules list via the drag handle." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ドラッグハンドルを使用して、ルールリストの順序を変更します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用拖动手柄调整规则在列表中的顺序。"
-          }
-        }
-      }
-    },
-    "Changes in the wizard still regenerate this prompt automatically." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ウィザードでの変更は、引き続きこのプロンプトを自動的に再生成します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "向导中的更改仍会自动重新生成此提示词。"
           }
         }
       }
@@ -14360,31 +14052,6 @@
         }
       }
     },
-    "Choose a transcription engine. Each engine needs to download a model before it can be used. Open settings to configure." : {
-      "comment" : "A description under the heading \"Choose a transcription engine\" in the Setup Wizard.",
-      "extractionState" : "stale",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle eine Transkriptions-Engine. Jede Engine muss ein Modell herunterladen. Öffne die Einstellungen zum Konfigurieren."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文字起こしエンジンを選択します。各エンジンは使用前にモデルのダウンロードが必要です。設定で構成してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择一个转录引擎。每个引擎使用前都需要下载模型。打开设置进行配置。"
-          }
-        }
-      }
-    },
     "Choose an output format preset" : {
       "localizations" : {
         "ja" : {
@@ -14397,52 +14064,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择输出格式预设"
-          }
-        }
-      }
-    },
-    "Choose Apps" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apps auswählen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリを選択"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择应用"
-          }
-        }
-      }
-    },
-    "Choose Apps..." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apps auswählen …"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリを選択…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择应用…"
           }
         }
       }
@@ -14491,22 +14112,6 @@
         }
       }
     },
-    "Choose how the input should be reformatted." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入力の再フォーマット方法を選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择输入文本的重新格式化方式。"
-          }
-        }
-      }
-    },
     "Choose how this workflow starts. Automatic can use app, website, hotkey, or combinations." : {
       "localizations" : {
         "ja" : {
@@ -14519,29 +14124,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择此工作流的启动方式。自动方式可使用应用、网站、快捷键或组合。"
-          }
-        }
-      }
-    },
-    "Choose how to trigger dictation." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle aus, wie du das Diktat auslöst."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "どの方法で音声入力を行うか選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择如何触发听写。"
           }
         }
       }
@@ -14564,38 +14146,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择你希望的触发听写方式，然后录制一个快捷键。"
-          }
-        }
-      }
-    },
-    "Choose one target language or a two-way language pair." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1つの翻訳先言語、または双方向の言語ペアを選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择一个目标语言或双向语言对。"
-          }
-        }
-      }
-    },
-    "Choose the apps where this rule may apply automatically." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールが自動的に適用されるアプリを選択します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择此规则可自动适用的应用。"
           }
         }
       }
@@ -14644,22 +14194,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择最贴近你的场景。你可以稍后在“设置 > 许可证”中更改。"
-          }
-        }
-      }
-    },
-    "Choose whether this prompt always translates into one language or toggles between a fixed pair." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトで常に単一の言語に翻訳するか、固定の言語ペア間で切り替えるかを選択します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择此提示词是始终翻译为单一语言，还是在固定配对之间切换。"
           }
         }
       }
@@ -14913,22 +14447,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "清除过滤器"
-          }
-        }
-      }
-    },
-    "Clear Rewrite" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "明確に書き換え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清除改写结果"
           }
         }
       }
@@ -15549,6 +15067,12 @@
     },
     "Community" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Community"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -15641,6 +15165,12 @@
     },
     "Completed" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abgeschlossen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -15651,38 +15181,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已完成"
-          }
-        }
-      }
-    },
-    "Concise" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "簡潔"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "简洁"
-          }
-        }
-      }
-    },
-    "Concise Rewrite" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "簡潔に書き換え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "简洁改写"
           }
         }
       }
@@ -15699,38 +15197,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将听写文本压缩为简洁的摘要。"
-          }
-        }
-      }
-    },
-    "Configure behavior first, then fine-tune the model settings for this prompt." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まず動作を設定してから、このプロンプトのモデル設定を微調整してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先设置处理方式，再微调此提示词使用的模型参数。"
-          }
-        }
-      }
-    },
-    "Configure the provider in Integrations." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「プラグイン」でプロバイダーを設定してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请在“集成”中配置服务提供商。"
           }
         }
       }
@@ -16329,38 +15795,6 @@
         }
       }
     },
-    "Create First Prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最初のプロンプトを作成"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建第一个提示词"
-          }
-        }
-      }
-    },
-    "Create First Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最初のルールを作成"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建第一条规则"
-          }
-        }
-      }
-    },
     "Create First Workflow" : {
       "localizations" : {
         "ja" : {
@@ -16373,29 +15807,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建第一个工作流"
-          }
-        }
-      }
-    },
-    "Create profiles to use app-specific transcription settings." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erstellen Sie Profile für app-spezifische Transkriptionseinstellungen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリごとの文字起こし設定を使うためのプロファイルを作成します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建配置文件，为不同应用使用不同的转录设置。"
           }
         }
       }
@@ -16422,28 +15833,6 @@
         }
       }
     },
-    "Create Rule" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Regel erstellen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールを作成"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建规则"
-          }
-        }
-      }
-    },
     "Create snippets to automatically expand short triggers into longer text" : {
       "localizations" : {
         "de" : {
@@ -16462,22 +15851,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "创建快捷短语，将简短触发词自动展开为完整文本"
-          }
-        }
-      }
-    },
-    "Create Table" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "表を作成"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "创建表格"
           }
         }
       }
@@ -16576,22 +15949,6 @@
         }
       }
     },
-    "Current Website" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "現在のWebサイト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当前网站"
-          }
-        }
-      }
-    },
     "Custom" : {
       "localizations" : {
         "ja" : {
@@ -16626,22 +15983,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自分で作成したAIプロンプトアクション。組込みのプリセットは書き出されません。"
-          }
-        }
-      }
-    },
-    "Custom Behavior" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カスタムの動作"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自定义行为"
           }
         }
       }
@@ -16686,22 +16027,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "自定义文件夹"
-          }
-        }
-      }
-    },
-    "Custom Prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カスタムプロンプト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自定义提示词"
           }
         }
       }
@@ -16977,22 +16302,6 @@
         }
       }
     },
-    "Decide whether this drafts a reply or a full email." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "返信の下書きか、メール全体の作成かを決定してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择生成回复内容或完整邮件。"
-          }
-        }
-      }
-    },
     "Default" : {
       "localizations" : {
         "de" : {
@@ -17055,76 +16364,6 @@
         }
       }
     },
-    "Default LLM Provider" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standard-LLM-Anbieter"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デフォルトLLMプロバイダー"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认 LLM 提供商"
-          }
-        }
-      }
-    },
-    "Default provider" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デフォルトのプロバイダー"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认提供商"
-          }
-        }
-      }
-    },
-    "Default Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デフォルトルール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认规则"
-          }
-        }
-      }
-    },
-    "Define how TypeWhisper should respond in this context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このコンテキストでTypeWhisperがどのように応答するかを定義します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置 TypeWhisper 在此场景中的处理方式。"
-          }
-        }
-      }
-    },
     "Define the outcome, optional fine-tuning, and the output settings." : {
       "localizations" : {
         "ja" : {
@@ -17137,38 +16376,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置处理结果、可选的微调说明和输出选项。"
-          }
-        }
-      }
-    },
-    "Define the response behavior first. Advanced includes provider, model, and temperature." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まず応答の動作を定義します。「詳細」にはプロバイダー、モデル、温度の設定が含まれます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先设置响应方式。高级选项包括服务提供商、模型和温度。"
-          }
-        }
-      }
-    },
-    "Define the structure for the extracted information." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "抽出する情報の構造を定義してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置提取结果的结构。"
           }
         }
       }
@@ -17346,22 +16553,6 @@
         }
       }
     },
-    "Delete rule?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールを削除しますか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "确定删除规则吗？"
-          }
-        }
-      }
-    },
     "Delete Sync Data" : {
       "comment" : "A button that deletes the sync data.",
       "isCommentAutoGenerated" : true,
@@ -17450,22 +16641,6 @@
         }
       }
     },
-    "Describe the job briefly, then add optional tone and output hints." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "タスクを簡潔に説明し、オプションでトーンと出力のヒントを追加してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "简要描述任务，并按需补充语气和输出要求。"
-          }
-        }
-      }
-    },
     "Describe what this custom workflow should do." : {
       "localizations" : {
         "ja" : {
@@ -17478,38 +16653,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "描述此自定义工作流需要完成的任务。"
-          }
-        }
-      }
-    },
-    "Describe your own task and let the wizard scaffold the prompt for you." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "独自のタスクを説明し、ウィザードにプロンプトの骨組みを作成させます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "描述你的任务，让向导为你生成提示词框架。"
-          }
-        }
-      }
-    },
-    "Describe your own task and let the wizard scaffold the prompt." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "独自のタスクを説明し、ウィザードにプロンプトの骨組みを作成させます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "描述你的任务，让向导生成提示词框架。"
           }
         }
       }
@@ -17537,24 +16680,14 @@
         }
       }
     },
-    "Detailed" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "詳細"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "详细"
-          }
-        }
-      }
-    },
     "Details" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -17565,29 +16698,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "详情"
-          }
-        }
-      }
-    },
-    "Detect spoken instructions in your dictation (e.g., 'write this as an email') and apply them automatically via LLM." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erkennt gesprochene Anweisungen in deinem Diktat (z.B. 'schreib das als E-Mail') und wendet sie automatisch per LLM an."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "あなたの音声入力（例: 'これをメールとして書きなさい'）で発話された指示を認識し、LLMを使って自動的に適用します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测听写中的口头指令（例如“写成一封邮件”），并通过 LLM 自动执行。"
           }
         }
       }
@@ -17899,6 +17009,12 @@
     },
     "Disabled" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deaktiviert"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -17915,6 +17031,12 @@
     },
     "Discard" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verwerfen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18137,29 +17259,6 @@
         }
       }
     },
-    "Dock icon when menu bar icon is hidden" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dock-Symbol bei ausgeblendetem Menüleistensymbol"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メニューバーアイコン非表示時にDockアイコンを表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜单栏图标隐藏时显示程序坞图标"
-          }
-        }
-      }
-    },
     "docs.github.com" : {
       "comment" : "A placeholder text for a website URL input field.",
       "isCommentAutoGenerated" : true,
@@ -18168,22 +17267,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "docs.github.com"
-          }
-        }
-      }
-    },
-    "Domains are only needed if the rule should apply to specific pages instead of the entire app." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ドメインは、アプリ全体ではなく特定のページにルールを適用する場合にのみ必要です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅当规则需要应用于特定网页，而不是整个应用时，才需要填写域名。"
           }
         }
       }
@@ -18266,38 +17349,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "草稿"
-          }
-        }
-      }
-    },
-    "Draft a reply or a full email from the input." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入力内容から返信やメール全文の下書きを作成します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "根据输入内容起草回复或完整邮件。"
-          }
-        }
-      }
-    },
-    "Draft a reply or complete email from the incoming text." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "受信したテキストから返信または完全なメールの下書きを作成します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "根据收到的文本起草回复或完整邮件。"
           }
         }
       }
@@ -18486,29 +17537,6 @@
         }
       }
     },
-    "e.g. github.com" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "z.B. github.com"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: github.com"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例如：github.com"
-          }
-        }
-      }
-    },
     "e.g. kubernetees" : {
       "localizations" : {
         "de" : {
@@ -18587,22 +17615,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "例如：Markdown、RTF、JSON、纯文本"
-          }
-        }
-      }
-    },
-    "e.g. Return a short bullet list" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 短い箇条書きリストを出力する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例如：返回简短的项目符号列表"
           }
         }
       }
@@ -18698,83 +17710,6 @@
         }
       }
     },
-    "Edit Profile" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profil bearbeiten"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロファイルを編集"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑配置文件"
-          }
-        }
-      }
-    },
-    "Edit prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを編集"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑提示词"
-          }
-        }
-      }
-    },
-    "Edit Prompt" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompt bearbeiten"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを編集"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑提示词"
-          }
-        }
-      }
-    },
-    "Edit Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールを編集"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑规则"
-          }
-        }
-      }
-    },
     "Edit Snippet" : {
       "localizations" : {
         "de" : {
@@ -18849,38 +17784,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "邮件"
-          }
-        }
-      }
-    },
-    "Email Action" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メールアクション"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "邮件操作"
-          }
-        }
-      }
-    },
-    "Email Draft" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メール下書き"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "邮件草稿"
           }
         }
       }
@@ -18989,22 +17892,6 @@
         }
       }
     },
-    "Enable Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールを有効にする"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用规则"
-          }
-        }
-      }
-    },
     "Enable translation" : {
       "localizations" : {
         "de" : {
@@ -19027,8 +17914,37 @@
         }
       }
     },
+    "Effort" : {
+      "comment" : "Label of the reasoning-effort picker for a language model.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Effort"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推論レベル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "推理强度"
+          }
+        }
+      }
+    },
     "Enabled" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviert"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -19061,22 +17977,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "引擎"
-          }
-        }
-      }
-    },
-    "Engine & Model" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エンジンとモデル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "引擎与模型"
           }
         }
       }
@@ -19441,134 +18341,6 @@
         }
       }
     },
-    "Example: EN <-> DE translation with formatting preserved." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: フォーマットを保持した英語⇔ドイツ語翻訳"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：在保留格式的情况下进行英语和德语双向翻译。"
-          }
-        }
-      }
-    },
-    "Example: extract JSON payloads or action items from meeting notes." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 議事録からJSONペイロードやアクションアイテムを抽出する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：从会议记录中提取 JSON 数据或待办事项。"
-          }
-        }
-      }
-    },
-    "Example: make rough notes sound concise and clear." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 大まかなメモを簡潔で明確な文章にする"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：将零散笔记整理得简洁清晰。"
-          }
-        }
-      }
-    },
-    "Example: summarize bugs for Slack in a strict bullet format." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: Slack用にバグを厳密な箇条書き形式で要約する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：按固定的项目符号格式整理 Bug 摘要，用于发送到 Slack。"
-          }
-        }
-      }
-    },
-    "Example: turn raw notes into meeting notes or a table." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 未整理のメモを議事録や表に変換する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：将原始笔记整理为会议纪要或表格。"
-          }
-        }
-      }
-    },
-    "Example: write a friendly short reply to an incoming message." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 受信したメッセージに対する親しみやすい短い返信を作成する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：针对收到的消息撰写简短、友好的回复。"
-          }
-        }
-      }
-    },
-    "Examples: Slack -> English with Auto Enter, github.com -> code prompt, Mail -> German with translation." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: Slack -> 英語（Auto Enter）、github.com -> コードプロンプト、Mail -> ドイツ語（翻訳あり）。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：在 Slack 中使用英语并自动发送，在 github.com 使用代码提示词，在邮件中翻译为德语。"
-          }
-        }
-      }
-    },
-    "Examples: translate English/German, draft a reply, extract JSON, or turn notes into meeting notes." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "例: 英語/ドイツ語の翻訳、返信の作成、JSONの抽出、メモの議事録への変換など。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "示例：中英德翻译、起草回复、提取 JSON，或将笔记整理为会议纪要。"
-          }
-        }
-      }
-    },
     "Expanded" : {
       "comment" : "A state that indicates whether the terms of a term pack are expanded.",
       "isCommentAutoGenerated" : true,
@@ -19576,13 +18348,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erweitert"
+            "value" : "Ausgeklappt"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拡張"
+            "value" : "展開"
           }
         },
         "zh-Hans" : {
@@ -20015,22 +18787,6 @@
         }
       }
     },
-    "Extract JSON" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JSONを抽出"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提取 JSON"
-          }
-        }
-      }
-    },
     "Extract structured data as JSON." : {
       "localizations" : {
         "ja" : {
@@ -20043,22 +18799,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将结构化数据提取为 JSON。"
-          }
-        }
-      }
-    },
-    "Extract Table" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "表を抽出"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提取表格"
           }
         }
       }
@@ -20081,22 +18821,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提取模型"
-          }
-        }
-      }
-    },
-    "Extraction Output" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "抽出出力"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提取结果"
           }
         }
       }
@@ -20451,22 +19175,6 @@
         }
       }
     },
-    "Finalize the visible prompt details first. The raw system prompt and action target live in Advanced." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まず表示されるプロンプトの詳細を確定してください。生のシステムプロンプトとアクションの出力先は「詳細」にあります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先完成当前页面中的提示词设置。原始系统提示词和操作目标位于“高级”选项中。"
-          }
-        }
-      }
-    },
     "Fine-Tuning" : {
       "localizations" : {
         "ja" : {
@@ -20555,22 +19263,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请在浏览器中完成 Discord 授权，然后返回此处刷新状态。"
-          }
-        }
-      }
-    },
-    "First give the rule a name. After that you’ll see the preview, and everything else is optional." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まずルールに名前を付けます。その後プレビューが表示されます。それ以降の設定はすべて任意です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先为规则命名。随后会显示预览，其他设置均为可选项。"
           }
         }
       }
@@ -20667,38 +19359,6 @@
         }
       }
     },
-    "Formal" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォーマル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正式"
-          }
-        }
-      }
-    },
-    "Formal Rewrite" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォーマルに書き換え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正式改写"
-          }
-        }
-      }
-    },
     "Format" : {
       "localizations" : {
         "ja" : {
@@ -20711,61 +19371,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "格式"
-          }
-        }
-      }
-    },
-    "Format as List" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リスト形式にする"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "格式化为列表"
-          }
-        }
-      }
-    },
-    "Format transcribed text for the target app. Auto-detect chooses the format based on the app's bundle ID. Requires app-aware formatting to be enabled in Recording settings." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transkribierten Text für die Ziel-App formatieren. Auto-Erkennung wählt das Format basierend auf der Bundle-ID der App. Erfordert, dass App-basierte Formatierung in den Aufnahme-Einstellungen aktiviert ist."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "対象アプリ向けに文字起こしテキストをフォーマット。自動検出はアプリのバンドルIDに基づいてフォーマットを選択。録音設定でアプリベースのフォーマットが有効になっている必要があります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为目标应用格式化转录文本。自动检测会根据应用的 Bundle ID 选择格式。需要在录音设置中启用应用感知格式化。"
-          }
-        }
-      }
-    },
-    "Formatting Output" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フォーマット出力"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "格式化输出"
           }
         }
       }
@@ -20868,22 +19473,6 @@
         }
       }
     },
-    "Friendly Rewrite" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フレンドリーに書き換え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "友好改写"
-          }
-        }
-      }
-    },
     "from %@ %@" : {
       "localizations" : {
         "de" : {
@@ -20902,29 +19491,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 %@ %@"
-          }
-        }
-      }
-    },
-    "from %@ EUR/mo" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ab %@ EUR/Monat"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "から %@ EUR/月"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 %@ EUR/mo"
           }
         }
       }
@@ -20973,38 +19539,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 99 EUR/mo"
-          }
-        }
-      }
-    },
-    "From context to behavior in three clear steps." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "3つの明確なステップでコンテキストから動作まで設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只需三个步骤，即可从使用场景完成行为设置。"
-          }
-        }
-      }
-    },
-    "From goal to final system prompt in three clear steps." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "3つの明確なステップで、目的から最終的なシステムプロンプトまで設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只需三个步骤，即可从目标生成最终系统提示词。"
           }
         }
       }
@@ -21152,44 +19686,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "前往仪表板"
-          }
-        }
-      }
-    },
-    "Go to Integrations" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zu Integrationen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プラグインを開く"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前往集成"
-          }
-        }
-      }
-    },
-    "Goal" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ゴール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目标"
           }
         }
       }
@@ -21372,45 +19868,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "帮助 Whisper 识别专业术语"
-          }
-        }
-      }
-    },
-    "Here you define language, prompt, engine, and output for this context. Priority and manual override come in the next step." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ここでは、このコンテキストの言語、プロンプト、エンジン、出力を定義します。優先順位と手動オーバーライドは次のステップで設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在此处为此上下文定义语言、提示词、引擎和输出。优先级和手动覆盖将在下一步设置。"
-          }
-        }
-      }
-    },
-    "Higher priority profiles take precedence when multiple profiles match." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profile mit höherer Priorität haben Vorrang, wenn mehrere Profile zutreffen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "複数のプロファイルが該当する場合、優先度の高いプロファイルが優先されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "多个配置文件同时匹配时，优先级较高的配置文件生效。"
           }
         }
       }
@@ -21607,70 +20064,6 @@
         }
       }
     },
-    "How should it respond?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "どのように応答しますか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "如何处理？"
-          }
-        }
-      }
-    },
-    "How should TypeWhisper respond?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisperはどのように応答すべきですか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper 应如何处理？"
-          }
-        }
-      }
-    },
-    "How spoken text is understood and optionally processed further." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "話し言葉をどのように理解し、さらに処理を行うか（任意）を設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "如何理解口语文本以及是否对其进行进一步处理。"
-          }
-        }
-      }
-    },
-    "How the result should be inserted into the target context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結果を対象のコンテキストに挿入する方法。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置如何将结果插入目标位置。"
-          }
-        }
-      }
-    },
     "HTML" : {
       "localizations" : {
         "de" : {
@@ -21815,22 +20208,6 @@
         }
       }
     },
-    "Idea" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アイデア"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "想法"
-          }
-        }
-      }
-    },
     "Idle" : {
       "localizations" : {
         "de" : {
@@ -21865,45 +20242,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "如果你已购买支持者密钥，请在上方输入。GitHub Sponsors 身份仍可在网页上验证。"
-          }
-        }
-      }
-    },
-    "If you need non-GPL terms, procurement, support, or proprietary redistribution rights, purchase a commercial license on Polar.sh and enter the key below." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn du Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilungsrechte brauchst, kaufe eine kommerzielle Lizenz auf Polar.sh und gib den Key unten ein."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "非GPL条件、調達、サポート、または専有再配布権が必要な場合は、Polar.shで商用ライセンスを購入し、下記にキーを入力してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "如果你需要非 GPL 条款、采购支持、技术支持或专有再分发权利，请在 Polar.sh 购买商业许可证并在下方输入密钥。"
-          }
-        }
-      }
-    },
-    "Ignores your saved provider setting and lets the provider use its own default behavior." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存されたプロバイダ設定を無視し、プロバイダ独自のデフォルト動作を使用します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "忽略你保存的提供商设置，让提供商使用其自己的默认行为。"
           }
         }
       }
@@ -22124,38 +20462,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "限定一种或多种预期语言，以提高检测准确率。"
-          }
-        }
-      }
-    },
-    "Improve wording and tone while keeping the original meaning intact." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "元の意味を保ちながら、言い回しとトーンを改善します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在保留原意的前提下改进措辞和语气。"
-          }
-        }
-      }
-    },
-    "Improve wording, tone, and readability without changing the meaning." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "意味を変えずに、言い回し、トーン、読みやすさを改善します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在不改变含义的情况下改进措辞、语气和可读性。"
           }
         }
       }
@@ -22600,28 +20906,6 @@
         }
       }
     },
-    "Install additional LLM providers from the Integrations tab." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Weitere LLM-Anbieter im Reiter \"Integrationen\" installieren."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「プラグイン」で他のLLMプロバイダーをインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可在“集成”页面安装其他 LLM 服务提供商。"
-          }
-        }
-      }
-    },
     "Install an LLM provider in Integrations before using workflow overrides." : {
       "localizations" : {
         "ja" : {
@@ -22634,44 +20918,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用工作流覆盖前，请先在“集成”中安装 LLM 服务提供商。"
-          }
-        }
-      }
-    },
-    "Install an LLM provider plugin (e.g. Groq, OpenAI) to use prompts." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installiere ein LLM-Provider-Plugin (z.B. Groq, OpenAI) um Prompts zu nutzen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LLMプロバイダーのプラグイン（例: Groq, OpenAI）をインストールしてプロンプトを使用してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请安装 LLM 服务提供商插件（如 Groq、OpenAI）后再使用提示词。"
-          }
-        }
-      }
-    },
-    "Install an LLM provider plugin such as Groq or OpenAI to use prompt actions." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトアクションを使用するには、GroqやOpenAIなどのLLMプロバイダプラグインをインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请安装 Groq、OpenAI 等 LLM 服务提供商插件后再使用提示词操作。"
           }
         }
       }
@@ -22842,29 +21088,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "安装 %1$@ %2$@ 将替换为其他 TypeWhisper 运行环境保留的旧外部插件包（%3$@）。替换后，旧版应用可能无法继续使用该插件包。"
-          }
-        }
-      }
-    },
-    "Installing plugins..." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Plugins werden installiert..."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プラグインがインストール中..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在安装插件…"
           }
         }
       }
@@ -23252,22 +21475,6 @@
         }
       }
     },
-    "Keep this on the provider default unless this prompt needs a different creativity level." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトに異なる創造性レベルが必要な場合を除き、プロバイダのデフォルトのままにしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "除非此提示词需要不同的创造力水平，否则保持提供商默认值即可。"
-          }
-        }
-      }
-    },
     "Keep using the GPL version as-is." : {
       "localizations" : {
         "ja" : {
@@ -23280,29 +21487,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "继续使用原版 GPL 版本。"
-          }
-        }
-      }
-    },
-    "Keep visible" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sichtbar lassen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保持显示"
           }
         }
       }
@@ -23345,22 +21529,6 @@
         }
       }
     },
-    "Key Points" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要点"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要点"
-          }
-        }
-      }
-    },
     "Language" : {
       "localizations" : {
         "de" : {
@@ -23379,22 +21547,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
-          }
-        }
-      }
-    },
-    "Language & Transformation" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "言語と変換"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语言与转换"
           }
         }
       }
@@ -23729,22 +21881,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将模型保持在“提供商默认”，以使用所选提供商推荐的模型。"
-          }
-        }
-      }
-    },
-    "Leave this on Insert Text unless the result should trigger a plugin action." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結果でプラグインアクションをトリガーする場合を除き、「テキストを挿入」のままにしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "除非结果需要触发插件操作，否则请保持“插入文本”。"
           }
         }
       }
@@ -24242,29 +22378,6 @@
         }
       }
     },
-    "Load Presets" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorlagen laden"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テンプレートを読み込む"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "加载预设"
-          }
-        }
-      }
-    },
     "Loaded" : {
       "localizations" : {
         "de" : {
@@ -24497,22 +22610,6 @@
         }
       }
     },
-    "Magic" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マジック"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "智能"
-          }
-        }
-      }
-    },
     "Manage" : {
       "localizations" : {
         "de" : {
@@ -24665,70 +22762,6 @@
         }
       }
     },
-    "Manual override active" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手動オーバーライドが有効"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动覆盖已启用"
-          }
-        }
-      }
-    },
-    "Manual override, priority, memory, and more details." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手動オーバーライド、優先順位、メモリ、その他の詳細。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动覆盖、优先级、记忆以及更多详细信息。"
-          }
-        }
-      }
-    },
-    "Manual prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手動プロンプト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动提示词"
-          }
-        }
-      }
-    },
-    "Manual: %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手动：%@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手動: %@"
-          }
-        }
-      }
-    },
     "Manually triggered" : {
       "localizations" : {
         "ja" : {
@@ -24811,6 +22844,12 @@
     },
     "Marketplace" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Marketplace"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -25025,29 +23064,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "菜单栏图标"
-          }
-        }
-      }
-    },
-    "Menu bar icon hidden" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menüleistensymbol ausgeblendet"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メニューバーのアイコンが非表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "菜单栏图标已隐藏"
           }
         }
       }
@@ -25551,6 +23567,12 @@
     },
     "More information" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Informationen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -25712,40 +23734,6 @@
         }
       }
     },
-    "Move earlier" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前移"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前に移動"
-          }
-        }
-      }
-    },
-    "Move later" : {
-      "comment" : "A label for a button that moves a language to a later position in a list.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "后移"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "後ろに移動"
-          }
-        }
-      }
-    },
     "Move Up" : {
       "localizations" : {
         "de" : {
@@ -25818,28 +23806,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "名称"
-          }
-        }
-      }
-    },
-    "Name and prompt cannot be empty" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Name und Prompt dürfen nicht leer sein"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "名前とプロンプトは空にできません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "名称和提示词不能为空"
           }
         }
       }
@@ -25924,22 +23890,6 @@
         }
       }
     },
-    "Needs Setup" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定が必要"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要设置"
-          }
-        }
-      }
-    },
     "Network error. Please check your internet connection." : {
       "localizations" : {
         "de" : {
@@ -26020,67 +23970,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建修正"
-          }
-        }
-      }
-    },
-    "New Profile" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neues Profil"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新しいプロファイル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新建配置文件"
-          }
-        }
-      }
-    },
-    "New Prompt" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neuer Prompt"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新しいプロンプト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新建提示词"
-          }
-        }
-      }
-    },
-    "New Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新規ルール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新建规则"
           }
         }
       }
@@ -26273,29 +24162,6 @@
         }
       }
     },
-    "No apps assigned" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Apps zugewiesen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "割り当てられたアプリがありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未指定应用"
-          }
-        }
-      }
-    },
     "No apps selected yet." : {
       "localizations" : {
         "ja" : {
@@ -26308,22 +24174,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未选择应用。"
-          }
-        }
-      }
-    },
-    "No apps selected." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリが選択されていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未选择应用。"
           }
         }
       }
@@ -26644,22 +24494,6 @@
         }
       }
     },
-    "No manual override" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "手動オーバーライドなし"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无手动覆盖"
-          }
-        }
-      }
-    },
     "No matching prompts" : {
       "localizations" : {
         "de" : {
@@ -26694,22 +24528,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的结果"
-          }
-        }
-      }
-    },
-    "No Matching Rules" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一致するルールがありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有匹配的规则"
           }
         }
       }
@@ -26834,38 +24652,6 @@
         }
       }
     },
-    "no more specific rule matches" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "より具体的なルールが一致しない場合"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有更具体的规则匹配时"
-          }
-        }
-      }
-    },
-    "no more specific rule matches or it is triggered manually" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "より具体的なルールが一致しないか、手動でトリガーされた場合"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有更具体的规则匹配，或手动触发时"
-          }
-        }
-      }
-    },
     "No plugins installed." : {
       "comment" : "A message displayed when there are no plugins installed.",
       "isCommentAutoGenerated" : true,
@@ -26890,29 +24676,6 @@
         }
       }
     },
-    "No Profiles" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Profile"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロファイルがありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无配置文件"
-          }
-        }
-      }
-    },
     "No prompts yet" : {
       "localizations" : {
         "de" : {
@@ -26921,22 +24684,6 @@
             "value" : "Noch keine Prompts"
           }
         },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトがまだありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无提示词"
-          }
-        }
-      }
-    },
-    "No Prompts Yet" : {
-      "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -27039,38 +24786,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当前筛选条件下没有结果。"
-          }
-        }
-      }
-    },
-    "No rules currently use the selected prompt." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "現在選択されているプロンプトを使用するルールはありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "目前没有规则使用所选提示词。"
-          }
-        }
-      }
-    },
-    "No Rules Yet" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールはまだありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无规则"
           }
         }
       }
@@ -27265,29 +24980,6 @@
         }
       }
     },
-    "No transcription engines available." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Transkriptions-Engines verfügbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "利用可能な文字起こしエンジンがありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有可用的转录引擎。"
-          }
-        }
-      }
-    },
     "No transcription engines installed. Install engines via Integrations." : {
       "comment" : "A message displayed when there are no transcription engines installed. It encourages the user to install some.",
       "isCommentAutoGenerated" : true,
@@ -27312,29 +25004,6 @@
         }
       }
     },
-    "No transcriptions yet." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Noch keine Transkriptionen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文字起こしはまだありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无转录内容。"
-          }
-        }
-      }
-    },
     "No Trigger" : {
       "localizations" : {
         "ja" : {
@@ -27351,29 +25020,6 @@
         }
       }
     },
-    "No URL patterns" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine URL-Muster"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "URLパターンがありません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无 URL 模式"
-          }
-        }
-      }
-    },
     "No websites added yet." : {
       "localizations" : {
         "ja" : {
@@ -27386,22 +25032,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未添加网站。"
-          }
-        }
-      }
-    },
-    "No websites selected." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Webサイトが選択されていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未选择网站。"
           }
         }
       }
@@ -27693,22 +25323,6 @@
         }
       }
     },
-    "Not used in any rules" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "どのルールでも未使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未在任何规则中使用"
-          }
-        }
-      }
-    },
     "Notch" : {
       "localizations" : {
         "de" : {
@@ -27929,22 +25543,6 @@
         }
       }
     },
-    "One Target" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "単一の翻訳先"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "单一目标"
-          }
-        }
-      }
-    },
     "one-time" : {
       "localizations" : {
         "ja" : {
@@ -27957,29 +25555,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一次性"
-          }
-        }
-      }
-    },
-    "One-time payment. Use TypeWhisper commercially forever with no recurring fees." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einmalzahlung. Nutze TypeWhisper kommerziell für immer ohne laufende Kosten."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一回払い。TypeWhisperを商業利用で永遠に継続料金なしで使用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一次性付款。永久商业使用 TypeWhisper，无需续订费用。"
           }
         }
       }
@@ -28034,70 +25609,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "仅在活动时"
-          }
-        }
-      }
-    },
-    "Only for power users. These options do not change the matching, only the behavior after a match." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "パワーユーザー専用。これらのオプションはマッチングには影響せず、マッチした後の動作のみを変更します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅供高级用户使用。这些选项不会改变匹配规则，只会影响匹配后的处理方式。"
-          }
-        }
-      }
-    },
-    "Only while a window is open" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur solange ein Fenster geöffnet ist"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ウィンドウが開いている間のみ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅在窗口打开时"
-          }
-        }
-      }
-    },
-    "Open an engine's settings to download a model." : {
-      "comment" : "A description below the list of transcription engines, explaining that users can open an engine's settings to download a model.",
-      "extractionState" : "stale",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Öffne die Einstellungen einer Engine, um ein Modell herunterzuladen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エンジンの設定を開いてモデルをダウンロードしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开引擎设置以下载模型。"
           }
         }
       }
@@ -28249,38 +25760,6 @@
         }
       }
     },
-    "Open prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを開く"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开提示词"
-          }
-        }
-      }
-    },
-    "Open Prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを開く"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "打开提示词"
-          }
-        }
-      }
-    },
     "Open Recovery" : {
       "localizations" : {
         "de" : {
@@ -28423,54 +25902,6 @@
         }
       }
     },
-    "Optional action target instead of direct text insertion." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストを直接挿入する代わりに使用する、任意のアクション出力先。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：将结果发送到操作目标，而不是直接插入文本。"
-          }
-        }
-      }
-    },
-    "Optional model within the selected engine." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選択したエンジン内のオプションのモデル。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：选择当前引擎中的模型。"
-          }
-        }
-      }
-    },
-    "Optional post-processing step for this rule." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールのオプションの後処理ステップ。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：为此规则添加后处理步骤。"
-          }
-        }
-      }
-    },
     "Optional: add tone, length, or wording hints." : {
       "localizations" : {
         "ja" : {
@@ -28483,54 +25914,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可选：添加语气、长度或措辞提示。"
-          }
-        }
-      }
-    },
-    "Optional: customize how this rule appears in the list." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任意: リストでのこのルールの表示方法をカスタマイズします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：自定义此规则在列表中的显示方式。"
-          }
-        }
-      }
-    },
-    "Optional: forces this rule regardless of the current context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任意: 現在のコンテキストに関係なく、このルールを強制します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：无论当前场景如何，始终强制使用此规则。"
-          }
-        }
-      }
-    },
-    "Optional: limit to a website" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任意: Webサイトに制限する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可选：限制为指定网站"
           }
         }
       }
@@ -28678,38 +26061,6 @@
         }
       }
     },
-    "Output Hint" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "出力のヒント"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输出提示"
-          }
-        }
-      }
-    },
-    "Output Rules" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "出力ルール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输出规则"
-          }
-        }
-      }
-    },
     "Overlay" : {
       "localizations" : {
         "de" : {
@@ -28750,22 +26101,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为此提示词指定其他服务提供商。保持“默认”则使用全局设置。"
-          }
-        }
-      }
-    },
-    "Override the default provider only when this prompt needs a different model stack." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトに別のモデルスタックが必要な場合のみ、デフォルトプロバイダを上書きしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅当此提示词需要不同的模型组合时才覆盖默认提供商。"
           }
         }
       }
@@ -29193,54 +26528,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "先选择具体结果，然后添加行为和一个或多个触发方式。"
-          }
-        }
-      }
-    },
-    "Pick the job first. Details and presets appear only for the active goal." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まずタスクを選択します。詳細とプリセットは、アクティブな目的に対してのみ表示されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先选择任务。详细信息和预设仅在激活目标时显示。"
-          }
-        }
-      }
-    },
-    "Pick the job first. Presets can be used as starters and refined in the next step." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まずタスクを選択します。プリセットを出発点として使用し、次のステップで調整できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先选择任务。可以从预设开始，并在下一步继续调整。"
-          }
-        }
-      }
-    },
-    "Pick tone, language behavior, and output form." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "トーン、言語の動作、出力形式を選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择语气、语言处理方式和输出形式。"
           }
         }
       }
@@ -29977,22 +27264,6 @@
         }
       }
     },
-    "Preserve formatting when possible" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可能な限りフォーマットを維持する"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尽可能保留格式"
-          }
-        }
-      }
-    },
     "preset.actionItems" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -30455,22 +27726,6 @@
         }
       }
     },
-    "Press Enter Automatically" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動的にEnterを押す"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动按回车键"
-          }
-        }
-      }
-    },
     "Press Esc again to cancel recording" : {
       "localizations" : {
         "de" : {
@@ -30597,22 +27852,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "每次插入听写文本后都按下 Enter。"
-          }
-        }
-      }
-    },
-    "Presses Enter automatically after inserting when the target context expects it." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "対象のコンテキストで必要な場合、挿入後に自動でEnterキーを押します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在目标上下文需要时，插入后自动按回车键。"
           }
         }
       }
@@ -30758,22 +27997,6 @@
         }
       }
     },
-    "Primary Language" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プライマリ言語"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "主要语言"
-          }
-        }
-      }
-    },
     "Primary Screen" : {
       "localizations" : {
         "de" : {
@@ -30914,28 +28137,6 @@
         }
       }
     },
-    "Processing prompt: %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verarbeite Prompt: %@"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを処理: %@"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在处理提示词：%@"
-          }
-        }
-      }
-    },
     "Processing transcription" : {
       "localizations" : {
         "de" : {
@@ -31012,38 +28213,6 @@
         }
       }
     },
-    "Professional" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロフェッショナル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "专业"
-          }
-        }
-      }
-    },
-    "Professional Rewrite" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロフェッショナルに書き換え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "专业改写"
-          }
-        }
-      }
-    },
     "Profile" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -31063,52 +28232,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "配置文件"
-          }
-        }
-      }
-    },
-    "Profile name" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profilname"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロフィール名"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "配置文件名称"
-          }
-        }
-      }
-    },
-    "Profile shortcut" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Profil-Tastenkürzel"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロフィールのキーボードショートカット"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "配置文件快捷键"
           }
         }
       }
@@ -31223,82 +28346,6 @@
         }
       }
     },
-    "Prompt already selected" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompt bereits ausgewählt"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトはすでに選択されています"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词已选择"
-          }
-        }
-      }
-    },
-    "Prompt complete" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompt abgeschlossen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプト完了"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词已完成"
-          }
-        }
-      }
-    },
-    "Prompt Details" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトの詳細"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词详情"
-          }
-        }
-      }
-    },
-    "Prompt Name" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプト名"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词名称"
-          }
-        }
-      }
-    },
     "Prompt Palette" : {
       "localizations" : {
         "de" : {
@@ -31343,44 +28390,6 @@
         }
       }
     },
-    "Prompt saved. Create a rule to run it automatically during dictation." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompt gespeichert. Erstelle eine Regel, damit er bei Diktaten automatisch läuft."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを保存しました。音声入力中に自動実行するにはルールを作成してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词已保存。创建规则后，可在听写时自动运行。"
-          }
-        }
-      }
-    },
-    "Prompt Wizard" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトウィザード"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提示词向导"
-          }
-        }
-      }
-    },
     "Prompts" : {
       "localizations" : {
         "de" : {
@@ -31421,50 +28430,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "提示词与 AI"
-          }
-        }
-      }
-    },
-    "Prompts become automatic during dictation only when a rule assigns them. Otherwise they stay available from the Prompt Palette." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompts werden bei Diktaten nur dann automatisch, wenn eine Regel sie zuweist. Andernfalls bleiben sie über die Prompt-Palette verfügbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトはルールで割り当てた場合のみ音声入力中に自動実行されます。それ以外はプロンプトパレットから使用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只有规则指定提示词后，才会在听写时自动运行；否则可从提示词面板手动使用。"
-          }
-        }
-      }
-    },
-    "Prompts run automatically during dictation only when a rule assigns them. Without a rule, they remain available via the Prompt Palette." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prompts laufen bei Diktaten nur dann automatisch, wenn eine Regel sie zuweist. Ohne Regel bleiben sie über die Prompt-Palette verfügbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトは、ルールが割り当てた場合のみ音声認識時に自動実行されます。ルールがない場合は、プロンプトパレット経由で利用可能です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只有规则指定提示词后，才会在听写时自动运行；没有规则时仍可从提示词面板手动使用。"
           }
         }
       }
@@ -31551,22 +28516,6 @@
         }
       }
     },
-    "Provider default temp" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロバイダのデフォルトTemperature"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务提供商默认温度"
-          }
-        }
-      }
-    },
     "Provider setup not finished yet." : {
       "localizations" : {
         "ja" : {
@@ -31579,54 +28528,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "服务提供商尚未完成设置。"
-          }
-        }
-      }
-    },
-    "Provider temperature" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロバイダのTemperature"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提供商 温度"
-          }
-        }
-      }
-    },
-    "Pull out action items, JSON, tables, or key facts." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アクションアイテム、JSON、表、または重要な事実を抽出します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提取待办事项、JSON、表格或关键信息。"
-          }
-        }
-      }
-    },
-    "Pull structured output like JSON, tables, action items, or key facts from the input." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入力からJSON、表、アクションアイテム、重要な事実などの構造化された出力を抽出します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从输入内容中提取 JSON、表格、待办事项或关键信息等结构化结果。"
           }
         }
       }
@@ -32530,35 +29431,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已有转录"
-          }
-        }
-      }
-    },
-    "recorder.language" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprache"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Language"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "言語"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语言"
           }
         }
       }
@@ -33715,6 +30587,12 @@
     },
     "Recovery" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellung"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33783,38 +30661,6 @@
         }
       }
     },
-    "Reformat loose input into a reliable structure such as lists, meeting notes, tables, or JSON." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まとまりのない入力をリスト、議事録、表、またはJSONなどの確実な構造に再フォーマットします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将零散输入整理为列表、会议纪要、表格或 JSON 等清晰结构。"
-          }
-        }
-      }
-    },
-    "Reformat text into lists, meeting notes, tables, or JSON." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストをリスト、議事録、表、またはJSON形式に再フォーマットします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将文本整理为列表、会议纪要、表格或 JSON。"
-          }
-        }
-      }
-    },
     "Refresh Discord Status" : {
       "localizations" : {
         "ja" : {
@@ -33827,22 +30673,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刷新 Discord 状态"
-          }
-        }
-      }
-    },
-    "Regenerate from selections" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選択内容から再生成"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "根据所选内容重新生成"
           }
         }
       }
@@ -34345,29 +31175,6 @@
         }
       }
     },
-    "Replacement text cannot be empty for corrections" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ersetzungstext darf bei Korrekturen nicht leer sein"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "置き換えテキストは修正時に空にできません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "修正后的替换文本不能为空"
-          }
-        }
-      }
-    },
     "Replaces incorrect transcriptions" : {
       "localizations" : {
         "de" : {
@@ -34402,38 +31209,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "回复"
-          }
-        }
-      }
-    },
-    "Reply / Email" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "返信 / メール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "回复 / 邮件"
-          }
-        }
-      }
-    },
-    "Reply Behavior" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "返信の動作"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "回复行为"
           }
         }
       }
@@ -34854,54 +31629,6 @@
         }
       }
     },
-    "Review & Advanced" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "確認と詳細設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检查与高级"
-          }
-        }
-      }
-    },
-    "Review the name and preview first. Advanced includes the system prompt and target." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "まず名前とプレビューを確認します。「詳細」にはシステムプロンプトと出力先が含まれます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "先检查名称和预览。系统提示词和目标位于“高级”选项中。"
-          }
-        }
-      }
-    },
-    "Review the name, matching, and advanced options before saving." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存する前に、名前、マッチング、詳細オプションを確認してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存前请检查名称、匹配条件和高级选项。"
-          }
-        }
-      }
-    },
     "Rewrite" : {
       "localizations" : {
         "ja" : {
@@ -34914,22 +31641,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "改写"
-          }
-        }
-      }
-    },
-    "Rewrite Behavior" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "リライトの動作"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "改写行为"
           }
         }
       }
@@ -35024,38 +31735,6 @@
         }
       }
     },
-    "Rule Name" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルール名"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "规则名称"
-          }
-        }
-      }
-    },
-    "Rule Wizard" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールウィザード"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "规则向导"
-          }
-        }
-      }
-    },
     "Rules" : {
       "localizations" : {
         "ja" : {
@@ -35068,22 +31747,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "规则"
-          }
-        }
-      }
-    },
-    "Rules tell TypeWhisper which language, engine, or output format should apply in which context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールによって、TypeWhisperがどのコンテキストでどの言語、エンジン、または出力形式を適用するかを指定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "规则用于指定 TypeWhisper 在不同场景下使用的语言、引擎和输出格式。"
           }
         }
       }
@@ -35190,22 +31853,6 @@
         }
       }
     },
-    "Same as Input" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入力と同じ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "与输入相同"
-          }
-        }
-      }
-    },
     "Sat" : {
       "localizations" : {
         "de" : {
@@ -35294,38 +31941,6 @@
         }
       }
     },
-    "Save Prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトを保存"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存提示词"
-          }
-        }
-      }
-    },
-    "Save Rule" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールを保存"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存规则"
-          }
-        }
-      }
-    },
     "Save Workflow" : {
       "localizations" : {
         "ja" : {
@@ -35388,6 +32003,12 @@
     },
     "Saved to History" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Im Verlauf gespeichert"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -35420,51 +32041,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将转录内容保存到“历史记录”标签。"
-          }
-        }
-      }
-    },
-    "Saving without an app or website creates a global fallback rule with this prompt." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Speichern ohne App oder Website erstellt eine globale Fallback-Regel mit diesem Prompt."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリまたはウェブサイトなしで保存すると、このプロンプトを使用したグローバルなフォールバックルールが作成されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不指定应用或网站时，将使用此提示词创建全局备用规则。"
-          }
-        }
-      }
-    },
-    "Search apps..." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apps suchen …"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリを検索..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索应用…"
           }
         }
       }
@@ -35505,28 +32081,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索语言"
-          }
-        }
-      }
-    },
-    "Search models..." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modelle durchsuchen..."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "モデルを検索..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索模型…"
           }
         }
       }
@@ -35675,22 +32229,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索…"
-          }
-        }
-      }
-    },
-    "Secondary Language" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "セカンダリ言語"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "次要语言"
           }
         }
       }
@@ -36048,22 +32586,6 @@
         }
       }
     },
-    "Selected Goal" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選択したゴール"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择的目标"
-          }
-        }
-      }
-    },
     "Selected input device is no longer available." : {
       "localizations" : {
         "ja" : {
@@ -36168,22 +32690,6 @@
         }
       }
     },
-    "Send After Inserting" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "挿入後に送信"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "插入后发送"
-          }
-        }
-      }
-    },
     "Set a spoken language to configure punctuation behavior." : {
       "localizations" : {
         "de" : {
@@ -36202,54 +32708,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请先设置口语语言，再配置标点处理方式。"
-          }
-        }
-      }
-    },
-    "Set for this prompt" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプト用に設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为此提示词设置"
-          }
-        }
-      }
-    },
-    "Set the final name, enabled state, icon, and list preview." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最終的な名前、有効状態、アイコン、リストプレビューを設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置最终名称、启用状态、图标和列表预览。"
-          }
-        }
-      }
-    },
-    "Set the target language or the two fixed languages for the pair." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳先言語、またはペアにする2つの固定言語を設定します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置目标语言，或设置双向翻译使用的两种固定语言。"
           }
         }
       }
@@ -36422,35 +32880,6 @@
         }
       }
     },
-    "settings.tab.watchFolder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ordnerüberwachung"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Watch Folder"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ウォッチフォルダ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "监控文件夹"
-          }
-        }
-      }
-    },
     "Setup" : {
       "localizations" : {
         "de" : {
@@ -36563,38 +32992,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快捷键行为"
-          }
-        }
-      }
-    },
-    "Show All" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "すべて表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示全部"
-          }
-        }
-      }
-    },
-    "Show All Rules" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "すべてのルールを表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示所有规则"
           }
         }
       }
@@ -36725,45 +33122,6 @@
         }
       }
     },
-    "Show matching rules" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マッチするルールを表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示匹配的规则"
-          }
-        }
-      }
-    },
-    "Show menu bar icon" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menüleistensymbol anzeigen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メニューバーのアイコンを表示"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "显示菜单栏图标"
-          }
-        }
-      }
-    },
     "Show terms for %@" : {
       "localizations" : {
         "de" : {
@@ -36782,22 +33140,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示 %@ 的词条"
-          }
-        }
-      }
-    },
-    "Showing rules linked to this prompt." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトにリンクされているルールを表示しています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在显示与此提示词关联的规则。"
           }
         }
       }
@@ -37059,22 +33401,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "声音"
-          }
-        }
-      }
-    },
-    "Sparkles" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スパークル"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "闪光"
           }
         }
       }
@@ -37396,22 +33722,6 @@
         }
       }
     },
-    "Starter Presets" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スタータープリセット"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "入门预设"
-          }
-        }
-      }
-    },
     "Starts dictation" : {
       "localizations" : {
         "ja" : {
@@ -37656,22 +33966,6 @@
         }
       }
     },
-    "Structure / Format" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "構造化 / フォーマット"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "结构 / 格式"
-          }
-        }
-      }
-    },
     "Structure dictated notes into a meeting summary." : {
       "localizations" : {
         "ja" : {
@@ -37684,22 +33978,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将听写笔记整理为会议摘要。"
-          }
-        }
-      }
-    },
-    "Structure JSON" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JSONを構造化"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "结构化 JSON"
           }
         }
       }
@@ -37723,45 +34001,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "风格"
-          }
-        }
-      }
-    },
-    "Subdomains are included automatically. `google.com` also matches `docs.google.com`." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サブドメインは自動的に含まれます。`google.com`は`docs.google.com`にもマッチします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动包含子域名。`google.com` 也会匹配 `docs.google.com`。"
-          }
-        }
-      }
-    },
-    "Subdomains are included automatically. E.g. \"google.com\" also matches \"docs.google.com\"." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Subdomains werden automatisch eingeschlossen. Z.B. \"google.com\" matcht auch \"docs.google.com\"."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サブドメインは自動的に含まれます。例: \"google.com\" は \"docs.google.com\" もマッチします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动包含子域名。例如 \"google.com\" 也会匹配 \"docs.google.com\"。"
           }
         }
       }
@@ -38246,44 +34485,6 @@
         }
       }
     },
-    "System Prompt" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "System-Prompt"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "システムプロンプト"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "系统提示词"
-          }
-        }
-      }
-    },
-    "System prompt editing and optional action target." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "システムプロンプトの編集と、任意のアクション出力先。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑系统提示词，并可设置操作目标。"
-          }
-        }
-      }
-    },
     "Table" : {
       "localizations" : {
         "ja" : {
@@ -38470,22 +34671,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "温度"
-          }
-        }
-      }
-    },
-    "Temperature is not available for Apple Intelligence." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple IntelligenceではTemperatureは利用できません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence 不支持温度设置。"
           }
         }
       }
@@ -38777,29 +34962,6 @@
         }
       }
     },
-    "Terms are sent to the transcription service for better recognition" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begriffe werden an den Transkriptionsdienst gesendet für bessere Erkennung"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "認識精度向上のため、用語は文字起こしサービスに送信されます"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "词条会发送到转录服务以提高识别准确率"
-          }
-        }
-      }
-    },
     "Terms depend on engine support. Corrections always run after transcription." : {
       "comment" : "A description of the terms of the engine support.",
       "isCommentAutoGenerated" : true,
@@ -38832,29 +34994,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "词条仅在支持转录时偏置的引擎上有效。词典纠正始终在转录后运行，并适用于所有引擎。"
-          }
-        }
-      }
-    },
-    "Terms help speech recognition identify technical words correctly. Corrections fix common transcription mistakes automatically." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begriffe helfen der Spracherkennung, technische Wörter korrekt zu identifizieren. Korrekturen beheben häufige Transkriptionsfehler automatisch."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用語は音声認識が専門用語を正しく認識する助けになります。修正はよくある文字起こしミスを自動で直します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "词条帮助语音识别正确识别专业词汇。词典纠正常用于自动修复常见的转录错误。"
           }
         }
       }
@@ -38955,22 +35094,6 @@
         }
       }
     },
-    "Text Box" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストボックス"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文本框"
-          }
-        }
-      }
-    },
     "Text inserted" : {
       "comment" : "Text shown in a toast notification when text is successfully inserted into a text field.",
       "isCommentAutoGenerated" : true,
@@ -39058,29 +35181,6 @@
         }
       }
     },
-    "Thank you for supporting TypeWhisper! Join our Discord to claim your supporter role." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Danke für deine Unterstützung! Tritt unserem Discord bei, um deine Supporter-Rolle zu erhalten."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ご支援ありがとうございます！Discordに参加してサポート者ロールを取得してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "感谢你支持 TypeWhisper！加入我们的 Discord，即可领取支持者身份。"
-          }
-        }
-      }
-    },
     "The Discord claim service returned an unknown error." : {
       "localizations" : {
         "ja" : {
@@ -39159,22 +35259,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "このファイルは有効なTypeWhisperの設定バックアップではありません。"
-          }
-        }
-      }
-    },
-    "the global settings" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "グローバル設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全局设置"
           }
         }
       }
@@ -39726,29 +35810,6 @@
         }
       }
     },
-    "This hotkey is also assigned to the %@ slot." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Hotkey ist auch dem %@-Slot zugewiesen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このショートカットは%@スロットにも割り当てられています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此快捷键同时已分配给 %@ 插槽。"
-          }
-        }
-      }
-    },
     "This incompatible plugin bundle is no longer registered." : {
       "localizations" : {
         "de" : {
@@ -39787,22 +35848,6 @@
         }
       }
     },
-    "This is how the rule reads before saving." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存前のルールの内容です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这是规则在保存前的内容预览。"
-          }
-        }
-      }
-    },
     "This is how the workflow currently reads before saving." : {
       "localizations" : {
         "ja" : {
@@ -39815,22 +35860,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这是工作流保存前的当前内容预览。"
-          }
-        }
-      }
-    },
-    "This is the final raw prompt that will be saved and executed." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "これは保存されて実行される、最終的な生のプロンプトです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这是将要保存并执行的最终原始提示词。"
           }
         }
       }
@@ -39993,93 +36022,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "アカウントと利用権の紐づけを削除します。このMacの項目や非公開のクラウドファイルは削除されません。"
-          }
-        }
-      }
-    },
-    "This rule applies across browsers based on the website. App + website is even more specific, and against other website rules the priority decides." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールは、Webサイトに基づいてブラウザ全体に適用されます。「アプリ + Webサイト」はさらに具体的であり、他のWebサイトルールと競合する場合は優先順位によって決定されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此规则根据网站跨浏览器生效。“应用 + 网站”规则更具体；与其他网站规则冲突时，由优先级决定。"
-          }
-        }
-      }
-    },
-    "This rule applies as soon as one of the selected apps is active. Website rules are more specific, and against other app rules the priority decides." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールは、選択したアプリのいずれかがアクティブになるとすぐに適用されます。Webサイトルールはより具体的であり、他のアプリルールと競合する場合は優先順位によって決定されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选定的任一应用处于活动状态时，此规则即会生效。网站规则更具体；与其他应用规则冲突时，由优先级决定。"
-          }
-        }
-      }
-    },
-    "This Rule Does the Following" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールの実行内容"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此规则将执行以下操作"
-          }
-        }
-      }
-    },
-    "This rule is strongest when the app and website match at the same time. If multiple equally specific rules match, the higher priority wins." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールは、アプリとWebサイトが同時に一致する場合に最も優先度が高くなります。同じ条件のルールが複数一致した場合は、優先順位の高いものが優先されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同时匹配应用和网站时，此规则最精确。若多个同等精确的规则同时匹配，则优先级较高者生效。"
-          }
-        }
-      }
-    },
-    "This setting applies only when the menu bar icon is hidden." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Einstellung gilt nur, wenn das Menüleistensymbol ausgeblendet ist."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この設定はメニューバーのアイコンが非表示になっている場合のみ有効です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此设置仅在菜单栏图标隐藏时生效。"
           }
         }
       }
@@ -40476,29 +36418,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "计时器"
-          }
-        }
-      }
-    },
-    "To use AI prompts, install an LLM provider (e.g. Groq, OpenAI) from the Integrations tab after setup." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Um KI-Prompts zu verwenden, installiere nach dem Setup einen LLM-Anbieter (z.B. Groq, OpenAI) im Reiter \"Integrationen\"."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AIプロンプトを使うには、初期設定後に「プラグイン」でLLMプロバイダー（Groq、OpenAIなど）をインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "要使用 AI 提示词，请在完成初始设置后前往“集成”，安装 LLM 服务提供商（例如 Groq、OpenAI）。"
           }
         }
       }
@@ -41167,38 +37086,6 @@
         }
       }
     },
-    "Translate text into one language or toggle between a pair." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストを1つの言語に翻訳するか、2つの言語間で切り替えます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将文本翻译为单一目标语言，或在一组语言之间双向翻译。"
-          }
-        }
-      }
-    },
-    "Translate text into one target language or switch between a language pair." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストを1つの目的言語に翻訳するか、言語ペア間で切り替えます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将文本翻译为单一目标语言，或在一组语言之间切换。"
-          }
-        }
-      }
-    },
     "Translate to English" : {
       "localizations" : {
         "de" : {
@@ -41243,22 +37130,6 @@
         }
       }
     },
-    "Translation Behavior" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳の動作"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译行为"
-          }
-        }
-      }
-    },
     "Translation Mode" : {
       "localizations" : {
         "ja" : {
@@ -41271,52 +37142,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "翻译模式"
-          }
-        }
-      }
-    },
-    "Translation Off" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung Aus"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳を無効"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译关闭"
-          }
-        }
-      }
-    },
-    "Translation On" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung An"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳を有効"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译开启"
           }
         }
       }
@@ -41555,22 +37380,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "关闭后，指示器不会出现在受支持的屏幕录制应用中，但仍会显示在你的屏幕上。"
-          }
-        }
-      }
-    },
-    "Two-Way Pair" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "双方向ペア"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "双向配对"
           }
         }
       }
@@ -42534,29 +38343,6 @@
         }
       }
     },
-    "URL Patterns" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "URL-Muster"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "URLパターン"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "URL 匹配模式"
-          }
-        }
-      }
-    },
     "Usage by Time of Day" : {
       "localizations" : {
         "de" : {
@@ -42597,22 +38383,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用示例"
-          }
-        }
-      }
-    },
-    "Use Domain" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ドメインを使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用域名"
           }
         }
       }
@@ -42713,38 +38483,6 @@
         }
       }
     },
-    "Use my provider setting" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自分のプロバイダ設定を使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用我的服务提供商设置"
-          }
-        }
-      }
-    },
-    "Use provider default" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロバイダのデフォルトを使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用提供商默认"
-          }
-        }
-      }
-    },
     "Use the engine output unchanged." : {
       "localizations" : {
         "ja" : {
@@ -42831,22 +38569,6 @@
         }
       }
     },
-    "Used by prompts unless a prompt overrides provider or model in Advanced." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「詳細」でプロンプトがプロバイダーやモデルを上書きしない限り、プロンプトによって使用されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "除非某个提示词在“高级”设置中覆盖服务提供商或模型，否则提示词将使用此设置。"
-          }
-        }
-      }
-    },
     "User Type" : {
       "localizations" : {
         "de" : {
@@ -42887,54 +38609,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用 Apple 翻译（设备端）"
-          }
-        }
-      }
-    },
-    "Uses the temperature saved in this provider's settings." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロバイダの設定に保存されているTemperatureを使用します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用此服务提供商设置中保存的温度值。"
-          }
-        }
-      }
-    },
-    "Uses this value only for this prompt and overrides the provider setting." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトでのみこの値を使用し、プロバイダ設定を上書きします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅在此提示词中使用此值，并覆盖提供商设置。"
-          }
-        }
-      }
-    },
-    "Uses this value only for this prompt. Local MLX models support values from 0.0 to 1.0." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトでのみこの値を使用します。ローカルMLXモデルは0.0から1.0の値をサポートしています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此值仅用于当前提示词。本地 MLX 模型支持 0.0 到 1.0 之间的值。"
           }
         }
       }
@@ -43061,35 +38735,6 @@
         }
       }
     },
-    "Version %@ (%@)" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Version %1$@ (%2$@)"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Version %1$@ (%2$@)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バージョン %@ (%@)"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "版本 %1$@ (%2$@)"
-          }
-        }
-      }
-    },
     "Version %@ (%@)%@" : {
       "localizations" : {
         "de" : {
@@ -43114,22 +38759,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本 %1$@ (%2$@)%3$@"
-          }
-        }
-      }
-    },
-    "Via Drag & Drop" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ドラッグ＆ドロップ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通过拖放"
           }
         }
       }
@@ -43607,35 +39236,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "语言"
-          }
-        }
-      }
-    },
-    "watchFolder.language.auto" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Automatisch erkennen"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-detect"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動検出"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动检测"
           }
         }
       }
@@ -44247,77 +39847,6 @@
         }
       }
     },
-    "What should it do?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "何を実行しますか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应该做什么？"
-          }
-        }
-      }
-    },
-    "What should this prompt do?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このプロンプトは何を行うべきですか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此提示词应该做什么？"
-          }
-        }
-      }
-    },
-    "When a prompt is assigned, dictated text will be processed by the LLM before insertion. This replaces translation." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ein Prompt zugewiesen ist, wird diktierter Text vor dem Einfügen vom LLM verarbeitet. Dies ersetzt die Übersetzung."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロンプトが割り当てられている場合、挿入前の音声入力テキストはLLMによって処理されます。これにより翻訳が置き換えられます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "当分配了提示词时，听写文本会在插入前由 LLM 处理。这将替代翻译功能。"
-          }
-        }
-      }
-    },
-    "When context X is detected, TypeWhisper uses behavior Y." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "コンテキストXが検出されると、TypeWhisperは動作Yを使用します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检测到场景 X 时，TypeWhisper 将采用行为 Y。"
-          }
-        }
-      }
-    },
     "When disabled, pressing Esc once immediately discards the active recording." : {
       "localizations" : {
         "de" : {
@@ -44340,29 +39869,6 @@
         }
       }
     },
-    "When disabled, the indicator only shows recording status while transcription continues in the background." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn deaktiviert, zeigt der Indikator nur den Aufnahmestatus an, während die Transkription im Hintergrund weiterläuft."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無効にすると、インジケーターは録音状態のみを表示し、背景でのテキスト生成は継続されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "禁用后，指示器仅显示录音状态，而转录在后台继续进行。"
-          }
-        }
-      }
-    },
     "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording." : {
       "localizations" : {
         "ja" : {
@@ -44375,29 +39881,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "禁用后，TypeWhisper 会跳过为指示器进行的实时转录请求，仅在你停止录音后运行最终转录。"
-          }
-        }
-      }
-    },
-    "When enabled, transcriptions from this profile are stored as memories and used as context for prompts." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn aktiviert, werden Transkriptionen dieses Profils als Erinnerungen gespeichert und als Kontext für Prompts verwendet."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "有効にすると、このプロファイルのテキストは思い出として保存され、プロンプトの文脈として使用されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用后，此配置的转录内容会存为记忆，并作为提示词的上下文。"
           }
         }
       }
@@ -44420,75 +39903,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "启用后，TypeWhisper 会结合目标应用规则和可用的光标上下文，更智能地插入文本。每个工作流最终仍按其输出格式设置插入内容。"
-          }
-        }
-      }
-    },
-    "When hidden, the app is accessible via the Dock icon." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ausgeblendet, ist die App über das Dock-Symbol erreichbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "非表示にすると、アプリはドックのアイコンを通じてアクセス可能になります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "隐藏后，可通过程序坞图标访问应用。"
-          }
-        }
-      }
-    },
-    "When hidden, the app stays accessible via the Dock icon." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ausgeblendet, bleibt die App über das Dock-Symbol erreichbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "非表示にすると、アプリはドックのアイコンを通じてアクセス可能になります。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "隐藏后，仍可通过程序坞图标访问应用。"
-          }
-        }
-      }
-    },
-    "When hidden, the Dock icon only appears while a TypeWhisper window is open. To reopen Settings later, launch TypeWhisper again from Spotlight or the Applications folder." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wenn ausgeblendet, erscheint das Dock-Symbol nur, solange ein TypeWhisper-Fenster geöffnet ist. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper erneut über Spotlight oder den Programme-Ordner."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "非表示にすると、ドックのアイコンはTypeWhisperのウィンドウが開いている間だけ表示されます。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダからTypeWhisperを再び起動してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "隐藏后，仅在 TypeWhisper 窗口打开时显示程序坞图标。如需再次打开设置，请从 Spotlight 或“应用程序”文件夹重新启动 TypeWhisper。"
           }
         }
       }
@@ -44521,134 +39935,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当我说“press enter”时"
-          }
-        }
-      }
-    },
-    "When left on Default, this prompt uses the provider selected above in Prompts settings." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "「デフォルト」のままにした場合、このプロンプトは上部のプロンプト設定で選択されたプロバイダを使用します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保留“默认”时，此提示词将使用上方“提示词”设置中选择的服务提供商。"
-          }
-        }
-      }
-    },
-    "Where should this rule apply?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このルールをどこに適用しますか？"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此规则应在哪些场景生效？"
-          }
-        }
-      }
-    },
-    "Whether TypeWhisper should translate the text automatically before inserting it." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "テキストを挿入する前にTypeWhisperが自動的に翻訳するかどうか。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "是否在插入文本前自动翻译。"
-          }
-        }
-      }
-    },
-    "Which engine should preferably handle this context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このコンテキストを優先して処理するエンジン。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "优先使用哪个引擎处理此场景。"
-          }
-        }
-      }
-    },
-    "Which engine TypeWhisper should prefer here." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ここでTypeWhisperが優先するエンジン。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper 在此处应优先使用哪个引擎。"
-          }
-        }
-      }
-    },
-    "Which format the result should be inserted in." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "結果を挿入するフォーマット。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "结果应以哪种格式插入。"
-          }
-        }
-      }
-    },
-    "Which language should be output after translation." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳後に出力される言語。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻译后应输出哪种语言。"
-          }
-        }
-      }
-    },
-    "Which language TypeWhisper should expect in this context." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このコンテキストでTypeWhisperが想定する言語。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper 在此场景中应识别哪种语言。"
           }
         }
       }
@@ -44739,22 +40025,6 @@
         }
       }
     },
-    "Who decides?" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定元"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由谁决定？"
-          }
-        }
-      }
-    },
     "With a team" : {
       "localizations" : {
         "ja" : {
@@ -44767,140 +40037,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "团队使用"
-          }
-        }
-      }
-    },
-    "with Auto Enter" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動Enterあり"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "带自动回车"
-          }
-        }
-      }
-    },
-    "with auto-detect" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動検出あり"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "带自动检测"
-          }
-        }
-      }
-    },
-    "with automatic formatting" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自動フォーマットあり"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "带自动格式化"
-          }
-        }
-      }
-    },
-    "with Inline Commands" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "インラインコマンドあり"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "带内联命令"
-          }
-        }
-      }
-    },
-    "with translation" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳あり"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "带翻译"
-          }
-        }
-      }
-    },
-    "Without a rule, prompts remain available via the Prompt Palette." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ohne Regel bleiben Prompts über die Prompt-Palette verfügbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ルールがない場合は、プロンプトはプロンプトパレット経由で利用可能です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "即使没有设置规则，仍可通过提示词面板使用提示词。"
-          }
-        }
-      }
-    },
-    "Without an app or website, this rule becomes the global fallback. It applies only when no more specific rule matches, and among other fallback rules the higher priority wins." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリやWebサイトが指定されていない場合、このルールはグローバルフォールバックになります。より具体的なルールが一致しない場合にのみ適用され、他のフォールバックルールと競合する場合は優先順位の高いものが優先されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未指定应用或网站时，此规则将成为全局备用规则。仅在没有匹配到更具体的规则时生效；若存在多个备用规则，则优先级较高者生效。"
-          }
-        }
-      }
-    },
-    "without translation" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "翻訳なし"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不带翻译"
           }
         }
       }
@@ -45207,29 +40343,6 @@
         }
       }
     },
-    "You can access TypeWhisper settings via the Dock icon." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Du kannst die TypeWhisper-Einstellungen über das Dock-Symbol öffnen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisperの設定はDockのアイコンから開けます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你可以通过程序坞图标打开 TypeWhisper 设置。"
-          }
-        }
-      }
-    },
     "You can change permissions anytime in System Settings." : {
       "localizations" : {
         "ja" : {
@@ -45320,22 +40433,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你可以粘贴完整 URL；仅保留域名部分。"
-          }
-        }
-      }
-    },
-    "You can shape tone, format, language behavior, and model settings in the next step." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "次のステップで、トーン、フォーマット、言語の動作、モデル設定を調整できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "下一步可以设置语气、格式、语言行为和模型。"
           }
         }
       }
@@ -51645,29 +46742,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作流“%@”的快捷键"
-          }
-        }
-      }
-    },
-    "the “%@” profile shortcut" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dem Shortcut des Profils „%@“"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プロファイル「%@」のショートカット"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "配置文件“%@”的快捷键"
           }
         }
       }
