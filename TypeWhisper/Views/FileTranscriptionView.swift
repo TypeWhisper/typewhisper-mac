@@ -53,6 +53,12 @@ struct FileTranscriptionView: View {
                         Button(String(localized: "watchFolder.selectFolder")) {
                             watchFolder.selectWatchFolder()
                         }
+                        .accessibilityLabel(localizedAppText(
+                            "Select Watch Folder…",
+                            de: "Überwachten Ordner auswählen …",
+                            ja: "ウォッチフォルダを選択…",
+                            zh: "选择监控文件夹…"
+                        ))
                     }
 
                     HStack {
@@ -80,10 +86,18 @@ struct FileTranscriptionView: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.plain)
+                            .help(clearOutputFolderLabel)
+                            .accessibilityLabel(clearOutputFolderLabel)
                         }
                         Button(String(localized: "watchFolder.selectFolder")) {
                             watchFolder.selectOutputFolder()
                         }
+                        .accessibilityLabel(localizedAppText(
+                            "Select Output Folder…",
+                            de: "Ausgabeordner auswählen …",
+                            ja: "出力フォルダを選択…",
+                            zh: "选择输出文件夹…"
+                        ))
                     }
                 }
 
@@ -161,6 +175,12 @@ struct FileTranscriptionView: View {
                             Label(processing, systemImage: "arrow.trianglehead.2.counterclockwise")
                                 .foregroundStyle(.secondary)
                                 .font(.caption)
+                                .accessibilityLabel(localizedAppText(
+                                    "Processing \(processing)",
+                                    de: "\(processing) wird verarbeitet",
+                                    ja: "\(processing)を処理中",
+                                    zh: "正在处理\(processing)"
+                                ))
                         }
                     }
 
@@ -178,6 +198,9 @@ struct FileTranscriptionView: View {
                             HStack {
                                 Image(systemName: item.success ? "checkmark.circle.fill" : "xmark.circle.fill")
                                     .foregroundStyle(item.success ? .green : .red)
+                                    .accessibilityLabel(item.success
+                                        ? String(localized: "Done")
+                                        : String(localized: "Failed"))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(item.fileName)
                                         .lineLimit(1)
@@ -193,6 +216,7 @@ struct FileTranscriptionView: View {
                                     }
                                 }
                             }
+                            .accessibilityElement(children: .combine)
                         }
 
                         if !watchFolder.watchFolderService.processedFiles.isEmpty {
@@ -356,6 +380,15 @@ struct FileTranscriptionView: View {
             RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
                 .fill(.quaternary)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(item.fileName)
+        .modifier(FileRowExpandAction(
+            isAvailable: item.state == .done && item.result != nil,
+            isExpanded: expandedFileId == item.id,
+            toggle: {
+                expandedFileId = expandedFileId == item.id ? nil : item.id
+            }
+        ))
     }
 
     @ViewBuilder
@@ -394,6 +427,12 @@ struct FileTranscriptionView: View {
             if let progress = item.progressFraction {
                 ProgressView(value: progress)
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText(
+                        "Transcription progress",
+                        de: "Transkriptionsfortschritt",
+                        ja: "文字起こしの進行状況",
+                        zh: "转录进度"
+                    ))
             }
 
             if let progressText = item.progressText, !progressText.isEmpty {
@@ -418,7 +457,12 @@ struct FileTranscriptionView: View {
             }
             .buttonStyle(.plain)
             .help(String(localized: "Copy"))
-            .accessibilityLabel(String(localized: "Copy"))
+            .accessibilityLabel(localizedAppText(
+                "Copy transcript of \(item.fileName)",
+                de: "Transkript von \(item.fileName) kopieren",
+                ja: "\(item.fileName)の文字起こしをコピー",
+                zh: "复制\(item.fileName)的转录"
+            ))
 
             if let result = item.result, !result.segments.isEmpty {
                 Menu {
@@ -432,6 +476,12 @@ struct FileTranscriptionView: View {
                 .menuIndicator(.hidden)
                 .frame(width: 20)
                 .help(String(localized: "Export Subtitles"))
+                .accessibilityLabel(localizedAppText(
+                    "Export subtitles for \(item.fileName)",
+                    de: "Untertitel für \(item.fileName) exportieren",
+                    ja: "\(item.fileName)の字幕を書き出し",
+                    zh: "导出\(item.fileName)的字幕"
+                ))
             }
         }
     }
@@ -538,19 +588,43 @@ struct FileTranscriptionView: View {
                 Text("·")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Text(String(localized: "\(viewModel.processedFiles)/\(viewModel.totalFiles)"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
+                    .accessibilityLabel(processedFilesAccessibilityLabel)
             }
             .fixedSize(horizontal: true, vertical: false)
             .layoutPriority(1)
+            .accessibilityElement(children: .combine)
         } else {
             Text(String(localized: "\(viewModel.processedFiles)/\(viewModel.totalFiles)"))
                 .font(.caption)
                 .monospacedDigit()
                 .fixedSize(horizontal: true, vertical: false)
+                .accessibilityLabel(processedFilesAccessibilityLabel)
         }
+    }
+
+    private var processedFilesAccessibilityLabel: String {
+        let processed = viewModel.processedFiles
+        let total = viewModel.totalFiles
+        return localizedAppText(
+            "\(processed) of \(total) files processed",
+            de: "\(processed) von \(total) Dateien verarbeitet",
+            ja: "\(total)件中\(processed)件のファイルを処理済み",
+            zh: "已处理 \(processed)/\(total) 个文件"
+        )
+    }
+
+    private var clearOutputFolderLabel: String {
+        localizedAppText(
+            "Clear Output Folder",
+            de: "Ausgabeordner zurücksetzen",
+            ja: "出力フォルダをクリア",
+            zh: "清除输出文件夹"
+        )
     }
 
     @ViewBuilder
@@ -676,5 +750,25 @@ struct FileTranscriptionView: View {
             return nil
         }
         return String(format: "%.1f", sourceProgress.processedDuration / elapsed)
+    }
+}
+
+/// Exposes the tap-to-expand transcript of a finished file as a named VoiceOver action.
+private struct FileRowExpandAction: ViewModifier {
+    let isAvailable: Bool
+    let isExpanded: Bool
+    let toggle: () -> Void
+
+    func body(content: Content) -> some View {
+        content.accessibilityActions {
+            if isAvailable {
+                Button(isExpanded
+                    ? localizedAppText("Hide Transcript", de: "Transkript ausblenden", ja: "文字起こしを非表示", zh: "隐藏转录")
+                    : String(localized: "recorder.showTranscript")
+                ) {
+                    toggle()
+                }
+            }
+        }
     }
 }
