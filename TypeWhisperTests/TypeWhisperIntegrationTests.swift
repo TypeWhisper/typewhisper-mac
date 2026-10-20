@@ -3307,57 +3307,43 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     func testTranscribeEndpointRefusesAnEngineTheManagedSettingsRefuse() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var context: APIContext?
-        defer {
-            context = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        MockTranscriptionPlugin.reset()
-        let engineId = try await MainActor.run { () throws -> String in
-            let made = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
-            context = made
-            let engineId = try XCTUnwrap(PluginManager.shared.transcriptionEngines.first?.providerId)
-            PluginManager.shared.applyProviderPolicy(ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]))
-            return engineId
-        }
-
-        let router = try XCTUnwrap(context?.router)
-        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
-        let boundary = "TestBoundary-\(UUID().uuidString)"
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(wavData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"engine\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(engineId)\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
         // The refused engine leaves the engine list; the API names the policy, not an unknown engine.
-        let response = await router.route(
-            HTTPRequest(
-                method: "POST",
-                path: "/v1/transcribe",
-                queryParams: [:],
-                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
-                body: body
-            )
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
+            field: "engine",
+            value: { $0 },
+            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
         )
-
-        XCTAssertEqual(response.status, 403)
-        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
-        let reason = await MainActor.run { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: engineId) }
-        XCTAssertNotNil(reason)
-        XCTAssertEqual(error["message"] as? String, reason)
-        XCTAssertEqual(error["code"] as? String, "forbidden")
-        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
     }
 
     func testTranscribeEndpointRefusesAModelOfAnEngineTheManagedSettingsRefuse() async throws {
+        // Only the model is named; its engine is refused, so the API names the policy, not an unknown model.
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
+            field: "model",
+            value: { _ in "tiny" },
+            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
+        )
+    }
+
+    func testTranscribeEndpointRefusesAModelOfAPluginRefusedAsAWhole() async throws {
+        // The refused plugin stops and offers no models any more; the models it offered are remembered.
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedPlugins: ["com.typewhisper.tests.other"]),
+            field: "model",
+            value: { _ in "tiny" },
+            expectedReason: { _ in PluginManager.shared.policyRefusals["com.typewhisper.mock.transcription"] }
+        )
+    }
+
+    /// Applies `policy`, sends a transcription request with `field`, and expects the policy's 403
+    /// without the engine being called.
+    private func assertTranscribeRefusedByPolicy(
+        _ policy: ManagedProviderPolicy,
+        field: String,
+        value: @escaping (_ engineId: String) -> String,
+        expectedReason: @escaping @MainActor (_ engineId: String) -> String?
+    ) async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
         defer {
@@ -3370,38 +3356,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             let made = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
             context = made
             let engineId = try XCTUnwrap(PluginManager.shared.transcriptionEngines.first?.providerId)
-            PluginManager.shared.applyProviderPolicy(ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]))
+            PluginManager.shared.applyProviderPolicy(policy)
             return engineId
         }
 
         let router = try XCTUnwrap(context?.router)
-        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
         let boundary = "TestBoundary-\(UUID().uuidString)"
-        var body = Data()
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-        body.append(wavData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"model\"\r\n\r\n".data(using: .utf8)!)
-        body.append("tiny\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-
-        // Only the model is named; its engine is refused, so the API names the policy, not an unknown model.
         let response = await router.route(
             HTTPRequest(
                 method: "POST",
                 path: "/v1/transcribe",
                 queryParams: [:],
                 headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
-                body: body
+                body: Self.multipartTranscribeBody(
+                    wavData: WavEncoder.encode(Array(repeating: Float(0), count: 1600)),
+                    boundary: boundary,
+                    fields: [(name: field, value: value(engineId))]
+                )
             )
         )
 
         XCTAssertEqual(response.status, 403)
         let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
-        let reason = await MainActor.run { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: engineId) }
+        let reason = await MainActor.run { expectedReason(engineId) }
         XCTAssertNotNil(reason)
         XCTAssertEqual(error["message"] as? String, reason)
         XCTAssertEqual(error["code"] as? String, "forbidden")

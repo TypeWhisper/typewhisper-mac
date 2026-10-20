@@ -503,13 +503,21 @@ final class PluginManager: ObservableObject {
                 }
             }
         }
-        return nil
+        // A plugin refused as a whole is a placeholder without models; match the ones it offered.
+        return policyRefusals.first { pluginId, _ in
+            (UserDefaults.standard.stringArray(forKey: Self.knownModelIdsKey(pluginId)) ?? []).contains(modelId)
+        }?.value
     }
 
     /// Provider IDs a plugin exposed when it last ran, so a plugin refused before it loads can still
     /// be matched to the engine or language model a user selected.
     static func knownProviderIdsKey(_ pluginId: String) -> String {
         "plugin.\(pluginId).knownProviderIds"
+    }
+
+    /// Transcription model IDs a plugin offered when it last ran, for requests that name only a model.
+    static func knownModelIdsKey(_ pluginId: String) -> String {
+        "plugin.\(pluginId).knownTranscriptionModelIds"
     }
 
     private func rememberProviderIds(of plugin: LoadedPlugin) {
@@ -527,7 +535,19 @@ final class PluginManager: ObservableObject {
             ids.insert(provider.llmProviderDisplayName)
             ids.formUnion(provider.llmProviderLegacyAliases)
         }
-        let key = Self.knownProviderIdsKey(plugin.manifest.id)
+        Self.remember(ids, forKey: Self.knownProviderIdsKey(plugin.manifest.id))
+
+        var engines: [TranscriptionEnginePlugin] = []
+        if let engine = plugin.instance as? TranscriptionEnginePlugin {
+            engines.append(engine)
+        }
+        if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
+            engines.append(contentsOf: expanded.additionalTranscriptionEngines)
+        }
+        Self.remember(Set(engines.flatMap { $0.modelCatalog.map(\.id) }), forKey: Self.knownModelIdsKey(plugin.manifest.id))
+    }
+
+    private static func remember(_ ids: Set<String>, forKey key: String) {
         let sorted = ids.sorted()
         guard !sorted.isEmpty, UserDefaults.standard.stringArray(forKey: key) != sorted else { return }
         UserDefaults.standard.set(sorted, forKey: key)
@@ -1371,6 +1391,7 @@ final class PluginManager: ObservableObject {
             // An uninstalled plugin no longer explains a refusal of the providers it exposed.
             policyRefusals.removeValue(forKey: pluginId)
             UserDefaults.standard.removeObject(forKey: Self.knownProviderIdsKey(pluginId))
+            UserDefaults.standard.removeObject(forKey: Self.knownModelIdsKey(pluginId))
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
             if !disabledProviderIds.isEmpty {
                 uninstalledTranscriptionEngines.send(disabledProviderIds)
