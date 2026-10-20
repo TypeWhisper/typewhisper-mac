@@ -1329,6 +1329,34 @@ final class SelectionPaletteInteractionModelTests: XCTestCase {
         XCTAssertEqual(model.selectedIndex, 0)
     }
 
+    /// VoiceOver hears the highlighted entry when it changes, also when typing replaces
+    /// the entry at index 0 without moving the highlight.
+    func testHighlightedItemFollowsTheSearchWhileTheIndexStaysZero() throws {
+        let items = [
+            SelectionPaletteItem(id: UUID(), title: "Translate"),
+            SelectionPaletteItem(id: UUID(), title: "Summarize"),
+        ]
+        let model = SelectionPaletteInteractionModel(
+            configuration: SelectionPaletteConfiguration(
+                searchPrompt: "Search",
+                emptyStateTitle: "Empty"
+            ),
+            items: items,
+            onSelect: { _ in },
+            onDismiss: {}
+        )
+        XCTAssertEqual(model.highlightedItem?.id, items[0].id)
+
+        XCTAssertTrue(model.handleKeyDown(try keyEvent(keyCode: 1, characters: "s")))
+        XCTAssertTrue(model.handleKeyDown(try keyEvent(keyCode: 32, characters: "u")))
+
+        XCTAssertEqual(model.selectedIndex, 0)
+        XCTAssertEqual(model.highlightedItem?.id, items[1].id)
+
+        XCTAssertTrue(model.handleKeyDown(try keyEvent(keyCode: 7, characters: "x")))
+        XCTAssertNil(model.highlightedItem, "No match leaves nothing highlighted")
+    }
+
     func testTypingAndDeleteUpdateSearchTextAndFilteredItems() throws {
         let items = [
             SelectionPaletteItem(id: UUID(), title: "Translate"),
