@@ -20,6 +20,9 @@ final class WidgetDataService {
     }
 
     private func updateWidgetData(records: [TranscriptionRecord], now: Date) {
+        // With a development team configured, the test host shares the installed
+        // app's App Group container, so a test would replace the real widget data.
+        guard !AppConstants.isRunningTests else { return }
         let data = buildWidgetData(records: records, now: now)
         // Reload only once the file is on disk, otherwise the widget can reload
         // against the previous payload now that the write is asynchronous.

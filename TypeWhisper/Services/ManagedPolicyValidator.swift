@@ -82,6 +82,12 @@ enum ManagedPolicyValidator {
     /// The most entries a list may hold after deduplication.
     static let maximumListEntries = 256
 
+    /// A payload whose type is the app's domain makes macOS copy keys of the profile itself into
+    /// the managed preferences, such as `PayloadUUID` and `_manualProfile`. They are not settings.
+    static func isProfileMetadataKey(_ key: String) -> Bool {
+        key.hasPrefix("Payload") || key.hasPrefix("_")
+    }
+
     static func validate(_ reading: ManagedPolicyReading, revision: Int, readAt: Date) -> ManagedPolicySnapshot {
         guard reading.readable else {
             return ManagedPolicySnapshot(
@@ -100,7 +106,7 @@ enum ManagedPolicyValidator {
         }
 
         var issues: [ManagedPolicyIssue] = []
-        var rootValues = reading.forcedValues
+        var rootValues = reading.forcedValues.filter { !isProfileMetadataKey($0.key) }
         let rawRecommended = rootValues.removeValue(forKey: ManagedPolicyKeys.recommendedDictionary)
 
         var enforced: [String: ManagedPolicyValue] = [:]

@@ -1226,6 +1226,11 @@ struct RecordingSettingsView: View {
                                 .disabled(!modelManager.canUseForTranscription(engine))
                         }
                     }
+                    .disabled(pluginManager.selectionPolicy.enforcesTranscription)
+
+                    if let enforced = pluginManager.enforcedTranscriptionResolution {
+                        ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                    }
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")
@@ -1247,6 +1252,7 @@ struct RecordingSettingsView: View {
                                     Text(model.displayName).tag(model.id as String?)
                                 }
                             }
+                            .disabled(pluginManager.selectionPolicy.enforcesTranscription)
                         }
                     }
 

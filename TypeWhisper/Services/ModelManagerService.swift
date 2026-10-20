@@ -5,6 +5,8 @@ import TypeWhisperPluginSDK
 enum TranscriptionEngineError: LocalizedError {
     case noEngineSelected
     case engineUnavailable(engineName: String?, reason: String?)
+    /// The managed settings refuse this engine; `reason` is localized.
+    case managedPolicyRefused(engineName: String?, reason: String)
     case modelNotLoaded
     case appleSpeechModelNotLoaded
     case transcriptionFailed(String)
@@ -24,6 +26,9 @@ enum TranscriptionEngineError: LocalizedError {
                 Self.sentence(reason),
                 String(localized: "Check its settings page in the sidebar or choose another engine under Settings > Dictation."),
             ].compactMap { $0 }.joined(separator: " ")
+        case .managedPolicyRefused(let engineName, let reason):
+            [String(localized: "\(engineName ?? Self.defaultEngineName) is not available."), Self.sentence(reason)]
+                .compactMap { $0 }.joined(separator: " ")
         case .modelNotLoaded:
             String(localized: "The selected model is not ready yet. Download or load it on the engine's settings page, or choose another model under Settings > Dictation.")
         case .appleSpeechModelNotLoaded:
@@ -290,6 +295,23 @@ final class ModelManagerService: ObservableObject {
     }
     #endif
 
+    // MARK: - Managed settings
+
+    /// The engine a transcription uses: the enforced pair's engine, otherwise the requested engine or
+    /// the selected one. An enforced pair that cannot be used yields nil, and the readiness check
+    /// names the reason; it never falls back to another engine.
+    func effectiveEngineId(_ requested: String?) -> String? {
+        if let enforced = PluginManager.shared?.enforcedTranscriptionResolution {
+            return enforced.resolvedProviderId
+        }
+        return requested ?? selectedProviderId
+    }
+
+    /// A workflow's or request's model override, which an enforced pair replaces with its model.
+    func effectiveModelOverride(_ requested: String?) -> String? {
+        PluginManager.shared?.enforcedTranscriptionResolution == nil ? requested : nil
+    }
+
     // MARK: - Public API
 
     var isModelReady: Bool {
@@ -298,7 +320,7 @@ final class ModelManagerService: ObservableObject {
 
     /// Whether the engine a dictation uses is ready without restoring its model first.
     func isTranscriptionEngineReady(engineOverrideId: String?) -> Bool {
-        guard let providerId = engineOverrideId ?? selectedProviderId else { return false }
+        guard let providerId = effectiveEngineId(engineOverrideId) else { return false }
         return PluginManager.shared.transcriptionEngine(for: providerId)?.isConfigured ?? false
     }
 
@@ -311,7 +333,14 @@ final class ModelManagerService: ObservableObject {
     /// Explains why the given engine cannot start a transcription, before any model preparation.
     /// Returns nil when the engine exists and is usable; model readiness is checked in transcribe().
     func transcriptionReadinessError(providerId: String?) -> TranscriptionEngineError? {
+        if let reason = PluginManager.shared?.enforcedTranscriptionResolution?.unavailableReason {
+            return .managedPolicyRefused(engineName: nil, reason: reason)
+        }
         guard let providerId else { return .noEngineSelected }
+        if let refusal = PluginManager.shared.transcriptionPolicyRefusal(forProviderId: providerId) {
+            let name = PluginManager.shared.installedTranscriptionPlugin(for: providerId)?.manifest.name
+            return .managedPolicyRefused(engineName: name, reason: refusal)
+        }
         guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return .engineUnavailable(engineName: nil, reason: String(localized: "It is not installed or is disabled."))
         }
@@ -343,10 +372,11 @@ final class ModelManagerService: ObservableObject {
     }
 
     func resolvedModelId(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
         if let cloudModelOverride {
             return cloudModelOverride
         }
-        let providerId = engineOverrideId ?? selectedProviderId
+        let providerId = effectiveEngineId(engineOverrideId)
         return selectedModelId(for: providerId)
     }
 
@@ -373,7 +403,8 @@ final class ModelManagerService: ObservableObject {
 
     func selectProvider(_ providerId: String) {
         PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
-        selectedProviderId = providerId
+        // The user's choice is saved as usual; an enforced pair keeps deciding the engine in use.
+        selectedProviderId = PluginManager.shared?.enforcedTranscriptionResolution == nil ? providerId : effectiveEngineId(nil)
         UserDefaults.standard.set(providerId, forKey: providerKey)
         reconcilePassiveModelRestore()
     }
@@ -524,7 +555,7 @@ final class ModelManagerService: ObservableObject {
     }
 
     func supportsLiveTranscriptionSession(engineOverrideId: String? = nil) -> Bool {
-        guard let providerId = engineOverrideId ?? selectedProviderId,
+        guard let providerId = effectiveEngineId(engineOverrideId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
@@ -532,7 +563,7 @@ final class ModelManagerService: ObservableObject {
     }
 
     func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
-        guard let providerId = engineOverrideId ?? selectedProviderId,
+        guard let providerId = effectiveEngineId(engineOverrideId),
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
             return false
         }
@@ -544,7 +575,8 @@ final class ModelManagerService: ObservableObject {
         selectedProviderId: String? = nil,
         cloudModelOverride: String? = nil
     ) -> Bool {
-        guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
@@ -566,7 +598,7 @@ final class ModelManagerService: ObservableObject {
     /// Whether the dictation engine opted in to delivering its final result through a
     /// live session, so dictation should stream even when no transcript preview is shown.
     func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
-        guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
+        guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
               PluginManager.shared.transcriptionEngine(for: providerId) is any LiveTranscriptionCapablePlugin,
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
             return false
@@ -632,7 +664,8 @@ final class ModelManagerService: ObservableObject {
 
     /// Resolve display name for a given engine/model override combination
     func resolvedModelDisplayName(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> String? {
-        let providerId = engineOverrideId ?? selectedProviderId
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        let providerId = effectiveEngineId(engineOverrideId)
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
 
@@ -657,6 +690,11 @@ final class ModelManagerService: ObservableObject {
     /// choice, which used to switch dictation to another engine for good (#1533).
     func restoreProviderSelection() {
         defer { reconcilePassiveModelRestore() }
+        if applyEnforcedTranscriptionPair() {
+            return
+        }
+        restoreModelsRetainedFromEnforcedPair()
+        applyRecommendedTranscriptionPairIfNeeded()
         let savedProviderId = UserDefaults.standard.string(forKey: providerKey)
 
         if let savedProviderId, isUsableForTranscription(savedProviderId) {
@@ -688,12 +726,98 @@ final class ModelManagerService: ObservableObject {
             return
         }
 
-        if savedProviderId == nil {
+        // While a recommended pair waits to become ready, the fallback stays temporary: saving it
+        // would count as the user's choice and keep the recommendation from ever applying.
+        if savedProviderId == nil, !isTranscriptionRecommendationPending {
             selectProvider(fallback.providerId)
         } else {
             PluginManager.temporaryFallbackEngine.withLock { $0 = fallback.providerId }
             selectedProviderId = fallback.providerId
         }
+    }
+
+    private var isTranscriptionRecommendationPending: Bool {
+        UserDefaults.standard.string(forKey: providerKey) == nil
+            && !UserDefaults.standard.bool(forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied)
+            && PluginManager.shared?.selectionPolicy.recommendedTranscription != nil
+    }
+
+    /// Selects the enforced pair's engine in memory and its model in the plugin, retaining the model
+    /// the user had. Returns false when no pair is enforced. Never falls back to another engine.
+    private func applyEnforcedTranscriptionPair() -> Bool {
+        guard let enforced = PluginManager.shared?.enforcedTranscriptionResolution else { return false }
+        PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
+        guard case .resolved(let providerId, let modelId) = enforced else {
+            if selectedProviderId != nil {
+                selectedProviderId = nil
+            }
+            passiveRestoreSelection = nil
+            return true
+        }
+        if selectedProviderId != providerId {
+            selectedProviderId = providerId
+        }
+        if let engine = PluginManager.shared.transcriptionEngine(for: providerId),
+           engine.selectedModelId?.caseInsensitiveCompare(modelId) != .orderedSame {
+            var retained = Self.retainedModels()
+            if retained[providerId] == nil {
+                // Retained before changing anything; an empty value means the plugin had none selected.
+                retained[providerId] = engine.selectedModelId ?? ""
+                UserDefaults.standard.set(retained, forKey: UserDefaultsKeys.managedTranscriptionModelRetention)
+            }
+            engine.selectModel(modelId)
+        }
+        return true
+    }
+
+    /// Gives each engine back the model the user had before an enforced pair, once the engine is
+    /// available again. Entries for unavailable engines wait for a later pass.
+    private func restoreModelsRetainedFromEnforcedPair() {
+        var retained = Self.retainedModels()
+        guard !retained.isEmpty else { return }
+        for (providerId, modelId) in retained {
+            guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { continue }
+            // An empty value means the engine had no model selected. Plugins cannot clear a
+            // selection, so the enforced model stays selected then.
+            if !modelId.isEmpty {
+                engine.selectModel(modelId)
+            }
+            retained.removeValue(forKey: providerId)
+        }
+        UserDefaults.standard.set(retained, forKey: UserDefaultsKeys.managedTranscriptionModelRetention)
+    }
+
+    private static func retainedModels() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: UserDefaultsKeys.managedTranscriptionModelRetention) as? [String: String] ?? [:]
+    }
+
+    /// A recommended pair becomes the initial selection of a profile that never chose an engine,
+    /// once, and only when its engine and model are ready.
+    private func applyRecommendedTranscriptionPairIfNeeded() {
+        guard UserDefaults.standard.string(forKey: providerKey) == nil,
+              !UserDefaults.standard.bool(forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied),
+              let manager = PluginManager.shared,
+              let recommended = manager.selectionPolicy.recommendedTranscription,
+              case .resolved(let providerId, let modelId) = manager.resolveTranscriptionPair(recommended),
+              let engine = manager.transcriptionEngine(for: providerId),
+              // Not ready yet: leave the plugin's selection alone and try again on a later pass.
+              isReadyForRecommendation(engine, modelId: modelId) else { return }
+        UserDefaults.standard.set(true, forKey: UserDefaultsKeys.managedTranscriptionRecommendationApplied)
+        if engine.selectedModelId != modelId {
+            engine.selectModel(modelId)
+        }
+        selectProvider(providerId)
+    }
+
+    /// Whether a recommended model can be used as it is, judged without selecting it: selecting a
+    /// local model loads it, which a check repeated on every plugin change must not do.
+    private func isReadyForRecommendation(_ engine: TranscriptionEnginePlugin, modelId: String) -> Bool {
+        guard canUseForTranscription(engine) else { return false }
+        let modelManager = (engine as? any PluginDownloadedModelManaging)
+            ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
+                as? any PluginDownloadedModelManaging)
+        guard let modelManager else { return true }
+        return modelManager.downloadedModels.contains { $0.id.caseInsensitiveCompare(modelId) == .orderedSame }
     }
 
     private func isUsableForTranscription(_ providerId: String) -> Bool {
@@ -786,7 +910,8 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> LiveTranscriptionSessionHandle? {
-        try await createLiveTranscriptionSession(
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        return try await createLiveTranscriptionSession(
             languageSelection: language.map(LanguageSelection.exact) ?? .auto,
             task: task,
             engineOverrideId: engineOverrideId,
@@ -806,13 +931,18 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> LiveTranscriptionSessionHandle? {
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
         try await HistoryRetranscriptionActivity.waitForEngineAvailability()
-        let providerId = engineOverrideId ?? selectedProviderId
+        let providerId = effectiveEngineId(engineOverrideId)
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var transfersAutoUnloadProtection = false
@@ -955,7 +1085,8 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
-        try await transcribe(
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        return try await transcribe(
             audioSamples: audioSamples,
             languageSelection: language.map(LanguageSelection.exact) ?? .auto,
             task: task,
@@ -977,13 +1108,18 @@ final class ModelManagerService: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint] = [],
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
         try await HistoryRetranscriptionActivity.waitForEngineAvailability()
-        let providerId = engineOverrideId ?? selectedProviderId
+        let providerId = effectiveEngineId(engineOverrideId)
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?
@@ -1063,7 +1199,8 @@ final class ModelManagerService: ObservableObject {
         normalizeNumbers: Bool? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
-        try await transcribe(
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        return try await transcribe(
             audioSamples: audioSamples,
             languageSelection: language.map(LanguageSelection.exact) ?? .auto,
             task: task,
@@ -1088,7 +1225,8 @@ final class ModelManagerService: ObservableObject {
         normalizeNumbers: Bool? = nil,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> TranscriptionResult {
-        try await transcribe(
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        return try await transcribe(
             audioSamples: audioSamples,
             languageSelection: languageSelection,
             task: task,
@@ -1114,7 +1252,8 @@ final class ModelManagerService: ObservableObject {
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> TranscriptionResult {
-        try await transcribe(
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        return try await transcribe(
             audioSamples: audioSamples,
             languageSelection: language.map(LanguageSelection.exact) ?? .auto,
             task: task,
@@ -1140,13 +1279,18 @@ final class ModelManagerService: ObservableObject {
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> TranscriptionResult {
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
         try await HistoryRetranscriptionActivity.waitForEngineAvailability()
-        let providerId = engineOverrideId ?? selectedProviderId
+        let providerId = effectiveEngineId(engineOverrideId)
         guard let providerId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
               canUseForTranscription(plugin), !lacksDownloadedModel(plugin) else {
             throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
+        // Dictionary terms are text: under a cloud text restriction they stay off engines that are not local.
+        let promptTextAllowed = PluginManager.shared.allowsPromptText(forTranscriptionProviderId: providerId)
+        let prompt = promptTextAllowed ? prompt : nil
+        let dictionaryTermHints = promptTextAllowed ? dictionaryTermHints : []
 
         beginAutoUnloadProtectedUse(of: plugin)
         var overrideRestoreId: String?
@@ -1222,7 +1366,8 @@ final class ModelManagerService: ObservableObject {
     /// restoring an auto-unloaded local model right away, so the load overlaps with speaking
     /// instead of delaying the transcript after the stop. Ends with `endDictationModelPrewarm()`.
     func beginDictationModelPrewarm(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) {
-        guard let providerId = engineOverrideId ?? selectedProviderId,
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
+        guard let providerId = effectiveEngineId(engineOverrideId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
               let nsPlugin = plugin as? NSObject else {
             endDictationModelPrewarm()
@@ -1882,6 +2027,7 @@ final class ModelManagerService: ObservableObject {
         requestedLanguage: String?,
         cloudModelOverride: String?
     ) async throws -> String? {
+        let cloudModelOverride = effectiveModelOverride(cloudModelOverride)
         let modelOverride = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
         let previousModelId = modelOverride.previousId
         let overrideRestoreId = modelOverride.restoreId

@@ -890,6 +890,7 @@ struct PluginSettingsView: View {
             }
 
             if !plugin.isEnabled {
+                let policyRefusal = pluginManager.policyRefusals[plugin.id]
                 Button {
                     PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
                 } label: {
@@ -899,8 +900,14 @@ struct PluginSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
-                .disabled(restartRequired || registryService.isBulkUpdating)
+                .disabled(restartRequired || registryService.isBulkUpdating || policyRefusal != nil)
                 .padding(.top, 4)
+
+                if let policyRefusal {
+                    ManagedByOrganizationLabel(text: policyRefusal)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 460)
+                }
 
                 if !plugin.isBundled {
                     Button(role: .destructive) {
@@ -1551,6 +1558,7 @@ struct PluginSettingsView: View {
                     source: integrationSource(for: plugin),
                     installState: registryService.installStates[plugin.id],
                     detailsURLString: detailsURLString,
+                    policyRefusal: PluginRegistryService.installRefusal(for: plugin, policy: pluginManager.providerPolicy),
                     onInstall: {
                         startInstall(plugin)
                     },
@@ -2354,6 +2362,8 @@ private struct AvailablePluginRow: View {
     let source: IntegrationPluginSource
     let installState: PluginRegistryService.InstallState?
     let detailsURLString: String?
+    /// Why the organization does not allow installing the plugin; replaces the Install button.
+    var policyRefusal: String?
     let onInstall: () -> Void
     let onOpenDetails: () -> Void
 
@@ -2408,7 +2418,11 @@ private struct AvailablePluginRow: View {
                     PluginInstallStateView(state: state, name: plugin.name)
                 }
 
-                if case .error = installState {
+                if let policyRefusal {
+                    ManagedByOrganizationLabel(text: String(localized: "Not allowed by your organization"))
+                        .help(policyRefusal)
+                        .accessibilityHint(policyRefusal)
+                } else if case .error = installState {
                     Button(String(localized: "Retry")) {
                         onInstall()
                     }

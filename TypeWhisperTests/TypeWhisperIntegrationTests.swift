@@ -3306,6 +3306,133 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
     }
 
+    func testTranscribeEndpointRefusesWhileTheEnforcedPairCannotBeUsed() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
+                enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "x")
+            ))
+            context.modelManager.restoreProviderSelection()
+            return context
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let wavData = WavEncoder.encode(Array(repeating: Float(0), count: 1600))
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"test.wav\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
+        body.append(wavData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        // No engine or model in the request: the unusable pair still decides, instead of "No engine selected".
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: body
+            )
+        )
+
+        XCTAssertEqual(response.status, 403)
+        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
+        let reason = await MainActor.run { PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason }
+        XCTAssertNotNil(reason)
+        XCTAssertEqual(error["message"] as? String, reason)
+        XCTAssertEqual(error["code"] as? String, "forbidden")
+    }
+
+    func testTranscribeEndpointRefusesAnEngineTheManagedSettingsRefuse() async throws {
+        // The refused engine leaves the engine list; the API names the policy, not an unknown engine.
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
+            field: "engine",
+            value: { $0 },
+            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
+        )
+    }
+
+    func testTranscribeEndpointRefusesAModelOfAnEngineTheManagedSettingsRefuse() async throws {
+        // Only the model is named; its engine is refused, so the API names the policy, not an unknown model.
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedTranscriptionProviders: ["com.typewhisper.tests.other"]),
+            field: "model",
+            value: { _ in "tiny" },
+            expectedReason: { PluginManager.shared.transcriptionPolicyRefusal(forProviderId: $0) }
+        )
+    }
+
+    func testTranscribeEndpointRefusesAModelOfAPluginRefusedAsAWhole() async throws {
+        // The refused plugin stops and offers no models any more; the models it offered are remembered.
+        try await assertTranscribeRefusedByPolicy(
+            ManagedProviderPolicy(allowedPlugins: ["com.typewhisper.tests.other"]),
+            field: "model",
+            value: { _ in "tiny" },
+            expectedReason: { _ in PluginManager.shared.policyRefusals["com.typewhisper.mock.transcription"] }
+        )
+    }
+
+    /// Applies `policy`, sends a transcription request with `field`, and expects the policy's 403
+    /// without the engine being called.
+    private func assertTranscribeRefusedByPolicy(
+        _ policy: ManagedProviderPolicy,
+        field: String,
+        value: @escaping (_ engineId: String) -> String,
+        expectedReason: @escaping @MainActor (_ engineId: String) -> String?
+    ) async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        let engineId = try await MainActor.run { () throws -> String in
+            let made = Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            context = made
+            let engineId = try XCTUnwrap(PluginManager.shared.transcriptionEngines.first?.providerId)
+            PluginManager.shared.applyProviderPolicy(policy)
+            return engineId
+        }
+
+        let router = try XCTUnwrap(context?.router)
+        let boundary = "TestBoundary-\(UUID().uuidString)"
+        let response = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/transcribe",
+                queryParams: [:],
+                headers: ["content-type": "multipart/form-data; boundary=\(boundary)"],
+                body: Self.multipartTranscribeBody(
+                    wavData: WavEncoder.encode(Array(repeating: Float(0), count: 1600)),
+                    boundary: boundary,
+                    fields: [(name: field, value: value(engineId))]
+                )
+            )
+        )
+
+        XCTAssertEqual(response.status, 403)
+        let error = try XCTUnwrap(Self.jsonObject(response)["error"] as? [String: Any])
+        let reason = await MainActor.run { expectedReason(engineId) }
+        XCTAssertNotNil(reason)
+        XCTAssertEqual(error["message"] as? String, reason)
+        XCTAssertEqual(error["code"] as? String, "forbidden")
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+    }
+
     func testTranscribeEndpointUsesDefaultNumberThreshold() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -5210,6 +5337,86 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(context.selectedText)
         XCTAssertEqual(context.previousCharacter, "e")
         XCTAssertEqual(context.nextCharacter, "m")
+    }
+
+    @MainActor
+    func testCaptureInsertionContextIgnoresGeneratedPlaceholderText() throws {
+        // An empty Tiptap composer in Firefox: the CSS placeholder and the trailing break are
+        // exposed as text, with the caret after the placeholder.
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.focusedTextElementOverride = { element }
+        service.focusedTextStateOverride = { _ in
+            (value: "Ask anything\n", selectedText: "", selectedRange: NSRange(location: 12, length: 0))
+        }
+        service.generatedTextRangesOverride = { _ in [NSRange(location: 0, length: 12)] }
+
+        let context = try XCTUnwrap(service.captureInsertionContext())
+
+        XCTAssertEqual(context.value, "\n")
+        XCTAssertEqual(context.selectedRange, NSRange(location: 0, length: 0))
+        XCTAssertNil(context.previousCharacter)
+        XCTAssertEqual(context.nextCharacter, "\n")
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "What is your name? Thank you.",
+                insertionContext: context
+            ),
+            "What is your name? Thank you."
+        )
+    }
+
+    @MainActor
+    func testGeneratedTextRangesReadGeckoAutoGeneratedRuns() {
+        let generated = NSAttributedString.Key("auto-generated")
+        let text = NSMutableAttributedString(string: "Ask anything\n")
+        text.addAttribute(generated, value: "true", range: NSRange(location: 0, length: 12))
+        XCTAssertEqual(
+            TextInsertionService.generatedTextRanges(in: text),
+            [NSRange(location: 0, length: 12)]
+        )
+
+        let list = NSMutableAttributedString(string: "1. one")
+        list.addAttribute(generated, value: NSNumber(value: true), range: NSRange(location: 0, length: 3))
+        list.addAttribute(generated, value: "false", range: NSRange(location: 3, length: 3))
+        XCTAssertEqual(
+            TextInsertionService.generatedTextRanges(in: list),
+            [NSRange(location: 0, length: 3)]
+        )
+    }
+
+    @MainActor
+    func testRemovingGeneratedTextMovesSelectionOntoRemainingText() throws {
+        let caretAfterMarker = try XCTUnwrap(TextInsertionService.removingGeneratedText(
+            from: "1. Hello world",
+            selectedRange: NSRange(location: 9, length: 0),
+            generatedRanges: [NSRange(location: 0, length: 3)]
+        ))
+        XCTAssertEqual(caretAfterMarker.value, "Hello world")
+        XCTAssertEqual(caretAfterMarker.selectedRange, NSRange(location: 6, length: 0))
+
+        let caretInsideMarker = try XCTUnwrap(TextInsertionService.removingGeneratedText(
+            from: "1. Hello",
+            selectedRange: NSRange(location: 1, length: 0),
+            generatedRanges: [NSRange(location: 0, length: 3)]
+        ))
+        XCTAssertEqual(caretInsideMarker.value, "Hello")
+        XCTAssertEqual(caretInsideMarker.selectedRange, NSRange(location: 0, length: 0))
+
+        let selectionAcrossRuns = try XCTUnwrap(TextInsertionService.removingGeneratedText(
+            from: "• one\n• two",
+            selectedRange: NSRange(location: 1, length: 9),
+            generatedRanges: [NSRange(location: 6, length: 2), NSRange(location: 0, length: 2)]
+        ))
+        XCTAssertEqual(selectionAcrossRuns.value, "one\ntwo")
+        XCTAssertEqual(selectionAcrossRuns.selectedRange, NSRange(location: 0, length: 6))
+
+        XCTAssertNil(TextInsertionService.removingGeneratedText(
+            from: "Hi",
+            selectedRange: NSRange(location: 3, length: 0),
+            generatedRanges: []
+        ))
     }
 
     @MainActor
@@ -16836,6 +17043,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             AppConstants.appSupportDirectory.standardizedFileURL.path
                 .hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path)
         )
+    }
+
+    func testTestHostDoesNotWriteTheAppsOwnPreferences() throws {
+        let appDomain = try XCTUnwrap(Bundle.main.bundleIdentifier)
+        let isolatedDefaults = try XCTUnwrap(TestHostIsolation.isolatedDefaults)
+        XCTAssertTrue(UserDefaults.standard === isolatedDefaults)
+        XCTAssertNotEqual(TestHostIsolation.defaultsSuiteName, appDomain)
+
+        let key = "testHostIsolationProbe.\(UUID().uuidString)"
+        UserDefaults.standard.set(true, forKey: key)
+        // Also removes the probe from the app's domain if the isolation ever breaks.
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        XCTAssertEqual(
+            CFPreferencesCopyAppValue(key as CFString, TestHostIsolation.defaultsSuiteName as CFString) as? Bool,
+            true
+        )
+        XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, appDomain as CFString))
+        XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesCurrentApplication))
+    }
+
+    func testTestHostDoesNotUseTheAppsKeychainItems() {
+        XCTAssertEqual(AppConstants.keychainServicePrefix, "com.typewhisper.mac.tests.apikey.")
     }
 
     func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {

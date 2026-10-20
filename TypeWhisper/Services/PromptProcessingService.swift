@@ -272,15 +272,42 @@ class PromptProcessingService: ObservableObject {
     /// again after an integration is reinstalled.
     func validateSelectionAfterPluginLoad() {
         setFallbackPriorityList(fallbackPriorityList, normalizeProviderIds: true)
+        applyRecommendedLlmPairIfNeeded()
+    }
+
+    /// A recommended LLM pair becomes the default language model of a profile that still has the
+    /// built-in default, once. The user can change it afterwards.
+    func applyRecommendedLlmPairIfNeeded() {
+        guard !userDefaults.bool(forKey: UserDefaultsKeys.managedLlmRecommendationApplied),
+              let manager = PluginManager.shared,
+              let recommended = manager.selectionPolicy.recommendedLlm,
+              case .resolved(let providerId, let modelId) = manager.resolveLlmPair(recommended) else { return }
+        let keepsBuiltInDefault = fallbackPriorityList.count == 1
+            && fallbackPriorityList[0].providerId == Self.appleIntelligenceId
+            && fallbackPriorityList[0].modelId == nil
+        // A provider that is not ready yet would fail every call; a later plugin change retries.
+        guard keepsBuiltInDefault, isProviderReady(providerId) else { return }
+        userDefaults.set(true, forKey: UserDefaultsKeys.managedLlmRecommendationApplied)
+        setFallbackPriorityList(
+            [LLMFallbackPriorityItem(providerId: providerId, modelId: providerId == Self.appleIntelligenceId ? nil : modelId)],
+            normalizeProviderIds: true
+        )
     }
 
     // MARK: - Fallback list management
+
+    /// An enforced LLM pair replaces the list for every call; the list stays as the user saved it
+    /// for when the pair is removed, so it cannot be edited meanwhile.
+    var isFallbackListLocked: Bool {
+        PluginManager.shared?.selectionPolicy.enforcesLlm == true
+    }
 
     func addLLMFallback(
         providerId: String,
         modelId: String? = nil,
         effortId: String? = nil
     ) {
+        guard !isFallbackListLocked else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -307,7 +334,8 @@ class PromptProcessingService: ObservableObject {
         modelId: String? = nil,
         effortId: String? = nil
     ) {
-        guard let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
+        guard !isFallbackListLocked,
+              let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
@@ -326,6 +354,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func removeLLMFallback(_ item: LLMFallbackPriorityItem) {
+        guard !isFallbackListLocked else { return }
         setFallbackPriorityList(
             fallbackPriorityList.filter { $0.id != item.id },
             normalizeProviderIds: false
@@ -333,7 +362,7 @@ class PromptProcessingService: ObservableObject {
     }
 
     func moveLLMFallbacks(from source: IndexSet, to destination: Int) {
-        guard !source.isEmpty else { return }
+        guard !isFallbackListLocked, !source.isEmpty else { return }
 
         var items = fallbackPriorityList
         let validSource = source.filter { items.indices.contains($0) }.sorted()
@@ -478,12 +507,19 @@ class PromptProcessingService: ObservableObject {
         )
     }
 
-    /// The attempts `execute` makes: the explicit provider, or the fallback list.
+    /// The attempts `execute` makes: the enforced pair, the explicit provider, or the fallback list.
     private func candidates(
         providerOverride: String?,
         cloudModelOverride: String?,
         effortOverride: String?
     ) -> [LLMFallbackPriorityItem] {
+        // An enforced pair replaces every workflow, prompt and request selection, without fallbacks.
+        if case .resolved(let providerId, let modelId)? = PluginManager.shared?.enforcedLlmResolution {
+            return [LLMFallbackPriorityItem(
+                providerId: providerId,
+                modelId: providerId == Self.appleIntelligenceId ? nil : modelId
+            )]
+        }
         guard let explicitProviderId = Self.trimmedOrNil(providerOverride) else {
             return fallbackPriorityList
         }
@@ -542,7 +578,11 @@ class PromptProcessingService: ObservableObject {
             logger.info("Prompt memory retrieval skipped")
         }
 
+        if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
+            throw ManagedPolicyRefusal(reason: reason)
+        }
         let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
+            && PluginManager.shared?.enforcedLlmResolution == nil
         let candidates = self.candidates(
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
@@ -562,6 +602,8 @@ class PromptProcessingService: ObservableObject {
         }
 
         var failures: [LLMFallbackAttemptFailure] = []
+        // When the managed settings refuse every candidate, the refusal is the answer, not exhaustion.
+        var policyRefusals: [ManagedPolicyRefusal] = []
         var emptyResultCount = 0
         var emptyProviderIds: Set<String> = []
         var firstEmptyCandidate: LLMFallbackPriorityItem?
@@ -644,6 +686,9 @@ class PromptProcessingService: ObservableObject {
                     throw error
                 }
 
+                if let refusal = error as? ManagedPolicyRefusal {
+                    policyRefusals.append(refusal)
+                }
                 if case LLMFallbackAttemptError.emptyResult = error {
                     emptyResultCount += 1
                     emptyProviderIds.insert(providerId)
@@ -733,6 +778,9 @@ class PromptProcessingService: ObservableObject {
             }
         }
 
+        if let refusal = policyRefusals.first, policyRefusals.count == failures.count {
+            throw refusal
+        }
         throw LLMFallbackExhaustedError(failures: failures)
     }
 
@@ -746,6 +794,13 @@ class PromptProcessingService: ObservableObject {
         onLocalProviderUsed: (any LLMProviderPlugin) -> Void
     ) async throws -> String {
         if providerId == Self.appleIntelligenceId {
+            if let refusal = PluginManager.shared?.providerPolicy.llmRefusal(
+                pluginId: ManagedProviderPolicy.appleIntelligenceId,
+                providerId: Self.appleIntelligenceId,
+                locality: .local
+            ) {
+                throw ManagedPolicyRefusal(reason: refusal)
+            }
             guard let provider = appleIntelligenceProvider, provider.isAvailable else {
                 throw LLMError.notAvailable
             }
@@ -762,6 +817,10 @@ class PromptProcessingService: ObservableObject {
             }
         }
 
+        // Refused providers are not in the provider list; name the reason instead of a missing provider.
+        if let refusal = PluginManager.shared?.llmPolicyRefusal(forProviderId: providerId) {
+            throw ManagedPolicyRefusal(reason: refusal)
+        }
         guard let plugin = PluginManager.shared?.llmProvider(for: providerId) else {
             throw LLMError.noProviderConfigured
         }

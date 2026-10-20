@@ -113,12 +113,18 @@ struct RegistryPlugin: Codable, Identifiable {
     let iconSystemName: String?
     let requiresAPIKey: Bool?
     let hosting: PluginHosting?
+    /// The raw `locality` value the catalog publishes; unknown values resolve to nil.
+    let locality: String?
     let descriptions: [String: String]?
     let downloadCount: Int?
     let detailsURL: String?
     let homepageURL: String?
     let iconURL: String?
     let iconDarkURL: String?
+
+    var resolvedLocality: PluginLocality? {
+        locality.flatMap { PluginLocality(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
 
     var localizedDescription: String {
         if let descriptions,
@@ -168,7 +174,8 @@ struct RegistryPlugin: Codable, Identifiable {
         detailsURL: String? = nil,
         homepageURL: String? = nil,
         iconURL: String? = nil,
-        iconDarkURL: String? = nil
+        iconDarkURL: String? = nil,
+        locality: String? = nil
     ) {
         self.id = id
         self.source = source
@@ -188,6 +195,7 @@ struct RegistryPlugin: Codable, Identifiable {
         self.iconSystemName = iconSystemName
         self.requiresAPIKey = requiresAPIKey
         self.hosting = hosting
+        self.locality = locality
         self.descriptions = descriptions
         self.downloadCount = downloadCount
         self.detailsURL = detailsURL
@@ -244,6 +252,7 @@ struct RegistryPluginEntry: Decodable {
     let iconSystemName: String?
     let requiresAPIKey: Bool?
     let hosting: PluginHosting?
+    let locality: String?
     let descriptions: [String: String]?
     let downloadCount: Int?
     let detailsURL: String?
@@ -264,6 +273,7 @@ struct RegistryPluginEntry: Decodable {
         case iconSystemName
         case requiresAPIKey
         case hosting
+        case locality
         case descriptions
         case downloadCount
         case detailsURL
@@ -300,6 +310,7 @@ struct RegistryPluginEntry: Decodable {
         iconSystemName = try container.decodeIfPresent(String.self, forKey: .iconSystemName)
         requiresAPIKey = try container.decodeIfPresent(Bool.self, forKey: .requiresAPIKey)
         hosting = try container.decodeIfPresent(PluginHosting.self, forKey: .hosting)
+        locality = try? container.decodeIfPresent(String.self, forKey: .locality)
         descriptions = try container.decodeIfPresent([String: String].self, forKey: .descriptions)
         downloadCount = try container.decodeIfPresent(Int.self, forKey: .downloadCount)
         detailsURL = Self.validHTTPURLString(from: try? container.decodeIfPresent(String.self, forKey: .detailsURL))
@@ -382,7 +393,8 @@ struct RegistryPluginEntry: Decodable {
             detailsURL: detailsURL,
             homepageURL: homepageURL,
             iconURL: iconURL,
-            iconDarkURL: iconDarkURL
+            iconDarkURL: iconDarkURL,
+            locality: locality
         )
     }
 }
@@ -734,7 +746,7 @@ final class PluginRegistryService: ObservableObject {
                 }
 
                 if case .updateAvailable = installInfo(for: plugin.id) {
-                    return true
+                    return Self.installRefusal(for: plugin) == nil
                 }
                 return false
             }
@@ -778,6 +790,22 @@ final class PluginRegistryService: ObservableObject {
         )
     }
 
+    /// Why the managed settings refuse installing or updating this plugin, judged by its catalog
+    /// entry. The loaded manifest is judged again when the plugin loads.
+    static func installRefusal(
+        for plugin: RegistryPlugin,
+        policy: ManagedProviderPolicy? = PluginManager.shared?.providerPolicy
+    ) -> String? {
+        guard let policy else { return nil }
+        #if !APPSTORE
+        // The App Store edition installs its built-in plugins without downloading.
+        if let refusal = policy.pluginDownloadRefusal {
+            return refusal
+        }
+        #endif
+        return policy.packageRefusal(pluginId: plugin.id, locality: plugin.resolvedLocality, categories: plugin.categories)
+    }
+
     // MARK: - Install Info
 
     func installInfo(for pluginId: String) -> PluginInstallInfo {
@@ -804,6 +832,11 @@ final class PluginRegistryService: ObservableObject {
 
     @discardableResult
     func downloadAndInstall(_ plugin: RegistryPlugin) async -> Bool {
+        // Refused before any byte is downloaded, for Marketplace installs, updates, backups and setup.
+        if let refusal = Self.installRefusal(for: plugin) {
+            installStates[plugin.id] = .error(refusal)
+            return false
+        }
         #if APPSTORE
         return installBundledPlugin(plugin)
         #endif
@@ -863,6 +896,12 @@ final class PluginRegistryService: ObservableObject {
             let extracted = try FileManager.default.contentsOfDirectory(at: extractDir, includingPropertiesForKeys: nil)
             guard let bundleURL = extracted.first(where: { $0.pathExtension == "bundle" }) else {
                 installStates[plugin.id] = .error("No .bundle found in ZIP")
+                return false
+            }
+
+            // Judged again: the managed settings may have changed while the archive downloaded.
+            if let refusal = Self.installRefusal(for: plugin) {
+                installStates[plugin.id] = .error(refusal)
                 return false
             }
 
@@ -973,6 +1012,9 @@ final class PluginRegistryService: ObservableObject {
 
     @discardableResult
     func installFromFile(_ url: URL) async throws -> PluginManifest {
+        if let refusal = PluginManager.shared?.providerPolicy.pluginDownloadRefusal {
+            throw ManagedPolicyRefusal(reason: refusal)
+        }
         #if APPSTORE
         throw NSError(domain: "PluginRegistry", code: 6,
                       userInfo: [NSLocalizedDescriptionKey: "Plugins from files are not available in the Mac App Store edition"])
@@ -1056,6 +1098,12 @@ final class PluginRegistryService: ObservableObject {
                 code: 3,
                 userInfo: [NSLocalizedDescriptionKey: "Downloaded bundle ID \(manifest.id) does not match expected plugin \(expectedPluginId)"]
             )
+        }
+
+        // The catalog entry was judged before downloading; the bundle's own manifest decides, and
+        // a refused plugin must not be installed even though it would never load.
+        if let refusal = PluginManager.shared?.providerPolicy.packageRefusal(for: manifest) {
+            throw ManagedPolicyRefusal(reason: refusal)
         }
 
         let destinationURL = Self.resolveInstallDestinationURL(
