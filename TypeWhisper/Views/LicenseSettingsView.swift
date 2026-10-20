@@ -182,10 +182,10 @@ struct LicenseSettingsView: View {
 
                 planSelectionButton(
                     title: localizedAppText("Enterprise", de: "Unternehmensplan"),
-                    price: localizedAppText("from 99 EUR/mo", de: "ab 99 EUR/Monat"),
+                    price: localizedAppText("from 199 EUR/mo", de: "ab 199 EUR/Monat"),
                     description: localizedAppText(
-                        "Company-wide rollout, procurement, and compliance-heavy setups.",
-                        de: "Firmenweiter Rollout, Beschaffung und Setups mit hohen Compliance-Anforderungen."
+                        "Up to 50 devices, a reply within one business day, and help with rollout and security reviews.",
+                        de: "Bis zu 50 Geräte, Antwort innerhalb eines Arbeitstags und Hilfe bei Rollout und Security-Reviews."
                     ),
                     systemImage: "building.2",
                     selected: license.usageIntent == .enterprise || license.licenseTier == .enterprise,
@@ -261,38 +261,37 @@ struct LicenseSettingsView: View {
                         .accessibilityAddTraits(.isHeader)
 
                     if let selectedCommercialTier {
-                        HStack(alignment: .top, spacing: 12) {
-                            purchaseOptionCard(
-                                eyebrow: localizedAppText("Flexible", de: "Flexibel"),
-                                title: localizedAppText("Monthly subscription", de: "Monatsabo"),
-                                pricing: commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: .monthly),
-                                description: monthlyPurchaseDescription(for: selectedCommercialTier),
-                                systemImage: "calendar",
-                                accent: .accentColor
-                            ) {
-                                openURL(selectedCommercialMonthlyURL)
-                            }
-
-                            purchaseOptionCard(
-                                eyebrow: localizedAppText("One-time purchase", de: "Einmalkauf"),
-                                title: localizedAppText("Lifetime", de: "Dauerlizenz"),
-                                pricing: commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: .lifetime),
-                                description: lifetimePurchaseDescription(for: selectedCommercialTier),
-                                systemImage: "infinity",
-                                accent: Color(red: 0.96, green: 0.69, blue: 0.22),
-                                badge: localizedAppText("Best Value", de: "Bestes Angebot"),
-                                emphasized: true
-                            ) {
-                                openURL(selectedCommercialLifetimeURL)
+                        LazyVGrid(columns: planColumns, alignment: .leading, spacing: 12) {
+                            ForEach(commercialPurchaseCadences(for: selectedCommercialTier), id: \.self) { cadence in
+                                if let pricing = commercialPurchaseOptionCopy(for: selectedCommercialTier, cadence: cadence),
+                                   let description = purchaseDescription(for: selectedCommercialTier, cadence: cadence) {
+                                    purchaseOptionCard(
+                                        for: selectedCommercialTier,
+                                        cadence: cadence,
+                                        pricing: pricing,
+                                        description: description
+                                    )
+                                }
                             }
                         }
 
-                        Text(localizedAppText(
-                            "Monthly is recurring. Lifetime is a one-time purchase for the same tier.",
-                            de: "Das Monatsabo ist wiederkehrend. Die Dauerlizenz ist ein einmaliger Kauf für dasselbe Paket."
-                        ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text(purchaseOptionsNote(for: selectedCommercialTier))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if selectedCommercialTier == .enterprise {
+                            Button {
+                                openURL(AppConstants.Website.licensingEmailURL)
+                            } label: {
+                                Label(
+                                    localizedAppText("More than 50 devices? Contact sales", de: "Mehr als 50 Geräte? Vertrieb kontaktieren"),
+                                    systemImage: "envelope"
+                                )
+                            }
+                            .buttonStyle(.link)
+                            .modifier(PointingHandCursorModifier())
+                        }
 
                         pricingWebsiteLink
                     }
@@ -766,8 +765,8 @@ struct LicenseSettingsView: View {
             )
         case .enterprise:
             return localizedAppText(
-                "Enterprise covers company-wide rollout, procurement, and unlimited devices.",
-                de: "Der Unternehmensplan deckt firmenweiten Rollout, Beschaffung und unbegrenzt viele Geräte ab."
+                "Enterprise covers up to 50 devices with a reply within one business day and help with rollout and security reviews. For more devices, contact sales.",
+                de: "Der Unternehmensplan deckt bis zu 50 Geräte ab, mit Antwort innerhalb eines Arbeitstags und Hilfe bei Rollout und Security-Reviews. Für mehr Geräte kontaktiere den Vertrieb."
             )
         }
     }
@@ -809,8 +808,8 @@ struct LicenseSettingsView: View {
                 )
             case .enterprise:
                 return localizedAppText(
-                    "This Mac is covered by an enterprise license for company-wide rollout and unlimited devices.",
-                    de: "Dieser Mac ist durch eine Unternehmenslizenz für firmenweiten Rollout und unbegrenzt viele Geräte abgedeckt."
+                    "This Mac is covered by an enterprise license for your organization's rollout.",
+                    de: "Dieser Mac ist durch eine Unternehmenslizenz für den Rollout deiner Organisation abgedeckt."
                 )
             }
         }
@@ -821,43 +820,109 @@ struct LicenseSettingsView: View {
         )
     }
 
-    private func monthlyPurchaseDescription(for tier: LicenseTier) -> String {
-        switch tier {
-        case .individual:
+    private func purchaseDescription(for tier: LicenseTier, cadence: CommercialPurchaseCadence) -> String? {
+        switch (tier, cadence) {
+        case (.individual, .monthly):
             return localizedAppText(
                 "Individual commercial license terms for up to 3 devices with recurring billing.",
                 de: "Kommerzielle Einzelnutzer-Bedingungen für bis zu 3 Geräte mit wiederkehrender Abrechnung."
             )
-        case .team:
+        case (.team, .monthly):
             return localizedAppText(
                 "Keeps a team of up to 10 devices covered with a recurring plan.",
                 de: "Deckt ein Team mit bis zu 10 Geräten über einen wiederkehrenden Plan ab."
             )
-        case .enterprise:
+        case (.enterprise, .monthly):
             return localizedAppText(
-                "Recurring company-wide plan for rollout, procurement, and unlimited devices.",
-                de: "Wiederkehrender firmenweiter Plan für Rollout, Beschaffung und unbegrenzt viele Geräte."
+                "Recurring plan for up to 50 devices with faster support.",
+                de: "Wiederkehrender Plan für bis zu 50 Geräte mit schnellerem Support."
             )
-        }
-    }
-
-    private func lifetimePurchaseDescription(for tier: LicenseTier) -> String {
-        switch tier {
-        case .individual:
+        case (.individual, .yearly):
+            return localizedAppText(
+                "The same 3-device Individual tier, billed once a year.",
+                de: "Dasselbe Einzelnutzer-Paket mit 3 Geräten, einmal im Jahr abgerechnet."
+            )
+        case (.team, .yearly):
+            return localizedAppText(
+                "The same Team tier with up to 10 devices, billed once a year.",
+                de: "Dasselbe Team-Paket mit bis zu 10 Geräten, einmal im Jahr abgerechnet."
+            )
+        case (.enterprise, .yearly):
+            return localizedAppText(
+                "The same Enterprise tier with up to 50 devices, billed once a year.",
+                de: "Dasselbe Unternehmens-Paket mit bis zu 50 Geräten, einmal im Jahr abgerechnet."
+            )
+        case (.individual, .lifetime):
             return localizedAppText(
                 "One payment for the same 3-device Individual tier, with no monthly renewal.",
                 de: "Eine Zahlung für dasselbe Einzelnutzer-Paket mit 3 Geräten, ohne monatliche Verlängerung."
             )
-        case .team:
+        case (.team, .lifetime):
             return localizedAppText(
                 "One payment for the same Team tier with up to 10 devices and no renewal cycle.",
                 de: "Eine Zahlung für dasselbe Team-Paket mit bis zu 10 Geräten und ohne Verlängerungszyklus."
             )
-        case .enterprise:
+        case (.enterprise, .lifetime):
+            return nil
+        }
+    }
+
+    private func purchaseOptionsNote(for tier: LicenseTier) -> String {
+        if commercialPurchaseCadences(for: tier).contains(.lifetime) {
             return localizedAppText(
-                "One payment for the same Enterprise rollout tier with unlimited devices.",
-                de: "Eine Zahlung für dasselbe Unternehmens-Paket mit unbegrenzt vielen Geräten."
+                "Monthly and yearly renew automatically; a year costs ten monthly prices. Lifetime is a one-time purchase for the same tier.",
+                de: "Monats- und Jahresabo verlängern sich automatisch; ein Jahr kostet zehn Monatspreise. Die Dauerlizenz ist ein einmaliger Kauf für dasselbe Paket."
             )
+        }
+        return localizedAppText(
+            "Enterprise is available as a monthly or yearly subscription; a year costs ten monthly prices.",
+            de: "Den Unternehmensplan gibt es als Monats- oder Jahresabo; ein Jahr kostet zehn Monatspreise."
+        )
+    }
+
+    private func purchaseOptionCard(
+        for tier: LicenseTier,
+        cadence: CommercialPurchaseCadence,
+        pricing: CommercialPurchaseOptionCopy,
+        description: String
+    ) -> some View {
+        let open = { openURL(commercialCheckoutURL(for: tier, cadence: cadence)) }
+
+        return Group {
+            switch cadence {
+            case .monthly:
+                purchaseOptionCard(
+                    eyebrow: localizedAppText("Flexible", de: "Flexibel"),
+                    title: localizedAppText("Monthly subscription", de: "Monatsabo"),
+                    pricing: pricing,
+                    description: description,
+                    systemImage: "calendar",
+                    accent: .accentColor,
+                    action: open
+                )
+            case .yearly:
+                purchaseOptionCard(
+                    eyebrow: localizedAppText("Billed yearly", de: "Jährliche Abrechnung"),
+                    title: localizedAppText("Yearly subscription", de: "Jahresabo"),
+                    pricing: pricing,
+                    description: description,
+                    systemImage: "calendar.badge.clock",
+                    accent: .green,
+                    action: open
+                )
+            case .lifetime:
+                purchaseOptionCard(
+                    eyebrow: localizedAppText("One-time purchase", de: "Einmalkauf"),
+                    title: localizedAppText("Lifetime", de: "Dauerlizenz"),
+                    pricing: pricing,
+                    description: description,
+                    systemImage: "infinity",
+                    accent: Color(red: 0.96, green: 0.69, blue: 0.22),
+                    badge: localizedAppText("Best Value", de: "Bestes Angebot"),
+                    emphasized: true,
+                    action: open
+                )
+            }
         }
     }
 
@@ -874,39 +939,23 @@ struct LicenseSettingsView: View {
         }
     }
 
-    private var selectedCommercialMonthlyURL: URL? {
-        guard let tier = selectedCommercialTier else { return nil }
-
-        let urlString: String = switch tier {
-        case .individual:
-            AppConstants.Polar.checkoutURLIndividual
-        case .team:
-            AppConstants.Polar.checkoutURLTeam
-        case .enterprise:
-            AppConstants.Polar.checkoutURLEnterprise
+    private func commercialCheckoutURL(for tier: LicenseTier, cadence: CommercialPurchaseCadence) -> URL? {
+        let urlString: String? = switch (tier, cadence) {
+        case (.individual, .monthly): AppConstants.Polar.checkoutURLIndividual
+        case (.team, .monthly): AppConstants.Polar.checkoutURLTeam
+        case (.enterprise, .monthly): AppConstants.Polar.checkoutURLEnterprise
+        case (.individual, .yearly): AppConstants.Polar.checkoutURLIndividualYearly
+        case (.team, .yearly): AppConstants.Polar.checkoutURLTeamYearly
+        case (.enterprise, .yearly): AppConstants.Polar.checkoutURLEnterpriseYearly
+        case (.individual, .lifetime): AppConstants.Polar.checkoutURLIndividualLifetime
+        case (.team, .lifetime): AppConstants.Polar.checkoutURLTeamLifetime
+        case (.enterprise, .lifetime): nil
         }
+        guard let urlString else { return nil }
 
         return AppConstants.Polar.appCheckoutURL(
             baseURL: urlString,
-            content: "settings_\(tier.rawValue)_monthly"
-        )
-    }
-
-    private var selectedCommercialLifetimeURL: URL? {
-        guard let tier = selectedCommercialTier else { return nil }
-
-        let urlString: String = switch tier {
-        case .individual:
-            AppConstants.Polar.checkoutURLIndividualLifetime
-        case .team:
-            AppConstants.Polar.checkoutURLTeamLifetime
-        case .enterprise:
-            AppConstants.Polar.checkoutURLEnterpriseLifetime
-        }
-
-        return AppConstants.Polar.appCheckoutURL(
-            baseURL: urlString,
-            content: "settings_\(tier.rawValue)_lifetime"
+            content: "settings_\(tier.rawValue)_\(cadence.rawValue)"
         )
     }
 
@@ -1055,9 +1104,20 @@ struct LicenseSettingsView: View {
     }
 }
 
-enum CommercialPurchaseCadence {
+enum CommercialPurchaseCadence: String, CaseIterable {
     case monthly
+    case yearly
     case lifetime
+}
+
+/// The ways a tier can be bought. Enterprise is sold as a subscription only.
+func commercialPurchaseCadences(for tier: LicenseTier) -> [CommercialPurchaseCadence] {
+    switch tier {
+    case .individual, .team:
+        [.monthly, .yearly, .lifetime]
+    case .enterprise:
+        [.monthly, .yearly]
+    }
 }
 
 struct CommercialPurchaseOptionCopy: Equatable {
@@ -1066,44 +1126,48 @@ struct CommercialPurchaseOptionCopy: Equatable {
     let detail: String
 }
 
-func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurchaseCadence) -> CommercialPurchaseOptionCopy {
+func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurchaseCadence) -> CommercialPurchaseOptionCopy? {
+    let monthly = localizedAppText("per month", de: "pro Monat")
+    let yearly = localizedAppText("per year", de: "pro Jahr")
+    let oneTime = localizedAppText("one-time", de: "einmalig")
+    let twoMonthsFree = localizedAppText("Two months free", de: "Zwei Monate gratis")
+    let payOnce = localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
+
     switch (tier, cadence) {
     case (.individual, .monthly):
-        CommercialPurchaseOptionCopy(
+        return CommercialPurchaseOptionCopy(
             price: "5 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
+            billingLabel: monthly,
             detail: localizedAppText("Lower upfront cost", de: "Geringerer Einstiegspreis")
         )
+    case (.individual, .yearly):
+        return CommercialPurchaseOptionCopy(price: "50 EUR", billingLabel: yearly, detail: twoMonthsFree)
     case (.individual, .lifetime):
-        CommercialPurchaseOptionCopy(
-            price: "99 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
-        )
+        return CommercialPurchaseOptionCopy(price: "99 EUR", billingLabel: oneTime, detail: payOnce)
     case (.team, .monthly):
-        CommercialPurchaseOptionCopy(
+        return CommercialPurchaseOptionCopy(
             price: "19 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
+            billingLabel: monthly,
             detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
         )
+    case (.team, .yearly):
+        return CommercialPurchaseOptionCopy(price: "190 EUR", billingLabel: yearly, detail: twoMonthsFree)
     case (.team, .lifetime):
-        CommercialPurchaseOptionCopy(
-            price: "299 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
-        )
+        return CommercialPurchaseOptionCopy(price: "299 EUR", billingLabel: oneTime, detail: payOnce)
     case (.enterprise, .monthly):
-        CommercialPurchaseOptionCopy(
-            price: "99 EUR",
-            billingLabel: localizedAppText("per month", de: "pro Monat"),
+        return CommercialPurchaseOptionCopy(
+            price: "199 EUR",
+            billingLabel: monthly,
             detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
+        )
+    case (.enterprise, .yearly):
+        return CommercialPurchaseOptionCopy(
+            price: localizedAppText("1,990 EUR", de: "1.990 EUR"),
+            billingLabel: yearly,
+            detail: twoMonthsFree
         )
     case (.enterprise, .lifetime):
-        CommercialPurchaseOptionCopy(
-            price: "999 EUR",
-            billingLabel: localizedAppText("one-time", de: "einmalig"),
-            detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
-        )
+        return nil
     }
 }
 
