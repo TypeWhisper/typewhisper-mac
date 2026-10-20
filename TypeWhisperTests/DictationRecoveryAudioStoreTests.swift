@@ -809,5 +809,16 @@ final class DictationRecoveryErrorAnnouncementTests: XCTestCase {
             DictationRecoveryView.newRecoveryErrors(previous: ["a": failed], current: ["a": "Engine unavailable"]),
             ["Engine unavailable"]
         )
+
+        // Two recordings failing together with the same message are one announcement
+        // that names how many failed, so the duplicate filter cannot drop the second.
+        let together = DictationRecoveryView.newRecoveryErrors(
+            previous: [:],
+            current: ["a": failed, "b": failed, "c": "Engine unavailable"]
+        )
+        XCTAssertEqual(together.count, 2)
+        XCTAssertTrue(together[0].hasPrefix(failed), together[0])
+        XCTAssertTrue(together[0].contains("2"), together[0])
+        XCTAssertEqual(together[1], "Engine unavailable")
     }
 }

@@ -46,11 +46,26 @@ struct DictationRecoveryView: View {
 
     /// Errors that a recording did not have before, compared per recording, so a second
     /// recording failing with the same message as another one is still announced.
+    /// Recordings that fail with the same message at once are announced together with
+    /// their number, because the announcement service speaks a repeated message once.
     static func newRecoveryErrors(previous: [String: String], current: [String: String]) -> [String] {
-        current
-            .filter { previous[$0.key] != $0.value }
-            .sorted { $0.key < $1.key }
-            .map(\.value)
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for (recordingID, message) in current.sorted(by: { $0.key < $1.key })
+        where previous[recordingID] != message {
+            if counts[message] == nil { order.append(message) }
+            counts[message, default: 0] += 1
+        }
+        return order.map { message in
+            let count = counts[message] ?? 1
+            guard count > 1 else { return message }
+            return localizedAppText(
+                "\(message) (\(count) recordings)",
+                de: "\(message) (\(count) Aufnahmen)",
+                ja: "\(message)（\(count)件の録音）",
+                zh: "\(message)（\(count) 个录音）"
+            )
+        }
     }
 
     private func announce(_ message: String) {
