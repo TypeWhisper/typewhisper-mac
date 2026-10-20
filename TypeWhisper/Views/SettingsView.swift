@@ -821,12 +821,11 @@ private struct SettingsSidebarRow: View {
         }
         .opacity(destination.isDimmed && !isSelected ? 0.5 : 1)
         .contentShape(Rectangle())
-        // One element per row: the title is its name, and the update badge and
-        // the dimmed look of a disabled plugin become its value. SwiftUI keeps the
+        // One text element per row, named by its title. The update badge and the
+        // dimmed look of a disabled plugin become its value. SwiftUI keeps the
         // outline row itself unnamed; VoiceOver reads this element for the row.
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(destination.title)
-        .accessibilityValue(accessibilityStatus)
+        .modifier(SettingsSidebarRowStatus(status: accessibilityStatus))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .onChange(of: isSelected) { _, selected in
             guard hasAppeared, selected, !reduceMotion else { return }
@@ -857,6 +856,21 @@ private struct SettingsSidebarRow: View {
     }
 }
 
+/// Sets the row's status as its value only when there is one. An empty value
+/// would replace the title, which UI scripting reads as the row text.
+private struct SettingsSidebarRowStatus: ViewModifier {
+    let status: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if status.isEmpty {
+            content
+        } else {
+            content.accessibilityValue(status)
+        }
+    }
+}
+
 /// The plugin's own logo, so installed plugins are recognizable in the sidebar.
 private struct SettingsSidebarPluginIcon: View {
     let destination: SettingsDestination
@@ -881,6 +895,8 @@ private struct SettingsSidebarPluginIcon: View {
                 Image(systemName: destination.systemImage)
             }
         }
+        // Decorative next to the plugin name.
+        .accessibilityHidden(true)
         .task(id: resolvedURL) {
             guard let resolvedURL else {
                 image = nil
