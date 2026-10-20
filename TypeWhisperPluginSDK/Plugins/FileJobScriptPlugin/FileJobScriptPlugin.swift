@@ -493,7 +493,7 @@ private struct FileJobScriptSettingsView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack {
                                 Toggle(String(localized: "Enabled"), isOn: $script.isEnabled)
-                                    .accessibilityLabel(Text("Enable \(script.name)"))
+                                    .accessibilityLabel(Text("Enable \(script.displayName)"))
                                 Spacer()
                                 Button(role: .destructive) {
                                     service.removeScript(id: script.id)
@@ -501,7 +501,7 @@ private struct FileJobScriptSettingsView: View {
                                     Image(systemName: "trash")
                                 }
                                 .buttonStyle(.borderless)
-                                .accessibilityLabel(Text("Delete \(script.name)"))
+                                .accessibilityLabel(Text("Delete \(script.displayName)"))
                             }
 
                             TextField(String(localized: "Name"), text: $script.name)
