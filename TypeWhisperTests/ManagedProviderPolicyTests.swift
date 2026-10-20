@@ -350,6 +350,30 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         XCTAssertNil(manager.transcriptionPolicyRefusal(forProviderId: "local-engine"))
     }
 
+    func testLegacyLlmAliasReportsTheRefusal() {
+        let manager = makeManager()
+        manager.loadedPlugins.append(loaded(AliasPolicyLLM(), id: AliasPolicyLLM.pluginId, locality: "cloud", categories: ["llm", "transcription"]))
+
+        manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTextProcessing: false))
+
+        let expected = manager.llmPolicyRefusal(forProviderId: AliasPolicyLLM.providerIdentifier)
+        XCTAssertNotNil(expected)
+        XCTAssertEqual(manager.llmPolicyRefusal(forProviderId: "Legacy Alias LLM"), expected)
+        XCTAssertEqual(manager.llmPolicyRefusal(forProviderId: " alias llm "), expected)
+    }
+
+    func testUninstalledRefusedPluginNoLongerReportsARefusal() {
+        let manager = makeManager()
+        manager.applyProviderPolicy(ManagedProviderPolicy(allowedPlugins: [PolicyTestEngine.localId, PolicyTestLLM.cloudId]))
+        XCTAssertNotNil(manager.transcriptionPolicyRefusal(forProviderId: "cloud-engine"))
+
+        manager.unloadPlugin(PolicyTestEngine.cloudId)
+
+        XCTAssertNil(manager.policyRefusals[PolicyTestEngine.cloudId])
+        XCTAssertNil(manager.transcriptionPolicyRefusal(forProviderId: "cloud-engine"))
+        XCTAssertNil(UserDefaults.standard.stringArray(forKey: PluginManager.knownProviderIdsKey(PolicyTestEngine.cloudId)))
+    }
+
     func testRefusedPluginFileIsNotInstalled() async throws {
         let manager = PluginManager(appSupportDirectory: directory)
         PluginManager.shared = manager
@@ -552,6 +576,24 @@ private final class PolicyTestEngine: NSObject, TranscriptionEnginePlugin, @unch
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "ok", detectedLanguage: language)
     }
+}
+
+private final class AliasPolicyLLM: NSObject, LLMProviderIdentityProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.alias-llm"
+    static let pluginName = "Alias LLM"
+    static let providerIdentifier = "com.typewhisper.tests.alias-llm.provider"
+
+    required override init() {}
+
+    var providerName: String { "Alias LLM" }
+    var providerId: String { Self.providerIdentifier }
+    var providerDisplayName: String { "Alias LLM" }
+    var providerLegacyAliases: [String] { ["Legacy Alias LLM"] }
+    var isAvailable: Bool { true }
+    var supportedModels: [PluginModelInfo] { [] }
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func process(systemPrompt: String, userText: String, model: String?) async throws -> String { userText }
 }
 
 private final class PolicyTestLLM: NSObject, LLMProviderPlugin, @unchecked Sendable {

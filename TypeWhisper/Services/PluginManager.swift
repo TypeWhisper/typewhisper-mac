@@ -486,6 +486,26 @@ final class PluginManager: ObservableObject {
         return transcriptionRefusal(for: providerId, in: plugin)
     }
 
+    /// Why the managed settings refuse the engine that offers this model, for requests that name
+    /// only a model. Searches the engines the filtered lists leave out.
+    func transcriptionPolicyRefusal(forModelId modelId: String) -> String? {
+        for plugin in loadedPlugins where plugin.isEnabled {
+            var engines: [TranscriptionEnginePlugin] = []
+            if let engine = plugin.instance as? TranscriptionEnginePlugin {
+                engines.append(engine)
+            }
+            if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
+                engines.append(contentsOf: expanded.additionalTranscriptionEngines)
+            }
+            for engine in engines where engine.modelCatalog.contains(where: { $0.id == modelId }) {
+                if let refusal = transcriptionRefusal(for: engine.providerId, in: plugin) {
+                    return refusal
+                }
+            }
+        }
+        return nil
+    }
+
     /// Provider IDs a plugin exposed when it last ran, so a plugin refused before it loads can still
     /// be matched to the engine or language model a user selected.
     static func knownProviderIdsKey(_ pluginId: String) -> String {
@@ -504,6 +524,8 @@ final class PluginManager: ObservableObject {
         for provider in llmProviders {
             ids.insert(provider.llmProviderId)
             ids.insert(provider.providerName)
+            ids.insert(provider.llmProviderDisplayName)
+            ids.formUnion(provider.llmProviderLegacyAliases)
         }
         let key = Self.knownProviderIdsKey(plugin.manifest.id)
         let sorted = ids.sorted()
@@ -520,6 +542,7 @@ final class PluginManager: ObservableObject {
 
     /// Why the managed settings refuse text for this language model provider, or nil.
     func llmPolicyRefusal(forProviderId providerId: String) -> String? {
+        let providerId = providerId.trimmingCharacters(in: .whitespacesAndNewlines)
         for plugin in loadedPlugins where plugin.isEnabled {
             var providers: [LLMProviderPlugin] = []
             if let provider = plugin.instance as? LLMProviderPlugin {
@@ -528,9 +551,11 @@ final class PluginManager: ObservableObject {
             if let expanded = plugin.instance as? AdditionalLLMProvidersProviding {
                 providers.append(contentsOf: expanded.additionalLLMProviders)
             }
-            if let provider = providers.first(where: {
-                $0.llmProviderId.caseInsensitiveCompare(providerId) == .orderedSame
-                    || $0.providerName.caseInsensitiveCompare(providerId) == .orderedSame
+            // The same names llmProvider(for:) accepts, so saved legacy aliases report the refusal too.
+            if let provider = providers.first(where: { provider in
+                ([provider.llmProviderId, provider.providerName, provider.llmProviderDisplayName]
+                    + provider.llmProviderLegacyAliases)
+                    .contains { $0.caseInsensitiveCompare(providerId) == .orderedSame }
             }) {
                 return llmRefusal(for: provider, in: plugin)
             }
@@ -1343,6 +1368,9 @@ final class PluginManager: ObservableObject {
         } else {
             providerIdsAwaitingRelaunch[pluginId] = nil
             UserDefaults.standard.removeObject(forKey: Self.disabledEngineIdsKey(pluginId))
+            // An uninstalled plugin no longer explains a refusal of the providers it exposed.
+            policyRefusals.removeValue(forKey: pluginId)
+            UserDefaults.standard.removeObject(forKey: Self.knownProviderIdsKey(pluginId))
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
             if !disabledProviderIds.isEmpty {
                 uninstalledTranscriptionEngines.send(disabledProviderIds)
