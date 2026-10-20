@@ -58,6 +58,7 @@ struct ErrorLogView: View {
             Image(systemName: "checkmark.circle")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(String(localized: "No errors recorded."))
                 .font(.title3)
                 .foregroundStyle(.secondary)
@@ -68,11 +69,13 @@ struct ErrorLogView: View {
     private var errorList: some View {
         List(errorLogService.entries) { entry in
             HStack(alignment: .top, spacing: 10) {
+                // The category is also written out below the message.
                 Image(systemName: entry.categoryIcon)
                     .foregroundStyle(.red)
                     .font(.system(size: 14))
                     .frame(width: 20, alignment: .center)
                     .padding(.top, 2)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(entry.message)
@@ -85,6 +88,7 @@ struct ErrorLogView: View {
                         Text("-")
                             .font(.caption)
                             .foregroundStyle(.quaternary)
+                            .accessibilityHidden(true)
                         Text(entry.timestamp, style: .relative)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -92,6 +96,8 @@ struct ErrorLogView: View {
                 }
             }
             .padding(.vertical, 2)
+            // One entry per row: message, category and time.
+            .accessibilityElement(children: .combine)
         }
     }
 
