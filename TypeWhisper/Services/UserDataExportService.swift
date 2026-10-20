@@ -58,7 +58,7 @@ struct UserDataLocations: Sendable {
         return UserDataLocations(
             appSupportDirectory: AppConstants.appSupportDirectory,
             auxiliaryItems: auxiliaryItems,
-            preferencesDomain: bundleIdentifier
+            preferencesDomain: AppConstants.preferencesDomain
         )
     }
 

@@ -10270,6 +10270,55 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.state = .idle
     }
 
+    /// A rejected undo or restore during a recording plays the error sound but must
+    /// not show a banner, which would end the recording. The indicator shows it in
+    /// place of its status for a moment instead, so it is not only audible.
+    @MainActor
+    func testRejectedUndoDuringRecordingShowsABriefIndicatorWarning() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let viewModel = context.dictationViewModel
+        let originalSoundFeedback = viewModel.soundFeedbackEnabled
+        defer {
+            viewModel.soundFeedbackEnabled = originalSoundFeedback
+            viewModel.state = .idle
+        }
+        viewModel.soundFeedbackEnabled = false
+        viewModel.testingSetRejectedShortcutWarningDuration(.milliseconds(200))
+
+        viewModel.state = .recording
+        viewModel.undoLastDictation()
+        let warning = try XCTUnwrap(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertEqual(viewModel.indicatorWarningMessage, warning)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.actionFeedbackMessage)
+
+        // It disappears on its own while the recording goes on.
+        for _ in 0..<100 where viewModel.rejectedShortcutWarningMessage != nil {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertNil(viewModel.indicatorWarningMessage)
+        XCTAssertEqual(viewModel.state, .recording)
+
+        // A restore rejected during the transcription shows it too, and it ends with that state.
+        viewModel.testingSetRejectedShortcutWarningDuration(.seconds(30))
+        viewModel.state = .processing
+        viewModel.restoreRawTranscript()
+        XCTAssertNotNil(viewModel.indicatorWarningMessage)
+        viewModel.state = .inserting
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        viewModel.state = .processing
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage, "A warning from an earlier state came back")
+
+        // Without an active recording, the existing error banner is used instead.
+        viewModel.state = .idle
+        viewModel.undoLastDictation()
+        XCTAssertNil(viewModel.rejectedShortcutWarningMessage)
+        XCTAssertNotNil(viewModel.actionFeedbackMessage)
+    }
+
     /// The indicator banner appears next to the app the user works in, so VoiceOver
     /// users only notice it through an announcement.
     @MainActor
@@ -17111,6 +17160,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesCurrentApplication))
     }
 
+    /// A Debug build started from a checkout with `--store-screenshots` has the Dev app's bundle
+    /// identifier; its preferences and managed settings come from the screenshot domain instead.
+    func testScreenshotRunsUseTheScreenshotDomainWhateverTheBundleIdentifier() {
+        let screenshots = "com.typewhisper.mac.screenshots"
+        XCTAssertEqual(AppConstants.screenshotPreferencesDomain, screenshots)
+        for bundleIdentifier in ["com.typewhisper.mac.dev", "com.typewhisper.mac", "com.typewhisper.typewhisper-app.dev", nil] {
+            XCTAssertEqual(
+                ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: bundleIdentifier),
+                screenshots,
+                String(describing: bundleIdentifier)
+            )
+            XCTAssertEqual(
+                AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: true, bundleIdentifier: bundleIdentifier),
+                screenshots
+            )
+        }
+        // The fastlane lane builds the app with the screenshot domain as its identifier.
+        XCTAssertNil(ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: screenshots))
+
+        XCTAssertEqual(
+            AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: false, bundleIdentifier: "com.typewhisper.mac.dev"),
+            "com.typewhisper.mac.dev"
+        )
+        XCTAssertNil(ScreenshotPreferencesIsolation.isolatedDefaults, "A test run is no screenshot run")
+        XCTAssertEqual(AppConstants.preferencesDomain, TestHostIsolation.defaultsSuiteName)
+    }
+
     func testTestHostDoesNotUseTheAppsKeychainItems() {
         XCTAssertEqual(AppConstants.keychainServicePrefix, "com.typewhisper.mac.tests.apikey.")
     }
@@ -18278,6 +18354,59 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(plugin.restoreInvocationCount, 0)
         XCTAssertEqual(plugin.selectedModelId, "tiny")
         XCTAssertTrue(plugin.isConfigured)
+    }
+
+    @MainActor
+    func testModelsLoadEndpointLoadsOnlyTheEnforcedModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: ModelLifecycleTranscriptionPlugin.pluginId, modelId: "tiny")
+        ))
+        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
+
+        func load(_ model: String) async -> HTTPResponse {
+            await context.router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/models/load",
+                    queryParams: [:],
+                    headers: ["content-type": "application/json"],
+                    body: Data(#"{"engine":"model-lifecycle-mock","model":"\#(model)"}"#.utf8)
+                )
+            )
+        }
+
+        let refused = await load("large")
+        XCTAssertEqual(refused.status, 403)
+        let error = try XCTUnwrap(Self.jsonObject(refused)["error"] as? [String: Any])
+        XCTAssertEqual(error["code"] as? String, "forbidden")
+        XCTAssertEqual(plugin.restoreInvocationCount, 0, "A model the pair does not name is never loaded")
+
+        let loaded = await load("tiny")
+        XCTAssertEqual(loaded.status, 200)
+        XCTAssertEqual(plugin.selectedModelId, "tiny")
     }
 
     @MainActor

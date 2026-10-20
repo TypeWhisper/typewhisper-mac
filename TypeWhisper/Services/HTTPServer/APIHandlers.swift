@@ -959,6 +959,20 @@ final class APIHandlers: @unchecked Sendable {
         guard !engineId.isEmpty, !modelId.isEmpty else {
             return .error(status: 400, message: "Both 'engine' and 'model' are required")
         }
+        // An enforced pair decides the model in use, so another model would never be used.
+        if let enforced = PluginManager.shared.enforcedTranscriptionResolution {
+            if let reason = enforced.unavailableReason {
+                return .error(status: 403, message: reason, code: "forbidden")
+            }
+            guard engineId.caseInsensitiveCompare(enforced.resolvedProviderId ?? "") == .orderedSame,
+                  modelId.caseInsensitiveCompare(enforced.resolvedModelId ?? "") == .orderedSame else {
+                return .error(
+                    status: 403,
+                    message: "Your organization requires a specific transcription engine and model",
+                    code: "forbidden"
+                )
+            }
+        }
 
         do {
             try await modelManager.loadModel(engineId, modelId: modelId)

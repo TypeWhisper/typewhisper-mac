@@ -128,7 +128,11 @@ struct HomeSettingsView: View {
                     statisticsSummaryCard(
                         title: String(localized: "Time Saved"),
                         value: statistics.timeSaved,
-                        systemImage: "clock.badge.checkmark"
+                        systemImage: "clock.badge.checkmark",
+                        accessibilityValue: StatisticsViewModel.spokenTimeSaved(
+                            minutes: statistics.timeSavedMinutes,
+                            locale: HistoryAccessibilityText.locale
+                        )
                     )
                 }
             }
@@ -137,7 +141,12 @@ struct HomeSettingsView: View {
         .accessibilityLabel(String(localized: "Your Activity"))
     }
 
-    private func statisticsSummaryCard(title: String, value: String, systemImage: String) -> some View {
+    private func statisticsSummaryCard(
+        title: String,
+        value: String,
+        systemImage: String,
+        accessibilityValue: String? = nil
+    ) -> some View {
         Button {
             viewModel.navigateToStatistics = true
         } label: {
@@ -146,7 +155,7 @@ struct HomeSettingsView: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         // "—" while there is no data is read as "No data", as on the Statistics page.
-        .accessibilityLabel(Text("\(title), \(statisticsSpokenValue(value))"))
+        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? statisticsSpokenValue(value))"))
         .accessibilityAddTraits(.isButton)
     }
 

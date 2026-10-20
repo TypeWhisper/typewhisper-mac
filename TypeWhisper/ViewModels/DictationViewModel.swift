@@ -298,6 +298,7 @@ final class DictationViewModel: ObservableObject {
             refreshCancellationAvailability()
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
+            clearRejectedShortcutWarningIfStateNoLongerMatches()
             if state != .recording, state != .processing {
                 modelManager.endDictationModelPrewarm()
             }
@@ -528,6 +529,16 @@ final class DictationViewModel: ObservableObject {
     @Published private var cancelWarningTarget: CancelWarningTarget?
     private var cancelWarningResetTask: Task<Void, Never>?
     private var cancelConfirmationWindow: Duration = .seconds(3)
+    private struct RejectedShortcutWarning {
+        let id = UUID()
+        let message: String
+        let state: State
+    }
+    /// An undo or restore rejected during a recording or transcription. A banner would
+    /// end the active operation, so the indicator shows it briefly in place of its status.
+    @Published private var rejectedShortcutWarning: RejectedShortcutWarning?
+    private var rejectedShortcutWarningResetTask: Task<Void, Never>?
+    private var rejectedShortcutWarningDuration: Duration = .seconds(3)
     private let cancelConfirmationClock = ContinuousClock()
     private var cancelWarningDeadline: ContinuousClock.Instant?
     /// Resolves the browser URL after recording starts and returns it, so work after insertion
@@ -609,6 +620,17 @@ final class DictationViewModel: ObservableObject {
     var silentInputWarningMessage: String? {
         guard state == .recording, isRecordingInputSilent else { return nil }
         return String(localized: "No sound from the microphone. Is it muted?")
+    }
+
+    var rejectedShortcutWarningMessage: String? {
+        guard let rejectedShortcutWarning, rejectedShortcutWarning.state == state else { return nil }
+        return rejectedShortcutWarning.message
+    }
+
+    /// Shown by the indicator in place of its regular status. The Esc confirmation comes
+    /// first, since it expires; a silent microphone is shown again once the others are gone.
+    var indicatorWarningMessage: String? {
+        cancelWarningMessage ?? rejectedShortcutWarningMessage ?? silentInputWarningMessage
     }
 
     init(
@@ -1836,7 +1858,39 @@ final class DictationViewModel: ObservableObject {
     func testingSetCancelConfirmationWindow(_ window: Duration) {
         cancelConfirmationWindow = window
     }
+
+    func testingSetRejectedShortcutWarningDuration(_ duration: Duration) {
+        rejectedShortcutWarningDuration = duration
+    }
     #endif
+
+    private func showRejectedShortcutWarning(_ message: String) {
+        guard state == .recording || state == .processing else { return }
+        rejectedShortcutWarningResetTask?.cancel()
+        let warning = RejectedShortcutWarning(message: message, state: state)
+        rejectedShortcutWarning = warning
+        let duration = rejectedShortcutWarningDuration
+        rejectedShortcutWarningResetTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: duration)
+            } catch {
+                return
+            }
+            guard let self, self.rejectedShortcutWarning?.id == warning.id else { return }
+            self.clearRejectedShortcutWarning()
+        }
+    }
+
+    private func clearRejectedShortcutWarningIfStateNoLongerMatches() {
+        guard let rejectedShortcutWarning, rejectedShortcutWarning.state != state else { return }
+        clearRejectedShortcutWarning()
+    }
+
+    private func clearRejectedShortcutWarning() {
+        rejectedShortcutWarningResetTask?.cancel()
+        rejectedShortcutWarningResetTask = nil
+        rejectedShortcutWarning = nil
+    }
 
     private func cancelCurrentOperation() {
         let cancelledMessage = String(localized: "Cancelled")
@@ -4899,7 +4953,10 @@ final class DictationViewModel: ObservableObject {
         case .recording, .processing, .inserting, .promptSelection, .promptProcessing:
             // A rejected shortcut must not replace an active operation with an
             // insertion-feedback timer that later cancels its recording/tasks.
+            // During a recording or transcription the indicator shows it briefly
+            // instead, so it is not only heard.
             errorLogService.addEntry(message: failure.feedbackMessage, category: "insertion")
+            showRejectedShortcutWarning(failure.feedbackMessage)
             accessibilityAnnouncementService.announceError(failure.feedbackMessage)
             soundService.play(.error, enabled: soundFeedbackEnabled)
         }

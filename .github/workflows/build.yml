@@ -246,6 +246,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | tee test.log
 
+      # Screenshot runs from a checkout use the same Debug build and bundle identifier.
+      - name: Check a Screenshot Run Leaves App Preferences Unchanged
+        run: |
+          set -o pipefail
+          app="$(xcodebuild -project $PROJECT -scheme $SCHEME \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
+            -destination 'platform=macOS,arch=arm64' \
+            -skipPackagePluginValidation -showBuildSettings -json 2>/dev/null \
+            | python3 -c 'import json,sys; s=next(t["buildSettings"] for t in json.load(sys.stdin) if t["target"]=="TypeWhisper"); print(s["BUILT_PRODUCTS_DIR"]+"/"+s["FULL_PRODUCT_NAME"])')"
+          python3 scripts/check_test_host_preferences.py screenshot-run "$app"
+
       # Also after failing tests, which can have written preferences before they failed.
       - name: Check App Preferences Are Unchanged
         if: always() && steps.app-preferences-snapshot.outcome == 'success'

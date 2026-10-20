@@ -17,14 +17,15 @@ struct EmptyManagedPolicySource: ManagedPolicySource {
 }
 
 /// Reads the managed preferences of the app's own domain (`com.typewhisper.mac`,
-/// `com.typewhisper.typewhisper-app` or their `.dev` variants).
+/// `com.typewhisper.typewhisper-app` or their `.dev` variants), or of
+/// `com.typewhisper.mac.screenshots` in screenshot runs.
 ///
 /// Only values forced by a configuration profile count. A value written with `defaults write` is
 /// user-writable and therefore reported as unmanaged instead of being applied.
 struct ManagedPreferencesPolicySource: ManagedPolicySource {
     let applicationID: String
 
-    init(applicationID: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac") {
+    init(applicationID: String = AppConstants.managedPreferencesDomain) {
         self.applicationID = applicationID
     }
 

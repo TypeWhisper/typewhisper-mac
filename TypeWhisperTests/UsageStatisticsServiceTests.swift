@@ -281,6 +281,40 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.maxHourlyCount, 0, "Clearing usage statistics must also clear the heatmap")
     }
 
+    /// "2m" on the Time Saved card can be read as two metres, so the view model hands
+    /// out the whole minutes and VoiceOver speaks them with their unit.
+    @MainActor
+    func testTimeSavedIsAvailableAsMinutesAndSpokenWithItsUnit() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsTimeSaved")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Calendar.current
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = calendar.date(byAdding: .hour, value: 9, to: calendar.startOfDay(for: Date()))!
+        // 450 words at 45 words per minute of typing, minus one minute of speaking.
+        usageStatisticsService.recordTranscription(
+            timestamp: today,
+            wordsCount: 450,
+            durationSeconds: 60,
+            appBundleIdentifier: "com.example.editor"
+        )
+
+        let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+        viewModel.refresh()
+        XCTAssertEqual(viewModel.timeSavedMinutes, 9)
+
+        usageStatisticsService.clearUsageStatistics()
+        viewModel.refresh()
+        XCTAssertNil(viewModel.timeSavedMinutes)
+        XCTAssertNil(StatisticsViewModel.spokenTimeSaved(minutes: nil, locale: Locale(identifier: "en_US")))
+
+        let english = Locale(identifier: "en_US")
+        XCTAssertEqual(StatisticsViewModel.spokenTimeSaved(minutes: 2, locale: english), "2 minutes")
+        XCTAssertEqual(StatisticsViewModel.spokenTimeSaved(minutes: 1, locale: english), "1 minute")
+        XCTAssertEqual(StatisticsViewModel.spokenTimeSaved(minutes: 65, locale: english), "1 hour, 5 minutes")
+        XCTAssertEqual(StatisticsViewModel.spokenTimeSaved(minutes: 2, locale: Locale(identifier: "de_DE")), "2 Minuten")
+    }
+
     /// Statistics must stay fully populated even when history is disabled or has a short
     /// retention window, because the view model never reads `HistoryService` records - only the
     /// persistent usage-statistics snapshots, which are unaffected by history retention/purging.

@@ -1,8 +1,9 @@
 import Foundation
 
-// Unit tests run inside this app and would otherwise share the installed app's
+// Unit tests and screenshot runs would otherwise share the installed app's
 // preferences. This has to come before the first read of UserDefaults.standard.
 TestHostIsolation.isolateDefaultsIfRunningTests()
+ScreenshotPreferencesIsolation.isolateDefaultsIfTakingScreenshots()
 
 // Override Bundle.main's localization to support in-app language switching.
 // This must happen before TypeWhisperApp.main() so that all String(localized:)

@@ -33,7 +33,6 @@ struct SettingsView: View {
     @ObservedObject private var dictationRecovery = DictationRecoveryViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
-    @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @ObservedObject private var pluginManager = PluginManager.shared
 
@@ -213,12 +212,6 @@ struct SettingsView: View {
             if navigate {
                 selectedTab = .statistics
                 homeViewModel.navigateToStatistics = false
-            }
-        }
-        .onChange(of: promptActionsViewModel.navigateToIntegrations) { _, navigate in
-            if navigate {
-                selectedTab = .integrations
-                promptActionsViewModel.navigateToIntegrations = false
             }
         }
         .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in

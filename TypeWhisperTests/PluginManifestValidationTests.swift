@@ -175,14 +175,14 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertTrue(manifest.supportsCapability(.liveDictation))
     }
 
-    func testWhisperKitPlugin122RequiresHost18ForTheDownloadPolicy() throws {
+    func testWhisperKitPlugin130RequiresHost18ForTheTransientModelSelection() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.2.2")
+        XCTAssertEqual(manifest.version, "1.3.0")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])

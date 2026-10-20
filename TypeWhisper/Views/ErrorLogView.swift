@@ -6,6 +6,7 @@ struct ErrorLogView: View {
 
     @State private var showClearConfirmation = false
     @State private var exportErrorMessage: String?
+    @StateObject private var exportConfirmation = ActionConfirmation(duration: .seconds(4))
 
     var body: some View {
         Group {
@@ -16,6 +17,16 @@ struct ErrorLogView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 300)
+        // A successful export shows nothing else, so confirm it below the list.
+        .safeAreaInset(edge: .bottom) {
+            if let message = exportConfirmation.message {
+                ActionConfirmationLabel(message: message)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.bar)
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
@@ -126,6 +137,7 @@ struct ErrorLogView: View {
         Task { @MainActor in
             do {
                 try await errorLogService.exportDiagnostics(to: url)
+                exportConfirmation.show(String(localized: "Diagnostics exported to \(url.lastPathComponent)"))
             } catch {
                 exportErrorMessage = error.localizedDescription
             }
