@@ -15,6 +15,7 @@ struct SetupWizardView: View {
     @AppStorage(UserDefaultsKeys.setupWizardTestedSelections) private var testedSelectionsData = Data()
     @State private var trialSignal = SetupWizardTrialSignal()
     @State private var trialText = ""
+    @State private var trialAnnouncementTask: Task<Void, Never>?
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
@@ -1418,9 +1419,11 @@ struct SetupWizardView: View {
         .onChange(of: selectedSetupModel) { _, _ in
             // Never attribute an in-flight test to a different provider/model.
             trialSignal.reset()
+            trialAnnouncementTask?.cancel()
         }
         .onDisappear {
             trialSignal.reset()
+            trialAnnouncementTask?.cancel()
         }
         .task {
             try? await Task.sleep(for: .milliseconds(50))
@@ -1433,8 +1436,11 @@ struct SetupWizardView: View {
     /// dictation flow's own "transcription complete" announcement finish first.
     private func announceTrialSuccess() {
         let message = "\(trialSuccessTitle) \(trialSuccessMessage)"
-        Task { @MainActor in
+        trialAnnouncementTask?.cancel()
+        // Cancelled when the wizard goes away or the tested model changes meanwhile.
+        trialAnnouncementTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
             accessibilityAnnouncementService.announce(message)
         }
     }
