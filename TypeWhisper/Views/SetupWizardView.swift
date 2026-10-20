@@ -545,11 +545,21 @@ struct SetupWizardView: View {
                     )
                 } else {
                     VStack(alignment: .trailing, spacing: 8) {
-                        statusPill(
-                            localizedAppText("Needs Access", de: "Zugriff nötig"),
-                            systemImage: isRequired ? "exclamationmark.circle.fill" : "circle",
-                            color: isRequired ? .orange : .secondary
-                        )
+                        // Required and optional access differ in text, not only in icon
+                        // and color. Only the App Store edition has optional permissions.
+                        if isRequired {
+                            statusPill(
+                                localizedAppText("Needs Access", de: "Zugriff nötig"),
+                                systemImage: "exclamationmark.circle.fill",
+                                color: .orange
+                            )
+                        } else {
+                            statusPill(
+                                localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选"),
+                                systemImage: "circle",
+                                color: .secondary
+                            )
+                        }
 
                         Button(localizedAppText("Grant Access", de: "Zugriff erlauben")) {
                             action()
