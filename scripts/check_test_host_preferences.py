@@ -82,6 +82,9 @@ def screenshot_run(app_path: str, state: str) -> int:
     executable = os.path.join(app_path, "Contents", "MacOS", info["CFBundleExecutable"])
     domains = tuple(sorted((set(DOMAINS) | {info["CFBundleIdentifier"]}) - {SCREENSHOT_DOMAIN}))
 
+    # The throwaway home only moves NSHomeDirectory(): UserDefaults still writes through
+    # cfprefsd to ~/Library/Preferences of the real home, so the snapshots read that.
+    # A main build fails this check that way (see #1665).
     before = snapshot(domains)
     with tempfile.TemporaryDirectory(prefix="typewhisper-screenshot-check-") as run_directory:
         home = os.path.join(run_directory, "home")
