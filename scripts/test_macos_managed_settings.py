@@ -232,6 +232,7 @@ class GeneratorTests(unittest.TestCase):
             (["--set", "UpdateMode=0", "--set", "UpdateMode=1"], "set twice"),
             (["--set", "TranscriptionProviderId=a\u0085b", "--set", "TranscriptionModelId=m"], "control characters"),
             (["--set", "UpdateMode=0", "--identifier", "TypeWhisper settings"], "reverse-DNS"),
+            (["--set", "AllowedUpdateChannels=none,stable"], "cannot combine none"),
             (["--set", "UpdateMode=0", "--identifier", ""], "reverse-DNS"),
             ([], "at least one value"),
         ]
@@ -306,6 +307,14 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(configured["items"]["type"], "string", name)
         if name == "AllowedUpdateChannels":
             self.assertEqual(configured["items"]["enum"], list(GENERATOR.UPDATE_CHANNEL_ENTRIES))
+        elif kind == "list":
+            self.assertEqual(configured["items"]["minLength"], 1, name)
+            self.assertEqual(configured["maxItems"], GENERATOR.MAXIMUM_LIST_ENTRIES, name)
+        if kind == "text":
+            # A blank enforced value would be invalid in the app and block its setting.
+            self.assertEqual(configured["minLength"], 1, name)
+            self.assertEqual(configured["maxLength"], GENERATOR.MAXIMUM_TEXT_LENGTH, name)
+            self.assertEqual(configured["pattern"], "\\S", name)
 
     def test_jamf_schemas_describe_the_catalog(self):
         for domain in EDITION_DOMAINS:

@@ -300,9 +300,11 @@ delivers them.
 
 TypeWhisper asks for these permissions when a feature first needs them. A privacy
 preferences profile (PPPC, `com.apple.TCC.configuration-profile-policy`) delivered by
-MDM can pre-approve some of them; the
+MDM can pre-approve some of them. The
 [privacy example](../../deployment/macos/examples/TypeWhisper-Privacy.mobileconfig)
-contains every entry that macOS accepts for TypeWhisper.
+covers the permissions every installation needs: Accessibility, PostEvent, Input
+Monitoring and Screen Recording. Calendars and Automation are optional; add their
+entries yourself if the organization wants them pre-approved.
 
 | Permission | Used for | PPPC |
 | --- | --- | --- |

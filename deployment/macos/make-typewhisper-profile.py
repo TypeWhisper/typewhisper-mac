@@ -126,6 +126,9 @@ def parse_value(name: str, raw: str):
             unknown = [item for item in items if item not in UPDATE_CHANNEL_ENTRIES]
             if unknown:
                 raise ProfileError(f"{name} entries must be stable, daily, release-candidate or none")
+            # The app ignores none next to a channel, so the channel would stay allowed.
+            if "none" in items and len(items) > 1:
+                raise ProfileError(f"{name} cannot combine none with channels; use none alone to turn updates off")
         return items
     return parse_text(name, raw)
 

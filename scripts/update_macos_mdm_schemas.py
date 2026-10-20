@@ -65,6 +65,9 @@ def load_generator():
 GENERATOR = load_generator()
 # Keys the App Store edition ignores, shared with the generator.
 APP_STORE_IGNORED = GENERATOR.APP_STORE_IGNORED
+# The app trims text and refuses it when it is blank or too long (ManagedPolicyValidator), and an
+# invalid enforced value blocks its setting, so the editor refuses such values up front.
+TEXT_CONSTRAINTS = {"type": "string", "minLength": 1, "maxLength": GENERATOR.MAXIMUM_TEXT_LENGTH, "pattern": "\\S"}
 
 
 def load_keys():
@@ -87,8 +90,12 @@ def jamf_property(name, kind, maximum, order):
         configured["options"] = {"enum_titles": ENUMERATION_TITLES[name]}
     elif name == "AllowedUpdateChannels":
         configured["items"] = {"type": "string", "title": "Channel", "enum": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}
+        configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
     elif kind == "list":
-        configured["items"] = {"type": "string", "title": "ID"}
+        configured["items"] = {"title": "ID", **TEXT_CONSTRAINTS}
+        configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
+    elif kind == "text":
+        configured.update(TEXT_CONSTRAINTS)
     # "Not Configured" keeps Jamf Pro from writing a value for keys the administrator leaves alone.
     return {
         "title": title,
