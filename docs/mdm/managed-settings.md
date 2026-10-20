@@ -15,6 +15,7 @@ generator and schemas for Jamf Pro and profile editors are in
 | TypeWhisper (direct download) | `com.typewhisper.mac` |
 | TypeWhisper from the Mac App Store | `com.typewhisper.typewhisper-app` |
 | Development builds | the same domains with a `.dev` suffix |
+| Screenshot runs (`--store-screenshots`, Debug builds) | `com.typewhisper.mac.screenshots` |
 
 ## Profile layout
 

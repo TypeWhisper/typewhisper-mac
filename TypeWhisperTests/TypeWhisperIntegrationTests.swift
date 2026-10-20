@@ -17111,6 +17111,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesCurrentApplication))
     }
 
+    /// A Debug build started from a checkout with `--store-screenshots` has the Dev app's bundle
+    /// identifier; its preferences and managed settings come from the screenshot domain instead.
+    func testScreenshotRunsUseTheScreenshotDomainWhateverTheBundleIdentifier() {
+        let screenshots = "com.typewhisper.mac.screenshots"
+        XCTAssertEqual(AppConstants.screenshotPreferencesDomain, screenshots)
+        for bundleIdentifier in ["com.typewhisper.mac.dev", "com.typewhisper.mac", "com.typewhisper.typewhisper-app.dev", nil] {
+            XCTAssertEqual(
+                ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: bundleIdentifier),
+                screenshots,
+                String(describing: bundleIdentifier)
+            )
+            XCTAssertEqual(
+                AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: true, bundleIdentifier: bundleIdentifier),
+                screenshots
+            )
+        }
+        // The fastlane lane builds the app with the screenshot domain as its identifier.
+        XCTAssertNil(ScreenshotPreferencesIsolation.domainReplacingAppPreferences(bundleIdentifier: screenshots))
+
+        XCTAssertEqual(
+            AppConstants.resolveManagedPreferencesDomain(isScreenshotAutomation: false, bundleIdentifier: "com.typewhisper.mac.dev"),
+            "com.typewhisper.mac.dev"
+        )
+        XCTAssertNil(ScreenshotPreferencesIsolation.isolatedDefaults, "A test run is no screenshot run")
+        XCTAssertEqual(AppConstants.preferencesDomain, TestHostIsolation.defaultsSuiteName)
+    }
+
     func testTestHostDoesNotUseTheAppsKeychainItems() {
         XCTAssertEqual(AppConstants.keychainServicePrefix, "com.typewhisper.mac.tests.apikey.")
     }

@@ -18,6 +18,27 @@ directory, and the isolated screenshot defaults domain is reset around every
 capture. Screenshot runs do not read, replace, or delete the user's TypeWhisper
 or TypeWhisper-Dev preferences, keychain items, or application data.
 
+## Preferences and managed settings
+
+Every screenshot run uses the preferences domain
+`com.typewhisper.mac.screenshots`, however it is launched:
+
+- `UserDefaults` read and write that domain. The lane builds the app with it as
+  the bundle identifier. A Debug build started from a checkout with
+  `--store-screenshots`, for example for pull-request screenshots, keeps the Dev
+  app's identifier `com.typewhisper.mac.dev` but still uses the screenshot
+  domain instead of the Dev app's preferences.
+- Managed settings come from the same domain. To capture managed states,
+  install a configuration profile for `com.typewhisper.mac.screenshots`; a
+  profile for the Dev app does not apply to screenshot runs.
+- The lane resets the domain before every capture. Runs from a checkout do not;
+  start them clean with `defaults delete com.typewhisper.mac.screenshots`.
+
+`python3 scripts/check_test_host_preferences.py screenshot-run <app>` starts a
+Debug build in screenshot mode and fails if the run changed the preferences of
+`com.typewhisper.mac.dev`, `com.typewhisper.mac` or the build's own bundle
+identifier. CI runs it with the test host build.
+
 Settings and History captures use the same 1150 × 890 point content size in
 every language. The PNG dimensions also include the native window shadow.
 
