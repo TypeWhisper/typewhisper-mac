@@ -19,6 +19,35 @@ enum AppConstants {
         #endif
     }()
 
+    /// Preferences domain of screenshot runs, also for their managed preferences. The fastlane
+    /// screenshot lane uses it as the bundle identifier; see `ScreenshotPreferencesIsolation`.
+    static let screenshotPreferencesDomain = "com.typewhisper.mac.screenshots"
+
+    /// The domain whose managed preferences (configuration profiles) apply to this process.
+    static let managedPreferencesDomain = resolveManagedPreferencesDomain(
+        isScreenshotAutomation: isScreenshotAutomation,
+        bundleIdentifier: Bundle.main.bundleIdentifier
+    )
+
+    static func resolveManagedPreferencesDomain(isScreenshotAutomation: Bool, bundleIdentifier: String?) -> String {
+        if isScreenshotAutomation {
+            return screenshotPreferencesDomain
+        }
+        return bundleIdentifier ?? "com.typewhisper.mac"
+    }
+
+    /// The persistent domain `UserDefaults.standard` writes to; the app's own domain unless a
+    /// test or screenshot run replaced it.
+    static var preferencesDomain: String {
+        if isRunningTests {
+            return TestHostIsolation.defaultsSuiteName
+        }
+        if isScreenshotAutomation {
+            return screenshotPreferencesDomain
+        }
+        return Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+    }
+
     static let screenshotState: String? = {
         guard isScreenshotAutomation else { return nil }
         return screenshotArgumentValue(after: "--screenshot-state")

@@ -25,19 +25,14 @@ enum TestHostIsolation {
     static func isolateDefaultsIfRunningTests() {
         guard AppConstants.isRunningTests, isolatedDefaults == nil else { return }
 
-        guard let defaults = UserDefaults(suiteName: defaultsSuiteName),
-              let standardGetter = class_getClassMethod(
-                  UserDefaults.self,
-                  #selector(getter: UserDefaults.standard)
-              ) else {
+        guard let defaults = UserDefaults(suiteName: defaultsSuiteName) else {
             fatalError("Could not separate the test host's UserDefaults from the app's preferences")
         }
 
         // A reused process ID must not inherit values from a run that crashed.
         defaults.removePersistentDomain(forName: defaultsSuiteName)
 
-        let isolatedStandard: @convention(block) (AnyObject) -> UserDefaults = { _ in defaults }
-        method_setImplementation(standardGetter, imp_implementationWithBlock(isolatedStandard))
+        replaceStandardDefaults(with: defaults)
         isolatedDefaults = defaults
     }
 
@@ -45,4 +40,58 @@ enum TestHostIsolation {
     static func removeIsolatedDefaults() {
         isolatedDefaults?.removePersistentDomain(forName: defaultsSuiteName)
     }
+}
+
+/// Keeps screenshot runs out of the app's own preferences.
+///
+/// Screenshot automation (`--store-screenshots`, Debug builds only) shows fixture data. The
+/// fastlane lane builds the app with the bundle identifier of the screenshot domain, but a Debug
+/// build started from a checkout, as for pull-request screenshots, has the Dev app's identifier
+/// `com.typewhisper.mac.dev`. It would read and write the Dev app's settings and apply profiles
+/// meant for the Dev app.
+///
+/// In a screenshot run, `UserDefaults.standard` returns the defaults of
+/// `AppConstants.screenshotPreferencesDomain`, whatever the bundle identifier, and managed
+/// preferences are read from that domain (`AppConstants.managedPreferencesDomain`). The fastlane
+/// lane resets the domain before every capture.
+enum ScreenshotPreferencesIsolation {
+    /// The defaults `UserDefaults.standard` returns in a screenshot run, or nil when the app's
+    /// own domain already is the screenshot domain or this is no screenshot run.
+    nonisolated(unsafe) private(set) static var isolatedDefaults: UserDefaults?
+
+    /// Must run before anything reads `UserDefaults.standard`, right after
+    /// `TestHostIsolation.isolateDefaultsIfRunningTests()` in `main.swift`.
+    static func isolateDefaultsIfTakingScreenshots() {
+        guard AppConstants.isScreenshotAutomation, isolatedDefaults == nil,
+              let domain = domainReplacingAppPreferences(bundleIdentifier: Bundle.main.bundleIdentifier) else {
+            return
+        }
+
+        guard let defaults = UserDefaults(suiteName: domain) else {
+            fatalError("Could not separate the screenshot run's UserDefaults from the app's preferences")
+        }
+
+        replaceStandardDefaults(with: defaults)
+        isolatedDefaults = defaults
+    }
+
+    /// The domain a screenshot run uses instead of the app's own, or nil when the app's own
+    /// domain is the screenshot domain (`UserDefaults(suiteName:)` refuses the app's identifier).
+    static func domainReplacingAppPreferences(bundleIdentifier: String?) -> String? {
+        let domain = AppConstants.screenshotPreferencesDomain
+        return bundleIdentifier == domain ? nil : domain
+    }
+}
+
+/// Makes `UserDefaults.standard` return `defaults` for the rest of the process.
+private func replaceStandardDefaults(with defaults: UserDefaults) {
+    guard let standardGetter = class_getClassMethod(
+        UserDefaults.self,
+        #selector(getter: UserDefaults.standard)
+    ) else {
+        fatalError("Could not replace UserDefaults.standard")
+    }
+
+    let replacement: @convention(block) (AnyObject) -> UserDefaults = { _ in defaults }
+    method_setImplementation(standardGetter, imp_implementationWithBlock(replacement))
 }
