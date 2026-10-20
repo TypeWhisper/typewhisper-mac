@@ -21,6 +21,7 @@ struct AppVocabularyImportSheet: View {
                  ? String(localized: "Import Words from Another App")
                  : String(localized: "Import Snippets from Another App"))
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             if let count = model.importedCount {
                 Label(String(localized: "Import Complete"), systemImage: "checkmark.circle.fill")
@@ -63,7 +64,12 @@ struct AppVocabularyImportSheet: View {
                                 ))
                                 .labelsHidden()
                                 .disabled(row.outcome != .add)
-                                .accessibilityLabel(row.entry.original)
+                                .accessibilityLabel(localizedAppText(
+                                    "Import \(row.entry.original)",
+                                    de: "\(row.entry.original) importieren",
+                                    ja: "\(row.entry.original)を読み込む",
+                                    zh: "导入\(row.entry.original)"
+                                ))
                             }.width(50)
                             TableColumn(String(localized: "Type")) { row in
                                 Text(kindName(row.entry.kind))
@@ -76,6 +82,7 @@ struct AppVocabularyImportSheet: View {
                                     .lineLimit(3)
                                     .help(row.entry.replacement ?? row.entry.original)
                                     .textSelection(.enabled)
+                                    .accessibilityLabel(row.entry.replacement ?? String(localized: "None"))
                             }
                             TableColumn(String(localized: "Status")) { row in
                                 Text(status(row.outcome))
@@ -100,6 +107,7 @@ struct AppVocabularyImportSheet: View {
 
             if let error = model.error {
                 Text(error).foregroundStyle(.red).textSelection(.enabled)
+                    .accessibilityLabel(String(localized: "Error: \(error)"))
             }
             Spacer(minLength: 0)
             HStack {
@@ -195,6 +203,7 @@ private struct SetupWizardImportDialog: View {
                 VStack(alignment: .leading, spacing: 16) {
                     Text(String(localized: "Import from Another App..."))
                         .font(.title2.bold())
+                        .accessibilityAddTraits(.isHeader)
                     if !detectedSources.isEmpty {
                         Text(String(localized: "Source files found on this Mac: \(detectedSources.map(\.name).joined(separator: ", "))."))
                             .foregroundStyle(.secondary)
