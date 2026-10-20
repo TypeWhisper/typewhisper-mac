@@ -946,6 +946,21 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertEqual(version.finalText, "enforced")
         XCTAssertEqual(version.engineName, enforced.providerDisplayName)
 
+        // A profile change between planning and running stops the plan instead of running an
+        // engine it did not check or disclose.
+        let stale = try HistoryRetranscriptionEnvironment.plan(
+            .init(engineID: requested.providerId),
+            manager: environment.manager, dictionary: environment.dictionary,
+            workflows: [], promptProcessing: environment.promptProcessing
+        )
+        PluginManager.shared.applySelectionPolicy(.unmanaged)
+        do {
+            _ = try await stale.run([0.1])
+            XCTFail("A changed enforced pair must stop the plan")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, HistoryRetranscriptionError.changed.localizedDescription)
+        }
+
         PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
             enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "any")
         ))

@@ -84,7 +84,8 @@ enum HistoryRetranscriptionEnvironment {
         var request = request
         // An enforced pair replaces the requested engine and model, so the plan checks, discloses
         // and records the pair that runs.
-        if let enforced = PluginManager.shared?.enforcedTranscriptionResolution {
+        let plannedEnforcement = PluginManager.shared?.enforcedTranscriptionResolution
+        if let enforced = plannedEnforcement {
             guard let providerId = enforced.resolvedProviderId else { throw HistoryRetranscriptionError.unavailable }
             request.engineID = providerId
             request.modelID = nil
@@ -171,6 +172,11 @@ enum HistoryRetranscriptionEnvironment {
             run: { samples in
                 guard PluginManager.shared?.transcriptionEngine(for: request.engineID) === engine else {
                     throw HistoryRetranscriptionError.unavailable
+                }
+                // A profile that changed the enforced pair since planning would run an engine the
+                // plan did not check or disclose.
+                guard PluginManager.shared?.enforcedTranscriptionResolution == plannedEnforcement else {
+                    throw HistoryRetranscriptionError.changed
                 }
                 let result = try await transcribe(
                     samples: samples, request: request, modelID: modelID,

@@ -250,8 +250,8 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     var resolvedEngine: TranscriptionEnginePlugin? {
-        let engineId = selectedEngine ?? modelManager.selectedProviderId
-        guard let engineId else { return nil }
+        // An enforced pair replaces the chosen engine, as it does when the recording is transcribed.
+        guard let engineId = modelManager.effectiveEngineId(selectedEngine) else { return nil }
         guard let pluginManager = PluginManager.shared else { return nil }
         return pluginManager.transcriptionEngine(for: engineId)
     }

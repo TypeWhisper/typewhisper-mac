@@ -95,6 +95,34 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertNotNil(manager.resolveTranscriptionPair(ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.catalog", modelId: "missing")).unavailableReason)
     }
 
+    func testFeatureEnginesFollowTheEnforcedPair() throws {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        defer { manager.applySelectionPolicy(.unmanaged) }
+        let suite = "TypeWhisperTests.ManagedPairs.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let files = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: DictionaryService(appSupportDirectory: directory),
+            defaults: defaults
+        )
+        files.selectedEngine = "cloud-engine"
+        XCTAssertEqual(files.resolvedEngine?.providerId, "cloud-engine")
+
+        // Readiness follows the engine that will run, not the feature's own choice.
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.local", modelId: "small")
+        ))
+        XCTAssertEqual(files.resolvedEngine?.providerId, "local-engine")
+
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "small")
+        ))
+        XCTAssertNil(files.resolvedEngine, "An unusable pair leaves nothing ready")
+    }
+
     func testEnforcedLlmPairLocksTheFallbackList() throws {
         let manager = makeManager()
         PluginManager.shared = manager
