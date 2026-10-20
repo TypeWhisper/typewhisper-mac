@@ -37,7 +37,7 @@ struct SetupWizardView: View {
             readiness: .current()
         )
         _currentStep = State(initialValue: min(max(managedStep ?? saved, 0), maxStep))
-        _promptProcessingService = ObservedObject(wrappedValue: PromptActionsViewModel.shared.promptProcessingService)
+        _promptProcessingService = ObservedObject(wrappedValue: ServiceContainer.shared.promptProcessingService)
 
         if !DictationSettingsHandler.loadHotkeys(for: .hybrid).isEmpty {
             _selectedHotkeyMode = State(initialValue: .hybrid)

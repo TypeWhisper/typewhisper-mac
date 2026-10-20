@@ -349,10 +349,14 @@ enum AppConstants {
         static let checkoutURLTeam = "https://buy.polar.sh/polar_cl_kSqGfvss0Ces3W7R4xw7hr5NdgvEbPbhhUGRH4ad3Hj"
         static let checkoutURLEnterprise = "https://buy.polar.sh/polar_cl_uzCNIsF0vY9gx2peWljyJU7JQoEzxHUueCPTA0MoOQe"
 
-        // Business Lifetime
+        // Business Yearly: ten monthly prices for a year
+        static let checkoutURLIndividualYearly = "https://buy.polar.sh/polar_cl_lnRsYNgI93u4CRXftmZU8JPn5EIGnbcbzGqLi3VBfzK"
+        static let checkoutURLTeamYearly = "https://buy.polar.sh/polar_cl_1MgHf8OcRjqEoxOvw3sorOKSPfAi6OIHVj3aN0nXytG"
+        static let checkoutURLEnterpriseYearly = "https://buy.polar.sh/polar_cl_LZkXVmog2aWoQqfWhIp19yEsaZNqHc0r3jU020T2oRi"
+
+        // Business Lifetime. Enterprise is sold as a subscription only.
         static let checkoutURLIndividualLifetime = "https://buy.polar.sh/polar_cl_Uiv5AnvLoQjx4JowO3gGciT7MLOovY4oY4ESz3PIxgI"
         static let checkoutURLTeamLifetime = "https://buy.polar.sh/polar_cl_GjG4jf1fT9HGQn051cgN6xsWH9Xm6Z7oe0Ke71xq6Po"
-        static let checkoutURLEnterpriseLifetime = "https://buy.polar.sh/polar_cl_ngagiyJjXtxDBqv19EooEGJOLRcgzBWKBFYrZ2V2Xm7"
 
         // Private Supporter
         static let checkoutURLSupporterBronze = "https://buy.polar.sh/polar_cl_yilyo1V90RnuUX59V2PyLUIg45FpzYI8aMhG824wYn8"
