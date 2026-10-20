@@ -53,9 +53,6 @@
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
 		7A1018FIX0000000000A001 /* PassiveRestoreSelectedEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */; };
 		103600000000000000000001 /* MLXPluginModelStorageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 103600000000000000000002 /* MLXPluginModelStorageTests.swift */; };
-		1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */; };
-		1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */; };
-		1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */; };
 		4D980A5CFE1A4217A10C2101 /* WhisperKitPluginLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */; };
 		4D980A5CFE1A4217A10C2104 /* WhisperKitPluginCompatibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D980A5CFE1A4217A10C2103 /* WhisperKitPluginCompatibilityTests.swift */; };
 		0B58B3B8ACBA76118C3B54C2 /* ModelManagerRestoreAfterAutoUnloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B9EC248517FD4849BEF54D /* ModelManagerRestoreAfterAutoUnloadTests.swift */; };
@@ -289,8 +286,8 @@
 		F83600000000000000000002 /* HistorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000012 /* HistorySettingsView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
-		AA00000000000000000067 /* ProfilesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000067 /* ProfilesViewModel.swift */; };
-		AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000068 /* ProfilesSettingsView.swift */; };
+		AA16570000000000000001 /* AppLanguageText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000001 /* AppLanguageText.swift */; };
+		AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000002 /* InstalledAppsViewModel.swift */; };
 		AA00000000000000000070 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000070 /* UpdateChecker.swift */; };
 		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; settings = {ATTRIBUTES = (Weak, ); }; };
 		AA00000000000000000072 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000072 /* Assets.xcassets */; };
@@ -348,9 +345,6 @@
 		AA00000000000000000112 /* LLMProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000112 /* LLMProvider.swift */; };
 		AA00000000000000000113 /* FoundationModelsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000113 /* FoundationModelsProvider.swift */; };
 		AA00000000000000000115 /* PromptProcessingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000115 /* PromptProcessingService.swift */; };
-		AA00000000000000000116 /* PromptActionsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000116 /* PromptActionsViewModel.swift */; };
-		AA00000000000000000315 /* PromptWizardSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000314 /* PromptWizardSupport.swift */; };
-		AA00000000000000000117 /* PromptActionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000117 /* PromptActionsSettingsView.swift */; };
 		AA00000000000000000118 /* PromptPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000118 /* PromptPalettePanel.swift */; };
 		AA00000000000000000119 /* UserDefaultsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000119 /* UserDefaultsKeys.swift */; };
 		AA00000000000000000120 /* NotchIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000120 /* NotchIndicatorPanel.swift */; };
@@ -990,9 +984,9 @@
 		F83600000000000000000012 /* HistorySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
-		BB00000000000000000067 /* ProfilesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesViewModel.swift; sourceTree = "<group>"; };
+		BB16570000000000000001 /* AppLanguageText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguageText.swift; sourceTree = "<group>"; };
+		BB16570000000000000002 /* InstalledAppsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledAppsViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardModel.swift; sourceTree = "<group>"; };
-		BB00000000000000000068 /* ProfilesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		BB00000000000000000072 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB00000000000000000073 /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
@@ -1049,9 +1043,6 @@
 		BB00000000000000000112 /* LLMProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMProvider.swift; sourceTree = "<group>"; };
 		BB00000000000000000113 /* FoundationModelsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelsProvider.swift; sourceTree = "<group>"; };
 		BB00000000000000000115 /* PromptProcessingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptProcessingService.swift; sourceTree = "<group>"; };
-		BB00000000000000000116 /* PromptActionsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptActionsViewModel.swift; sourceTree = "<group>"; };
-		BB00000000000000000314 /* PromptWizardSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptWizardSupport.swift; sourceTree = "<group>"; };
-		BB00000000000000000117 /* PromptActionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptActionsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000118 /* PromptPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptPalettePanel.swift; sourceTree = "<group>"; };
 		BB00000000000000000119 /* UserDefaultsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDefaultsKeys.swift; sourceTree = "<group>"; };
 		BB00000000000000000120 /* NotchIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotchIndicatorPanel.swift; sourceTree = "<group>"; };
@@ -1318,9 +1309,6 @@
 		836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationQuickSelectionTests.swift; sourceTree = "<group>"; };
 		2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IndicatorTranscriptPreviewSizingTests.swift; sourceTree = "<group>"; };
 		6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelSpacePolicyTests.swift; sourceTree = "<group>"; };
-		2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardComposerTests.swift; sourceTree = "<group>"; };
-		2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptWizardInferenceServiceTests.swift; sourceTree = "<group>"; };
-		2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionsViewModelWizardTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
 		545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardRecommendationAvailabilityTests.swift; sourceTree = "<group>"; };
 		545000000000000000000003 /* SetupWizardTrialSignalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardTrialSignalTests.swift; sourceTree = "<group>"; };
@@ -2230,15 +2218,14 @@
 				BB7E11000000000000000004 /* RemoteLinkViewModel.swift */,
 				BB00000000000000000063 /* HistoryViewModel.swift */,
 				9C4372F8CA247C5FF34F05CB /* SpeakerWorkspaceModel.swift */,
-				BB00000000000000000067 /* ProfilesViewModel.swift */,
+				BB16570000000000000001 /* AppLanguageText.swift */,
+				BB16570000000000000002 /* InstalledAppsViewModel.swift */,
 				BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */,
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
 				FCA27EE9C88045C584659C35 /* AppVocabularyImportViewModel.swift */,
 				BB00000000000000000084 /* SnippetsViewModel.swift */,
 				BB00000000000000000090 /* HomeViewModel.swift */,
 				B7A100000000000000000002 /* StatisticsViewModel.swift */,
-				BB00000000000000000116 /* PromptActionsViewModel.swift */,
-				BB00000000000000000314 /* PromptWizardSupport.swift */,
 				BB00000000000000000171 /* DictationEnums.swift */,
 				BB00000000000000000172 /* StreamingHandler.swift */,
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
@@ -2289,7 +2276,6 @@
 				58A7090514EE1B744E60CE86 /* SpeakerRecordingRow.swift */,
 				B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */,
 				F83600000000000000000012 /* HistorySettingsView.swift */,
-				BB00000000000000000068 /* ProfilesSettingsView.swift */,
 				BB00000000000000000075 /* TranslationHostWindow.swift */,
 				BB00000000000000000083 /* DictionarySettingsView.swift */,
 				E55F29B746864D4CA3108E92 /* AppVocabularyImportSheet.swift */,
@@ -2298,7 +2284,6 @@
 				B7A100000000000000000004 /* StatisticsView.swift */,
 				BB00000000000000000092 /* SetupWizardView.swift */,
 				BB00000000000000000094 /* AudioWaveformView.swift */,
-				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
 				BB00000000000000000118 /* PromptPalettePanel.swift */,
 				B91F00000000000000000001 /* SelectionPalettePanel.swift */,
 				BB00000000000000000120 /* NotchIndicatorPanel.swift */,
@@ -3216,9 +3201,6 @@
 				BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
 				FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */,
-				2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */,
-				2A7B3C4D5E6F708192A3B4C5 /* PromptWizardComposerTests.swift */,
-				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
 				F41BD305007A3A158038C75C /* ProfileServiceTests.swift */,
 				B10000000000000000000005 /* WorkflowServiceTests.swift */,
 				B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */,
@@ -5213,9 +5195,6 @@
 				AA00000000000000000367 /* AccessibilityPermissionPaneTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
 				FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */,
-				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,
-				1F7A2C3D4E5B60718293A4C5 /* PromptWizardComposerTests.swift in Sources */,
-				1F7A2C3D4E5B60718293A4C6 /* PromptWizardInferenceServiceTests.swift in Sources */,
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
 				C50700000000000000000001 /* MemoryServiceTests.swift in Sources */,
 				A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */,
@@ -5382,8 +5361,8 @@
 				AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */,
 				AA000000000000000A123601 /* WorkflowTextSegmenter.swift in Sources */,
 				AA000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift in Sources */,
-				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
-				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
+				AA16570000000000000001 /* AppLanguageText.swift in Sources */,
+				AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 				AA00000000000000000073 /* TranslationService.swift in Sources */,
 				AA00000000000000000074 /* AudioDuckingService.swift in Sources */,
@@ -5439,9 +5418,6 @@
 				AA00000000000000000112 /* LLMProvider.swift in Sources */,
 				AA00000000000000000113 /* FoundationModelsProvider.swift in Sources */,
 				AA00000000000000000115 /* PromptProcessingService.swift in Sources */,
-				AA00000000000000000116 /* PromptActionsViewModel.swift in Sources */,
-				AA00000000000000000315 /* PromptWizardSupport.swift in Sources */,
-				AA00000000000000000117 /* PromptActionsSettingsView.swift in Sources */,
 				AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */,
 				AA00000000000000000118 /* PromptPalettePanel.swift in Sources */,
 				A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */,
