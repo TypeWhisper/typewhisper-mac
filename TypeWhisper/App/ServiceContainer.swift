@@ -121,12 +121,11 @@ final class ServiceContainer: ObservableObject {
     let dictationViewModel: DictationViewModel
     let historyViewModel: HistoryViewModel
     lazy var historyRetranscriptionService = HistoryRetranscriptionEnvironment.makeService(self)
-    let profilesViewModel: ProfilesViewModel
+    let installedAppsViewModel: InstalledAppsViewModel
     let dictionaryViewModel: DictionaryViewModel
     let snippetsViewModel: SnippetsViewModel
     let homeViewModel: HomeViewModel
     let statisticsViewModel: StatisticsViewModel
-    let promptActionsViewModel: PromptActionsViewModel
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
 
@@ -494,12 +493,7 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             syncController: cloudFolderSyncController
         )
-        profilesViewModel = ProfilesViewModel(
-            profileService: profileService,
-            historyService: historyService,
-            settingsViewModel: settingsViewModel,
-            textInsertionService: textInsertionService
-        )
+        installedAppsViewModel = InstalledAppsViewModel()
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,
             licenseService: licenseService,
@@ -518,11 +512,6 @@ final class ServiceContainer: ObservableObject {
         statisticsViewModel = StatisticsViewModel(
             usageStatisticsService: usageStatisticsService
         )
-        promptActionsViewModel = PromptActionsViewModel(
-            promptActionService: promptActionService,
-            promptProcessingService: promptProcessingService,
-            profileService: profileService
-        )
         watchFolderViewModel = WatchFolderViewModel(
             watchFolderService: watchFolderService,
             modelManager: modelManagerService
@@ -536,12 +525,10 @@ final class ServiceContainer: ObservableObject {
         APIServerViewModel._shared = apiServerViewModel
         RemoteLinkViewModel._shared = remoteLinkViewModel
         HistoryViewModel._shared = historyViewModel
-        ProfilesViewModel._shared = profilesViewModel
         DictionaryViewModel._shared = dictionaryViewModel
         SnippetsViewModel._shared = snippetsViewModel
         HomeViewModel._shared = homeViewModel
         StatisticsViewModel._shared = statisticsViewModel
-        PromptActionsViewModel._shared = promptActionsViewModel
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
 

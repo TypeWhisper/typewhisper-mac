@@ -1199,7 +1199,7 @@ private struct WorkflowEditorPage: View {
 
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var hotkeyService = ServiceContainer.shared.hotkeyService
-    @ObservedObject private var profilesViewModel = ServiceContainer.shared.profilesViewModel
+    @ObservedObject private var installedAppsViewModel = ServiceContainer.shared.installedAppsViewModel
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var settingsViewModel = SettingsViewModel.shared
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -1245,7 +1245,7 @@ private struct WorkflowEditorPage: View {
         }
         .sheet(isPresented: $showingAppPicker) {
             WorkflowAppPickerSheet(
-                installedApps: profilesViewModel.installedApps,
+                installedApps: installedAppsViewModel.installedApps,
                 selectedBundleIdentifiers: $draft.appBundleIdentifiers
             )
         }
@@ -2349,12 +2349,12 @@ private struct WorkflowEditorPage: View {
     }
 
     private func installedAppName(for bundleId: String) -> String {
-        profilesViewModel.installedApps.first(where: { $0.id == bundleId })?.name
+        installedAppsViewModel.installedApps.first(where: { $0.id == bundleId })?.name
             ?? workflowAppDisplayName(for: bundleId)
     }
 
     private func installedAppIcon(for bundleId: String) -> NSImage? {
-        profilesViewModel.installedApps.first(where: { $0.id == bundleId })?.icon
+        installedAppsViewModel.installedApps.first(where: { $0.id == bundleId })?.icon
     }
 
     private func addWebsiteInput() {

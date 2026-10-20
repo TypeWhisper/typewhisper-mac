@@ -710,11 +710,41 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(
             commercialPurchaseOptionCopy(for: .enterprise, cadence: .monthly),
             CommercialPurchaseOptionCopy(
-                price: "99 EUR",
+                price: "199 EUR",
                 billingLabel: localizedAppText("per month", de: "pro Monat"),
                 detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
             )
         )
+
+        XCTAssertEqual(
+            commercialPurchaseOptionCopy(for: .team, cadence: .yearly),
+            CommercialPurchaseOptionCopy(
+                price: "190 EUR",
+                billingLabel: localizedAppText("per year", de: "pro Jahr"),
+                detail: localizedAppText("Two months free", de: "Zwei Monate gratis")
+            )
+        )
+
+        XCTAssertEqual(
+            commercialPurchaseOptionCopy(for: .enterprise, cadence: .yearly)?.price,
+            localizedAppText("1,990 EUR", de: "1.990 EUR")
+        )
+        XCTAssertNil(commercialPurchaseOptionCopy(for: .enterprise, cadence: .lifetime))
+    }
+
+    func testEnterpriseIsSoldAsSubscriptionOnly() {
+        XCTAssertEqual(commercialPurchaseCadences(for: .individual), [.monthly, .yearly, .lifetime])
+        XCTAssertEqual(commercialPurchaseCadences(for: .team), [.monthly, .yearly, .lifetime])
+        XCTAssertEqual(commercialPurchaseCadences(for: .enterprise), [.monthly, .yearly])
+
+        for tier in [LicenseTier.individual, .team, .enterprise] {
+            for cadence in commercialPurchaseCadences(for: tier) {
+                XCTAssertNotNil(
+                    commercialPurchaseOptionCopy(for: tier, cadence: cadence),
+                    "\(tier) \(cadence) is offered without a price"
+                )
+            }
+        }
     }
 
     func testMacCheckoutURLAddsPolarAttribution() throws {

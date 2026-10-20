@@ -1505,6 +1505,12 @@
     },
     "Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle Ollama, um installierte Modelle über den nativen /api/tags-Endpunkt des Servers zu finden. Allgemeine Server nutzen nur den OpenAI-kompatiblen /v1/models-Endpunkt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1549,6 +1555,12 @@
     },
     "Could not reach the Ollama server. Check that it is running and the URL is correct.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ollama-Server ist nicht erreichbar. Prüfe, ob er läuft und die URL stimmt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1637,6 +1649,12 @@
     },
     "The server response was not a valid Ollama /api/tags payload.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Antwort des Servers war keine gültige Ollama-/api/tags-Antwort."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
