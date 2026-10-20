@@ -133,6 +133,8 @@ struct HomeSettingsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Your Activity"))
     }
 
     private func statisticsSummaryCard(title: String, value: String, systemImage: String) -> some View {
@@ -153,6 +155,7 @@ struct HomeSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text(localizedAppText(
                         "Pricing, lifetime options, procurement, and support are clearer on the website.",
                         de: "Preise, Lifetime-Optionen, Beschaffung und Support sind auf der Website klarer erklärt."
@@ -170,6 +173,7 @@ struct HomeSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Close"))
             }
 
             HStack(spacing: 10) {
@@ -271,6 +275,18 @@ struct HomeSettingsView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(recentTranscriptionAccessibilityLabel(record))
+                            .accessibilityHint(localizedAppText(
+                                "Opens this transcription in History.",
+                                de: "Öffnet diese Transkription im Verlauf.",
+                                ja: "この文字起こしを履歴で開きます。",
+                                zh: "在历史记录中打开此转录。"
+                            ))
+                            // The context menu is hard to reach with VoiceOver;
+                            // offer its copy command as an action as well.
+                            .accessibilityAction(named: Text(String(localized: "Copy"))) {
+                                copyTranscription(record)
+                            }
                             .contextMenu {
                                 Button {
                                     copyTranscription(record)
@@ -292,6 +308,20 @@ struct HomeSettingsView: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Recent Transcriptions"))
+    }
+
+    /// Full text, time and app, without the visual "- App" dash and chevron.
+    private func recentTranscriptionAccessibilityLabel(_ record: TranscriptionRecord) -> String {
+        var parts = [record.displayText, record.timestamp.formatted(.relative(presentation: .named))]
+        if let appName = record.appName, !appName.isEmpty {
+            parts.append(appName)
+        }
+        if copiedRecordID == record.id {
+            parts.append(String(localized: "Copied to clipboard"))
+        }
+        return parts.joined(separator: ", ")
     }
 
     private func openInHistory(_ record: TranscriptionRecord) {
@@ -304,6 +334,7 @@ struct HomeSettingsView: View {
         NSPasteboard.general.setString(record.displayText, forType: .string)
         copyFeedbackTask?.cancel()
         copiedRecordID = record.id
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(String(localized: "Copied to clipboard"))
         copyFeedbackTask = Task { @MainActor in
             do {
                 try await Task.sleep(for: .seconds(2))
@@ -337,6 +368,7 @@ struct HomeSettingsView: View {
 
                 Text(String(localized: "Ready to start dictating?"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 HStack(spacing: 6) {
                     Text(String(localized: "Press"))
@@ -353,6 +385,14 @@ struct HomeSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .font(.callout)
+                // Read as one sentence instead of three fragments.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(localizedAppText(
+                    "Press \(primaryHotkeyLabel) in any app to begin.",
+                    de: "Drücke \(primaryHotkeyLabel) in einer beliebigen App, um zu beginnen.",
+                    ja: "任意のアプリで\(primaryHotkeyLabel)を押して開始します。",
+                    zh: "在任意应用中按 \(primaryHotkeyLabel) 开始。"
+                ))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
@@ -385,6 +425,8 @@ struct HomeSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(String(localized: "Microphone access required"))
             }
 #if APPSTORE
             if dictation.needsAccessibilityPermission {
@@ -407,6 +449,8 @@ struct HomeSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(AccessibilityPermissionPane.accessRequiredText())
             }
 #endif
         }
