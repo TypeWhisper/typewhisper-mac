@@ -371,8 +371,11 @@ private struct MyWorkflowsPage: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(localizedAppText("Search workflows", de: "Workflows durchsuchen"), text: $searchText)
                 .textFieldStyle(.plain)
+                .accessibilityLabel(localizedAppText("Search workflows", de: "Workflows durchsuchen"))
+                .accessibilityAddTraits(.isSearchField)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -427,6 +430,7 @@ private struct MyWorkflowsPage: View {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.body)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             Text(
                 localizedAppText(
@@ -567,17 +571,36 @@ private struct LLMFallbackPriorityRow: View {
             : localizedAppText("Unavailable", de: "Nicht verfügbar")
     }
 
+    /// Names the row by its priority, provider and status, since the drag handle and the
+    /// position number are hidden from accessibility.
+    private var accessibilityRowLabel: String {
+        let position = index + 1
+        let providerName = promptProcessingService.displayName(for: item.providerId)
+        let name = localizedAppText(
+            "Fallback \(position) of \(count): \(providerName)",
+            de: "Fallback \(position) von \(count): \(providerName)",
+            ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
+            zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)"
+        )
+        return [name, statusText].joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.tertiary)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 10)
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 10)
 
-            Text("\(index + 1)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.tertiary)
-                .frame(width: 14, alignment: .trailing)
+                Text("\(index + 1)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14, alignment: .trailing)
+            }
+            .contentShape(Rectangle())
+            .help(localizedAppText("Drag to reorder global LLM fallbacks", de: "Ziehen, um globale LLM-Fallbacks zu sortieren"))
+            .accessibilityHidden(true)
 
             selectionFields
 
@@ -624,12 +647,6 @@ private struct LLMFallbackPriorityRow: View {
                 Label(localizedAppText("Remove", de: "Entfernen"), systemImage: "trash")
             }
         }
-        .modifier(LLMFallbackPriorityAccessibilityActions(
-            canMoveUp: canMoveUp,
-            canMoveDown: canMoveDown,
-            moveUp: { onMove(item, -1) },
-            moveDown: { onMove(item, 1) }
-        ))
         .fallbackPriorityReordering(
             fallbackID: item.id.uuidString,
             isTargeted: $isDropTargeted,
@@ -641,10 +658,17 @@ private struct LLMFallbackPriorityRow: View {
                 return onDrop(draggedID, item)
             }
         )
-        .help(localizedAppText("Drag to reorder global LLM fallbacks", de: "Ziehen, um globale LLM-Fallbacks zu sortieren"))
-        .accessibilityHint(localizedAppText(
-            "Drag this row to reorder global LLM fallbacks.",
-            de: "Ziehe diese Zeile, um globale LLM-Fallbacks zu sortieren."
+        // One container per fallback keeps its controls together for VoiceOver. The drag
+        // tooltip sits on the grip and reordering is offered as Move Up and Move Down actions:
+        // a tooltip or hint on the container would replace its "group" role description, and
+        // on the row's content it would be repeated on every control.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+        .modifier(ReorderAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: { onMove(item, -1) },
+            moveDown: { onMove(item, 1) }
         ))
     }
 
@@ -797,7 +821,9 @@ private struct LLMFallbackPriorityRow: View {
     }
 }
 
-private struct LLMFallbackPriorityAccessibilityActions: ViewModifier {
+/// Offers Move Up and Move Down as accessibility actions so rows that sort by drag and drop
+/// can also be reordered with VoiceOver.
+private struct ReorderAccessibilityActions: ViewModifier {
     let canMoveUp: Bool
     let canMoveDown: Bool
     let moveUp: () -> Void
@@ -857,6 +883,37 @@ private struct WorkflowRow: View {
     @State private var isDropTargeted = false
     @State private var isHovered = false
 
+    private var statusText: String {
+        workflow.isEnabled
+            ? localizedAppText("Enabled", de: "Aktiv")
+            : localizedAppText("Disabled", de: "Deaktiviert")
+    }
+
+    private var accessibilityRowLabel: String {
+        [workflow.name, statusText].joined(separator: ", ")
+    }
+
+    private var reorderTooltip: String {
+        isReorderingEnabled
+            ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
+            : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
+    }
+
+    /// Reads the row's texts and badges as one sentence instead of many separate fragments.
+    private var accessibilitySummary: String {
+        let reviewText = workflowReviewText(for: workflow)
+        let templateName = workflow.template.definition.name
+        var parts = [workflow.name, statusText]
+        if !reviewText.localizedCaseInsensitiveContains(templateName) {
+            parts.append(templateName)
+        }
+        parts.append(reviewText)
+        if workflow.usesInlineCommands {
+            parts.append(String(localized: "Inline Commands"))
+        }
+        return parts.joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: workflow.template.definition.systemImage)
@@ -864,6 +921,8 @@ private struct WorkflowRow: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 28, height: 28)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .help(reorderTooltip)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
                 titleRow
@@ -906,6 +965,11 @@ private struct WorkflowRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
+            .contentShape(Rectangle())
+            .help(reorderTooltip)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 8)
 
@@ -917,28 +981,47 @@ private struct WorkflowRow: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Enable \(workflow.name)"))
 
                 Button(action: onMoveUp) {
                     Image(systemName: "arrow.up")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canMoveUp)
+                .help(String(localized: "Move Up"))
+                .accessibilityLabel(localizedAppText(
+                    "Move \(workflow.name) up",
+                    de: "\(workflow.name) nach oben bewegen",
+                    ja: "\(workflow.name)を上へ移動",
+                    zh: "上移 \(workflow.name)"
+                ))
 
                 Button(action: onMoveDown) {
                     Image(systemName: "arrow.down")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canMoveDown)
+                .help(String(localized: "Move Down"))
+                .accessibilityLabel(localizedAppText(
+                    "Move \(workflow.name) down",
+                    de: "\(workflow.name) nach unten bewegen",
+                    ja: "\(workflow.name)を下へ移動",
+                    zh: "下移 \(workflow.name)"
+                ))
 
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
                 }
                 .buttonStyle(.borderless)
+                .help(String(localized: "Edit"))
+                .accessibilityLabel(String(localized: "Edit \(workflow.name)"))
 
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
+                .help(String(localized: "Delete"))
+                .accessibilityLabel(String(localized: "Delete \(workflow.name)"))
             }
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
@@ -963,16 +1046,19 @@ private struct WorkflowRow: View {
             }
             return onDropWorkflow(droppedId)
         }
-        .help(
-            isReorderingEnabled
-                ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
-                : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
-        )
-        .accessibilityHint(
-            isReorderingEnabled
-                ? localizedAppText("Drag this row to reorder workflows.", de: "Ziehe diese Zeile, um Workflows zu sortieren.")
-                : localizedAppText("Reordering is disabled while search is active.", de: "Die Sortierung ist während aktiver Suche deaktiviert.")
-        )
+        // One container per workflow keeps its controls together for VoiceOver. The drag
+        // tooltip sits on the icon and text, the controls have their own, and reordering is
+        // offered as Move Up and Move Down actions: a tooltip or hint on the container would
+        // replace its "group" role description, and on the whole row it would be repeated on
+        // every control.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+        .modifier(ReorderAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: onMoveUp,
+            moveDown: onMoveDown
+        ))
     }
 
     private var rowBackgroundColor: Color {
@@ -1027,9 +1113,7 @@ private struct WorkflowRow: View {
 
     private var workflowStatusBadge: some View {
         WorkflowBadge(
-            title: workflow.isEnabled
-                ? localizedAppText("Enabled", de: "Aktiv")
-                : localizedAppText("Disabled", de: "Deaktiviert"),
+            title: statusText,
             compact: true,
             tint: workflow.isEnabled ? .green.opacity(0.14) : .secondary.opacity(0.14),
             foreground: workflow.isEnabled ? .green : .secondary
