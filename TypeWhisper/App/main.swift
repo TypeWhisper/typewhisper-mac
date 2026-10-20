@@ -1,5 +1,9 @@
 import Foundation
 
+// Unit tests run inside this app and would otherwise share the installed app's
+// preferences. This has to come before the first read of UserDefaults.standard.
+TestHostIsolation.isolateDefaultsIfRunningTests()
+
 // Override Bundle.main's localization to support in-app language switching.
 // This must happen before TypeWhisperApp.main() so that all String(localized:)
 // calls resolve using the user's preferred language, not the system language.

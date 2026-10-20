@@ -326,6 +326,7 @@
 		B7A100000000000000000003 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A100000000000000000004 /* StatisticsView.swift */; };
 		AA00000000000000000092 /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000092 /* SetupWizardView.swift */; };
 		AA00000000000000000093 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000093 /* main.swift */; };
+		7E57A0000000000000000001 /* TestHostIsolation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E57B0000000000000000001 /* TestHostIsolation.swift */; };
 		AA00000000000000000094 /* AudioWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000094 /* AudioWaveformView.swift */; };
 		AA00000000000000000095 /* WavEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000095 /* WavEncoder.swift */; };
 		AA00000000000000000096 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000096 /* KeychainService.swift */; };
@@ -1024,6 +1025,7 @@
 		B7A100000000000000000004 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000092 /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardView.swift; sourceTree = "<group>"; };
 		BB00000000000000000093 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		7E57B0000000000000000001 /* TestHostIsolation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestHostIsolation.swift; sourceTree = "<group>"; };
 		BB00000000000000000094 /* AudioWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWaveformView.swift; sourceTree = "<group>"; };
 		BB00000000000000000095 /* WavEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WavEncoder.swift; sourceTree = "<group>"; };
 		BB00000000000000000096 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
@@ -2025,6 +2027,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000093 /* main.swift */,
+				7E57B0000000000000000001 /* TestHostIsolation.swift */,
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
@@ -5407,6 +5410,7 @@
 				AA00000000000000000092 /* SetupWizardView.swift in Sources */,
 				AA00000000000000000094 /* AudioWaveformView.swift in Sources */,
 				AA00000000000000000093 /* main.swift in Sources */,
+				7E57A0000000000000000001 /* TestHostIsolation.swift in Sources */,
 				AA00000000000000000119 /* UserDefaultsKeys.swift in Sources */,
 				AA00000000000000000120 /* NotchIndicatorPanel.swift in Sources */,
 				E5A1B2C3D4F5061728394A5B /* NotchIndicatorLayout.swift in Sources */,

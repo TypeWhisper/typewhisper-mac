@@ -145,10 +145,11 @@ enum TestSupport {
     }
 }
 
-/// Principal class of the test bundle. The test host runs with the dev app's bundle
-/// identifier, so a test that selects an engine also changes the engine the dev app
-/// uses. After every test the engine and model selection are set back to the values
-/// from before the run.
+/// Principal class of the test bundle. `UserDefaults.standard` in the test host belongs
+/// to this run alone (see `TestHostIsolation`), so the installed app's settings are never
+/// touched. A test that selects an engine would still leak that choice into later tests,
+/// so after every test the engine and model selection are set back to the values from
+/// before the run. When the bundle finishes, the run's preferences domain is removed.
 final class TestHostDefaultsGuard: NSObject, XCTestObservation {
     private static let preservedKeys = [
         UserDefaultsKeys.selectedEngine,
@@ -177,6 +178,7 @@ final class TestHostDefaultsGuard: NSObject, XCTestObservation {
 
     func testBundleDidFinish(_ testBundle: Bundle) {
         restoreSavedValues()
+        TestHostIsolation.removeIsolatedDefaults()
     }
 
     private func restoreSavedValues() {
