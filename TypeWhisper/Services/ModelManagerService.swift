@@ -653,11 +653,13 @@ final class ModelManagerService: ObservableObject {
         let hasPersistedRestorableModel = pluginId.map {
             TranscriptionEngineReadiness.hasPersistedRestorableModel(pluginId: $0)
         } ?? false
+        // A transient model is not persisted; the plugin restores it on first use all the same.
+        let hasTransientModel = (engine as? any TransientModelSelectionProviding)?.transientModelId != nil
 
         return TranscriptionEngineReadiness.engineIsReadyOrRestorable(
             authAvailable: canUseForTranscription(engine),
             isConfigured: engine.isConfigured,
-            hasPersistedRestorableModel: hasPersistedRestorableModel,
+            hasPersistedRestorableModel: hasPersistedRestorableModel || hasTransientModel,
             hasPreparationFallback: hasPreparationFallback
         )
     }
@@ -693,6 +695,7 @@ final class ModelManagerService: ObservableObject {
         if applyEnforcedTranscriptionPair() {
             return
         }
+        endTransientModelSelections()
         restoreModelsRetainedFromEnforcedPair()
         applyRecommendedTranscriptionPairIfNeeded()
         let savedProviderId = UserDefaults.standard.string(forKey: providerKey)
@@ -742,23 +745,32 @@ final class ModelManagerService: ObservableObject {
             && PluginManager.shared?.selectionPolicy.recommendedTranscription != nil
     }
 
-    /// Selects the enforced pair's engine in memory and its model in the plugin, retaining the model
-    /// the user had. Returns false when no pair is enforced. Never falls back to another engine.
+    /// Selects the enforced pair's engine in memory and its model in the plugin. Returns false when
+    /// no pair is enforced. Never falls back to another engine.
     private func applyEnforcedTranscriptionPair() -> Bool {
         guard let enforced = PluginManager.shared?.enforcedTranscriptionResolution else { return false }
         PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
         guard case .resolved(let providerId, let modelId) = enforced else {
+            endTransientModelSelections()
             if selectedProviderId != nil {
                 selectedProviderId = nil
             }
             passiveRestoreSelection = nil
             return true
         }
+        endTransientModelSelections(except: providerId)
         if selectedProviderId != providerId {
             selectedProviderId = providerId
         }
-        if let engine = PluginManager.shared.transcriptionEngine(for: providerId),
-           engine.selectedModelId?.caseInsensitiveCompare(modelId) != .orderedSame {
+        guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { return true }
+        if let transientEngine = engine as? any TransientModelSelectionProviding {
+            // The plugin uses the model without saving it and returns to the user's selection
+            // when the selection ends, so nothing is retained here.
+            if transientEngine.transientModelId?.caseInsensitiveCompare(modelId) != .orderedSame {
+                transientEngine.beginTransientModelSelection(modelId)
+            }
+            resolveRetainedModel(of: transientEngine)
+        } else if engine.selectedModelId?.caseInsensitiveCompare(modelId) != .orderedSame {
             var retained = Self.retainedModels()
             if retained[providerId] == nil {
                 // Retained before changing anything; an empty value means the plugin had none selected.
@@ -770,6 +782,39 @@ final class ModelManagerService: ObservableObject {
         return true
     }
 
+    /// Ends the transient selections of engines the enforced pair no longer names. Engines of
+    /// plugins that were turned off or reloaded lost theirs when they were deactivated.
+    private func endTransientModelSelections(except providerId: String? = nil) {
+        guard let manager = PluginManager.shared else { return }
+        for plugin in manager.loadedPlugins where plugin.isEnabled {
+            var engines: [TranscriptionEnginePlugin] = []
+            if let engine = plugin.instance as? TranscriptionEnginePlugin {
+                engines.append(engine)
+            }
+            if let expanded = plugin.instance as? AdditionalTranscriptionEnginesProviding {
+                engines.append(contentsOf: expanded.additionalTranscriptionEngines)
+            }
+            for case let engine as any TransientModelSelectionProviding in engines
+            where engine.providerId != providerId && engine.transientModelId != nil {
+                engine.endTransientModelSelection()
+            }
+        }
+    }
+
+    /// An engine that now uses a transient selection may still have a model retained by the
+    /// earlier approach, which saved the enforced model as the user's selection. Selecting the
+    /// retained model during the transient selection saves it again without using it. An empty
+    /// entry meant no model was selected; that saved state cannot be cleared, as before.
+    private func resolveRetainedModel(of engine: any TransientModelSelectionProviding) {
+        var retained = Self.retainedModels()
+        guard engine.transientModelId != nil,
+              let modelId = retained.removeValue(forKey: engine.providerId) else { return }
+        if !modelId.isEmpty {
+            engine.selectModel(modelId)
+        }
+        UserDefaults.standard.set(retained, forKey: UserDefaultsKeys.managedTranscriptionModelRetention)
+    }
+
     /// Gives each engine back the model the user had before an enforced pair, once the engine is
     /// available again. Entries for unavailable engines wait for a later pass.
     private func restoreModelsRetainedFromEnforcedPair() {
@@ -777,8 +822,8 @@ final class ModelManagerService: ObservableObject {
         guard !retained.isEmpty else { return }
         for (providerId, modelId) in retained {
             guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { continue }
-            // An empty value means the engine had no model selected. Plugins cannot clear a
-            // selection, so the enforced model stays selected then.
+            // An empty value means the engine had no model selected. Without a transient
+            // selection plugins cannot clear a selection, so the enforced model stays selected then.
             if !modelId.isEmpty {
                 engine.selectModel(modelId)
             }

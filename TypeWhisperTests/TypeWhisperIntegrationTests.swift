@@ -18281,6 +18281,59 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testModelsLoadEndpointLoadsOnlyTheEnforcedModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: ModelLifecycleTranscriptionPlugin.pluginId, modelId: "tiny")
+        ))
+        defer { PluginManager.shared.applySelectionPolicy(.unmanaged) }
+
+        func load(_ model: String) async -> HTTPResponse {
+            await context.router.route(
+                HTTPRequest(
+                    method: "POST",
+                    path: "/v1/models/load",
+                    queryParams: [:],
+                    headers: ["content-type": "application/json"],
+                    body: Data(#"{"engine":"model-lifecycle-mock","model":"\#(model)"}"#.utf8)
+                )
+            )
+        }
+
+        let refused = await load("large")
+        XCTAssertEqual(refused.status, 403)
+        let error = try XCTUnwrap(Self.jsonObject(refused)["error"] as? [String: Any])
+        XCTAssertEqual(error["code"] as? String, "forbidden")
+        XCTAssertEqual(plugin.restoreInvocationCount, 0, "A model the pair does not name is never loaded")
+
+        let loaded = await load("tiny")
+        XCTAssertEqual(loaded.status, 200)
+        XCTAssertEqual(plugin.selectedModelId, "tiny")
+    }
+
+    @MainActor
     func testModelsLoadEndpointPreservesProviderSelectionWhenRestoreFails() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
