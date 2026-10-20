@@ -412,8 +412,8 @@ enum MenuBarLogoMarkImage {
         barRects(in: recordingBadgeRect(in: rect).insetBy(dx: recordingBarInset, dy: recordingBarInset))
     }
 
-    /// System red. With Increase Contrast, a darker red keeps the white bars at
-    /// about 5:1 and the badge at least 3:1 against light and dark menu bars.
+    /// System red. With Increase Contrast, a darker red raises the white bars from
+    /// about 3.6:1 to 5.4:1. `systemRed` does not change with that setting.
     static func recordingBadgeColor(increaseContrast: Bool) -> NSColor {
         increaseContrast
             ? NSColor(srgbRed: 215 / 255, green: 0, blue: 21 / 255, alpha: 1)
