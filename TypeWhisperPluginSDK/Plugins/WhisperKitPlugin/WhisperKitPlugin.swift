@@ -21,7 +21,7 @@ enum WhisperKitNetworkAccessPolicy {
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, HostModelLifecyclePolicyAwarePlugin, PassiveModelRestoreProviding, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, HostModelLifecyclePolicyAwarePlugin, PassiveModelRestoreProviding, TransientModelSelectionProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
     private static let maxConditioningPromptChars = 500
@@ -48,6 +48,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     private let modelLoadGate = PluginLocalInferenceGate()
+    /// A model the host uses in place of the user's selection, which is never saved.
+    /// `_selectedModelId` follows it while it lasts.
+    let transientSelection = PluginTransientModelSelection()
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -77,6 +80,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     func deactivate() {
+        transientSelection.end()
         passiveRestoreController.cancel()
         invalidateModelLoad()
         releaseWhisperKitResources()
@@ -250,8 +254,11 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         if loadedModelId == modelId {
             unloadModel(clearPersistence: true)
         }
-        if _selectedModelId == modelId {
+        // A transient model stays in use; only the user's saved selection forgets the model.
+        if _selectedModelId == modelId, transientSelection.modelId == nil {
             _selectedModelId = nil
+        }
+        if host?.userDefault(forKey: "selectedModel") as? String == modelId {
             host?.setUserDefault(nil, forKey: "selectedModel")
         }
         if host?.userDefault(forKey: "loadedModel") as? String == modelId {
@@ -262,10 +269,15 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         host?.notifyCapabilitiesChanged()
     }
 
-    var selectedModelId: String? { _selectedModelId }
+    var selectedModelId: String? { transientSelection.modelId ?? _selectedModelId }
 
     func selectModel(_ modelId: String) {
         guard Self.availableModels.contains(where: { $0.id == modelId }) else { return }
+        if transientSelection.modelId != nil {
+            // Saved as the user's choice; the transient model stays in use until it ends.
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+            return
+        }
 
         let previousLoadedModelId = loadedModelId
         let shouldUnloadCurrentModel = previousLoadedModelId != nil && previousLoadedModelId != modelId
@@ -284,6 +296,41 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
 
         Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId) }
+    }
+
+    // MARK: - Transient Model Selection
+
+    var transientModelId: String? { transientSelection.modelId }
+
+    func beginTransientModelSelection(_ modelId: String) {
+        guard host != nil, let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+        guard transientSelection.begin(modelDef.id) else { return }
+        _selectedModelId = modelDef.id
+        if let current = loadedModelId ?? loadingModelId, current != modelDef.id {
+            unloadModel(clearPersistence: false)
+        } else {
+            host?.notifyCapabilitiesChanged()
+        }
+        requestPassiveRestoreOfSelection()
+    }
+
+    func endTransientModelSelection() {
+        guard let host, transientSelection.end() != nil else { return }
+        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+        // Only the model the user loaded last stays loaded, as after a relaunch.
+        if let current = loadedModelId ?? loadingModelId,
+           current != host.userDefault(forKey: "loadedModel") as? String {
+            unloadModel(clearPersistence: false)
+        } else {
+            host.notifyCapabilitiesChanged()
+        }
+        requestPassiveRestoreOfSelection()
+    }
+
+    /// Loads the model now in use from installed files, if the host keeps models loaded.
+    private func requestPassiveRestoreOfSelection() {
+        guard shouldRestoreLoadedModelsPassively else { return }
+        requestPassiveModelRestore()
     }
 
     var supportsTranslation: Bool { true }
@@ -667,18 +714,29 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         return modelStorageRoots[0].appendingPathComponent(modelDef.id)
     }
 
-    fileprivate func loadModel(_ modelDef: WhisperModelDef, passively: Bool = false) async {
+    fileprivate func loadModel(
+        _ modelDef: WhisperModelDef,
+        passively: Bool = false,
+        requestedAt revision: Int? = nil
+    ) async {
+        let revision = revision ?? transientSelection.revision
+        if !passively, let transientModelId = transientSelection.modelId, modelDef.id != transientModelId {
+            // Chosen in the settings while a transient model is in use: saved for later, not loaded.
+            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+            return
+        }
         try? await modelLoadGate.withLock { [self] in
             guard host != nil else { return }
+            guard transientSelection.permitsLoad(of: modelDef.id, requestedAt: revision) else { return }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
             }
             guard !(isConfigured && loadedModelId == modelDef.id) else { return }
-            await performModelLoad(modelDef, allowDownloads: !passively)
+            await performModelLoad(modelDef, allowDownloads: !passively, requestedAt: revision)
         }
     }
 
-    private func performModelLoad(_ modelDef: WhisperModelDef, allowDownloads: Bool) async {
+    private func performModelLoad(_ modelDef: WhisperModelDef, allowDownloads: Bool, requestedAt revision: Int) async {
         beginModelUse()
         defer { endModelUse() }
 
@@ -804,15 +862,30 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 return
             }
 
-            whisperKit = kit
-            loadedModelId = modelDef.id
-            loadingModelId = nil
-            _selectedModelId = modelDef.id
-            downloadProgress = 1.0
-            modelState = .ready(modelDef.id)
+            var isTransient = false
+            let installed = transientSelection.installIfPermitted(modelDef.id, requestedAt: revision) { transient in
+                isTransient = transient
+                whisperKit = kit
+                loadedModelId = modelDef.id
+                loadingModelId = nil
+                _selectedModelId = modelDef.id
+                downloadProgress = 1.0
+                modelState = .ready(modelDef.id)
+            }
+            guard installed else {
+                // The transient selection changed while loading, so another model is in use now.
+                releaseWhisperKitResources(kit)
+                clearLoadingModelIfCurrent(modelDef.id, generation: loadGeneration)
+                modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
+                downloadProgress = 0
+                return
+            }
 
-            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+            // A transient model is never saved as the user's selection or as the model to restore.
+            if !isTransient {
+                host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+                host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+            }
             host?.notifyCapabilitiesChanged()
         } catch {
             guard isCurrentModelLoad(loadGeneration) else { return }
@@ -826,7 +899,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 return
             }
             modelState = .error(error.localizedDescription)
-            host?.setUserDefault(nil, forKey: "loadedModel")
+            if transientSelection.modelId == nil {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
             host?.notifyCapabilitiesChanged()
         }
     }
@@ -839,12 +914,22 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
               Self.availableModels.contains(where: { $0.id == preferredModelId }) else {
             return
         }
+        let revision = transientSelection.revision
+        let transientModelId = transientSelection.modelId
+        if let transientModelId, transientModelId != preferredModelId {
+            host?.setUserDefault(preferredModelId, forKey: "selectedModel")
+            return
+        }
         if loadedModelId != nil, loadedModelId != preferredModelId {
             unloadModel(clearPersistence: true)
         }
         _selectedModelId = preferredModelId
-        host?.setUserDefault(preferredModelId, forKey: "selectedModel")
-        Task { await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId) }
+        if transientModelId == nil {
+            host?.setUserDefault(preferredModelId, forKey: "selectedModel")
+        }
+        Task {
+            await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, requestedAt: revision)
+        }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
@@ -855,7 +940,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         loadingModelId = nil
         modelState = .notLoaded
         downloadProgress = 0
-        if clearPersistence {
+        // The saved model to restore is the user's, not the transient one in use.
+        if clearPersistence, transientSelection.modelId == nil {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
         host?.notifyCapabilitiesChanged()
@@ -933,25 +1019,42 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil, passively: passively)
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true, preferredModelId: String?, passively: Bool = false) async {
+    func restoreLoadedModel(
+        allowDownloads: Bool = true,
+        preferredModelId: String?,
+        passively: Bool = false,
+        requestedAt revision: Int? = nil
+    ) async {
         guard !Task.isCancelled else { return }
         #if DEBUG
         restoreLoadedModelInvocationCountForTesting += 1
         #endif
 
+        let revision = revision ?? transientSelection.revision
         guard let modelDef = modelDefinitionForRestore(
             allowDownloads: allowDownloads,
             preferredModelId: preferredModelId
         ) else { return }
-        await loadModel(modelDef, passively: passively)
+        await loadModel(modelDef, passively: passively, requestedAt: revision)
     }
 
     private func modelDefinitionForRestore(
         allowDownloads: Bool,
         preferredModelId: String? = nil
     ) -> WhisperModelDef? {
-        if let preferredModelId = preferredModelId?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !preferredModelId.isEmpty {
+        let preferredModelId = preferredModelId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let transientModelId = transientSelection.modelId {
+            // A transient model replaces the user's models; another requested model waits until it ends.
+            if let preferredModelId, !preferredModelId.isEmpty, preferredModelId != transientModelId {
+                return nil
+            }
+            guard let modelDef = Self.availableModels.first(where: { $0.id == transientModelId }),
+                  allowDownloads || isModelDownloaded(modelDef) else {
+                return nil
+            }
+            return modelDef
+        }
+        if let preferredModelId, !preferredModelId.isEmpty {
             guard let modelDef = Self.availableModels.first(where: { $0.id == preferredModelId }),
                   allowDownloads || isModelDownloaded(modelDef) else {
                 return nil
