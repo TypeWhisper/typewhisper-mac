@@ -138,6 +138,10 @@ enum AppConstants {
         if isScreenshotAutomation {
             return "com.typewhisper.mac.screenshots.apikey."
         }
+        // Tests must neither read nor delete the API keys of the installed app.
+        if isRunningTests {
+            return "com.typewhisper.mac.tests.apikey."
+        }
         #if APPSTORE && DEBUG
         return "com.typewhisper.typewhisper-app.dev.apikey."
         #elseif APPSTORE

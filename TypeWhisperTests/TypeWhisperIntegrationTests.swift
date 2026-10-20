@@ -16875,6 +16875,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
     }
 
+    func testTestHostDoesNotWriteTheAppsOwnPreferences() throws {
+        let appDomain = try XCTUnwrap(Bundle.main.bundleIdentifier)
+        let isolatedDefaults = try XCTUnwrap(TestHostIsolation.isolatedDefaults)
+        XCTAssertTrue(UserDefaults.standard === isolatedDefaults)
+        XCTAssertNotEqual(TestHostIsolation.defaultsSuiteName, appDomain)
+
+        let key = "testHostIsolationProbe.\(UUID().uuidString)"
+        UserDefaults.standard.set(true, forKey: key)
+        // Also removes the probe from the app's domain if the isolation ever breaks.
+        defer { UserDefaults.standard.removeObject(forKey: key) }
+
+        XCTAssertEqual(
+            CFPreferencesCopyAppValue(key as CFString, TestHostIsolation.defaultsSuiteName as CFString) as? Bool,
+            true
+        )
+        XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, appDomain as CFString))
+        XCTAssertNil(CFPreferencesCopyAppValue(key as CFString, kCFPreferencesCurrentApplication))
+    }
+
+    func testTestHostDoesNotUseTheAppsKeychainItems() {
+        XCTAssertEqual(AppConstants.keychainServicePrefix, "com.typewhisper.mac.tests.apikey.")
+    }
+
     func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {
         XCTAssertTrue(Bundle(for: TestHostDefaultsGuard.self).principalClass == TestHostDefaultsGuard.self)
 
