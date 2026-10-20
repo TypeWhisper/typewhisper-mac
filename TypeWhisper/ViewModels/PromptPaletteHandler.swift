@@ -269,7 +269,7 @@ final class PromptPaletteHandler {
     private func showMissingTextFeedback(soundFeedbackEnabled: Bool) {
         let message = "Please select or copy some text first."
         soundService.play(.error, enabled: soundFeedbackEnabled)
-        accessibilityAnnouncementService.announceError(message)
+        // The feedback banner announces itself to VoiceOver.
         onShowNotchFeedback?(message, "xmark.circle.fill", 2.5, true, "workflow")
         onShowError?(message)
     }
@@ -323,8 +323,9 @@ final class PromptPaletteHandler {
         soundFeedbackEnabled: Bool
     ) {
         onWorkflowProcessingChanged?(true)
+        // Feedback banners announce themselves to VoiceOver, so the progress and
+        // the result below need no separate announcement.
         onShowNotchFeedback?(workflow.name + "...", "ellipsis.circle", 30, false, nil)
-        accessibilityAnnouncementService.announcePromptProcessing(workflow.name)
 
         Task { [weak self] in
             guard let self else { return }
@@ -366,7 +367,6 @@ final class PromptPaletteHandler {
                         resolvedApp, ctx.text, nil
                     )
                     soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
-                    self.accessibilityAnnouncementService.announcePromptComplete()
                     let feedback = getActionFeedback?() ?? (message: nil, icon: nil, duration: 3.5)
                     onShowNotchFeedback?(
                         feedback.0 ?? "Done",
@@ -441,7 +441,6 @@ final class PromptPaletteHandler {
 #if APPSTORE
                 if insertionOutcome == .copiedToClipboard {
                     soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
-                    self.accessibilityAnnouncementService.announcePromptComplete()
                     onShowNotchFeedback?(AppStoreInputAccess.manualPasteMessage, "doc.on.clipboard.fill", 4, false, nil)
                     return
                 }
@@ -452,7 +451,6 @@ final class PromptPaletteHandler {
                 }
 
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
-                self.accessibilityAnnouncementService.announcePromptComplete()
                 let feedbackMessage: String
                 let feedbackIcon: String
                 if insertionOutcome == .failed && preserveClipboard {
@@ -469,7 +467,6 @@ final class PromptPaletteHandler {
             } catch {
                 guard !Task.isCancelled else { return }
                 soundService.play(.error, enabled: soundFeedbackEnabled)
-                self.accessibilityAnnouncementService.announceError(error.localizedDescription)
                 onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "workflow")
             }
         }

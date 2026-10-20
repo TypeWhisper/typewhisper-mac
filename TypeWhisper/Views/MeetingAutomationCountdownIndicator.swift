@@ -276,6 +276,20 @@ struct MeetingAutomationCountdownIndicator: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(indicatorAccessibilityIdentifier)
+        // The countdown runs next to whatever app has focus; VoiceOver users hear
+        // it start together with the way to cancel or continue.
+        .onAppear(perform: announcePresentation)
+        .onChange(of: presentation) { _, _ in announcePresentation() }
+    }
+
+    private func announcePresentation() {
+        let remainingSeconds = CalendarMeetingCountdown.remainingSeconds(
+            deadline: presentation.deadline,
+            now: Date()
+        )
+        let parts = [headline, countdownText(remainingSeconds), actionAccessibilityHint]
+            .filter { !$0.isEmpty }
+        ServiceContainer.shared.accessibilityAnnouncementService.announceWarning(parts.joined(separator: ". "))
     }
 
     private func countdownContent(now: Date) -> some View {

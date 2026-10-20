@@ -176,3 +176,85 @@ final class SpeechFeedbackServiceTests: XCTestCase {
         XCTAssertTrue(service.spokenFeedbackEnabled)
     }
 }
+
+/// VoiceOver announcements are the spoken counterpart of the indicator banners.
+@MainActor
+final class AccessibilityAnnouncementServiceTests: XCTestCase {
+    private final class Recorder {
+        var announcements: [(message: String, isUrgent: Bool)] = []
+    }
+
+    private final class TestClock {
+        var now = ContinuousClock.now
+    }
+
+    private func makeService(
+        voiceOverEnabled: Bool = true,
+        clock: TestClock = TestClock()
+    ) -> (AccessibilityAnnouncementService, Recorder) {
+        let recorder = Recorder()
+        let service = AccessibilityAnnouncementService()
+        service.isVoiceOverEnabled = { voiceOverEnabled }
+        service.now = { clock.now }
+        service.post = { message, isUrgent in
+            recorder.announcements.append((message, isUrgent))
+        }
+        return (service, recorder)
+    }
+
+    func testStaysSilentWithoutVoiceOver() {
+        let (service, recorder) = makeService(voiceOverEnabled: false)
+
+        service.announceRecordingStarted()
+        service.announceError("Microphone unavailable")
+
+        XCTAssertTrue(recorder.announcements.isEmpty)
+    }
+
+    func testSkipsEmptyMessagesAndTrimsWhitespace() {
+        let (service, recorder) = makeService()
+
+        service.announce("  \n ")
+        service.announce("  Text inserted\n")
+
+        XCTAssertEqual(recorder.announcements.map { $0.message }, ["Text inserted"])
+    }
+
+    func testErrorsInterruptAndStatusUpdatesWait() {
+        let (service, recorder) = makeService()
+
+        service.announceFeedback("Copied to clipboard", isError: false)
+        service.announceFeedback("No speech recognized", isError: true)
+        service.announceWarning("Press Esc again to cancel recording")
+
+        XCTAssertEqual(recorder.announcements.map { $0.isUrgent }, [false, true, true])
+        XCTAssertEqual(recorder.announcements.first?.message, "Copied to clipboard")
+        XCTAssertEqual(
+            recorder.announcements.dropFirst().first?.message,
+            String(localized: "Error: \("No speech recognized")")
+        )
+    }
+
+    func testRepeatedMessageWithinTheWindowIsSpokenOnce() {
+        let clock = TestClock()
+        let (service, recorder) = makeService(clock: clock)
+
+        service.announceError("Please select or copy some text first.")
+        clock.now = clock.now.advanced(by: .milliseconds(200))
+        service.announceError("Please select or copy some text first.")
+        clock.now = clock.now.advanced(by: AccessibilityAnnouncementService.duplicateWindow)
+        service.announceError("Please select or copy some text first.")
+
+        XCTAssertEqual(recorder.announcements.count, 2)
+    }
+
+    func testDifferentMessagesAreAllSpoken() {
+        let (service, recorder) = makeService()
+
+        service.announceRecordingStarted()
+        service.announceRecordingStopped()
+        service.announceTranscriptionComplete(wordCount: 3)
+
+        XCTAssertEqual(recorder.announcements.count, 3)
+    }
+}

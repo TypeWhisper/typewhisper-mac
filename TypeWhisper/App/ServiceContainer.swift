@@ -303,7 +303,8 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             dictionaryService: dictionaryService,
             audioFileService: audioFileService,
-            audioDeviceService: audioDeviceService
+            audioDeviceService: audioDeviceService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         let speakerCoordinator = SpeakerTranscriptCoordinator(
             historyService: historyService,

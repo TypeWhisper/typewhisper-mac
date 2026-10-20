@@ -452,6 +452,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
+    private let accessibilityAnnouncementService: AccessibilityAnnouncementService?
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
     private var activeCalendarMeetingHandle: CalendarMeetingRecordingHandle?
@@ -475,7 +476,8 @@ final class AudioRecorderViewModel: ObservableObject {
         speechRegionDetector: (any SpeechRegionDetecting)? = nil,
         recordingsLoader: RecordingsLoader? = nil,
         recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
-        livePreviewStartObserver: (() -> Void)? = nil
+        livePreviewStartObserver: (() -> Void)? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) {
         self.recorderService = recorderService
         self.audioDeviceService = audioDeviceService
@@ -491,6 +493,7 @@ final class AudioRecorderViewModel: ObservableObject {
         self.recorderCompletionsLoader = recorderCompletionsLoader ?? readRecorderTranscriptCompletions
         self.defaults = defaults
         self.livePreviewStartObserver = livePreviewStartObserver
+        self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.streamingHandler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { [weak recorderService] in
@@ -603,6 +606,24 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderService.$systemAudioWarningMessage
             .receive(on: DispatchQueue.main)
             .sink { [weak self] value in self?.systemAudioWarningMessage = value }
+            .store(in: &cancellables)
+
+        // Recorder errors and warnings appear on the Recorder page, which VoiceOver
+        // users rarely have in front of them while a recording runs.
+        $errorMessage
+            .compactMap { $0 }
+            .removeDuplicates()
+            .sink { [weak self] message in
+                self?.accessibilityAnnouncementService?.announceError(message)
+            }
+            .store(in: &cancellables)
+
+        $systemAudioWarningMessage
+            .compactMap { $0 }
+            .removeDuplicates()
+            .sink { [weak self] message in
+                self?.accessibilityAnnouncementService?.announceWarning(message)
+            }
             .store(in: &cancellables)
 
         modelManager.objectWillChange
@@ -786,6 +807,12 @@ final class AudioRecorderViewModel: ObservableObject {
             throw error
         }
         currentOutputURL = url
+        accessibilityAnnouncementService?.announce(localizedAppText(
+            "Recorder started",
+            de: "Recorder gestartet",
+            ja: "レコーダーを開始しました",
+            zh: "录音器已开始"
+        ))
 
         if let apiSessionID {
             activeRecorderAPISessionID = apiSessionID
@@ -822,6 +849,19 @@ final class AudioRecorderViewModel: ObservableObject {
         // the instant Stop is pressed, instead of staying up while audio finalization
         // and transcription run (which can take a while for long recordings).
         state = .finalizing
+        accessibilityAnnouncementService?.announce(shouldTranscribe
+            ? localizedAppText(
+                "Recorder stopped, transcribing",
+                de: "Recorder gestoppt, wird transkribiert",
+                ja: "レコーダーを停止しました。文字起こし中",
+                zh: "录音器已停止，正在转录"
+            )
+            : localizedAppText(
+                "Recorder stopped",
+                de: "Recorder gestoppt",
+                ja: "レコーダーを停止しました",
+                zh: "录音器已停止"
+            ))
 
         Task {
             let stoppedRecording = await recorderService.stopCapture(
@@ -900,6 +940,14 @@ final class AudioRecorderViewModel: ObservableObject {
             if let request = finalTranscriptionRequest {
                 finalTranscriptionOutcome = await runFinalTranscription(request)
                 state = .idle
+                if case .transcriptSaved = finalTranscriptionOutcome {
+                    accessibilityAnnouncementService?.announce(localizedAppText(
+                        "Recorder transcript saved",
+                        de: "Recorder-Transkript gespeichert",
+                        ja: "レコーダーの文字起こしを保存しました",
+                        zh: "录音器转录已保存"
+                    ))
+                }
             } else {
                 finalTranscriptionOutcome = .skipped
             }

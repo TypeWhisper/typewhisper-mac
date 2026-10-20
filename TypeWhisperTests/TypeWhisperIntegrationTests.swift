@@ -10063,6 +10063,48 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.state = .idle
     }
 
+    /// The indicator banner appears next to the app the user works in, so VoiceOver
+    /// users only notice it through an announcement.
+    @MainActor
+    func testFeedbackBannersAndRejectedUndoAreAnnouncedForVoiceOver() async throws {
+        final class Announcements {
+            var items: [(message: String, isUrgent: Bool)] = []
+            var now = ContinuousClock.now
+        }
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let announcer = AccessibilityAnnouncementService()
+        let announcements = Announcements()
+        announcer.isVoiceOverEnabled = { true }
+        // Each announcement happens well apart, so the duplicate filter never applies here.
+        announcer.now = {
+            announcements.now = announcements.now.advanced(by: .seconds(5))
+            return announcements.now
+        }
+        announcer.post = { message, isUrgent in
+            announcements.items.append((message, isUrgent))
+        }
+        let context = Self.makeDictationContext(
+            appSupportDirectory: directory,
+            accessibilityAnnouncementService: announcer
+        )
+        defer { context.dictationViewModel.state = .idle }
+
+        // Nothing to undo: the failure shows as an error banner and is announced once.
+        context.dictationViewModel.undoLastDictation()
+        let banner = try XCTUnwrap(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+        XCTAssertEqual(announcements.items.map { $0.message }, [String(localized: "Error: \(banner)")])
+        XCTAssertEqual(announcements.items.last?.isUrgent, true)
+
+        // During a recording the rejection shows no banner, but VoiceOver still hears it.
+        context.dictationViewModel.state = .recording
+        context.dictationViewModel.restoreRawTranscript()
+        XCTAssertEqual(announcements.items.count, 2)
+        XCTAssertEqual(announcements.items.last?.isUrgent, true)
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+    }
+
     @MainActor
     func testRawRestoreWaitsForItsDeferredPersistenceWithHistoryEnabled() async throws {
         try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true)
@@ -14478,7 +14520,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
         licenseService: LicenseService? = nil,
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
-        transcriptionDeadline: TimeInterval? = nil
+        transcriptionDeadline: TimeInterval? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -14560,7 +14603,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let punctuationRulesLoader = PunctuationRulesLoader()
         let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
         let speechFeedbackService = SpeechFeedbackService()
-        let accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        let accessibilityAnnouncementService = accessibilityAnnouncementService ?? AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
         let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService(startListening: false)
