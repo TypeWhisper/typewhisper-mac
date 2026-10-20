@@ -137,7 +137,9 @@ enum AppStorePluginCatalog {
                 detailsURL: entry.detailsURL,
                 homepageURL: entry.homepageURL,
                 iconURL: entry.iconURL,
-                iconDarkURL: entry.iconDarkURL
+                iconDarkURL: entry.iconDarkURL,
+                // The managed settings judge installs by the catalog entry's locality.
+                locality: manifest.locality
             )
             return plugin.isCompatibleWithCurrentEnvironment ? plugin : nil
         }
