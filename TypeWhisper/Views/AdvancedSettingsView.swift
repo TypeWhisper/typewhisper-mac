@@ -80,7 +80,7 @@ struct AdvancedSettingsView: View {
                     SettingsInfoButton(text: localizedAppText(
                         "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
                         de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
-                    ))
+                    ), topic: localizedAppText("Export Diagnostics", de: "Diagnose exportieren"))
                 }
             }
 
@@ -110,17 +110,23 @@ struct AdvancedSettingsView: View {
                     if isImportingBackup {
                         ProgressView()
                             .controlSize(.small)
+                            .accessibilityLabel(localizedAppText(
+                                "Importing settings",
+                                de: "Einstellungen werden importiert",
+                                ja: "設定を読み込み中",
+                                zh: "正在导入设置"
+                            ))
                     }
 
                     SettingsInfoButton(text: localizedAppText(
                         "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.",
                         de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
-                    ))
+                    ), topic: localizedAppText("Backup & Restore", de: "Sicherung & Wiederherstellung"))
                 }
             }
 
                 // MARK: - Your Data
-                Section(localizedAppText("Your Data", de: "Deine Daten")) {
+                Section(localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据")) {
                 HStack {
                     Button {
                         exportAllData()
@@ -145,12 +151,15 @@ struct AdvancedSettingsView: View {
                     if isExportingAllData || isDeletingAllData {
                         ProgressView()
                             .controlSize(.small)
+                            .accessibilityLabel(isDeletingAllData
+                                ? localizedAppText("Deleting all data", de: "Alle Daten werden gelöscht", ja: "すべてのデータを削除中", zh: "正在删除所有数据")
+                                : localizedAppText("Exporting all data", de: "Alle Daten werden exportiert", ja: "すべてのデータを書き出し中", zh: "正在导出所有数据"))
                     }
 
                     SettingsInfoButton(text: localizedAppText(
                         "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
                         de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
-                    ))
+                    ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据"))
                 }
                 .confirmationDialog(
                     localizedAppText("Delete All Data?", de: "Alle Daten löschen?"),
@@ -224,6 +233,7 @@ struct AdvancedSettingsView: View {
                             .font(.system(.caption, design: .monospaced))
                             .frame(minHeight: 120)
                             .border(.separator)
+                            .accessibilityLabel(String(localized: "Extraction Prompt"))
 
                         Button(String(localized: "Reset to Default")) {
                             memoryService.extractionPrompt = MemoryService.defaultExtractionPrompt
@@ -483,28 +493,39 @@ struct AdvancedSettingsView: View {
 
                 if viewModel.isRunning && viewModel.requiresAuthentication, let apiToken = viewModel.currentAPIToken {
                     Button(localizedAppText("Copy API Token", de: "API-Token kopieren", ja: "API トークンをコピー", zh: "复制 API 令牌")) {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(apiToken, forType: .string)
+                        copyToPasteboard(apiToken)
                     }
                 }
 
                 if viewModel.isEnabled {
+                    let serverStatus = viewModel.isRunning
+                        ? String(localized: "Running on port \(String(viewModel.port))")
+                        : String(localized: "Not running")
                     HStack {
                         Image(systemName: "circle.fill")
                             .foregroundStyle(viewModel.isRunning ? .green : .orange)
                             .font(.caption2)
                             .accessibilityHidden(true)
-                        Text(viewModel.isRunning
-                             ? String(localized: "Running on port \(String(viewModel.port))")
-                             : String(localized: "Not running"))
+                        Text(serverStatus)
                             .font(.callout)
                             .foregroundStyle(.secondary)
                     }
+                    // The status line has no visible subject; name it so
+                    // "Not running" is not read out of context.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(localizedAppText(
+                        "API server status",
+                        de: "Status des API-Servers",
+                        ja: "API サーバーの状態",
+                        zh: "API 服务器状态"
+                    ))
+                    .accessibilityValue(serverStatus)
 
                     if let error = viewModel.errorMessage {
                         Label(error, systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                             .font(.callout)
+                            .accessibilityLabel(String(localized: "Error: \(error)"))
                     }
                 }
             }
@@ -527,18 +548,37 @@ struct AdvancedSettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(localizedAppText(
+                    "Command line tool status",
+                    de: "Status des Kommandozeilen-Tools",
+                    ja: "コマンドラインツールの状態",
+                    zh: "命令行工具状态"
+                ))
+                .accessibilityValue(cliInstalled
+                    ? String(localized: "Installed at /usr/local/bin/typewhisper")
+                    : String(localized: "Not installed"))
 
                 if cliInstalled {
                     Button(String(localized: "Uninstall")) {
                         uninstallCLI()
                     }
+                    .accessibilityLabel(localizedAppText(
+                        "Uninstall command line tool",
+                        de: "Kommandozeilen-Tool deinstallieren",
+                        ja: "コマンドラインツールをアンインストール",
+                        zh: "卸载命令行工具"
+                    ))
                 } else {
                     HStack {
                         Button(String(localized: "Install Command Line Tool")) {
                             installCLI()
                         }
 
-                        SettingsInfoButton(text: String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."))
+                        SettingsInfoButton(
+                            text: String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."),
+                            topic: String(localized: "Command Line Tool")
+                        )
                     }
                 }
             }
@@ -557,76 +597,63 @@ struct AdvancedSettingsView: View {
 
                 // MARK: - Integrations
                 Section(String(localized: "Integrations")) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "command.square")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(String(localized: "Raycast Extension"))
-                            .font(.headline)
-
-                        if raycastInstalled {
-                            HStack {
-                                Button(String(localized: "Open in Raycast")) {
-                                    NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
-                                }
-
-                                SettingsInfoButton(text: String(localized: "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running."))
+                let raycastTitle = String(localized: "Raycast Extension")
+                integrationRow(systemImage: "command.square", title: raycastTitle) {
+                    if raycastInstalled {
+                        HStack {
+                            Button(String(localized: "Open in Raycast")) {
+                                NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
                             }
-                        } else {
-                            HStack {
-                                Button(String(localized: "Learn More")) {
-                                    NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
-                                }
 
-                                SettingsInfoButton(text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."))
+                            SettingsInfoButton(
+                                text: String(localized: "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running."),
+                                topic: raycastTitle
+                            )
+                        }
+                    } else {
+                        HStack {
+                            Button(String(localized: "Learn More")) {
+                                NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
                             }
+                            .accessibilityLabel(learnMoreAccessibilityLabel(about: raycastTitle))
+
+                            SettingsInfoButton(
+                                text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."),
+                                topic: raycastTitle
+                            )
                         }
                     }
                 }
 
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "globe")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(localizedAppText("Browser Extension", de: "Browser-Erweiterung"))
-                            .font(.headline)
-
-                        HStack {
-                            Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
-                                NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
-                            }
-
-                            SettingsInfoButton(text: browserExtensionInfoText)
+                let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
+                integrationRow(systemImage: "globe", title: browserExtensionTitle) {
+                    HStack {
+                        Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
+                            NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
                         }
+                        .accessibilityLabel(learnMoreAccessibilityLabel(about: browserExtensionTitle))
+
+                        SettingsInfoButton(text: browserExtensionInfoText, topic: browserExtensionTitle)
                     }
                 }
 
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "iphone")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 24)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App"))
-                            .font(.headline)
-
-                        HStack {
-                            Button(localizedAppText("Show", de: "Anzeigen")) {
-                                IOSCompanionPromoCoordinator.shared.requestManualPresentation()
-                            }
-
-                            SettingsInfoButton(text: localizedAppText(
-                                "Show the TypeWhisper companion app for iPhone and iPad again.",
-                                de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
-                            ))
+                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App")
+                integrationRow(systemImage: "iphone", title: companionAppTitle) {
+                    HStack {
+                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示")) {
+                            IOSCompanionPromoCoordinator.shared.requestManualPresentation()
                         }
+                        .accessibilityLabel(localizedAppText(
+                            "Show \(companionAppTitle)",
+                            de: "Anzeigen: \(companionAppTitle)",
+                            ja: "\(companionAppTitle)を表示",
+                            zh: "显示\(companionAppTitle)"
+                        ))
+
+                        SettingsInfoButton(text: localizedAppText(
+                            "Show the TypeWhisper companion app for iPhone and iPad again.",
+                            de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
+                        ), topic: companionAppTitle)
                     }
                 }
                 }
@@ -675,6 +702,42 @@ struct AdvancedSettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Integrations
+
+    /// One integration with its decorative icon hidden; grouped under its
+    /// name so VoiceOver announces which integration a "Learn More" belongs to.
+    private func integrationRow<Content: View>(
+        systemImage: String,
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.headline)
+
+                content()
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
+
+    private func learnMoreAccessibilityLabel(about title: String) -> String {
+        localizedAppText(
+            "Learn More about \(title)",
+            de: "Mehr erfahren: \(title)",
+            ja: "\(title)の詳細を見る",
+            zh: "进一步了解\(title)"
+        )
     }
 
     // MARK: - Examples
@@ -733,16 +796,34 @@ struct AdvancedSettingsView: View {
                     .textSelection(.enabled)
                 Spacer()
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(command, forType: .string)
+                    copyToPasteboard(command)
                 } label: {
                     Image(systemName: "doc.on.doc")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
                 .help(String(localized: "Copy"))
+                .accessibilityLabel(copyCommandAccessibilityLabel(for: label))
             }
         }
+    }
+
+    /// "Copy Check status command" instead of a row of identical "Copy" buttons.
+    private func copyCommandAccessibilityLabel(for label: String) -> String {
+        let name = label.trimmingCharacters(in: CharacterSet(charactersIn: ":：").union(.whitespaces))
+        return localizedAppText(
+            "Copy \(name) command",
+            de: "Befehl „\(name)“ kopieren",
+            ja: "「\(name)」のコマンドをコピー",
+            zh: "复制“\(name)”命令"
+        )
+    }
+
+    private func copyToPasteboard(_ string: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(string, forType: .string)
+        // Copying has no visible feedback; confirm it for VoiceOver users.
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(String(localized: "Copied to clipboard"))
     }
 
     // MARK: - Support Diagnostics
@@ -1044,15 +1125,24 @@ struct SettingsInfoLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(title)
-            SettingsInfoButton(text: info)
+            SettingsInfoButton(text: info, topic: title)
         }
     }
 }
 
 struct SettingsInfoButton: View {
     let text: String
+    /// What the button explains, e.g. the setting's title. VoiceOver and other
+    /// assistive apps then hear "More information about Enable Memory" instead
+    /// of a row of identical "More information" buttons.
+    let topic: String?
 
     @State private var isPresented = false
+
+    init(text: String, topic: String? = nil) {
+        self.text = text
+        self.topic = topic
+    }
 
     var body: some View {
         Button {
@@ -1064,7 +1154,7 @@ struct SettingsInfoButton: View {
         }
         .buttonStyle(.borderless)
         .help(text)
-        .accessibilityLabel(String(localized: "More information"))
+        .accessibilityLabel(infoAccessibilityLabel)
         .popover(isPresented: $isPresented, arrowEdge: .trailing) {
             Text(text)
                 .font(.callout)
@@ -1073,5 +1163,17 @@ struct SettingsInfoButton: View {
                 .padding(12)
                 .frame(width: 300, alignment: .leading)
         }
+    }
+
+    private var infoAccessibilityLabel: String {
+        guard let topic = topic?.trimmingCharacters(in: .whitespacesAndNewlines), !topic.isEmpty else {
+            return localizedAppText("More information", de: "Weitere Informationen", ja: "詳細情報", zh: "更多信息")
+        }
+        return localizedAppText(
+            "More information about \(topic)",
+            de: "Weitere Informationen zu \(topic)",
+            ja: "\(topic)の詳細情報",
+            zh: "关于“\(topic)”的更多信息"
+        )
     }
 }

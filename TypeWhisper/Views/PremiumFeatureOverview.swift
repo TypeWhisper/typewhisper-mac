@@ -251,6 +251,7 @@ struct PremiumLockedFeatureOverview: View {
                         Text(String(localized: "premium.hub.locked.title"))
                             .font(.title2.weight(.semibold))
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
 
                         Text(premiumLockedDescription)
                             .font(.callout)
@@ -452,6 +453,7 @@ struct PremiumActiveFeatureOverview: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(String(localized: "premium.hub.active.title"))
                         .font(.title2.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     Text(String(localized: "premium.hub.active.description"))
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -902,6 +904,7 @@ private struct PremiumFeatureCard: View {
                     .font(.headline)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(description)
                     .font(.callout)
@@ -956,6 +959,7 @@ private struct PremiumFeatureCard: View {
                 )
         )
         .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
         .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
     }
 }
@@ -975,6 +979,7 @@ private struct PremiumFeatureRow: View {
     var action: (() -> Void)?
 
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button {
@@ -1015,7 +1020,7 @@ private struct PremiumFeatureRow: View {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(isHovered ? AnyShapeStyle(accent) : AnyShapeStyle(.tertiary))
-                        .offset(x: isHovered ? 2 : 0)
+                        .offset(x: isHovered && !reduceMotion ? 2 : 0)
                         .accessibilityHidden(true)
                 }
             }
@@ -1027,9 +1032,12 @@ private struct PremiumFeatureRow: View {
         .buttonStyle(.plain)
         .disabled(actionTitle == nil)
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isHovered = hovering }
         }
         .help(description)
+        // The status sits in a colored capsule; spell it out after the feature name.
+        .accessibilityLabel(title)
+        .accessibilityValue(([status] + previewLines).joined(separator: ", "))
         .accessibilityHint(actionTitle ?? "")
         .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
     }
@@ -1074,6 +1082,7 @@ struct PremiumSettingsDetailHeader: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
                     .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -1208,6 +1217,15 @@ struct PremiumCorrectionExampleRow: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         )
+        // The strikethrough marks the wrong spelling only visually.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityLabel(localizedAppText(
+            "\(before), corrected to \(after)",
+            de: "\(before), korrigiert zu \(after)",
+            ja: "\(before) を \(after) に修正",
+            zh: "\(before) 更正为 \(after)"
+        ))
     }
 }
 

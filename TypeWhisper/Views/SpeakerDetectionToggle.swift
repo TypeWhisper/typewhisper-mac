@@ -34,6 +34,7 @@ struct SpeakerDetectionToggle: View {
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                     .help(String(localized: "speakers.premium.required"))
+                    .accessibilityHint(String(localized: "speakers.premium.required"))
                 }
             }
 

@@ -109,6 +109,7 @@ struct RemoteLinkSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(localizedAppText("Paired Devices", de: "Gekoppelte Geräte", ja: "ペアリング済みのデバイス", zh: "已配对的设备"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     if viewModel.devices.isEmpty {
                         Text(localizedAppText("No paired devices", de: "Keine gekoppelten Geräte", ja: "ペアリング済みのデバイスはありません", zh: "没有已配对的设备"))
                             .font(.callout)
@@ -122,6 +123,10 @@ struct RemoteLinkSettingsView: View {
                     }
                 }
             }
+        }
+        .onChange(of: viewModel.errorMessage) { _, message in
+            guard let message else { return }
+            ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
         }
         .sheet(isPresented: Binding(
             get: { viewModel.pairingState != .closed },
@@ -169,9 +174,16 @@ private struct RemoteLinkDeviceRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
             Spacer()
             Button(localizedAppText("Remove", de: "Entfernen", ja: "削除", zh: "移除"), role: .destructive, action: onRemove)
                 .buttonStyle(.borderless)
+                .accessibilityLabel(localizedAppText(
+                    "Remove \(device.name)",
+                    de: "\(device.name) entfernen",
+                    ja: "\(device.name) を削除",
+                    zh: "移除 \(device.name)"
+                ))
         }
     }
 
@@ -192,6 +204,7 @@ private struct RemoteLinkPairingSheet: View {
         VStack(spacing: 16) {
             Text(localizedAppText("Pair iPhone or iPad", de: "iPhone oder iPad koppeln", ja: "iPhone または iPad をペアリング", zh: "配对 iPhone 或 iPad"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             content
                 .frame(maxWidth: .infinity)
@@ -204,6 +217,51 @@ private struct RemoteLinkPairingSheet: View {
         }
         .padding(20)
         .frame(width: 420)
+        // The pairing request arrives from the other device, so VoiceOver
+        // users hear it, including the code to compare, and the outcome.
+        .onChange(of: viewModel.pairingState) { _, state in
+            switch state {
+            case .confirming(let request):
+                announce(Self.pairingRequestText(request) + " " + Self.spokenCode(request.code))
+            case .paired(let name):
+                announce(Self.pairedText(name))
+            case .failed:
+                announce(Self.failedText)
+            case .closed, .waiting, .finishing:
+                break
+            }
+        }
+    }
+
+    private func announce(_ message: String) {
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(message)
+    }
+
+    static func pairingRequestText(_ request: RemoteLinkPairingRequest) -> String {
+        localizedAppText(
+            "“\(request.deviceName)” wants to pair with this Mac.",
+            de: "„\(request.deviceName)“ möchte sich mit diesem Mac koppeln.",
+            ja: "「\(request.deviceName)」がこの Mac とのペアリングを求めています。",
+            zh: "“\(request.deviceName)”想要与这台 Mac 配对。"
+        )
+    }
+
+    static func spokenCode(_ code: String) -> String {
+        let digits = code.map(String.init).joined(separator: " ")
+        return localizedAppText("Code \(digits)", de: "Code \(digits)", ja: "コード \(digits)", zh: "代码 \(digits)")
+    }
+
+    static func pairedText(_ name: String) -> String {
+        localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。")
+    }
+
+    static var failedText: String {
+        localizedAppText(
+            "Pairing was not completed.",
+            de: "Die Kopplung wurde nicht abgeschlossen.",
+            ja: "ペアリングは完了しませんでした。",
+            zh: "配对未完成。"
+        )
     }
 
     @ViewBuilder
@@ -212,6 +270,12 @@ private struct RemoteLinkPairingSheet: View {
         case .closed, .waiting:
             VStack(spacing: 12) {
                 ProgressView()
+                    .accessibilityLabel(localizedAppText(
+                        "Waiting for a device",
+                        de: "Warte auf ein Gerät",
+                        ja: "デバイスを待っています",
+                        zh: "正在等待设备"
+                    ))
                 Text(localizedAppText(
                     "On your iPhone or iPad, open TypeWhisper, go to Settings → Mac and choose “\(viewModel.computerName)”.",
                     de: "Öffne TypeWhisper auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
@@ -223,17 +287,12 @@ private struct RemoteLinkPairingSheet: View {
             }
         case .confirming(let request):
             VStack(spacing: 12) {
-                Text(localizedAppText(
-                    "“\(request.deviceName)” wants to pair with this Mac.",
-                    de: "„\(request.deviceName)“ möchte sich mit diesem Mac koppeln.",
-                    ja: "「\(request.deviceName)」がこの Mac とのペアリングを求めています。",
-                    zh: "“\(request.deviceName)”想要与这台 Mac 配对。"
-                ))
-                .multilineTextAlignment(.center)
+                Text(Self.pairingRequestText(request))
+                    .multilineTextAlignment(.center)
                 Text(Self.formattedCode(request.code))
                     .font(.system(size: 36, weight: .semibold, design: .monospaced))
                     .textSelection(.disabled)
-                    .accessibilityLabel(request.code.map(String.init).joined(separator: " "))
+                    .accessibilityLabel(Self.spokenCode(request.code))
                 Text(localizedAppText(
                     "Approve only if the device shows the same code.",
                     de: "Bestätige nur, wenn das Gerät denselben Code anzeigt.",
@@ -247,6 +306,7 @@ private struct RemoteLinkPairingSheet: View {
         case .finishing:
             VStack(spacing: 12) {
                 ProgressView()
+                    .accessibilityHidden(true)
                 Text(localizedAppText(
                     "Waiting for confirmation on the device…",
                     de: "Warte auf die Bestätigung auf dem Gerät …",
@@ -260,7 +320,7 @@ private struct RemoteLinkPairingSheet: View {
                     .font(.system(size: 36))
                     .foregroundStyle(.green)
                     .accessibilityHidden(true)
-                Text(localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。"))
+                Text(Self.pairedText(name))
             }
         case .failed:
             VStack(spacing: 12) {
@@ -268,12 +328,7 @@ private struct RemoteLinkPairingSheet: View {
                     .font(.system(size: 36))
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
-                Text(localizedAppText(
-                    "Pairing was not completed.",
-                    de: "Die Kopplung wurde nicht abgeschlossen.",
-                    ja: "ペアリングは完了しませんでした。",
-                    zh: "配对未完成。"
-                ))
+                Text(Self.failedText)
             }
         }
     }

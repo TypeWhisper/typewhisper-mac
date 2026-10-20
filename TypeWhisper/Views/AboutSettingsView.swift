@@ -37,12 +37,13 @@ struct AboutSettingsView: View {
                         .scaleEffect(isLogoHovering && !reduceMotion ? 1.05 : 1.0)
                         .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isLogoHovering)
                         .onHover { isLogoHovering = $0 }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(Text("TypeWhisper"))
+                        // Decorative: the app name follows right below.
+                        .accessibilityHidden(true)
 
                     Text("TypeWhisper")
                         .font(.title)
                         .fontWeight(.semibold)
+                        .accessibilityAddTraits(.isHeader)
 
                     if license.isSupporter, let tier = license.supporterTier {
                         SupporterBadgeView(tier: tier)
@@ -86,6 +87,7 @@ struct AboutSettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .disabled(updatePolicy.isChannelLocked)
+                .managedLockAccessibilityHint(isLocked: updatePolicy.isChannelLocked, reason: nil)
 
                 Text(selectedUpdateChannel.updateDescription)
                     .font(.caption)
@@ -109,6 +111,7 @@ struct AboutSettingsView: View {
                         UpdateChecker.shared?.checkForUpdates()
                     }
                     .disabled(checkRefusal != nil || UpdateChecker.shared?.canCheckForUpdates() != true)
+                    .managedLockAccessibilityHint(isLocked: checkRefusal != nil, reason: checkRefusal)
                     Spacer()
                 }
             }

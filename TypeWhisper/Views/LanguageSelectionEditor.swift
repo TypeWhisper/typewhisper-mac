@@ -152,6 +152,7 @@ struct LanguageSelectionEditor: View {
             VStack(alignment: .leading, spacing: 8) {
                 TextField(localizedAppText("Search languages", de: "Sprachen suchen"), text: $searchQuery)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(localizedAppText("Search languages", de: "Sprachen suchen", ja: "言語を検索", zh: "搜索语言"))
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
@@ -184,6 +185,7 @@ struct LanguageSelectionEditor: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: mode == targetMode ? "largecircle.fill.circle" : "circle")
                     .foregroundStyle(mode == targetMode ? Color.accentColor : Color.secondary)
+                    .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .foregroundStyle(.primary)
@@ -195,6 +197,8 @@ struct LanguageSelectionEditor: View {
             }
         }
         .buttonStyle(.plain)
+        // The filled radio circle is the only visual cue for the chosen mode.
+        .accessibilityAddTraits(mode == targetMode ? .isSelected : [])
     }
 
     private var selectedLanguageChips: some View {
@@ -217,6 +221,13 @@ struct LanguageSelectionEditor: View {
                 )
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(localizedAppText(
+            "Selected languages",
+            de: "Ausgewählte Sprachen",
+            ja: "選択した言語",
+            zh: "已选语言"
+        ))
     }
 
     private func setMode(_ newMode: SelectionMode) {
@@ -298,6 +309,9 @@ struct LanguageSelectionEditor: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // The badge repeats the name, and the check circle is the only cue for the selection.
+        .accessibilityLabel(language.name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -325,18 +339,40 @@ struct LanguageChip: View {
                     Circle()
                         .fill(Color.primary.opacity(0.06))
                 }
+                .accessibilityHidden(true)
             LanguageCodeBadge(code: code)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
+                .accessibilityLabel(localizedAppText(
+                    "\(title), position \(priority)",
+                    de: "\(title), Position \(priority)",
+                    ja: "\(title)、\(priority)番目",
+                    zh: "\(title)，第 \(priority) 位"
+                ))
+                .accessibilityActions {
+                    if canMoveEarlier {
+                        Button(String(localized: "Move Up"), action: moveEarlierAction)
+                    }
+                    if canMoveLater {
+                        Button(String(localized: "Move Down"), action: moveLaterAction)
+                    }
+                    Button(String(localized: "Remove"), action: removeAction)
+                }
             Button(action: moveEarlierAction) {
                 Image(systemName: "chevron.left")
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
             .disabled(!canMoveEarlier)
-            .help(String(localized: "Move earlier"))
-            .accessibilityLabel(String(localized: "Move \(title) earlier"))
+            .help(localizedAppText("Move earlier", de: "Nach vorne verschieben", ja: "前に移動", zh: "前移"))
+            .accessibilityLabel(localizedAppText(
+                "Move \(title) earlier",
+                de: "\(title) nach vorne verschieben",
+                ja: "\(title)を前に移動",
+                zh: "将 \(title) 前移"
+            ))
 
             Button(action: moveLaterAction) {
                 Image(systemName: "chevron.right")
@@ -344,8 +380,13 @@ struct LanguageChip: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMoveLater)
-            .help(String(localized: "Move later"))
-            .accessibilityLabel(String(localized: "Move \(title) later"))
+            .help(localizedAppText("Move later", de: "Nach hinten verschieben", ja: "後ろに移動", zh: "后移"))
+            .accessibilityLabel(localizedAppText(
+                "Move \(title) later",
+                de: "\(title) nach hinten verschieben",
+                ja: "\(title)を後ろに移動",
+                zh: "将 \(title) 后移"
+            ))
 
             Button(action: removeAction) {
                 Image(systemName: "xmark.circle.fill")
@@ -400,6 +441,7 @@ struct LanguageCodeBadge: View {
                 .strokeBorder(Color.primary.opacity(0.1), lineWidth: 1)
         }
         .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(descriptor.accessibilityLabel)
     }
 }

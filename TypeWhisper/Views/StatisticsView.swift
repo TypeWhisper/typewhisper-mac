@@ -140,6 +140,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "Activity"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
                     Text(String(localized: "No activity in this period."))
@@ -266,6 +267,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 8) {
             Text(String(localized: "Top Apps"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if viewModel.appUsageStats.isEmpty {
                 Text(String(localized: "No app usage data for this period."))
@@ -304,6 +306,10 @@ struct StatisticsView: View {
             }
             }
         }
+        // Keeps the rows with their card; side by side, VoiceOver would interleave
+        // apps and models by position.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Top Apps"))
     }
 
     // MARK: - Heatmap
@@ -325,6 +331,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "Usage by Time of Day"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 if viewModel.maxHourlyCount == 0 {
                     Text(String(localized: "No activity for this period."))
@@ -387,6 +394,40 @@ struct StatisticsView: View {
             }
         }
         .frame(height: heatmapCellHeight * 8 + heatmapCellSpacing * 7)
+        // 168 cells and their axis labels are tedious to walk through with VoiceOver;
+        // one line per weekday names the hours with activity instead.
+        .accessibilityRepresentation {
+            VStack(alignment: .leading) {
+                ForEach(0..<7, id: \.self) { weekday in
+                    Text(heatmapDaySummary(weekday: weekday))
+                }
+            }
+        }
+    }
+
+    /// "Monday: 11:00, 1 dictation; 17:00, 2 dictations", or no dictations for a quiet day.
+    private func heatmapDaySummary(weekday: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: preferredAppLanguageCode())
+        // The grid starts on Monday; the symbols start on Sunday.
+        let symbols = formatter.standaloneWeekdaySymbols ?? []
+        let dayName = symbols.indices.contains((weekday + 1) % 7)
+            ? symbols[(weekday + 1) % 7]
+            : weekdayLabels[weekday]
+        let activeHours = (0..<24).compactMap { hour -> String? in
+            let count = viewModel.hourlyActivity[weekday][hour]
+            guard count > 0 else { return nil }
+            return "\(hour):00, \(heatmapCellTooltip(count: count))"
+        }
+        guard !activeHours.isEmpty else {
+            return localizedAppText(
+                "\(dayName): no dictations",
+                de: "\(dayName): keine Diktate",
+                ja: "\(dayName): 文字起こしなし",
+                zh: "\(dayName)：无听写"
+            )
+        }
+        return "\(dayName): " + activeHours.joined(separator: "; ")
     }
 
     private func heatmapCellColor(count: Int) -> Color {
@@ -408,6 +449,7 @@ struct StatisticsView: View {
             VStack(alignment: .leading, spacing: 8) {
             Text(String(localized: "Models Used"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if viewModel.modelUsageStats.isEmpty {
                 Text(String(localized: "No transcription data for this period."))
@@ -446,6 +488,8 @@ struct StatisticsView: View {
             }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "Models Used"))
     }
 
     // MARK: - Empty state
@@ -494,8 +538,13 @@ private struct StatisticsStatCard: View {
             .frame(maxWidth: .infinity)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
+        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? statisticsSpokenValue(value))"))
     }
+}
+
+/// The cards show "—" while there is no data; VoiceOver would read it as "em dash".
+func statisticsSpokenValue(_ value: String) -> String {
+    value == "—" ? localizedAppText("No data", de: "Keine Daten", ja: "データなし", zh: "无数据") : value
 }
 
 struct StatisticsMetricCard: View {
@@ -529,6 +578,7 @@ struct StatisticsMetricCard: View {
     }
 
     private var trendAwareAccessibilityLabel: Text {
+        let value = statisticsSpokenValue(value)
         guard let trend else {
             return Text("\(title), \(value)")
         }

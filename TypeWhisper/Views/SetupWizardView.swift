@@ -15,6 +15,7 @@ struct SetupWizardView: View {
     @AppStorage(UserDefaultsKeys.setupWizardTestedSelections) private var testedSelectionsData = Data()
     @State private var trialSignal = SetupWizardTrialSignal()
     @State private var trialText = ""
+    @State private var trialAnnouncementTask: Task<Void, Never>?
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
@@ -114,8 +115,21 @@ struct SetupWizardView: View {
         accessibilityAnnouncementService.announce(localizedAppText(
             "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
-            ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)"
+            ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)",
+            zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)"
         ))
+    }
+
+    /// "Step 2 of 5" for the current step, exposed as the progress value.
+    private var currentStepPositionText: String {
+        let index = currentStep + 1
+        let count = SetupWizardStep.allCases.count
+        return localizedAppText(
+            "Step \(index) of \(count)",
+            de: "Schritt \(index) von \(count)",
+            ja: "ステップ \(index)/\(count)",
+            zh: "第 \(index) 步，共 \(count) 步"
+        )
     }
 
     private func restartWizardFromBeginning() {
@@ -148,6 +162,14 @@ struct SetupWizardView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(localizedAppText(
+                "Setup progress",
+                de: "Setup-Fortschritt",
+                ja: "セットアップの進行状況",
+                zh: "设置进度"
+            ))
+            .accessibilityValue(currentStepPositionText)
         }
         .padding(.top, 18)
         .padding(.horizontal, 34)
@@ -182,9 +204,11 @@ struct SetupWizardView: View {
         .accessibilityLabel(localizedAppText(
             "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
-            ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)"
+            ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)",
+            zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
+        .accessibilityAddTraits(step == currentWizardStep ? .isSelected : [])
     }
 
     private func progressFill(for step: SetupWizardStep) -> Color {
@@ -196,12 +220,12 @@ struct SetupWizardView: View {
 
     private func progressAccessibilityStatus(for step: SetupWizardStep) -> String {
         if step.rawValue < currentStep {
-            return localizedAppText("Completed", de: "Abgeschlossen")
+            return localizedAppText("Completed", de: "Abgeschlossen", ja: "完了", zh: "已完成")
         }
         if step == currentWizardStep {
-            return localizedAppText("Current", de: "Aktuell")
+            return localizedAppText("Current", de: "Aktuell", ja: "現在のステップ", zh: "当前")
         }
-        return localizedAppText("Upcoming", de: "Ausstehend")
+        return localizedAppText("Upcoming", de: "Ausstehend", ja: "未完了", zh: "待完成")
     }
 
     private var stepContent: some View {
@@ -368,8 +392,8 @@ struct SetupWizardView: View {
                 .scaleEffect(isLogoHovering && !reduceMotion ? 1.05 : 1.0)
                 .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isLogoHovering)
                 .onHover { isLogoHovering = $0 }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text("TypeWhisper"))
+                // Decorative: the step title already says "Welcome to TypeWhisper".
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 14) {
                 setupFeatureRow(
@@ -412,6 +436,7 @@ struct SetupWizardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Permissions
@@ -535,21 +560,30 @@ struct SetupWizardView: View {
                 }
             }
         }
+        // One element per permission: name and purpose as the label, the
+        // granted state as the value (the pill text, not just its color), and
+        // pressing it requests access while access is still missing.
         .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(isGranted ? [] : .isButton)
-        .accessibilityLabel(permissionAccessibilityLabel(title: title, description: description, isGranted: isGranted))
-        .accessibilityHint(isGranted ? "" : localizedAppText("Use the grant access button to continue setup.", de: "Nutze die Schaltfläche Zugriff erlauben, um fortzufahren."))
-        .accessibilityAction(named: Text(localizedAppText("Grant Access", de: "Zugriff erlauben"))) {
-            guard !isGranted else { return }
-            action()
-        }
+        .accessibilityLabel(permissionAccessibilityLabel(title: title, description: description, isRequired: isRequired))
+        .accessibilityValue(isGranted
+            ? localizedAppText("Granted", de: "Erlaubt")
+            : localizedAppText("Needs access", de: "Zugriff nötig"))
+        .setupWizardAccessibilityPress(
+            isEnabled: !isGranted,
+            hint: localizedAppText(
+                "Requests access. macOS shows a permission prompt or opens System Settings.",
+                de: "Fordert den Zugriff an. macOS zeigt eine Abfrage oder öffnet die Systemeinstellungen.",
+                ja: "アクセスを要求します。macOS が確認ダイアログを表示するか、システム設定を開きます。",
+                zh: "请求访问权限。macOS 会显示权限提示或打开系统设置。"
+            ),
+            perform: action
+        )
     }
 
-    private func permissionAccessibilityLabel(title: String, description: String, isGranted: Bool) -> String {
-        let status = isGranted
-            ? localizedAppText("Granted", de: "Erlaubt")
-            : localizedAppText("Needs access", de: "Zugriff nötig")
-        return "\(title). \(description) \(status)."
+    private func permissionAccessibilityLabel(title: String, description: String, isRequired: Bool) -> String {
+        guard !isRequired else { return "\(title). \(description)" }
+        let optional = localizedAppText("Optional", de: "Optional", ja: "任意", zh: "可选")
+        return "\(title), \(optional). \(description)"
     }
 
     // MARK: - Hotkey
@@ -583,102 +617,114 @@ struct SetupWizardView: View {
     }
 
     private var recommendedHotkeyCard: some View {
-        setupCard(isSelected: selectedHotkeyMode == .hybrid) {
+        let title = localizedAppText("Hybrid", de: "Hybrid")
+        let badge = localizedAppText("Recommended", de: "Empfohlen")
+        let description = localizedAppText("Short press to toggle, hold to push-to-talk.", de: "Kurz drücken zum Umschalten, halten für Push-to-Talk.")
+
+        return setupCard(isSelected: selectedHotkeyMode == .hybrid) {
             VStack(spacing: 12) {
-                HStack(spacing: 14) {
-                    Image(systemName: selectedHotkeyMode == .hybrid ? "largecircle.fill.circle" : "circle")
-                        .foregroundStyle(selectedHotkeyMode == .hybrid ? .blue : .secondary)
+                // A real (plain) button so the mode can be chosen with Tab and
+                // Space, not only by clicking. The recorder below stays a
+                // separate control instead of being merged into this row.
+                Button {
+                    selectedHotkeyMode = .hybrid
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: selectedHotkeyMode == .hybrid ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(selectedHotkeyMode == .hybrid ? .blue : .secondary)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 8) {
-                            Text(localizedAppText("Hybrid", de: "Hybrid"))
-                                .font(.headline)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Text(title)
+                                    .font(.headline)
 
-                            Text(localizedAppText("Recommended", de: "Empfohlen"))
-                                .font(.caption2.weight(.semibold))
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 3)
-                                .background(Color.blue.opacity(0.18))
-                                .foregroundStyle(.blue)
-                                .clipShape(Capsule())
+                                Text(badge)
+                                    .font(.caption2.weight(.semibold))
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Color.blue.opacity(0.18))
+                                    .foregroundStyle(.blue)
+                                    .clipShape(Capsule())
+                            }
+
+                            Text(description)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
                         }
 
-                        Text(localizedAppText("Short press to toggle, hold to push-to-talk.", de: "Kurz drücken zum Umschalten, halten für Push-to-Talk."))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        Spacer()
+
+                        hotkeyChip(label: displayedHotkeyLabel(for: .hybrid))
                     }
-
-                    Spacer()
-
-                    hotkeyChip(label: displayedHotkeyLabel(for: .hybrid))
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedHotkeyMode = .hybrid }
+                .buttonStyle(.plain)
+                .hotkeyModeAccessibility(
+                    label: hotkeyModeAccessibilityLabel(
+                        title: title,
+                        badge: badge,
+                        description: description,
+                        label: displayedHotkeyLabel(for: .hybrid)
+                    ),
+                    isSelected: selectedHotkeyMode == .hybrid,
+                    hint: localizedAppText("Recommended. Press Return to continue with this shortcut.", de: "Empfohlen. Drücke Return, um mit diesem Shortcut fortzufahren.")
+                )
 
                 if selectedHotkeyMode == .hybrid, shouldShowRecorder(for: .hybrid) {
                     hotkeyRecorder(for: .hybrid)
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(hotkeyModeAccessibilityLabel(
-            title: localizedAppText("Hybrid", de: "Hybrid"),
-            description: localizedAppText("Short press to toggle, hold to push-to-talk.", de: "Kurz drücken zum Umschalten, halten für Push-to-Talk."),
-            label: displayedHotkeyLabel(for: .hybrid)
-        ))
-        .accessibilityValue(selectedHotkeyMode == .hybrid ? localizedAppText("Selected", de: "Ausgewählt") : "")
-        .accessibilityHint(localizedAppText("Recommended. Press Return to continue with this shortcut.", de: "Empfohlen. Drücke Return, um mit diesem Shortcut fortzufahren."))
-        .accessibilityAction(named: Text(localizedAppText("Select", de: "Auswählen"))) {
-            selectedHotkeyMode = .hybrid
-        }
     }
 
     private func compactHotkeyModeCard(mode: HotkeySlotType, title: String, description: String) -> some View {
         setupCard(isSelected: selectedHotkeyMode == mode) {
             VStack(spacing: 10) {
-                HStack(spacing: 14) {
-                    Image(systemName: selectedHotkeyMode == mode ? "largecircle.fill.circle" : "circle")
-                        .foregroundStyle(selectedHotkeyMode == mode ? .blue : .secondary)
+                Button {
+                    selectedHotkeyMode = mode
+                } label: {
+                    HStack(spacing: 14) {
+                        Image(systemName: selectedHotkeyMode == mode ? "largecircle.fill.circle" : "circle")
+                            .foregroundStyle(selectedHotkeyMode == mode ? .blue : .secondary)
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(title)
-                            .font(.headline)
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title)
+                                .font(.headline)
+                            Text(description)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        if !dictation.hotkeys(for: mode).isEmpty {
+                            hotkeyChip(label: displayedHotkeyLabel(for: mode))
+                        }
                     }
-
-                    Spacer()
-
-                    if !dictation.hotkeys(for: mode).isEmpty {
-                        hotkeyChip(label: displayedHotkeyLabel(for: mode))
-                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-                .onTapGesture { selectedHotkeyMode = mode }
+                .buttonStyle(.plain)
+                .hotkeyModeAccessibility(
+                    label: hotkeyModeAccessibilityLabel(
+                        title: title,
+                        badge: nil,
+                        description: description,
+                        label: displayedHotkeyLabel(for: mode)
+                    ),
+                    isSelected: selectedHotkeyMode == mode,
+                    hint: localizedAppText("Selects this hotkey mode.", de: "Wählt diesen Hotkey-Modus aus.")
+                )
 
                 if selectedHotkeyMode == mode, shouldShowRecorder(for: mode) {
                     hotkeyRecorder(for: mode)
                 }
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(hotkeyModeAccessibilityLabel(
-            title: title,
-            description: description,
-            label: displayedHotkeyLabel(for: mode)
-        ))
-        .accessibilityValue(selectedHotkeyMode == mode ? localizedAppText("Selected", de: "Ausgewählt") : "")
-        .accessibilityHint(localizedAppText("Selects this hotkey mode.", de: "Wählt diesen Hotkey-Modus aus."))
-        .accessibilityAction(named: Text(localizedAppText("Select", de: "Auswählen"))) {
-            selectedHotkeyMode = mode
-        }
     }
 
-    private func hotkeyModeAccessibilityLabel(title: String, description: String, label: String) -> String {
-        "\(title). \(description) \(localizedAppText("Shortcut", de: "Shortcut")): \(label)."
+    private func hotkeyModeAccessibilityLabel(title: String, badge: String?, description: String, label: String) -> String {
+        let name = badge.map { "\(title), \($0)" } ?? title
+        return "\(name). \(description) \(localizedAppText("Shortcut", de: "Shortcut")): \(label)."
     }
 
     private func shouldShowRecorder(for mode: HotkeySlotType) -> Bool {
@@ -697,6 +743,7 @@ struct SetupWizardView: View {
         HStack(spacing: 10) {
             Image(systemName: "keyboard")
                 .foregroundStyle(.blue)
+                .accessibilityHidden(true)
 
             HotkeyRecorderView(
                 label: mode == .hybrid && recommendedHotkeyResolution.shouldApply
@@ -815,6 +862,7 @@ struct SetupWizardView: View {
         return HStack(spacing: 10) {
             Image(systemName: isReady ? "checkmark.circle.fill" : "circle.dashed")
                 .foregroundStyle(isReady ? .green : .secondary)
+                .accessibilityHidden(true)
             Text(localReadinessText)
             .font(.callout.weight(.medium))
             .foregroundStyle(isReady ? .green : .secondary)
@@ -823,6 +871,7 @@ struct SetupWizardView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
+        .accessibilityElement(children: .combine)
     }
 
     private var localReadinessText: String {
@@ -882,6 +931,7 @@ struct SetupWizardView: View {
                     .font(.title2)
                     .foregroundStyle(.blue)
                     .frame(width: 36)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
@@ -914,16 +964,33 @@ struct SetupWizardView: View {
         }
 
         if isInteractive {
+            // A plain button keeps the card's look but makes it reachable with
+            // Tab and pressable with Space and VoiceOver.
+            Button {
+                Task { await handleRecommendationCardAction(manifestId: manifestId, registryPlugin: registryPlugin) }
+            } label: {
+                card
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(recommendationCardAccessibilityHint(manifestId: manifestId, availability: availability))
+        } else if recommendationCardHasEmbeddedControl(manifestId: manifestId, availability: availability) {
             card
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    Task { await handleRecommendationCardAction(manifestId: manifestId, registryPlugin: registryPlugin) }
-                }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(recommendationCardAccessibilityHint(manifestId: manifestId, availability: availability))
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(title)
         } else {
             card
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
+    }
+
+    /// The card shows its own settings button, which must stay a separate control.
+    private func recommendationCardHasEmbeddedControl(
+        manifestId: String,
+        availability: SetupWizardRecommendationAvailability
+    ) -> Bool {
+        availability == .setupRequired && manifestId != SetupWizardParakeetRecommendation.manifestId
     }
 
     @ViewBuilder
@@ -941,6 +1008,7 @@ struct SetupWizardView: View {
             } else {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText("Activating", de: "Wird aktiviert", ja: "有効化中", zh: "正在激活"))
             }
         } else {
             switch availability {
@@ -965,6 +1033,7 @@ struct SetupWizardView: View {
                 case .extracting:
                     ProgressView()
                         .controlSize(.small)
+                        .accessibilityLabel(localizedAppText("Installing", de: "Wird installiert", ja: "インストール中", zh: "正在安装"))
                 case .restartRequired:
                     statusPill(localizedAppText("Restart", de: "Neustart"), systemImage: "arrow.clockwise.circle.fill", color: .orange)
                 case .error:
@@ -975,6 +1044,7 @@ struct SetupWizardView: View {
             case .loading:
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText("Loading", de: "Wird geladen", ja: "読み込み中", zh: "正在加载"))
             case .unavailable(let reason):
                 statusPill(reason.title, systemImage: "exclamationmark.triangle.fill", color: .orange)
                     .help(reason.message)
@@ -984,15 +1054,20 @@ struct SetupWizardView: View {
 
     private func setupProgressIndicator(_ progress: Double) -> some View {
         let progress = progress.isFinite ? min(max(progress, 0), 1) : 0
+        let percent = Int(progress * 100)
         return HStack(spacing: 6) {
             ProgressView(value: progress)
                 .frame(width: 70)
-            Text("\(Int(progress * 100))%")
+            Text("\(percent)%")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
                 .frame(width: 32, alignment: .trailing)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度"))
+        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)"))
+        .accessibilityAddTraits([.isStaticText, .updatesFrequently])
     }
 
     private func recommendationCardIsInteractive(
@@ -1119,6 +1194,7 @@ struct SetupWizardView: View {
                     .font(.title2)
                     .foregroundStyle(.blue)
                     .frame(width: 36)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
@@ -1146,15 +1222,19 @@ struct SetupWizardView: View {
         }
 
         if canSelectAppleSpeechForSetup {
-            card
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    Task { await activateAppleSpeechForSetup() }
-                }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityHint(localizedAppText("Selects Apple Speech as the local dictation engine.", de: "Wählt Apple Speech als lokale Diktier-Engine aus."))
+            Button {
+                Task { await activateAppleSpeechForSetup() }
+            } label: {
+                card
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityHint(localizedAppText("Selects Apple Speech as the local dictation engine.", de: "Wählt Apple Speech als lokale Diktier-Engine aus."))
         } else {
             card
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
     }
 
@@ -1184,6 +1264,7 @@ struct SetupWizardView: View {
             } else if isPreparingAppleSpeechFallback {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText("Preparing", de: "Wird vorbereitet", ja: "準備中", zh: "正在准备"))
             } else if modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
                 statusPill(localizedAppText("Active", de: "Aktiv"), systemImage: "checkmark.circle.fill", color: .blue)
             } else if let appleSpeechEngine, modelManager.canUseForTranscription(appleSpeechEngine) {
@@ -1204,6 +1285,7 @@ struct SetupWizardView: View {
                     .font(.title2)
                     .foregroundStyle(.blue)
                     .frame(width: 36)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
@@ -1236,18 +1318,32 @@ struct SetupWizardView: View {
                 }
             }
         }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Finish
+
+    private var trialSuccessTitle: String {
+        localizedAppText("You're all set!", de: "Alles bereit!")
+    }
+
+    private var trialSuccessMessage: String {
+        localizedAppText("TypeWhisper is ready to help you work faster.", de: "TypeWhisper ist bereit, damit du schneller arbeiten kannst.")
+    }
 
     private var finishStep: some View {
         VStack(spacing: 14) {
             HStack(spacing: 8) {
                 Image(systemName: "keyboard")
                     .foregroundStyle(.blue)
+                    .accessibilityHidden(true)
                 hotkeyChip(label: primaryHotkeyLabel)
             }
             .font(.callout)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(localizedAppText("Your hotkey", de: "Dein Hotkey", ja: "現在のショートカットキー", zh: "你的快捷键"))
+            .accessibilityValue(primaryHotkeyLabel)
+            .accessibilityAddTraits(.isStaticText)
 
             TextEditor(text: $trialText)
                 .font(.body)
@@ -1266,11 +1362,12 @@ struct SetupWizardView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.title2)
                             .foregroundStyle(.green)
+                            .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(localizedAppText("You're all set!", de: "Alles bereit!"))
+                            Text(trialSuccessTitle)
                                 .font(.headline)
-                            Text(localizedAppText("TypeWhisper is ready to help you work faster.", de: "TypeWhisper ist bereit, damit du schneller arbeiten kannst."))
+                            Text(trialSuccessMessage)
                                 .font(.callout)
                                 .foregroundStyle(.secondary)
                         }
@@ -1278,13 +1375,15 @@ struct SetupWizardView: View {
                         Spacer()
                     }
                 }
-                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .accessibilityElement(children: .combine)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 setupCard(isSelected: false) {
                     HStack(spacing: 14) {
                         Image(systemName: readinessIcon)
                             .font(.title2)
                             .foregroundStyle(readinessColor)
+                            .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(readinessTitle)
@@ -1297,6 +1396,7 @@ struct SetupWizardView: View {
                         Spacer()
                     }
                 }
+                .accessibilityElement(children: .combine)
             }
         }
         .onChange(of: dictation.state) { oldValue, newValue in
@@ -1307,21 +1407,41 @@ struct SetupWizardView: View {
                 completedInsertion: dictation.lastSuccessfulDictationInsertion
             )
             if let testedSelection, setupReadiness.canCompleteSetup {
+                let wasAlreadySuccessful = trialSuccess
                 withAnimation(.spring(duration: 0.35)) {
                     markSetupWizardSelectionTested(testedSelection)
+                }
+                if !wasAlreadySuccessful {
+                    announceTrialSuccess()
                 }
             }
         }
         .onChange(of: selectedSetupModel) { _, _ in
             // Never attribute an in-flight test to a different provider/model.
             trialSignal.reset()
+            trialAnnouncementTask?.cancel()
         }
         .onDisappear {
             trialSignal.reset()
+            trialAnnouncementTask?.cancel()
         }
         .task {
             try? await Task.sleep(for: .milliseconds(50))
             isTrialFieldFocused = true
+        }
+    }
+
+    /// The success card appears silently below the text field, so VoiceOver
+    /// users get the same confirmation spoken. The short delay lets the
+    /// dictation flow's own "transcription complete" announcement finish first.
+    private func announceTrialSuccess() {
+        let message = "\(trialSuccessTitle) \(trialSuccessMessage)"
+        trialAnnouncementTask?.cancel()
+        // Cancelled when the wizard goes away or the tested model changes meanwhile.
+        trialAnnouncementTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            accessibilityAnnouncementService.announce(message)
         }
     }
 
@@ -1709,6 +1829,38 @@ struct SetupWizardView: View {
             .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(0.10)))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.white.opacity(0.14), lineWidth: 1))
             .lineLimit(1)
+    }
+}
+
+// MARK: - Accessibility Helpers
+
+private extension View {
+    /// Makes a combined card pressable for VoiceOver (button trait plus default
+    /// action) only while `isEnabled`; otherwise it stays a plain element.
+    @ViewBuilder
+    func setupWizardAccessibilityPress(
+        isEnabled: Bool,
+        hint: String,
+        perform action: @escaping () -> Void
+    ) -> some View {
+        if isEnabled {
+            self
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(hint)
+                .accessibilityAction { action() }
+        } else {
+            self
+        }
+    }
+
+    /// One hotkey-mode choice: a single element with the selection state as
+    /// both trait and spoken value.
+    func hotkeyModeAccessibility(label: String, isSelected: Bool, hint: String) -> some View {
+        self
+            .accessibilityLabel(label)
+            .accessibilityValue(isSelected ? localizedAppText("Selected", de: "Ausgewählt") : "")
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .accessibilityHint(hint)
     }
 }
 

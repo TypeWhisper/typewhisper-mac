@@ -619,3 +619,13 @@ final class UsageStatisticsServiceTests: XCTestCase {
         ).date!
     }
 }
+
+/// Statistics cards on the Statistics page and on Home show "—" without data.
+final class StatisticsSpokenValueTests: XCTestCase {
+    func testEmDashIsSpokenAsNoDataAndValuesStayAsTheyAre() {
+        XCTAssertNotEqual(statisticsSpokenValue("—"), "—")
+        XCTAssertFalse(statisticsSpokenValue("—").isEmpty)
+        XCTAssertEqual(statisticsSpokenValue("101"), "101")
+        XCTAssertEqual(statisticsSpokenValue("2m"), "2m")
+    }
+}

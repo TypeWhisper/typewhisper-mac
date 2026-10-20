@@ -1517,6 +1517,7 @@ final class CloudFolderSyncTests: XCTestCase {
             defaults: defaults
         )
         defer { controller.deactivate() }
+        controller.errorMessage = "The last sync failed."
 
         await controller.deletePrivateSyncFolder()
         store.notifyLocalChange()
@@ -1524,6 +1525,9 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertEqual(controller.mode, .off)
         XCTAssertFalse(FileManager.default.fileExists(atPath: packageURL.path))
+        // The earlier error no longer applies, so the deletion result is shown and announced.
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertNotNil(controller.statusMessage)
     }
 
     func testICloudBridgeMirrorCopiesBothDirectionsAndKeepsNewestContent() throws {
@@ -5399,4 +5403,21 @@ final class CloudFolderSyncTests: XCTestCase {
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
+}
+
+/// A failing background sync is announced once, and again after a sync succeeded.
+final class SyncErrorAnnouncementFilterTests: XCTestCase {
+    func testRepeatedErrorIsAnnouncedOnceUntilASyncSucceeds() {
+        var filter = SyncErrorAnnouncementFilter()
+
+        XCTAssertTrue(filter.shouldAnnounce("The network connection was lost."))
+        // Each retry clears the error first; the same failure is not repeated.
+        XCTAssertFalse(filter.shouldAnnounce(nil))
+        XCTAssertFalse(filter.shouldAnnounce("The network connection was lost."))
+        XCTAssertTrue(filter.shouldAnnounce("The sync folder is not available."))
+
+        // After a successful sync the same failure is new again.
+        filter.reset()
+        XCTAssertTrue(filter.shouldAnnounce("The sync folder is not available."))
+    }
 }

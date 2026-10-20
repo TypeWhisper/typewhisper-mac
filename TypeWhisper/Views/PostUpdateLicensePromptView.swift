@@ -15,6 +15,7 @@ struct PostUpdateLicensePromptView: View {
                     .resizable()
                     .frame(width: 64, height: 64)
                     .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityHidden(true)
 
                 Spacer()
 
@@ -30,6 +31,7 @@ struct PostUpdateLicensePromptView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
                     .font(.title2.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(localizedAppText(
                     "You can keep using the GPL version as-is. Choose a commercial license if you need non-GPL terms, procurement, support, or proprietary redistribution.",
@@ -82,6 +84,7 @@ struct PostUpdateLicensePromptView: View {
 
                 Button(localizedAppText("Not now", de: "Später"), action: onNotNow)
                     .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
             }
         }
         .padding(28)
@@ -101,6 +104,7 @@ struct PostUpdateLicensePromptView: View {
                     .font(.title3)
                     .foregroundStyle(emphasized ? .white : Color.accentColor)
                     .frame(width: 28)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)

@@ -64,6 +64,14 @@ struct AudioRecorderView: View {
                         .font(.system(size: 48, weight: .light, design: .monospaced))
                         .foregroundStyle(viewModel.state == .recording ? .primary : .secondary)
                         .frame(maxWidth: .infinity)
+                        .accessibilityLabel(localizedAppText(
+                            "Recording time",
+                            de: "Aufnahmezeit",
+                            ja: "録音時間",
+                            zh: "录音时长"
+                        ))
+                        .accessibilityValue(recorderSpokenDuration(viewModel.duration))
+                        .accessibilityAddTraits(.updatesFrequently)
 
                     // Record/Stop button
                     Button {
@@ -72,9 +80,8 @@ struct AudioRecorderView: View {
                         HStack(spacing: 8) {
                             Image(systemName: viewModel.state == .recording ? "stop.fill" : "record.circle")
                                 .font(.title2)
-                            Text(viewModel.state == .recording
-                                ? String(localized: "recorder.stopRecording")
-                                : String(localized: "recorder.startRecording"))
+                                .accessibilityHidden(true)
+                            Text(recordButtonTitle)
                         }
                         .frame(minWidth: 200)
                     }
@@ -82,6 +89,8 @@ struct AudioRecorderView: View {
                     .tint(viewModel.state == .recording ? .red : .accentColor)
                     .controlSize(.large)
                     .disabled(!viewModel.canToggleRecording)
+                    .accessibilityLabel(recordButtonTitle)
+                    .accessibilityValue(recorderStateDescription)
 
                     if viewModel.isHistoryRetranscribing {
                         Label(String(localized: "history.retranscribe.busy"), systemImage: "hourglass")
@@ -116,12 +125,23 @@ struct AudioRecorderView: View {
                     Label(error, systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.red)
                         .font(.callout)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
+                        .accessibilityLabel(String(localized: "Error: \(error)"))
                 }
 
                 if let warning = viewModel.systemAudioWarningMessage {
                     Label(warning, systemImage: "speaker.slash")
                         .foregroundStyle(.orange)
                         .font(.callout)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
+                        .accessibilityLabel(localizedAppText(
+                            "Warning: \(warning)",
+                            de: "Warnung: \(warning)",
+                            ja: "警告: \(warning)",
+                            zh: "警告：\(warning)"
+                        ))
                 }
             }
 
@@ -134,6 +154,9 @@ struct AudioRecorderView: View {
                         Text(String(localized: "recorder.transcribing"))
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityAddTraits(.isStaticText)
+                    .accessibilityLabel(String(localized: "recorder.transcribing"))
                 }
             }
 
@@ -356,6 +379,24 @@ struct AudioRecorderView: View {
         }
     }
 
+    private var recordButtonTitle: String {
+        viewModel.state == .recording
+            ? String(localized: "recorder.stopRecording")
+            : String(localized: "recorder.startRecording")
+    }
+
+    /// Spoken state of the recorder, so VoiceOver does not depend on the button tint.
+    private var recorderStateDescription: String {
+        switch viewModel.state {
+        case .idle:
+            localizedAppText("Stopped", de: "Gestoppt", ja: "停止中", zh: "已停止")
+        case .recording:
+            localizedAppText("Recording", de: "Aufnahme läuft", ja: "録音中", zh: "正在录音")
+        case .finalizing:
+            String(localized: "recorder.transcribing")
+        }
+    }
+
     private var isLiveTranscriptPluginActive: Bool {
         pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
     }
@@ -369,6 +410,7 @@ struct AudioRecorderView: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -378,6 +420,9 @@ private struct LevelMeterRow: View {
     let label: String
     let icon: String
     let level: Float
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let maxRms: Float = 0.8
 
     var body: some View {
         HStack(spacing: 8) {
@@ -385,6 +430,7 @@ private struct LevelMeterRow: View {
                 .foregroundStyle(.secondary)
                 .font(.caption)
                 .frame(width: 16)
+                .accessibilityHidden(true)
 
             Text(label)
                 .font(.caption)
@@ -392,8 +438,7 @@ private struct LevelMeterRow: View {
                 .frame(width: 80, alignment: .leading)
 
             GeometryReader { geo in
-                let maxRms: Float = 0.8
-                let levelWidth = max(0, geo.size.width * CGFloat(min(level, maxRms) / maxRms))
+                let levelWidth = max(0, geo.size.width * CGFloat(normalizedLevel))
 
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 3)
@@ -402,11 +447,41 @@ private struct LevelMeterRow: View {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(levelColor(level).gradient)
                         .frame(width: levelWidth)
-                        .animation(.easeOut(duration: 0.08), value: level)
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.08), value: level)
                 }
             }
             .frame(height: 6)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isStaticText)
+        .accessibilityLabel(localizedAppText(
+            "\(label) input level",
+            de: "Eingangspegel \(label)",
+            ja: "\(label)の入力レベル",
+            zh: "\(label)输入电平"
+        ))
+        .accessibilityValue(accessibilityLevelValue)
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private var normalizedLevel: Float {
+        min(max(level, 0), Self.maxRms) / Self.maxRms
+    }
+
+    /// Mirrors the meter colors (green, yellow, red) as words plus a percentage.
+    private var accessibilityLevelValue: String {
+        let band: String
+        if level > 0.7 {
+            band = localizedAppText("High", de: "Hoch", ja: "高", zh: "高")
+        } else if level > 0.4 {
+            band = localizedAppText("Medium", de: "Mittel", ja: "中", zh: "中")
+        } else {
+            band = localizedAppText("Low", de: "Niedrig", ja: "低", zh: "低")
+        }
+        let percent = Double(normalizedLevel).formatted(
+            .percent.precision(.fractionLength(0)).locale(Locale(identifier: preferredAppLanguageCode()))
+        )
+        return "\(band), \(percent)"
     }
 
     private func levelColor(_ level: Float) -> Color {
@@ -438,6 +513,12 @@ private struct RecordingRow: View {
                     HStack(spacing: 12) {
                         Label(formattedDate(item.date), systemImage: "calendar")
                         Label(viewModel.formattedDuration(item.duration), systemImage: "clock")
+                            .accessibilityLabel(localizedAppText(
+                                "Duration \(recorderSpokenDuration(item.duration))",
+                                de: "Dauer \(recorderSpokenDuration(item.duration))",
+                                ja: "長さ \(recorderSpokenDuration(item.duration))",
+                                zh: "时长 \(recorderSpokenDuration(item.duration))"
+                            ))
                         Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
                         if item.transcript != nil {
                             Label(String(localized: "recorder.hasTranscript"), systemImage: "text.quote")
@@ -450,6 +531,7 @@ private struct RecordingRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
 
                 Spacer()
 
@@ -463,6 +545,19 @@ private struct RecordingRow: View {
                         }
                         .buttonStyle(.borderless)
                         .help(String(localized: "recorder.showTranscript"))
+                        .accessibilityLabel(showTranscript
+                            ? localizedAppText(
+                                "Hide transcript of \(item.fileName)",
+                                de: "Transkript von \(item.fileName) ausblenden",
+                                ja: "\(item.fileName)の文字起こしを非表示",
+                                zh: "隐藏\(item.fileName)的转录"
+                            )
+                            : localizedAppText(
+                                "Show transcript of \(item.fileName)",
+                                de: "Transkript von \(item.fileName) anzeigen",
+                                ja: "\(item.fileName)の文字起こしを表示",
+                                zh: "显示\(item.fileName)的转录"
+                            ))
 
                         Button {
                             viewModel.copyTranscript(transcript)
@@ -472,7 +567,12 @@ private struct RecordingRow: View {
                         .buttonStyle(.borderless)
                         .foregroundStyle(.secondary)
                         .help(String(localized: "recorder.copyTranscript"))
-                        .accessibilityLabel(String(localized: "recorder.copyTranscript"))
+                        .accessibilityLabel(localizedAppText(
+                            "Copy transcript of \(item.fileName)",
+                            de: "Transkript von \(item.fileName) kopieren",
+                            ja: "\(item.fileName)の文字起こしをコピー",
+                            zh: "复制\(item.fileName)的转录"
+                        ))
                         .accessibilityIdentifier("recorder.recording.copyTranscript")
                     }
 
@@ -487,6 +587,11 @@ private struct RecordingRow: View {
                             }
                         }
                         .help(item.transcript == nil
+                            ? String(localized: "recorder.transcribing")
+                            : String(localized: "recorder.retranscribing"))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isStaticText)
+                        .accessibilityLabel(item.transcript == nil
                             ? String(localized: "recorder.transcribing")
                             : String(localized: "recorder.retranscribing"))
                     } else if item.transcript == nil {
@@ -510,6 +615,12 @@ private struct RecordingRow: View {
                         .buttonStyle(.borderless)
                         .help(transcriptionActionTitle)
                         .disabled(!viewModel.canTranscribeRecording(item))
+                        .accessibilityLabel(localizedAppText(
+                            "Re-transcribe \(item.fileName)",
+                            de: "\(item.fileName) erneut transkribieren",
+                            ja: "\(item.fileName)を再文字起こし",
+                            zh: "重新转录\(item.fileName)"
+                        ))
                     }
 
                     Button {
@@ -520,6 +631,12 @@ private struct RecordingRow: View {
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.revealInFinder"))
                     .disabled(viewModel.isRetranscribing(item))
+                    .accessibilityLabel(localizedAppText(
+                        "Show \(item.fileName) in Finder",
+                        de: "\(item.fileName) im Finder anzeigen",
+                        ja: "\(item.fileName)をFinderで表示",
+                        zh: "在访达中显示\(item.fileName)"
+                    ))
 
                     Button(role: .destructive) {
                         viewModel.deleteRecording(item)
@@ -529,6 +646,12 @@ private struct RecordingRow: View {
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.delete"))
                     .disabled(viewModel.isRetranscribing(item))
+                    .accessibilityLabel(localizedAppText(
+                        "Delete \(item.fileName)",
+                        de: "\(item.fileName) löschen",
+                        ja: "\(item.fileName)を削除",
+                        zh: "删除\(item.fileName)"
+                    ))
                 }
             }
 
@@ -539,6 +662,7 @@ private struct RecordingRow: View {
                     .foregroundStyle(.red)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityLabel(String(localized: "Error: \(failureSummary)"))
             }
 
             // Expandable transcript
@@ -562,6 +686,8 @@ private struct RecordingRow: View {
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(item.fileName)
         .contextMenu {
             if let transcript = item.transcript {
                 Button(String(localized: "recorder.copyTranscript")) {
@@ -622,4 +748,12 @@ private struct RecordingRow: View {
         formatter.timeStyle = .short
         return formatter.string(from: date)
     }
+}
+
+/// Spells out a duration ("1 minute, 5 seconds") for VoiceOver instead of "1:05".
+private func recorderSpokenDuration(_ duration: TimeInterval) -> String {
+    Duration.seconds(max(0, Int(duration))).formatted(
+        .units(allowed: [.hours, .minutes, .seconds], width: .wide)
+            .locale(Locale(identifier: preferredAppLanguageCode()))
+    )
 }

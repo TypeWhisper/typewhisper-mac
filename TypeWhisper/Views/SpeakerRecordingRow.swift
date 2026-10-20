@@ -84,7 +84,7 @@ struct SpeakerRecordingRow: View {
         .background(Color.purple.opacity(isHovered && onOpen != nil ? 0.1 : 0))
         .contentShape(Rectangle())
         .onHover { hovering in
-            withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isHovered = hovering }
             guard onOpen != nil else { return }
             if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
@@ -92,8 +92,25 @@ struct SpeakerRecordingRow: View {
             if isHovered, onOpen != nil { NSCursor.pop() }
         }
         .onTapGesture { onOpen?() }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(onOpen != nil ? .isButton : [])
+        // One element per recording: the title, then the progress or the speakers with
+        // their share as words. The row's buttons become named actions, so VoiceOver
+        // does not merge their titles into the description.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(accessibilityStatus)
+        .accessibilityAddTraits(onOpen != nil ? .isButton : .isStaticText)
+        // Only rows that open something offer a default action; file-intake rows do not.
+        .modifier(SpeakerRowOpenAction(onOpen: onOpen))
+        .accessibilityActions {
+            if let onRetry {
+                Button(String(localized: "speakers.action.tryAgain"), action: onRetry)
+            }
+            if let onCancel {
+                Button(String(localized: "Cancel"), action: onCancel)
+            } else if let onRemove {
+                Button(String(localized: "Remove \(title)"), action: onRemove)
+            }
+        }
         .task(id: isReady) {
             guard isReady else {
                 revealed = false
@@ -105,6 +122,47 @@ struct SpeakerRecordingRow: View {
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.75)) { revealed = true }
             }
         }
+    }
+
+    // MARK: - Accessibility
+
+    /// Date and duration, then where the recording stands, all as words.
+    private var accessibilityStatus: String {
+        let status: String
+        switch phase {
+        case .queued:
+            status = String(localized: "speakers.page.queued")
+        case .working(let step, let detail, let fraction):
+            let stepTitle = step <= 1
+                ? String(localized: "speakers.page.step.transcribe")
+                : String(localized: "speakers.page.step.detect")
+            var parts = [localizedAppText(
+                "Step \(step) of 2: \(stepTitle)",
+                de: "Schritt \(step) von 2: \(stepTitle)",
+                ja: "ステップ \(step)/2: \(stepTitle)",
+                zh: "第 \(step) 步，共 2 步：\(stepTitle)"
+            )]
+            if let fraction {
+                let overall = (Double(step - 1) + min(max(fraction, 0), 1)) / 2
+                parts.append(overall.formatted(.percent.precision(.fractionLength(0))))
+            }
+            if !detail.isEmpty {
+                parts.append(detail)
+            }
+            status = parts.joined(separator: ", ")
+        case .failed(let message):
+            status = message
+        case .ready(let shares):
+            if shares.isEmpty {
+                status = String(localized: "speakers.page.noSpeech")
+            } else {
+                status = shares.map { share in
+                    "\(share.name) \(share.fraction.formatted(.percent.precision(.fractionLength(0))))"
+                }
+                .joined(separator: ", ")
+            }
+        }
+        return [detail, status].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
     // MARK: - Tile
@@ -297,7 +355,7 @@ struct SpeakerRecordingRow: View {
                     .padding(.vertical, 5)
                     .background(Capsule().fill(Color.purple))
                     .opacity(isHovered ? 1 : 0)
-                    .offset(x: isHovered ? 0 : 6)
+                    .offset(x: isHovered || reduceMotion ? 0 : 6)
 
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
@@ -359,6 +417,12 @@ struct SpeakerPersonCard: View {
                         .onChange(of: isNameFocused) { _, focused in
                             if !focused { commit(service) }
                         }
+                        .accessibilityLabel(localizedAppText(
+                            "Rename \(profile.name)",
+                            de: "\(profile.name) umbenennen",
+                            ja: "\(profile.name)の名前を変更",
+                            zh: "重命名\(profile.name)"
+                        ))
                     Text(String.localizedStringWithFormat(
                         String(localized: "premium.window.speakers.profiles.learnedFormat"),
                         SpeakerTranscriptPresentation.timestamp(profile.enrolledSeconds),
@@ -386,7 +450,12 @@ struct SpeakerPersonCard: View {
                 .buttonStyle(.borderless)
                 .opacity(isHovered ? 1 : 0.35)
                 .help(String(localized: "premium.window.speakers.profiles.delete"))
-                .accessibilityLabel(String(localized: "premium.window.speakers.profiles.delete"))
+                .accessibilityLabel(localizedAppText(
+                    "Delete Voice Profile of \(profile.name)",
+                    de: "Sprecherprofil von \(profile.name) löschen",
+                    ja: "\(profile.name)の声のプロフィールを削除",
+                    zh: "删除\(profile.name)的声音档案"
+                ))
             }
 
             if !appearances.isEmpty {
@@ -410,6 +479,10 @@ struct SpeakerPersonCard: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        // The magnifier badge on the waveform marks a suggested, unconfirmed match.
+                        .accessibilityValue(appearance.isSuggestion
+                            ? localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议")
+                            : "")
                     }
                     if appearances.count > Self.shownRecordings {
                         Text(String.localizedStringWithFormat(
@@ -428,6 +501,8 @@ struct SpeakerPersonCard: View {
             RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(profile.name)
         .onHover { isHovered = $0 }
         .onAppear { nameDraft = profile.name }
         .onChange(of: profile.name) { _, name in
@@ -438,5 +513,19 @@ struct SpeakerPersonCard: View {
     private func commit(_ service: SpeakerVoiceProfileService) {
         if nameDraft != profile.name { service.renameProfile(profile.id, to: nameDraft) }
         nameDraft = service.store.profile(withID: profile.id)?.name ?? profile.name
+    }
+}
+
+/// The default VoiceOver action of a recording row, only when the row opens something.
+private struct SpeakerRowOpenAction: ViewModifier {
+    let onOpen: (() -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let onOpen {
+            content.accessibilityAction(.default, onOpen)
+        } else {
+            content
+        }
     }
 }

@@ -75,6 +75,7 @@ struct GeneralSettingsView: View {
                     set: { launchAtLogin.setUserChoice($0) }
                 ))
                 .disabled(launchAtLogin.isLocked)
+                .managedLockAccessibilityHint(isLocked: launchAtLogin.isLocked, reason: nil)
 
                 Text(String(localized: "TypeWhisper will start automatically when you log in."))
                     .font(.caption)

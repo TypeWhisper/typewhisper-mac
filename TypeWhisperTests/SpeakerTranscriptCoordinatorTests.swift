@@ -290,11 +290,38 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         coordinator.cancel(recordID: second)
 
         XCTAssertNil(coordinator.stages[second])
+        XCTAssertEqual(coordinator.outcomes[second], .cancelled)
         XCTAssertEqual(history.record(withID: second)?.speakerTranscriptState, .failed)
         XCTAssertNotNil(coordinator.stages[first])
         try await waitUntilIdle(coordinator)
         XCTAssertEqual(history.record(withID: first)?.speakerTranscriptState, .ready)
+        XCTAssertEqual(coordinator.outcomes[first], .succeeded)
         XCTAssertEqual(provider.requests.count, 1)
+    }
+
+    /// A failed "Detect again" keeps the earlier transcript; the outcome still reports
+    /// the failure, so VoiceOver does not hear "Speakers detected".
+    func testFailedRerunReportsFailureWhileKeepingTheEarlierTranscript() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        let addedID = await coordinator.addRecording(input())
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(coordinator.outcomes[id], .succeeded)
+        let revision = try XCTUnwrap(history.record(withID: id)?.speakerTranscript?.revision)
+
+        provider.error = PluginDiarizationError.processingFailed("boom")
+        XCTAssertNil(coordinator.start(recordID: id))
+        XCTAssertNil(coordinator.outcomes[id], "A queued run has no outcome yet")
+        try await waitUntilIdle(coordinator)
+
+        XCTAssertEqual(coordinator.outcomes[id], .failed)
+        XCTAssertEqual(history.record(withID: id)?.speakerTranscriptState, .ready)
+        XCTAssertEqual(history.record(withID: id)?.speakerTranscript?.revision, revision)
+        XCTAssertEqual(
+            HistoryRecordDetailView.speakerDetectionAnnouncement(for: .failed),
+            String(localized: "speakers.status.failed")
+        )
     }
 
     func testSpeakerRecordCapturedBeforeClearHistoryIsNotAdded() throws {

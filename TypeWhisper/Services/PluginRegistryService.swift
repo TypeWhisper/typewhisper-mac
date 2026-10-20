@@ -490,7 +490,13 @@ final class PluginRegistryService: ObservableObject {
 
     @Published var registry: [RegistryPlugin] = []
     @Published var fetchState: FetchState = .idle
-    @Published var installStates: [String: InstallState] = [:]
+    @Published var installStates: [String: InstallState] = [:] {
+        didSet { announceInstallOutcomes(previous: oldValue) }
+    }
+    /// Speaks install errors and restart notices for VoiceOver. Installs keep running
+    /// after the Settings page that started them goes away, so the service announces
+    /// them rather than the page. Set by the service container.
+    var accessibilityAnnouncementService: AccessibilityAnnouncementService?
     @Published var availableUpdatesCount: Int = 0
     @Published private(set) var bulkUpdateProgress: BulkUpdateProgress?
 
@@ -619,6 +625,25 @@ final class PluginRegistryService: ObservableObject {
         self.fetchData = fetchData
 
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
+    }
+
+    /// Announces each install that newly ended with an error or needs a restart.
+    private func announceInstallOutcomes(previous: [String: InstallState]) {
+        guard let accessibilityAnnouncementService else { return }
+        for (pluginId, state) in installStates.sorted(by: { $0.key < $1.key }) where previous[pluginId] != state {
+            switch state {
+            case .error(let message):
+                // Named, so two plugins failing alike are both heard and each says which one failed.
+                let name = registry.first { $0.id == pluginId }?.name
+                    ?? PluginManager.shared?.loadedPlugins.first { $0.manifest.id == pluginId }?.manifest.name
+                    ?? pluginId
+                accessibilityAnnouncementService.announceError("\(name): \(message)")
+            case .restartRequired:
+                accessibilityAnnouncementService.announce(String(localized: "Restart TypeWhisper to finish updating."))
+            case .downloading, .extracting:
+                break
+            }
+        }
     }
 
     // MARK: - Fetch Registry

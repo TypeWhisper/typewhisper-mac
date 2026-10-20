@@ -29,6 +29,9 @@ struct SettingsPageHeader<Actions: View>: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.title2.weight(.semibold))
+                    // The page title is the top heading VoiceOver users jump to.
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityHeading(.h1)
 
                 if let summary {
                     Text(summary)

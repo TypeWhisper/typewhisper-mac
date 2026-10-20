@@ -13,6 +13,8 @@ struct NativeSearchField: NSViewRepresentable {
     func makeNSView(context: Context) -> NSSearchField {
         let searchField = NSSearchField()
         searchField.placeholderString = placeholder
+        // The placeholder disappears once text is typed; the label keeps the field named.
+        searchField.setAccessibilityLabel(placeholder)
         searchField.controlSize = .large
         searchField.bezelStyle = .roundedBezel
         searchField.focusRingType = .default
@@ -25,6 +27,7 @@ struct NativeSearchField: NSViewRepresentable {
     func updateNSView(_ searchField: NSSearchField, context: Context) {
         context.coordinator.text = $text
         searchField.placeholderString = placeholder
+        searchField.setAccessibilityLabel(placeholder)
 
         if searchField.stringValue != text {
             searchField.stringValue = text

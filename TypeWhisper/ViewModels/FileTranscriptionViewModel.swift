@@ -141,6 +141,7 @@ final class FileTranscriptionViewModel: ObservableObject {
     private let engineReadinessChecker: EngineReadinessChecker?
     private let subtitleFileSaver: SubtitleFileSaver
     private let subtitleFolderPicker: SubtitleFolderPicker
+    private let accessibilityAnnouncementService: AccessibilityAnnouncementService?
     private var cancellables = Set<AnyCancellable>()
     private var isInitialized = false
     private var activeBatchTask: Task<Void, Never>?
@@ -162,8 +163,10 @@ final class FileTranscriptionViewModel: ObservableObject {
         transcriptionRunner: TranscriptionRunner? = nil,
         engineReadinessChecker: EngineReadinessChecker? = nil,
         subtitleFileSaver: SubtitleFileSaver? = nil,
-        subtitleFolderPicker: SubtitleFolderPicker? = nil
+        subtitleFolderPicker: SubtitleFolderPicker? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) {
+        self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.modelManager = modelManager
         self.audioFileService = audioFileService
         self.dictionaryService = dictionaryService
@@ -424,13 +427,37 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             if cancellationFlag.isCancelled {
                 batchState = .cancelled
+                accessibilityAnnouncementService?.announce(String(localized: "Cancelled"))
             } else {
                 batchState = .done
+                announceBatchResult()
             }
             stopElapsedTimer()
             activeBatchTask = nil
             activeCancellationFlag = nil
         }
+    }
+
+    /// The results appear on the page; VoiceOver users hear when the batch is done.
+    private func announceBatchResult() {
+        let total = files.count
+        let done = files.filter { $0.state == .done }.count
+        let failed = files.filter { $0.state == .error }.count
+        var message = localizedAppText(
+            "Transcription complete: \(done) of \(total) files",
+            de: "Transkription abgeschlossen: \(done) von \(total) Dateien",
+            ja: "文字起こし完了: \(total)件中\(done)件のファイル",
+            zh: "转录完成：\(total) 个文件中的 \(done) 个"
+        )
+        if failed > 0 {
+            message += ", " + localizedAppText(
+                "\(failed) failed",
+                de: "\(failed) fehlgeschlagen",
+                ja: "\(failed)件失敗",
+                zh: "\(failed) 个失败"
+            )
+        }
+        accessibilityAnnouncementService?.announce(message)
     }
 
     func cancelTranscription() {
@@ -580,6 +607,9 @@ final class FileTranscriptionViewModel: ObservableObject {
             files[index].progressFraction = nil
             files[index].sourceProgress = nil
             files[index].finishedAt = Date()
+            accessibilityAnnouncementService?.announceError(
+                "\(files[index].fileName): \(error.localizedDescription)"
+            )
         }
     }
 

@@ -612,6 +612,7 @@ private struct SettingsSidebarSearchField: View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(
                 localizedAppText("Search Settings", de: "Einstellungen durchsuchen"),
                 text: $text
@@ -809,21 +810,63 @@ private struct SettingsSidebarRow: View {
                 Image(systemName: "arrow.down.circle.fill")
                     .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
                     .help(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
-                    .accessibilityLabel(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
+                    // Read as the row's value instead.
+                    .accessibilityHidden(true)
             }
 
             if let badge = destination.badge {
-                SettingsSidebarBadge(title: destination.title, count: badge)
+                SettingsSidebarBadge(count: badge)
+                    .accessibilityHidden(true)
             }
         }
         .opacity(destination.isDimmed && !isSelected ? 0.5 : 1)
         .contentShape(Rectangle())
+        // One text element per row, named by its title. The update badge and the
+        // dimmed look of a disabled plugin become its value. SwiftUI keeps the
+        // outline row itself unnamed; VoiceOver reads this element for the row.
+        .accessibilityElement(children: .combine)
+        .modifier(SettingsSidebarRowStatus(status: accessibilityStatus))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
         .onChange(of: isSelected) { _, selected in
             guard hasAppeared, selected, !reduceMotion else { return }
             bounceTrigger += 1
         }
         .onAppear {
             DispatchQueue.main.async { hasAppeared = true }
+        }
+    }
+
+    private var accessibilityStatus: String {
+        var parts: [String] = []
+        if destination.isDimmed {
+            parts.append(localizedAppText("Disabled", de: "Deaktiviert", ja: "無効", zh: "已停用"))
+        }
+        if destination.hasUpdate {
+            parts.append(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります", zh: "有可用更新"))
+        }
+        if let badge = destination.badge {
+            parts.append(localizedAppText(
+                "\(badge) updates",
+                de: "\(badge) Updates",
+                ja: "\(badge)件の更新",
+                zh: "\(badge) 个更新"
+            ))
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+/// Sets the row's status as its value only when there is one. An empty value
+/// would replace the title, which UI scripting reads as the row text.
+private struct SettingsSidebarRowStatus: ViewModifier {
+    let status: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if status.isEmpty {
+            content
+        } else {
+            content.accessibilityValue(status)
         }
     }
 }
@@ -852,6 +895,8 @@ private struct SettingsSidebarPluginIcon: View {
                 Image(systemName: destination.systemImage)
             }
         }
+        // Decorative next to the plugin name.
+        .accessibilityHidden(true)
         .task(id: resolvedURL) {
             guard let resolvedURL else {
                 image = nil
@@ -873,7 +918,6 @@ private struct SettingsSidebarPluginIcon: View {
 }
 
 private struct SettingsSidebarBadge: View {
-    let title: String
     let count: Int
 
     var body: some View {
@@ -884,7 +928,6 @@ private struct SettingsSidebarBadge: View {
             .padding(.vertical, 2)
             .background(.tertiary, in: Capsule())
             .foregroundStyle(.secondary)
-            .accessibilityLabel("\(title), \(count) updates")
     }
 }
 
@@ -1035,27 +1078,38 @@ struct RecordingSettingsView: View {
         let canMoveUp = index > 0
         let canMoveDown = index < audioDevice.inputDevicePriorityList.count - 1
 
+        let deviceName = audioDevice.displayName(for: item)
+
         return HStack(spacing: 8) {
+            // The grip only hints at dragging; VoiceOver users reorder with the
+            // row's Move Up / Move Down actions.
             Image(systemName: "line.3.horizontal")
                 .foregroundStyle(.tertiary)
                 .font(.system(size: 11, weight: .semibold))
                 .frame(width: 12)
+                .accessibilityHidden(true)
 
-            Text("\(index + 1).")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 20, alignment: .trailing)
+            HStack(spacing: 8) {
+                Text("\(index + 1).")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20, alignment: .trailing)
 
-            Text(audioDevice.displayName(for: item))
-                .font(.callout)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                Text(deviceName)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
 
-            if !isAvailable {
-                Text(String(localized: "Disconnected"))
-                    .font(.caption2)
-                    .foregroundStyle(.orange)
+                if !isAvailable {
+                    Text(String(localized: "Disconnected"))
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(deviceName)
+            .accessibilityValue(microphonePriorityAccessibilityValue(index: index, isAvailable: isAvailable))
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 8)
 
@@ -1068,6 +1122,12 @@ struct RecordingSettingsView: View {
             .foregroundStyle(.secondary)
             .font(.system(size: 13))
             .help(String(localized: "Remove microphone"))
+            .accessibilityLabel(localizedAppText(
+                "Remove \(deviceName)",
+                de: "\(deviceName) entfernen",
+                ja: "\(deviceName)を削除",
+                zh: "移除\(deviceName)"
+            ))
         }
         .padding(.vertical, 3)
         .frame(minHeight: 24)
@@ -1087,12 +1147,25 @@ struct RecordingSettingsView: View {
             }
             .disabled(!canMoveDown)
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(deviceName)
         .modifier(MicrophonePriorityAccessibilityActions(
             canMoveUp: canMoveUp,
             canMoveDown: canMoveDown,
             moveUp: { moveMicrophonePriorityItemUp(item) },
             moveDown: { moveMicrophonePriorityItemDown(item) }
         ))
+    }
+
+    private func microphonePriorityAccessibilityValue(index: Int, isAvailable: Bool) -> String {
+        let position = localizedAppText(
+            "Priority \(index + 1) of \(audioDevice.inputDevicePriorityList.count)",
+            de: "Priorität \(index + 1) von \(audioDevice.inputDevicePriorityList.count)",
+            ja: "優先順位 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
+            zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)"
+        )
+        guard !isAvailable else { return position }
+        return "\(position), \(String(localized: "Disconnected"))"
     }
 
     private func moveMicrophonePriorityItemUp(_ item: AudioInputDevicePriorityItem) {
@@ -1154,6 +1227,10 @@ struct RecordingSettingsView: View {
                         }
                     }
                     .disabled(pluginManager.selectionPolicy.enforcesTranscription)
+                    .managedLockAccessibilityHint(
+                        isLocked: pluginManager.selectionPolicy.enforcesTranscription,
+                        reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
+                    )
 
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1180,6 +1257,10 @@ struct RecordingSettingsView: View {
                                 }
                             }
                             .disabled(pluginManager.selectionPolicy.enforcesTranscription)
+                            .managedLockAccessibilityHint(
+                                isLocked: pluginManager.selectionPolicy.enforcesTranscription,
+                                reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
+                            )
                         }
                     }
 
@@ -1247,6 +1328,10 @@ struct RecordingSettingsView: View {
                         .foregroundStyle(.green)
                     }
                     .padding(.vertical, 4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(AudioWaveformView.levelAccessibilityLabel)
+                    .accessibilityValue(AudioWaveformView.levelAccessibilityValue(audioDevice.previewAudioLevel))
+                    .accessibilityAddTraits([.isStaticText, .updatesFrequently])
                 }
 
                 Button(audioDevice.isPreviewActive
@@ -1347,9 +1432,20 @@ struct RecordingSettingsView: View {
                     HStack {
                         Image(systemName: "speaker.slash")
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                         Slider(value: $dictation.audioDuckingLevel, in: 0...0.5, step: 0.05)
+                            .accessibilityLabel(localizedAppText(
+                                "Volume during recording",
+                                de: "Lautstärke während der Aufnahme",
+                                ja: "録音中の音量",
+                                zh: "录音期间的音量"
+                            ))
+                            .accessibilityValue(
+                                dictation.audioDuckingLevel.formatted(.percent.precision(.fractionLength(0)))
+                            )
                         Image(systemName: "speaker.wave.2")
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
 
                     Text(String(localized: "Percentage of your current volume to use during recording. 0% mutes completely."))
@@ -1495,6 +1591,12 @@ private struct SoundEventPicker: View {
             }
             .buttonStyle(.borderless)
             .help(String(localized: "Preview sound"))
+            .accessibilityLabel(localizedAppText(
+                "Preview sound for \(event.displayName)",
+                de: "Sound für „\(event.displayName)“ abspielen",
+                ja: "「\(event.displayName)」の音を再生",
+                zh: "预览“\(event.displayName)”的声音"
+            ))
 
             Button {
                 importCustomSound()
@@ -1503,6 +1605,12 @@ private struct SoundEventPicker: View {
             }
             .buttonStyle(.borderless)
             .help(String(localized: "Add custom sound"))
+            .accessibilityLabel(localizedAppText(
+                "Add custom sound for \(event.displayName)",
+                de: "Eigenen Sound für „\(event.displayName)“ hinzufügen",
+                ja: "「\(event.displayName)」にカスタム音を追加",
+                zh: "为“\(event.displayName)”添加自定义声音"
+            ))
         }
     }
 

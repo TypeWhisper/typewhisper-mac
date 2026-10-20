@@ -825,10 +825,12 @@ struct PluginSettingsView: View {
                     Text(plugin.manifest.name)
                         .font(.title2.weight(.semibold))
                         .lineLimit(1)
+                        .accessibilityAddTraits(.isHeader)
                     Text(installedPluginSummary(plugin))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                        .accessibilityLabel(installedPluginSummaryAccessibilityLabel(plugin))
                 }
 
                 // Category badges give way before the name or the actions get cut off.
@@ -899,6 +901,7 @@ struct PluginSettingsView: View {
                 .controlSize(.large)
                 .keyboardShortcut(.defaultAction)
                 .disabled(restartRequired || registryService.isBulkUpdating || policyRefusal != nil)
+                .managedLockAccessibilityHint(isLocked: policyRefusal != nil, reason: policyRefusal)
                 .padding(.top, 4)
 
                 if let policyRefusal {
@@ -927,6 +930,12 @@ struct PluginSettingsView: View {
         let version = "v\(plugin.manifest.version)"
         guard let author = plugin.manifest.author, !author.isEmpty else { return version }
         return "\(version) · \(author)"
+    }
+
+    private func installedPluginSummaryAccessibilityLabel(_ plugin: LoadedPlugin) -> String {
+        let version = pluginVersionAccessibilityLabel(plugin.manifest.version)
+        guard let author = plugin.manifest.author, !author.isEmpty else { return version }
+        return "\(version), \(pluginAuthorAccessibilityLabel(author))"
     }
 
     /// The buttons keep their titles while there is room, then fall back to icons:
@@ -1151,6 +1160,12 @@ struct PluginSettingsView: View {
             case .idle, .loading:
                 ProgressView()
                     .frame(maxWidth: .infinity, minHeight: 160)
+                    .accessibilityLabel(localizedAppText(
+                        "Loading plugins",
+                        de: "Plugins werden geladen",
+                        ja: "プラグインを読み込み中",
+                        zh: "正在加载插件"
+                    ))
             case .error(let message):
                 VStack(spacing: 8) {
                     Text(String(localized: "Failed to load plugins."))
@@ -1161,6 +1176,12 @@ struct PluginSettingsView: View {
                     Button(String(localized: "Retry")) {
                         Task { await registryService.fetchRegistry(force: true) }
                     }
+                    .accessibilityLabel(localizedAppText(
+                        "Retry loading plugins",
+                        de: "Laden der Plugins erneut versuchen",
+                        ja: "プラグインの読み込みを再試行",
+                        zh: "重试加载插件"
+                    ))
                 }
                 .frame(maxWidth: .infinity, minHeight: 160)
             case .loaded:
@@ -1353,12 +1374,51 @@ struct PluginSettingsView: View {
                 }
             }
         } label: {
-            Label(capabilityFilterTitle, systemImage: "line.3.horizontal.decrease.circle")
-                .font(.caption.weight(.medium))
+            discoverMenuLabel(capabilityFilterTitle, systemImage: "line.3.horizontal.decrease.circle")
+                .accessibilityLabel(Self.capabilityFilterAccessibilityLabel)
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .fixedSize()
+        .help(Self.capabilityFilterAccessibilityLabel)
+        .accessibilityValue(capabilityFilterTitle)
+    }
+
+    /// The icon stays out of the accessibility tree, so VoiceOver reads only the menu's purpose and value.
+    private func discoverMenuLabel(_ title: String, systemImage: String) -> some View {
+        Label {
+            Text(title)
+        } icon: {
+            Image(systemName: systemImage)
+                .accessibilityHidden(true)
+        }
+        .font(.caption.weight(.medium))
+    }
+
+    private static var capabilityFilterAccessibilityLabel: String {
+        localizedAppText("Filter by function", de: "Nach Funktion filtern", ja: "機能で絞り込む", zh: "按功能筛选")
+    }
+
+    private static var hostingFilterAccessibilityLabel: String {
+        localizedAppText(
+            "Filter by local or cloud",
+            de: "Nach lokal oder Cloud filtern",
+            ja: "ローカルまたはクラウドで絞り込む",
+            zh: "按本地或云端筛选"
+        )
+    }
+
+    private static var sortAccessibilityLabel: String {
+        localizedAppText("Sort by", de: "Sortieren nach", ja: "並べ替え", zh: "排序方式")
+    }
+
+    private static var communityToggleAccessibilityLabel: String {
+        localizedAppText(
+            "Show community plugins",
+            de: "Community-Plugins anzeigen",
+            ja: "コミュニティプラグインを表示",
+            zh: "显示社区插件"
+        )
     }
 
     private var discoverHostingMenu: some View {
@@ -1382,12 +1442,14 @@ struct PluginSettingsView: View {
                 }
             }
         } label: {
-            Label(discoverHostingFilter.title, systemImage: discoverHostingFilter.systemImage)
-                .font(.caption.weight(.medium))
+            discoverMenuLabel(discoverHostingFilter.title, systemImage: discoverHostingFilter.systemImage)
+                .accessibilityLabel(Self.hostingFilterAccessibilityLabel)
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .fixedSize()
+        .help(Self.hostingFilterAccessibilityLabel)
+        .accessibilityValue(discoverHostingFilter.title)
     }
 
     private var discoverSortMenu: some View {
@@ -1400,12 +1462,14 @@ struct PluginSettingsView: View {
                 }
             }
         } label: {
-            Label(discoverSort.title, systemImage: "arrow.up.arrow.down")
-                .font(.caption.weight(.medium))
+            discoverMenuLabel(discoverSort.title, systemImage: "arrow.up.arrow.down")
+                .accessibilityLabel(Self.sortAccessibilityLabel)
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)
         .fixedSize()
+        .help(Self.sortAccessibilityLabel)
+        .accessibilityValue(discoverSort.title)
     }
 
     private var discoverCommunityToggle: some View {
@@ -1416,6 +1480,8 @@ struct PluginSettingsView: View {
         .toggleStyle(.checkbox)
         .controlSize(.small)
         .fixedSize()
+        .help(Self.communityToggleAccessibilityLabel)
+        .accessibilityLabel(Self.communityToggleAccessibilityLabel)
     }
 
     private var capabilityFilterTitle: String {
@@ -1448,6 +1514,7 @@ struct PluginSettingsView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(
                 localizedAppText(
                     "Search plugins, providers, or features",
@@ -1456,6 +1523,12 @@ struct PluginSettingsView: View {
                 text: $searchText
             )
                 .textFieldStyle(.plain)
+                .accessibilityLabel(localizedAppText(
+                    "Search plugins",
+                    de: "Plugins durchsuchen",
+                    ja: "プラグインを検索",
+                    zh: "搜索插件"
+                ))
             if !searchText.isEmpty {
                 Button {
                     searchText = ""
@@ -1464,6 +1537,8 @@ struct PluginSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help(String(localized: "Clear search"))
+                .accessibilityLabel(String(localized: "Clear search"))
             }
         }
         .padding(.horizontal, 12)
@@ -1568,8 +1643,16 @@ struct PluginSettingsView: View {
         }
         enableInstalledPluginIfNeeded(pluginId)
 
-        guard pluginManager.loadedPlugins.contains(where: { $0.id == pluginId }) else { return }
+        guard let installedPlugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }) else { return }
 
+        // The install button disappears with the page change, so VoiceOver users hear the outcome instead.
+        let name = installedPlugin.manifest.name
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(localizedAppText(
+            "\(name) installed",
+            de: "\(name) installiert",
+            ja: "\(name)をインストールしました",
+            zh: "已安装\(name)"
+        ))
         SettingsNavigationCoordinator.shared.navigate(to: .installedPlugin(pluginId: pluginId))
     }
 
@@ -1755,6 +1838,15 @@ private extension Array where Element: Hashable {
     }
 }
 
+/// "Version 1.2.0" instead of "v1.2.0", which VoiceOver reads letter by letter.
+private func pluginVersionAccessibilityLabel(_ version: String) -> String {
+    localizedAppText("Version \(version)", de: "Version \(version)", ja: "バージョン \(version)", zh: "版本 \(version)")
+}
+
+private func pluginAuthorAccessibilityLabel(_ author: String) -> String {
+    localizedAppText("by \(author)", de: "von \(author)", ja: "作成者: \(author)", zh: "作者：\(author)")
+}
+
 private struct IntegrationEmptyState: View {
     let title: String
     let systemImage: String
@@ -1764,11 +1856,42 @@ private struct IntegrationEmptyState: View {
             Image(systemName: systemImage)
                 .font(.title3)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(title)
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, minHeight: 120)
+    }
+}
+
+private extension IntegrationPluginSource {
+    /// Spells out what the short badge title means, e.g. "Manual" becomes "Manually installed plugin".
+    var accessibilityTitle: String {
+        switch self {
+        case .builtIn:
+            return localizedAppText("Built-in plugin", de: "Integriertes Plugin", ja: "内蔵プラグイン", zh: "内置插件")
+        case .official:
+            return localizedAppText("Marketplace plugin", de: "Marketplace-Plugin", ja: "マーケットプレイスのプラグイン", zh: "市场插件")
+        case .community:
+            return localizedAppText("Community plugin", de: "Community-Plugin", ja: "コミュニティプラグイン", zh: "社区插件")
+        case .manual:
+            return localizedAppText(
+                "Manually installed plugin",
+                de: "Manuell installiertes Plugin",
+                ja: "手動でインストールしたプラグイン",
+                zh: "手动安装的插件"
+            )
+        }
+    }
+}
+
+private extension PluginHosting {
+    var accessibilityTitle: String {
+        if self == .cloud {
+            return localizedAppText("Uses a cloud service", de: "Nutzt einen Cloud-Dienst", ja: "クラウドサービスを使用", zh: "使用云服务")
+        }
+        return localizedAppText("Runs locally", de: "Läuft lokal", ja: "ローカルで動作", zh: "在本地运行")
     }
 }
 
@@ -1782,6 +1905,9 @@ private struct SourceBadge: View {
             .padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 6).fill(source.tint.opacity(0.14)))
             .foregroundStyle(source.tint)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(source.accessibilityTitle)
     }
 }
 
@@ -1798,6 +1924,7 @@ private struct HostingBadge: View {
                 .background(.cyan.opacity(0.15))
                 .foregroundStyle(.cyan)
                 .clipShape(Capsule())
+                .accessibilityLabel(hosting.accessibilityTitle)
         } else {
             Text(String(localized: "Local"))
                 .font(.caption2)
@@ -1807,6 +1934,7 @@ private struct HostingBadge: View {
                 .background(.green.opacity(0.15))
                 .foregroundStyle(.green)
                 .clipShape(Capsule())
+                .accessibilityLabel(hosting.accessibilityTitle)
         }
     }
 }
@@ -1836,9 +1964,13 @@ private struct PluginCategoryBadge: View {
             .padding(.vertical, 2)
             .background(RoundedRectangle(cornerRadius: 6).fill(.secondary.opacity(0.12)))
             .foregroundStyle(.secondary)
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(category.badgeTitle)
     }
 }
 
+/// Read by VoiceOver as one element, e.g. "Marketplace plugin, Runs locally, Transcription".
 private struct PluginBadgeLine: View {
     let source: IntegrationPluginSource
     let hosting: PluginHosting
@@ -1852,6 +1984,8 @@ private struct PluginBadgeLine: View {
                 PluginCategoryBadge(category: category)
             }
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 
@@ -1893,6 +2027,8 @@ private struct IntegrationIcon: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(tint.opacity(0.14), lineWidth: 1)
         }
+        // The plugin name always sits next to the logo.
+        .accessibilityHidden(true)
         .task(id: resolvedImageURL) {
             guard let resolvedImageURL else {
                 loadedImage = nil
@@ -1980,6 +2116,9 @@ private struct InstalledPluginRow: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel(downloadedModelCountTitle(models.count))
+                        .accessibilityValue(modelsExpanded
+                            ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+                            : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠"))
                     }
 
                     if let externalNotice {
@@ -2153,6 +2292,7 @@ private struct DownloadedPluginModelRow: View {
             Image(systemName: model.loaded == true ? "checkmark.circle.fill" : "externaldrive")
                 .foregroundStyle(model.loaded == true ? .green : .secondary)
                 .frame(width: 18)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -2174,12 +2314,20 @@ private struct DownloadedPluginModelRow: View {
                         .lineLimit(1)
                 }
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 12)
 
             if isDeleting {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText(
+                        "Removing \(model.displayName)",
+                        de: "\(model.displayName) wird entfernt",
+                        ja: "\(model.displayName)を削除中",
+                        zh: "正在移除\(model.displayName)"
+                    ))
             } else {
                 Button {
                     onDelete()
@@ -2237,6 +2385,7 @@ private struct AvailablePluginRow: View {
                     Text("v\(plugin.version)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(pluginVersionAccessibilityLabel(plugin.version))
                 }
 
                 PluginBadgeLine(source: source, hosting: plugin.resolvedHosting, categories: categories)
@@ -2248,6 +2397,7 @@ private struct AvailablePluginRow: View {
 
                 HStack(spacing: 8) {
                     Text(plugin.author)
+                        .accessibilityLabel(pluginAuthorAccessibilityLabel(plugin.author))
                     Text(PluginRegistryService.formattedSize(plugin.size))
                     if let count = plugin.downloadCount, count > 0 {
                         Label(
@@ -2259,6 +2409,9 @@ private struct AvailablePluginRow: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             }
+            .accessibilityElement(children: .combine)
+            .modifier(PolicyRefusalAccessibilityValue(text: policyRefusalAccessibilityText))
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 12)
 
@@ -2270,12 +2423,14 @@ private struct AvailablePluginRow: View {
                 if let policyRefusal {
                     ManagedByOrganizationLabel(text: String(localized: "Not allowed by your organization"))
                         .help(policyRefusal)
-                        .accessibilityHint(policyRefusal)
+                        // Read with the card's description instead, together with the reason.
+                        .accessibilityHidden(true)
                 } else if case .error = installState {
                     Button(String(localized: "Retry")) {
                         onInstall()
                     }
                     .controlSize(.small)
+                    .accessibilityLabel(retryInstallAccessibilityLabel)
                 } else if installState == nil {
                     Button {
                         onInstall()
@@ -2301,6 +2456,44 @@ private struct AvailablePluginRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
+        // One stop per card for VoiceOver; its info and buttons stay reachable inside.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(cardAccessibilityLabel)
+    }
+
+    /// The card is named after the plugin; a plugin the organization refuses says so up front.
+    private var cardAccessibilityLabel: String {
+        guard policyRefusal != nil else { return plugin.name }
+        return "\(plugin.name), \(String(localized: "Not allowed by your organization"))"
+    }
+
+    /// The refusal and its reason, read after the card's description.
+    private var policyRefusalAccessibilityText: String? {
+        guard let policyRefusal else { return nil }
+        return "\(String(localized: "Not allowed by your organization")): \(policyRefusal)"
+    }
+
+    private var retryInstallAccessibilityLabel: String {
+        localizedAppText(
+            "Retry installing \(plugin.name)",
+            de: "Installation von \(plugin.name) erneut versuchen",
+            ja: "\(plugin.name)のインストールを再試行",
+            zh: "重试安装\(plugin.name)"
+        )
+    }
+}
+
+/// Adds the managed-settings refusal to a combined description, only when there is one.
+private struct PolicyRefusalAccessibilityValue: ViewModifier {
+    let text: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let text {
+            content.accessibilityValue(text)
+        } else {
+            content
+        }
     }
 }
 
@@ -2319,6 +2512,7 @@ private struct IncompatibleBundleRow: View {
                     Text("v\(bundle.version)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .accessibilityLabel(pluginVersionAccessibilityLabel(bundle.version))
                 }
 
                 Text(reasonText)
@@ -2331,6 +2525,8 @@ private struct IncompatibleBundleRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 12)
 
@@ -2345,6 +2541,8 @@ private struct IncompatibleBundleRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(bundle.pluginName)
     }
 
     private var reasonText: String {
@@ -2362,7 +2560,14 @@ private struct PluginInstallStateView: View {
     let state: PluginRegistryService.InstallState
     let name: String
 
+    // Errors and restart notices are announced by PluginRegistryService, which keeps
+    // observing an install after this view has gone away.
     var body: some View {
+        stateContent
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
         switch state {
         case .downloading(let progress):
             HStack(spacing: 6) {
@@ -2385,10 +2590,19 @@ private struct PluginInstallStateView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(localizedAppText(
+                "Installing \(name)",
+                de: "\(name) wird installiert",
+                ja: "\(name)をインストール中",
+                zh: "正在安装\(name)"
+            ))
         case .restartRequired:
             HStack(spacing: 6) {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .foregroundStyle(.orange)
+                    .accessibilityHidden(true)
                 Text(String(localized: "Restart TypeWhisper to finish updating."))
                     .font(.caption2)
                     .foregroundStyle(.orange)
@@ -2398,11 +2612,15 @@ private struct PluginInstallStateView: View {
             HStack(spacing: 6) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
+                    .accessibilityHidden(true)
                 Text(message)
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(String(localized: "Error: \(message)"))
         }
     }
 }
@@ -2449,6 +2667,10 @@ private struct PluginSettingsActivityView: View {
                     .foregroundStyle(activity.isError ? .red : .secondary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(accessibilityMessage)
+            .accessibilityValue("\(Int(progress * 100))%")
         } else {
             HStack(spacing: 6) {
                 if activity.isError {
@@ -2463,6 +2685,14 @@ private struct PluginSettingsActivityView: View {
                     .foregroundStyle(activity.isError ? .red : .secondary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityAddTraits(.isStaticText)
+            .accessibilityLabel(accessibilityMessage)
         }
+    }
+
+    /// The red color alone marks an error, so VoiceOver says it.
+    private var accessibilityMessage: String {
+        activity.isError ? String(localized: "Error: \(activity.message)") : activity.message
     }
 }

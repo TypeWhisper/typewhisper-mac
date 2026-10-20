@@ -7,6 +7,7 @@ struct SupporterBadgeView: View {
         HStack(spacing: 4) {
             Image(systemName: tierIcon)
                 .foregroundStyle(tierColor)
+                .accessibilityHidden(true)
             Text(tierName)
                 .font(.caption.bold())
                 .foregroundStyle(tierColor)
@@ -14,6 +15,8 @@ struct SupporterBadgeView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
         .background(tierColor.opacity(0.12), in: Capsule())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 
     private var tierIcon: String {

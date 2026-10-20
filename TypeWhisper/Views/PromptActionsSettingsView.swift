@@ -53,6 +53,7 @@ struct PromptActionsSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText("Prompts", de: "Prompts"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(String(localized: "Build reusable AI actions for Rules or the Prompt Palette."))
                     Text(String(localized: "Prompts run automatically during dictation only when a rule assigns them. Without a rule, they remain available via the Prompt Palette."))
@@ -90,6 +91,7 @@ struct PromptActionsSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(localizedAppText("Default LLM Provider", de: "Standard-LLM-Provider"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text(localizedAppText(
                         "Used by prompts unless a prompt overrides provider or model in Advanced.",
                         de: "Wird von Prompts genutzt, solange ein Prompt Provider oder Modell nicht unter Erweitert überschreibt."
@@ -114,6 +116,7 @@ struct PromptActionsSettingsView: View {
                     Image(systemName: "puzzlepiece.extension")
                         .font(.system(size: 18))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(String(localized: "Install an LLM provider plugin (e.g. Groq, OpenAI) to use prompts."))
@@ -533,6 +536,7 @@ private struct PromptActionRow: View {
                 .buttonStyle(.borderless)
                 .opacity(isHovering ? 1 : 0.7)
                 .help(localizedAppText("Edit prompt", de: "Prompt bearbeiten"))
+                .accessibilityLabel(String(localized: "Edit \(action.name)"))
             }
         }
         .padding(.horizontal, 16)
@@ -557,6 +561,16 @@ private struct PromptActionRow: View {
                 viewModel.deleteAction(action)
             }
         }
+        // One group per prompt keeps its texts and controls together for VoiceOver.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+    }
+
+    private var accessibilityRowLabel: String {
+        let status = action.isEnabled
+            ? localizedAppText("Enabled", de: "Aktiv")
+            : localizedAppText("Disabled", de: "Deaktiviert")
+        return [action.name, status].joined(separator: ", ")
     }
 
     private var promptNarrative: String {
@@ -612,6 +626,7 @@ private struct PromptRuleAssignmentCallout: View {
                 Image(systemName: "point.3.connected.trianglepath.dotted")
                     .foregroundStyle(.orange)
             }
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(String(localized: "Prompt saved. Create a rule to run it automatically during dictation."))
@@ -637,6 +652,8 @@ private struct PromptRuleAssignmentCallout: View {
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
+                .help(String(localized: "Close"))
+                .accessibilityLabel(String(localized: "Close"))
             }
         }
         .padding(16)
@@ -754,6 +771,7 @@ private struct PromptWizardSheet: View {
                         : localizedAppText("Edit Prompt", de: "Prompt bearbeiten")
                 )
                 .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
                 Text(localizedAppText(
                     "From goal to final system prompt in three clear steps.",
@@ -889,6 +907,7 @@ private struct PromptWizardStepHeader: View {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -899,6 +918,8 @@ private struct PromptWizardStepHeader: View {
         let isCurrent = step == currentStep
         let isCompleted = step.rawValue < currentStep.rawValue
         let isReachable = step.rawValue <= currentStep.rawValue
+        let stepNumber = step.rawValue + 1
+        let stepCount = PromptWizardStep.allCases.count
 
         return HStack(spacing: 10) {
             ZStack {
@@ -924,6 +945,22 @@ private struct PromptWizardStepHeader: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(stepBackground(isCurrent: isCurrent, isCompleted: isCompleted), in: Capsule())
+        // The step's state is otherwise only shown by its color and checkmark.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(localizedAppText(
+            "Step \(stepNumber) of \(stepCount): \(step.title)",
+            de: "Schritt \(stepNumber) von \(stepCount): \(step.title)",
+            ja: "ステップ \(stepNumber)/\(stepCount): \(step.title)",
+            zh: "第 \(stepNumber) 步，共 \(stepCount) 步：\(step.title)"
+        ))
+        .accessibilityValue(
+            isCurrent
+                ? localizedAppText("Current step", de: "Aktueller Schritt", ja: "現在のステップ", zh: "当前步骤")
+                : isCompleted
+                    ? localizedAppText("Completed", de: "Abgeschlossen", ja: "完了", zh: "已完成")
+                    : ""
+        )
+        .accessibilityAddTraits(isCurrent ? [.isStaticText, .isSelected] : .isStaticText)
     }
 
     private func stepCircleFill(isCurrent: Bool, isCompleted: Bool) -> some ShapeStyle {
@@ -978,12 +1015,18 @@ private struct PromptWizardGoalStep: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(PromptWizardGoal.allCases, id: \.self) { goal in
+                        let isSelected = viewModel.wizardDraft.goal == goal
+
                         Button {
                             viewModel.setWizardGoal(goal)
                         } label: {
-                            PromptWizardGoalRow(goal: goal, isSelected: viewModel.wizardDraft.goal == goal)
+                            PromptWizardGoalRow(goal: goal, isSelected: isSelected)
                         }
                         .buttonStyle(.plain)
+                        // The selection is otherwise only shown by the fill and the checkmark.
+                        .accessibilityLabel(goal.title)
+                        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+                        .accessibilityAddTraits(isSelected ? .isSelected : [])
                     }
                 }
                 .frame(width: 220, alignment: .topLeading)
@@ -1014,6 +1057,7 @@ private struct PromptWizardGoalRow: View {
                 Image(systemName: "checkmark")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(.white.opacity(0.92))
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, 14)
@@ -1103,6 +1147,7 @@ private struct PromptWizardResponseStep: View {
     @ObservedObject var viewModel: PromptActionsViewModel
     @ObservedObject var processingService: PromptProcessingService
     @State private var showingAdvancedOptions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1138,7 +1183,7 @@ private struct PromptWizardResponseStep: View {
     private var advancedSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                     showingAdvancedOptions.toggle()
                 }
             } label: {
@@ -1158,10 +1203,14 @@ private struct PromptWizardResponseStep: View {
                     Image(systemName: showingAdvancedOptions ? "chevron.up" : "chevron.down")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
+            .accessibilityValue(promptWizardDisclosureState(isExpanded: showingAdvancedOptions))
+            .accessibilityHint(advancedSummary)
 
             if showingAdvancedOptions {
                 VStack(alignment: .leading, spacing: 16) {
@@ -1374,6 +1423,7 @@ private struct PromptWizardResponseStep: View {
                     ))
                     .font(.body)
                     .frame(height: 80)
+                    .accessibilityLabel(localizedAppText("Goal", de: "Ziel"))
                     .padding(8)
                     .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay {
@@ -1427,6 +1477,7 @@ private struct PromptWizardResponseStep: View {
                     Image(systemName: "puzzlepiece.extension")
                         .font(.system(size: 20))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                     Text(localizedAppText(
                         "Install an LLM provider plugin such as Groq or OpenAI to use prompt actions.",
                         de: "Installiere ein LLM-Provider-Plugin wie Groq oder OpenAI, um Prompt-Aktionen zu nutzen."
@@ -1514,6 +1565,7 @@ private struct PromptWizardResponseStep: View {
                     step: PromptActionsViewModel.isLocalMLXProvider(effectiveProviderId) ? 0.05 : 0.1
                 )
                 .disabled(isAppleIntelligence)
+                .accessibilityLabel(localizedAppText("Temperature", de: "Temperatur"))
 
                 HStack {
                     Text("\(supportedRange.lowerBound, format: .number.precision(.fractionLength(1)))")
@@ -1869,6 +1921,7 @@ private struct PromptWizardReviewStep: View {
     @ObservedObject var viewModel: PromptActionsViewModel
     @Binding var showingAdvancedOptions: Bool
     let iconOptions: [String]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let actionPlugins = PluginManager.shared.actionPlugins
@@ -1899,6 +1952,7 @@ private struct PromptWizardReviewStep: View {
                             )
                         )
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Prompt Name", de: "Prompt-Name"))
 
                         HStack(spacing: 10) {
                             Text(localizedAppText("Active", de: "Aktiv"))
@@ -1933,6 +1987,7 @@ private struct PromptWizardReviewStep: View {
                             Image(systemName: viewModel.editIcon)
                                 .foregroundStyle(Color.accentColor)
                         }
+                        .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(viewModel.currentPromptName)
@@ -1974,7 +2029,7 @@ private struct PromptWizardReviewStep: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                         showingAdvancedOptions.toggle()
                     }
                 } label: {
@@ -2001,10 +2056,14 @@ private struct PromptWizardReviewStep: View {
                         Image(systemName: showingAdvancedOptions ? "chevron.up" : "chevron.down")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
+                .accessibilityValue(promptWizardDisclosureState(isExpanded: showingAdvancedOptions))
+                .accessibilityHint(reviewAdvancedSummary)
 
                 if showingAdvancedOptions {
                     VStack(alignment: .leading, spacing: 16) {
@@ -2045,6 +2104,7 @@ private struct PromptWizardReviewStep: View {
                                 ))
                                 .font(.body)
                                 .frame(height: 180)
+                                .accessibilityLabel(localizedAppText("System Prompt", de: "System-Prompt"))
                                 .padding(8)
                                 .background(Color.white.opacity(0.03), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay {
@@ -2201,6 +2261,7 @@ private func promptWizardCompactSection<Content: View>(
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             if let description, !description.isEmpty {
                 Text(description)
@@ -2238,6 +2299,14 @@ private func promptWizardEditorSubsection<Content: View>(
 
         content()
     }
+}
+
+/// The spoken state of a custom disclosure button, which otherwise only shows it by the
+/// direction of its chevron.
+private func promptWizardDisclosureState(isExpanded: Bool) -> String {
+    isExpanded
+        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠")
 }
 
 private func promptWizardInfoChip(_ text: String, tint: Color) -> some View {

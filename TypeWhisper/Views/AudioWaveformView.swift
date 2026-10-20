@@ -56,7 +56,19 @@ struct AudioWaveformBarModel {
 }
 
 /// Multi-bar audio waveform visualization with setup bounce animation.
+///
+/// The bars are hidden from accessibility. A view that shows them as the only
+/// sign of the input level exposes `levelAccessibilityLabel` and
+/// `levelAccessibilityValue(_:)` on its container instead.
 struct AudioWaveformView: View {
+    static var levelAccessibilityLabel: String {
+        localizedAppText("Microphone level", de: "Mikrofonpegel", ja: "マイクレベル", zh: "麦克风电平")
+    }
+
+    static func levelAccessibilityValue(_ level: Float) -> String {
+        Double(min(1, max(0, level))).formatted(.percent.precision(.fractionLength(0)))
+    }
+
     let audioLevel: Float
     let isSetup: Bool
     var compact: Bool = false

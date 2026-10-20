@@ -150,6 +150,11 @@ final class SelectionPaletteInteractionModel: ObservableObject {
         return items.filter(matchesSearch) + configuration.secondaryItems.filter(matchesSearch)
     }
 
+    /// The entry the highlight is on. Typing can replace it while the index stays the same.
+    var highlightedItem: SelectionPaletteItem? {
+        filteredItems[safe: selectedIndex]
+    }
+
     private func matchesSearch(_ item: SelectionPaletteItem) -> Bool {
         item.title.localizedCaseInsensitiveContains(searchText)
             || (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
@@ -255,6 +260,10 @@ private struct SelectionPaletteContentView: View {
                                 .onTapGesture {
                                     model.selectItem(item)
                                 }
+                                .accessibilityAddTraits(.isButton)
+                                .accessibilityAction {
+                                    model.selectItem(item)
+                                }
                             }
                         }
                         .padding(.vertical, 4)
@@ -266,6 +275,11 @@ private struct SelectionPaletteContentView: View {
                 }
             }
         }
+        // The highlighted entry, not its index: typing a search can replace the entry
+        // at index 0 without moving the highlight.
+        .onChange(of: model.highlightedItem?.id) { _, _ in
+            announceHighlightedItem()
+        }
         .frame(width: model.configuration.panelWidth, height: model.configuration.panelHeight)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
         .overlay(
@@ -273,6 +287,16 @@ private struct SelectionPaletteContentView: View {
                 .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+    }
+
+    /// The arrow keys move a highlight that VoiceOver's cursor does not follow,
+    /// so the highlighted entry is spoken instead. Each announcement replaces the
+    /// previous one, so fast navigation does not queue up stale entries.
+    private func announceHighlightedItem() {
+        guard let item = model.highlightedItem else { return }
+        AccessibilityAnnouncementService.announceHighlight(
+            item.subtitle.map { "\(item.title), \($0)" } ?? item.title
+        )
     }
 }
 

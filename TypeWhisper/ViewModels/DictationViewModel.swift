@@ -1716,7 +1716,6 @@ final class DictationViewModel: ObservableObject {
                 guard self.state == .recording, !self.isStopInFlight else { return }
                 let errorMessage = error.localizedDescription
                 self.abortActiveRecordingImmediately(sessionMessage: errorMessage, preserveRecoveryAudio: true)
-                self.accessibilityAnnouncementService.announceError(errorMessage)
                 self.showError(errorMessage, category: "recording")
             }
             .store(in: &cancellables)
@@ -1784,6 +1783,9 @@ final class DictationViewModel: ObservableObject {
     private func armCancelWarning(for target: CancelWarningTarget) {
         cancelWarningResetTask?.cancel()
         cancelWarningTarget = target
+        if let cancelWarningMessage {
+            accessibilityAnnouncementService.announceWarning(cancelWarningMessage)
+        }
         let confirmationWindow = cancelConfirmationWindow
         cancelWarningDeadline = cancelConfirmationClock.now.advanced(by: confirmationWindow)
         cancelWarningResetTask = Task { @MainActor [weak self] in
@@ -1878,6 +1880,8 @@ final class DictationViewModel: ObservableObject {
     private func finishCancellation(message: String) {
         if cancellationBehavior == .instant {
             resetDictationState()
+            // The indicator just disappears; the banner path announces itself.
+            accessibilityAnnouncementService.announce(message)
         } else {
             showNotchFeedback(message: message, icon: "xmark.circle", duration: 1.5)
         }
@@ -2326,7 +2330,6 @@ final class DictationViewModel: ObservableObject {
         } else {
             errorMessage = error.localizedDescription
         }
-        accessibilityAnnouncementService.announceError(errorMessage)
         failDictationSession(id: sessionID, error: errorMessage)
         showError(errorMessage, category: "recording")
         hotkeyService.cancelDictation()
@@ -2650,6 +2653,11 @@ final class DictationViewModel: ObservableObject {
             ? nil
             : String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
+        // A push-to-talk recording interrupted by other keys is discarded without
+        // transcription; its discard banner is announced instead.
+        if pendingPushToTalkDiscardMessage == nil {
+            accessibilityAnnouncementService.announceRecordingStopped()
+        }
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
             await finalizeStopDictation(
@@ -3103,6 +3111,9 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 // Route to action plugin or insert text
+                // The action's result appears in the banner; VoiceOver hears it after the
+                // transcription announcement below.
+                var actionResultAnnouncement: String?
                 if let actionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
                     cancelLiveFieldTranscriptSession()
@@ -3110,6 +3121,7 @@ final class DictationViewModel: ObservableObject {
                         actionPlugin, pluginId: actionPluginId, text: text,
                         activeApp: activeApp, language: language, originalText: result.text
                     )
+                    actionResultAnnouncement = actionFeedbackMessage
                     pinnedInsertionTarget = nil
                     updateLatencyTrace(sessionID: sessionID) { trace in
                         trace.insertion = .actionPlugin
@@ -3325,6 +3337,9 @@ final class DictationViewModel: ObservableObject {
                 let wordCount = text.split(separator: " ").count
                 let detectedLang = result.detectedLanguage ?? language
                 accessibilityAnnouncementService.announceTranscriptionComplete(wordCount: wordCount)
+                if let actionResultAnnouncement {
+                    accessibilityAnnouncementService.announce(actionResultAnnouncement)
+                }
                 speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
                 lastTranscribedText = text
                 lastTranscriptionLanguage = detectedLang
@@ -3395,7 +3410,6 @@ final class DictationViewModel: ObservableObject {
                 if let sessionID {
                     failDictationSession(id: sessionID, error: error.localizedDescription)
                 }
-                accessibilityAnnouncementService.announceError(error.localizedDescription)
                 showError(
                     error.localizedDescription,
                     category: "transcription",
@@ -5132,6 +5146,9 @@ final class DictationViewModel: ObservableObject {
             // Every error banner, not only those from showError, stays visible in the menu bar.
             lastDictationError = ErrorSummary(message: message, settingsTab: action?.settingsTab)
         }
+        // The banner appears next to the app the user is working in, so VoiceOver
+        // users would not notice it without an announcement.
+        accessibilityAnnouncementService.announceFeedback(message, isError: isError)
 
         startActionFeedbackLifetime(duration: duration)
     }
@@ -5348,6 +5365,9 @@ final class DictationViewModel: ObservableObject {
             )
         if isRecordingInputSilent != isSilent {
             isRecordingInputSilent = isSilent
+            if isSilent, let silentInputWarningMessage {
+                accessibilityAnnouncementService.announceWarning(silentInputWarningMessage)
+            }
         }
     }
 }

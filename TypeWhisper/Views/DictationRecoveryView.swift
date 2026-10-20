@@ -19,6 +19,57 @@ struct DictationRecoveryView: View {
         .onAppear {
             viewModel.refreshRecoveries()
         }
+        // Recovering only changes the page, so VoiceOver users hear the outcome.
+        .onChange(of: viewModel.lastSavedHistoryRecordID) { _, recordID in
+            guard recordID != nil else { return }
+            announce(localizedAppText(
+                "Saved to History",
+                de: "In Verlauf gespeichert",
+                ja: "履歴に保存しました",
+                zh: "已保存到历史记录"
+            ))
+        }
+        .onChange(of: recoveryErrors) { previous, current in
+            for message in Self.newRecoveryErrors(previous: previous, current: current) {
+                ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
+            }
+        }
+    }
+
+    /// The current error of each recording, keyed by recording.
+    private var recoveryErrors: [String: String] {
+        Dictionary(
+            viewModel.recoveries.compactMap { item in item.errorMessage.map { (item.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Errors that a recording did not have before, compared per recording, so a second
+    /// recording failing with the same message as another one is still announced.
+    /// Recordings that fail with the same message at once are announced together with
+    /// their number, because the announcement service speaks a repeated message once.
+    static func newRecoveryErrors(previous: [String: String], current: [String: String]) -> [String] {
+        var counts: [String: Int] = [:]
+        var order: [String] = []
+        for (recordingID, message) in current.sorted(by: { $0.key < $1.key })
+        where previous[recordingID] != message {
+            if counts[message] == nil { order.append(message) }
+            counts[message, default: 0] += 1
+        }
+        return order.map { message in
+            let count = counts[message] ?? 1
+            guard count > 1 else { return message }
+            return localizedAppText(
+                "\(message) (\(count) recordings)",
+                de: "\(message) (\(count) Aufnahmen)",
+                ja: "\(message)（\(count)件の録音）",
+                zh: "\(message)（\(count) 个录音）"
+            )
+        }
+    }
+
+    private func announce(_ message: String) {
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(message)
     }
 
     private var recoveryForm: some View {
@@ -57,6 +108,7 @@ struct DictationRecoveryView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                        .accessibilityElement(children: .combine)
 
                         Spacer()
 
@@ -185,6 +237,7 @@ struct DictationRecoveryView: View {
                 if viewModel.hedgeEnabled {
                     HStack {
                         Text(localizedAppText("Start racing after", de: "Rennen starten nach"))
+                            .accessibilityHidden(true)
                         Spacer()
                         Stepper(
                             value: $viewModel.hedgeThresholdSeconds,
@@ -196,6 +249,19 @@ struct DictationRecoveryView: View {
                                 de: "\(hedgeThresholdLabelValue) Sekunden"
                             ))
                         }
+                        // One element: the text in front of the stepper names it.
+                        .accessibilityLabel(localizedAppText(
+                            "Start racing after",
+                            de: "Rennen starten nach",
+                            ja: "並行実行を開始するまでの時間",
+                            zh: "开始并行处理前的等待时间"
+                        ))
+                        .accessibilityValue(localizedAppText(
+                            "\(hedgeThresholdLabelValue) seconds",
+                            de: "\(hedgeThresholdLabelValue) Sekunden",
+                            ja: "\(hedgeThresholdLabelValue) 秒",
+                            zh: "\(hedgeThresholdLabelValue) 秒"
+                        ))
                     }
                     .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
 
@@ -222,6 +288,7 @@ struct DictationRecoveryView: View {
                         if viewModel.isProcessing {
                             ProgressView()
                                 .controlSize(.small)
+                                .accessibilityLabel(String(localized: "Transcribing..."))
                         }
 
                         Button {
@@ -285,6 +352,15 @@ struct DictationRecoveryView: View {
             .buttonStyle(.plain)
             .disabled(!isSelectable || viewModel.isProcessing)
             .accessibilityAddTraits(isSelectable && isSelected ? .isSelected : [])
+            .accessibilityValue(recovery.isProcessing ? String(localized: "Transcribing...") : "")
+            .accessibilityHint(isSelectable
+                ? localizedAppText(
+                    "Selects this recording for Transcribe.",
+                    de: "Wählt diese Aufnahme für „Transkribieren“ aus.",
+                    ja: "この録音を「音声認識」の対象に選択します。",
+                    zh: "选择此录音进行转录。"
+                )
+                : "")
 
             Button(role: .destructive) {
                 viewModel.discardRecovery(recovery)

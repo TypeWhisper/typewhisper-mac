@@ -207,3 +207,28 @@ final class ProfileServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.visibleProfiles.count, 3)
     }
 }
+
+/// The VoiceOver Move Up / Move Down actions move a rule past its visible neighbour,
+/// not past a rule the prompt filter hides.
+final class RuleReorderTests: XCTestCase {
+    func testNeighboursSkipRulesTheFilterHides() {
+        let all = ["A", "hidden", "B", "C", "hidden2"]
+        let visible = ["A", "B", "C"]
+
+        let first = RuleReorder.visibleNeighbourIndices(of: "A", visibleIDs: visible, allIDs: all)
+        XCTAssertNil(first.previous)
+        XCTAssertEqual(first.next, 2)
+
+        let middle = RuleReorder.visibleNeighbourIndices(of: "B", visibleIDs: visible, allIDs: all)
+        XCTAssertEqual(middle.previous, 0)
+        XCTAssertEqual(middle.next, 3)
+
+        let last = RuleReorder.visibleNeighbourIndices(of: "C", visibleIDs: visible, allIDs: all)
+        XCTAssertEqual(last.previous, 2)
+        XCTAssertNil(last.next, "A hidden rule after the last visible one is no neighbour")
+
+        let missing = RuleReorder.visibleNeighbourIndices(of: "hidden", visibleIDs: visible, allIDs: all)
+        XCTAssertNil(missing.previous)
+        XCTAssertNil(missing.next)
+    }
+}

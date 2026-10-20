@@ -214,6 +214,7 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        pluginRegistryService.accessibilityAnnouncementService = accessibilityAnnouncementService
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
@@ -243,7 +244,8 @@ final class ServiceContainer: ObservableObject {
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         let recoveryViewModel = DictationRecoveryViewModel(
             audioRecordingService: audioRecordingService,
@@ -304,7 +306,8 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             dictionaryService: dictionaryService,
             audioFileService: audioFileService,
-            audioDeviceService: audioDeviceService
+            audioDeviceService: audioDeviceService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         let speakerCoordinator = SpeakerTranscriptCoordinator(
             historyService: historyService,
@@ -380,7 +383,8 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             audioFileService: audioFileService,
             dictionaryService: dictionaryService,
-            detectsSpeakers: true
+            detectsSpeakers: true,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         speakerTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)

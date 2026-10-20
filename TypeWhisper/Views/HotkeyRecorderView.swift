@@ -182,7 +182,13 @@ struct HotkeyRecorderView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(String(localized: "Clear shortcut"))
+            .help(String(localized: "Clear shortcut"))
+            .accessibilityLabel(localizedAppText(
+                "Clear shortcut for \(title)",
+                de: "Tastenkürzel für „\(title)“ entfernen",
+                ja: "「\(title)」のショートカットキーを削除",
+                zh: "清除“\(title)”的快捷键"
+            ))
         }
         .fixedSize()
     }
@@ -200,7 +206,12 @@ struct HotkeyRecorderView: View {
         }
         .buttonStyle(.plain)
         .help(String(localized: "Edit with visual keyboard"))
-        .accessibilityLabel(String(localized: "Edit shortcut with visual keyboard"))
+        .accessibilityLabel(localizedAppText(
+            "Edit shortcut for \(title) with visual keyboard",
+            de: "Tastenkürzel für „\(title)“ mit visueller Tastatur bearbeiten",
+            ja: "「\(title)」のショートカットキーをビジュアルキーボードで編集",
+            zh: "使用可视化键盘编辑“\(title)”的快捷键"
+        ))
     }
 
     /// Default conflict preview for the visual keyboard: the global slots, via the

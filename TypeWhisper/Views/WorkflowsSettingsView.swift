@@ -269,6 +269,10 @@ private struct MyWorkflowsPage: View {
                     } else if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
                             .disabled(promptProcessingService.isFallbackListLocked)
+                            .managedLockAccessibilityHint(
+                                isLocked: promptProcessingService.isFallbackListLocked,
+                                reason: pluginManager.enforcedLlmResolution?.unavailableReason
+                            )
                     }
 
                     Spacer(minLength: 0)
@@ -378,8 +382,11 @@ private struct MyWorkflowsPage: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             TextField(localizedAppText("Search workflows", de: "Workflows durchsuchen"), text: $searchText)
                 .textFieldStyle(.plain)
+                .accessibilityLabel(localizedAppText("Search workflows", de: "Workflows durchsuchen"))
+                .accessibilityAddTraits(.isSearchField)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -434,6 +441,7 @@ private struct MyWorkflowsPage: View {
             Image(systemName: "line.3.horizontal.decrease.circle")
                 .font(.body)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             Text(
                 localizedAppText(
@@ -574,17 +582,45 @@ private struct LLMFallbackPriorityRow: View {
             : localizedAppText("Unavailable", de: "Nicht verfügbar")
     }
 
+    /// Names the row by its priority, provider and status, since the drag handle and the
+    /// position number are hidden from accessibility.
+    private var accessibilityRowLabel: String {
+        let position = index + 1
+        let providerName = promptProcessingService.displayName(for: item.providerId)
+        let name = localizedAppText(
+            "Fallback \(position) of \(count): \(providerName)",
+            de: "Fallback \(position) von \(count): \(providerName)",
+            ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
+            zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)"
+        )
+        var parts = [name, statusText]
+        // The list is disabled under an enforced LLM pair; a hint on this container
+        // would replace its role description, so the reason is part of the name.
+        if promptProcessingService.isFallbackListLocked {
+            parts.append(
+                PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                    ?? ManagedByOrganizationLabel.defaultText
+            )
+        }
+        return parts.joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            Image(systemName: "line.3.horizontal")
-                .foregroundStyle(.tertiary)
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 10)
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(.tertiary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 10)
 
-            Text("\(index + 1)")
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.tertiary)
-                .frame(width: 14, alignment: .trailing)
+                Text("\(index + 1)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .frame(width: 14, alignment: .trailing)
+            }
+            .contentShape(Rectangle())
+            .help(localizedAppText("Drag to reorder global LLM fallbacks", de: "Ziehen, um globale LLM-Fallbacks zu sortieren"))
+            .accessibilityHidden(true)
 
             selectionFields
 
@@ -631,12 +667,6 @@ private struct LLMFallbackPriorityRow: View {
                 Label(localizedAppText("Remove", de: "Entfernen"), systemImage: "trash")
             }
         }
-        .modifier(LLMFallbackPriorityAccessibilityActions(
-            canMoveUp: canMoveUp,
-            canMoveDown: canMoveDown,
-            moveUp: { onMove(item, -1) },
-            moveDown: { onMove(item, 1) }
-        ))
         .fallbackPriorityReordering(
             fallbackID: item.id.uuidString,
             isTargeted: $isDropTargeted,
@@ -648,10 +678,18 @@ private struct LLMFallbackPriorityRow: View {
                 return onDrop(draggedID, item)
             }
         )
-        .help(localizedAppText("Drag to reorder global LLM fallbacks", de: "Ziehen, um globale LLM-Fallbacks zu sortieren"))
-        .accessibilityHint(localizedAppText(
-            "Drag this row to reorder global LLM fallbacks.",
-            de: "Ziehe diese Zeile, um globale LLM-Fallbacks zu sortieren."
+        // One container per fallback keeps its controls together for VoiceOver. The drag
+        // tooltip sits on the grip and reordering is offered as Move Up and Move Down actions:
+        // a tooltip or hint on the container would replace its "group" role description, and
+        // on the row's content it would be repeated on every control.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+        // A locked list cannot be reordered, so it offers no move actions either.
+        .modifier(ReorderAccessibilityActions(
+            canMoveUp: canMoveUp && !promptProcessingService.isFallbackListLocked,
+            canMoveDown: canMoveDown && !promptProcessingService.isFallbackListLocked,
+            moveUp: { onMove(item, -1) },
+            moveDown: { onMove(item, 1) }
         ))
     }
 
@@ -668,6 +706,10 @@ private struct LLMFallbackPriorityRow: View {
             }
         }
         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+        .managedLockAccessibilityHint(
+            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+        )
     }
 
     private var providerPicker: some View {
@@ -808,7 +850,9 @@ private struct LLMFallbackPriorityRow: View {
     }
 }
 
-private struct LLMFallbackPriorityAccessibilityActions: ViewModifier {
+/// Offers Move Up and Move Down as accessibility actions so rows that sort by drag and drop
+/// can also be reordered with VoiceOver.
+private struct ReorderAccessibilityActions: ViewModifier {
     let canMoveUp: Bool
     let canMoveDown: Bool
     let moveUp: () -> Void
@@ -868,6 +912,37 @@ private struct WorkflowRow: View {
     @State private var isDropTargeted = false
     @State private var isHovered = false
 
+    private var statusText: String {
+        workflow.isEnabled
+            ? localizedAppText("Enabled", de: "Aktiv")
+            : localizedAppText("Disabled", de: "Deaktiviert")
+    }
+
+    private var accessibilityRowLabel: String {
+        [workflow.name, statusText].joined(separator: ", ")
+    }
+
+    private var reorderTooltip: String {
+        isReorderingEnabled
+            ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
+            : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
+    }
+
+    /// Reads the row's texts and badges as one sentence instead of many separate fragments.
+    private var accessibilitySummary: String {
+        let reviewText = workflowReviewText(for: workflow)
+        let templateName = workflow.template.definition.name
+        var parts = [workflow.name, statusText]
+        if !reviewText.localizedCaseInsensitiveContains(templateName) {
+            parts.append(templateName)
+        }
+        parts.append(reviewText)
+        if workflow.usesInlineCommands {
+            parts.append(String(localized: "Inline Commands"))
+        }
+        return parts.joined(separator: ", ")
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: workflow.template.definition.systemImage)
@@ -875,6 +950,8 @@ private struct WorkflowRow: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 28, height: 28)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .help(reorderTooltip)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
                 titleRow
@@ -917,6 +994,11 @@ private struct WorkflowRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .layoutPriority(1)
+            .contentShape(Rectangle())
+            .help(reorderTooltip)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilitySummary)
+            .accessibilityAddTraits(.isStaticText)
 
             Spacer(minLength: 8)
 
@@ -928,28 +1010,47 @@ private struct WorkflowRow: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .controlSize(.small)
+                .accessibilityLabel(String(localized: "Enable \(workflow.name)"))
 
                 Button(action: onMoveUp) {
                     Image(systemName: "arrow.up")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canMoveUp)
+                .help(String(localized: "Move Up"))
+                .accessibilityLabel(localizedAppText(
+                    "Move \(workflow.name) up",
+                    de: "\(workflow.name) nach oben bewegen",
+                    ja: "\(workflow.name)を上へ移動",
+                    zh: "上移 \(workflow.name)"
+                ))
 
                 Button(action: onMoveDown) {
                     Image(systemName: "arrow.down")
                 }
                 .buttonStyle(.borderless)
                 .disabled(!canMoveDown)
+                .help(String(localized: "Move Down"))
+                .accessibilityLabel(localizedAppText(
+                    "Move \(workflow.name) down",
+                    de: "\(workflow.name) nach unten bewegen",
+                    ja: "\(workflow.name)を下へ移動",
+                    zh: "下移 \(workflow.name)"
+                ))
 
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
                 }
                 .buttonStyle(.borderless)
+                .help(String(localized: "Edit"))
+                .accessibilityLabel(String(localized: "Edit \(workflow.name)"))
 
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
+                .help(String(localized: "Delete"))
+                .accessibilityLabel(String(localized: "Delete \(workflow.name)"))
             }
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: true, vertical: false)
@@ -974,16 +1075,19 @@ private struct WorkflowRow: View {
             }
             return onDropWorkflow(droppedId)
         }
-        .help(
-            isReorderingEnabled
-                ? localizedAppText("Drag to reorder workflow", de: "Workflow ziehen, um die Reihenfolge zu ändern")
-                : localizedAppText("Clear search to reorder workflows", de: "Suche löschen, um Workflows zu sortieren")
-        )
-        .accessibilityHint(
-            isReorderingEnabled
-                ? localizedAppText("Drag this row to reorder workflows.", de: "Ziehe diese Zeile, um Workflows zu sortieren.")
-                : localizedAppText("Reordering is disabled while search is active.", de: "Die Sortierung ist während aktiver Suche deaktiviert.")
-        )
+        // One container per workflow keeps its controls together for VoiceOver. The drag
+        // tooltip sits on the icon and text, the controls have their own, and reordering is
+        // offered as Move Up and Move Down actions: a tooltip or hint on the container would
+        // replace its "group" role description, and on the whole row it would be repeated on
+        // every control.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+        .modifier(ReorderAccessibilityActions(
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
+            moveUp: onMoveUp,
+            moveDown: onMoveDown
+        ))
     }
 
     private var rowBackgroundColor: Color {
@@ -1038,9 +1142,7 @@ private struct WorkflowRow: View {
 
     private var workflowStatusBadge: some View {
         WorkflowBadge(
-            title: workflow.isEnabled
-                ? localizedAppText("Enabled", de: "Aktiv")
-                : localizedAppText("Disabled", de: "Deaktiviert"),
+            title: statusText,
             compact: true,
             tint: workflow.isEnabled ? .green.opacity(0.14) : .secondary.opacity(0.14),
             foreground: workflow.isEnabled ? .green : .secondary
@@ -1112,6 +1214,7 @@ private struct WorkflowEditorPage: View {
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
     #endif
     @StateObject private var websiteSuggestionStore = WorkflowWebsiteSuggestionStore()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(workflow: Workflow?) {
         self.workflow = workflow
@@ -1208,6 +1311,7 @@ private struct WorkflowEditorPage: View {
                         .font(.subheadline.weight(.semibold))
                     TextField(localizedAppText("Workflow name", de: "Workflow-Name"), text: $draft.name)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Workflow name", de: "Workflow-Name"))
                 }
 
                 if draft.template == .dictation {
@@ -1250,7 +1354,7 @@ private struct WorkflowEditorPage: View {
 
                 VStack(alignment: .leading, spacing: 0) {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.16)) {
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.16)) {
                             isAdvancedExpanded.toggle()
                         }
                     } label: {
@@ -1264,11 +1368,14 @@ private struct WorkflowEditorPage: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                                 .rotationEffect(.degrees(isAdvancedExpanded ? 90 : 0))
+                                .accessibilityHidden(true)
                         }
                         .padding(.vertical, 10)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(localizedAppText("Advanced", de: "Erweitert"))
+                    .accessibilityValue(workflowDisclosureState(isExpanded: isAdvancedExpanded))
 
                     if isAdvancedExpanded {
                         VStack(alignment: .leading, spacing: 14) {
@@ -1295,6 +1402,7 @@ private struct WorkflowEditorPage: View {
                                     HStack(spacing: 8) {
                                         TextField(localizedAppText("e.g. Auto, Markdown, RTF, JSON, plain text", de: "z. B. Auto, Markdown, RTF, JSON, Plain Text"), text: $draft.outputFormat)
                                             .textFieldStyle(.roundedBorder)
+                                            .accessibilityLabel(localizedAppText("Output Format", de: "Ausgabeformat"))
 
                                         Menu {
                                             ForEach(WorkflowOutputFormatPreset.all) { preset in
@@ -1362,6 +1470,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(localizedAppText("Action Target", de: "Action-Ziel"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             Picker(
                 localizedAppText("Target", de: "Ziel"),
@@ -1418,6 +1527,7 @@ private struct WorkflowEditorPage: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text(localizedAppText("Transcription Engine", de: "Transkriptions-Engine"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             if engines.isEmpty {
                 Text(
@@ -1440,6 +1550,10 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
+                .managedLockAccessibilityHint(
+                    isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
+                    reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
+                )
 
                 if let enforced = pluginManager.enforcedTranscriptionResolution {
                     ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1473,6 +1587,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
+                            reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(
@@ -1492,6 +1610,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             Picker(
                 localizedAppText("Whisper Mode", de: "Whisper-Modus"),
@@ -1575,6 +1694,7 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(localizedAppText("Spoken Language", de: "Gesprochene Sprache"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
             LanguageSelectionEditor(
                 selection: $draft.inputLanguageSelection,
                 availableLanguages: settingsViewModel.availableLanguages,
@@ -1599,6 +1719,7 @@ private struct WorkflowEditorPage: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(localizedAppText("Translation Mode", de: "Übersetzungsmodus"))
                     .font(.subheadline.weight(.semibold))
+                    .accessibilityAddTraits(.isHeader)
                 Picker(localizedAppText("Translation Mode", de: "Übersetzungsmodus"), selection: $draft.translationProcessor) {
                     ForEach(WorkflowTranslationProcessor.allCases, id: \.self) { processor in
                         Text(processor.label).tag(processor)
@@ -1645,6 +1766,7 @@ private struct WorkflowEditorPage: View {
                         .font(.subheadline.weight(.semibold))
                     TextField(localizedAppText("e.g. English", de: "z. B. Englisch"), text: $draft.translationTargetLanguage)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Target Language", de: "Zielsprache"))
                 }
             }
         }
@@ -1656,6 +1778,7 @@ private struct WorkflowEditorPage: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(localizedAppText("LLM Override", de: "LLM-Override"))
                 .font(.subheadline.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
             if providers.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
@@ -1687,6 +1810,10 @@ private struct WorkflowEditorPage: View {
                     }
                 }
                 .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                .managedLockAccessibilityHint(
+                    isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                    reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                )
 
                 if let enforced = pluginManager.enforcedLlmResolution {
                     ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
@@ -1720,6 +1847,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(
@@ -1756,6 +1887,10 @@ private struct WorkflowEditorPage: View {
                             }
                         }
                         .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
+                        .managedLockAccessibilityHint(
+                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
+                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
+                        )
 
                         Text(
                             localizedAppText(
@@ -1865,6 +2000,7 @@ private struct WorkflowEditorPage: View {
             Image(systemName: "list.bullet.rectangle")
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedAppText("Manual", de: "Manuell"))
@@ -1886,6 +2022,7 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 
     private var automaticTriggerEditor: some View {
@@ -2011,6 +2148,7 @@ private struct WorkflowEditorPage: View {
             HStack(alignment: .top, spacing: 10) {
                 TextField(String(localized: "docs.github.com"), text: $websiteInput)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(localizedAppText("Website", de: "Website"))
                     .onSubmit {
                         addWebsiteInput()
                     }
@@ -2129,6 +2267,7 @@ private struct WorkflowEditorPage: View {
             Image(systemName: "infinity")
                 .foregroundStyle(.secondary)
                 .frame(width: 20)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedAppText("Always", de: "Immer"))
@@ -2150,6 +2289,7 @@ private struct WorkflowEditorPage: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(workflowsGroupedSurface(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
     }
 
     private var websiteSuggestions: [String] {
@@ -2163,15 +2303,15 @@ private struct WorkflowEditorPage: View {
             pluginManager: pluginManager,
             existingWorkflowId: workflow?.id
         ) {
-            validationMessage = validationError
+            presentValidationMessage(validationError)
             return
         }
 
         guard let trigger = draft.resolvedTrigger() else {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "The selected trigger is incomplete.",
                 de: "Der ausgewählte Trigger ist unvollständig."
-            )
+            ))
             return
         }
 
@@ -2201,6 +2341,13 @@ private struct WorkflowEditorPage: View {
         navigation.goBackToList()
     }
 
+    /// Shows a validation problem and announces it, because the banner appears at the top of
+    /// the scrolled editor where a VoiceOver user would not otherwise notice it.
+    private func presentValidationMessage(_ message: String) {
+        validationMessage = message
+        AccessibilityNotification.Announcement(message).post()
+    }
+
     private func installedAppName(for bundleId: String) -> String {
         profilesViewModel.installedApps.first(where: { $0.id == bundleId })?.name
             ?? workflowAppDisplayName(for: bundleId)
@@ -2220,29 +2367,29 @@ private struct WorkflowEditorPage: View {
 
     private func addRecordedHotkey(_ hotkey: UnifiedHotkey) {
         if draft.containsEquivalentHotkey(hotkey) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This shortcut is already part of the workflow.",
                 de: "Dieser Shortcut ist bereits Teil des Workflows."
-            )
+            ))
             return
         }
 
         if let workflowId = hotkeyService.isHotkeyAssignedToWorkflow(hotkey, excludingWorkflowId: workflow?.id),
            let conflictWorkflow = workflowService.workflow(id: workflowId) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
                 ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
-            )
+            ))
             return
         }
 
         if let slot = hotkeyService.isHotkeyAssignedToGlobalSlot(hotkey) {
-            validationMessage = localizedAppText(
+            presentValidationMessage(localizedAppText(
                 "This hotkey is already used by the global slot “\(slot.rawValue)”.",
                 de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet.",
                 ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。"
-            )
+            ))
             return
         }
 
@@ -2262,6 +2409,7 @@ private struct WorkflowEditorPage: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 34, height: 34)
                 .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(definition.name)
@@ -2279,6 +2427,7 @@ private struct WorkflowEditorPage: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.accentColor.opacity(0.08))
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var workflowProviderOverrideBinding: Binding<String?> {
@@ -2430,6 +2579,11 @@ private struct WorkflowTemplateCard: View {
             }
         }
         .buttonStyle(.plain)
+        // The selection is otherwise only shown by the tint and the checkmark.
+        .accessibilityLabel(definition.name)
+        .accessibilityHint(definition.description)
+        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
@@ -2447,10 +2601,12 @@ private struct WorkflowSelectionRow: View {
                     .resizable()
                     .frame(width: 20, height: 20)
                     .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .accessibilityHidden(true)
             } else if let iconSystemName {
                 Image(systemName: iconSystemName)
                     .foregroundStyle(.secondary)
                     .frame(width: 20)
+                    .accessibilityHidden(true)
             }
 
             VStack(alignment: .leading, spacing: 2) {
@@ -2466,6 +2622,7 @@ private struct WorkflowSelectionRow: View {
                         .truncationMode(.middle)
                 }
             }
+            .accessibilityElement(children: .combine)
 
             Spacer()
 
@@ -2476,6 +2633,8 @@ private struct WorkflowSelectionRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help(String(localized: "Remove"))
+            .accessibilityLabel(String(localized: "Remove \(title)"))
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -2511,6 +2670,8 @@ private struct WorkflowTextEditorField: View {
                     .padding(.top, editorTopPadding)
                     .padding(.bottom, editorBottomPadding)
                     .background(Color.clear)
+                    .accessibilityLabel(title)
+                    .accessibilityHint(placeholder)
 
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(placeholder)
@@ -2520,6 +2681,7 @@ private struct WorkflowTextEditorField: View {
                         .padding(.top, placeholderTopInset)
                         .padding(.trailing, 12)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .background {
@@ -2555,6 +2717,7 @@ private struct WorkflowAppPickerSheet: View {
             HStack {
                 Text(localizedAppText("Select Apps", de: "Apps auswählen"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding()
@@ -2564,8 +2727,11 @@ private struct WorkflowAppPickerSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField(localizedAppText("Search Apps…", de: "Apps durchsuchen…"), text: $searchText)
                     .textFieldStyle(.plain)
+                    .accessibilityLabel(localizedAppText("Search Apps…", de: "Apps durchsuchen…"))
+                    .accessibilityAddTraits(.isSearchField)
                 if !searchText.isEmpty {
                     Button {
                         searchText = ""
@@ -2574,6 +2740,8 @@ private struct WorkflowAppPickerSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help(String(localized: "Clear search"))
+                    .accessibilityLabel(String(localized: "Clear search"))
                 }
             }
             .padding(8)
@@ -2581,21 +2749,32 @@ private struct WorkflowAppPickerSheet: View {
             Divider()
 
             List(filteredApps) { app in
-                HStack {
-                    if let icon = app.icon {
-                        Image(nsImage: icon)
-                    }
-                    Text(app.name)
-                    Spacer()
-                    if selectedBundleIdentifiers.contains(app.id) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
+                let isSelected = selectedBundleIdentifiers.contains(app.id)
+
+                // A plain button keeps the row's look but makes it reachable by keyboard and
+                // VoiceOver, which a tap gesture alone is not.
+                Button {
                     toggleSelection(app.id)
+                } label: {
+                    HStack {
+                        if let icon = app.icon {
+                            Image(nsImage: icon)
+                                .accessibilityHidden(true)
+                        }
+                        Text(app.name)
+                        Spacer()
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(app.name)
+                .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
             .listStyle(.inset)
 
@@ -2633,6 +2812,7 @@ private struct WorkflowSectionCard<Content: View>: View {
             VStack(alignment: .leading, spacing: compact ? 3 : 4) {
                 Text(title)
                     .font(compact ? Font.subheadline.weight(.semibold) : Font.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
                     .font(compact ? .caption : .subheadline)
                     .foregroundStyle(.secondary)
@@ -2686,6 +2866,7 @@ private struct ValidationBanner: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             Text(message)
                 .font(.subheadline)
         }
@@ -2695,7 +2876,16 @@ private struct ValidationBanner: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color.orange.opacity(0.12))
         }
+        .accessibilityElement(children: .combine)
     }
+}
+
+/// The spoken state of a custom disclosure button, which otherwise only shows it by the
+/// direction of its chevron.
+private func workflowDisclosureState(isExpanded: Bool) -> String {
+    isExpanded
+        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠")
 }
 
 private struct MissingWorkflowPage: View {

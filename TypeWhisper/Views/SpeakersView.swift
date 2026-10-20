@@ -34,6 +34,7 @@ struct SpeakersView: View {
     @State private var isDragTargeted = false
     @State private var showFilePicker = false
     @State private var deletedProfile: VoiceProfile?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let shownRecordings = 30
 
@@ -120,6 +121,7 @@ struct SpeakersView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(String(localized: "speakers.premium.required"), systemImage: "lock")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(String(localized: "premium.hub.speakers.description"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -185,6 +187,7 @@ struct SpeakersView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(String(localized: isDragTargeted ? "speakers.page.add.drop" : "speakers.page.add.title"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(String(localized: "speakers.page.add.description"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -221,7 +224,7 @@ struct SpeakersView: View {
                     style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
                 )
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragTargeted)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: isDragTargeted)
     }
 
     private var engineMenu: some View {
@@ -286,6 +289,7 @@ struct SpeakersView: View {
             RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         )
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
@@ -295,6 +299,7 @@ struct SpeakersView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "speakers.page.recordings.title"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 VStack(spacing: 0) {
                     ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
@@ -309,7 +314,7 @@ struct SpeakersView: View {
                         .fill(Color(nsColor: .controlBackgroundColor))
                 )
                 .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous))
-                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: models.map(\.id))
+                .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.85), value: models.map(\.id))
             }
         }
     }
@@ -411,6 +416,7 @@ struct SpeakersView: View {
                     .accessibilityHidden(true)
                 Text(String(localized: "speakers.page.people.emptyTitle"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(String(localized: "speakers.page.people.empty"))
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -463,6 +469,7 @@ struct SpeakersView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(String(localized: "speakers.page.sources.title"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             VStack(spacing: 0) {
                 sourceRow(
@@ -514,11 +521,14 @@ struct SpeakersView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // The switch carries the title and caption, so VoiceOver reads them once.
+            .accessibilityHidden(true)
             Spacer(minLength: 12)
             Toggle(title, isOn: isOn)
                 .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .accessibilityHint(caption)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

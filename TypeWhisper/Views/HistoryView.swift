@@ -152,6 +152,14 @@ struct HistoryView: View {
                 .onTapGesture {
                     viewModel.requestNavigationSelection(.device(device.id))
                 }
+                // The label selects the device like the other sidebar buttons;
+                // without this VoiceOver only offers expanding the group.
+                .accessibilityAddTraits(
+                    viewModel.navigationSelection == .device(device.id) ? [.isButton, .isSelected] : .isButton
+                )
+                .accessibilityAction {
+                    viewModel.requestNavigationSelection(.device(device.id))
+                }
             }
             .listRowBackground(
                 viewModel.navigationSelection == .device(device.id)
@@ -178,6 +186,8 @@ struct HistoryView: View {
                 ? Color.accentColor.opacity(0.16)
                 : Color.clear
         )
+        // The selection is otherwise only shown by the row background.
+        .accessibilityAddTraits(viewModel.navigationSelection == selection ? .isSelected : [])
     }
 
     private func sidebarButtonLabel(title: String, systemImage: String, count: Int) -> some View {
@@ -230,6 +240,9 @@ struct HistoryView: View {
                         }
                     }
                     .listStyle(.inset)
+                    .onDeleteCommand {
+                        viewModel.requestDeletion(of: viewModel.selectedRecordIDs)
+                    }
                     .id(viewModel.queryID)
                     .onChange(of: viewModel.recordScrollRequest, initial: true) { _, request in
                         guard let request else { return }
@@ -300,7 +313,10 @@ struct HistoryView: View {
                 Text(String(localized: "Copy, export, complete, reopen, or delete the selected entries."))
             } actions: {
                 HStack {
-                    Button(String(localized: "Copy")) { viewModel.copySelectedRecords() }
+                    Button(String(localized: "Copy")) {
+                        viewModel.copySelectedRecords()
+                        announceCopy()
+                    }
                     if viewModel.selectedRecords.contains(where: \.isOpenInInbox) {
                         Button(String(localized: "Mark Complete")) {
                             viewModel.markComplete(viewModel.selectedRecords)
@@ -412,7 +428,7 @@ struct HistoryView: View {
                 }
 
                 Button {
-                    viewModel.copyToClipboard(record.displayText)
+                    copy(record.displayText)
                 } label: {
                     Label(String(localized: "Copy"), systemImage: "doc.on.doc")
                 }
@@ -449,7 +465,7 @@ struct HistoryView: View {
             : [record]
 
         Button(String(localized: "Copy")) {
-            viewModel.copyToClipboard(selected.map(\.displayText).joined(separator: "\n\n"))
+            copy(selected.map(\.displayText).joined(separator: "\n\n"))
         }
 
         if selected.count == 1 {
@@ -476,6 +492,16 @@ struct HistoryView: View {
         Button(String(localized: "Delete"), role: .destructive) {
             viewModel.requestDeletion(of: Set(selected.map(\.id)))
         }
+    }
+
+    private func copy(_ text: String) {
+        viewModel.copyToClipboard(text)
+        announceCopy()
+    }
+
+    /// Copying shows no visible change, so VoiceOver confirms it.
+    private func announceCopy() {
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(String(localized: "Copied to clipboard"))
     }
 
     private func canCompare(_ record: TranscriptionRecord) -> Bool {

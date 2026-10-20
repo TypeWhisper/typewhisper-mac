@@ -110,6 +110,8 @@ private struct SnippetCardView: View {
                     .background(Color.secondary.opacity(0.12))
                     .foregroundStyle(.secondary)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
+                    .help(String(localized: "Case sensitive"))
+                    .accessibilityLabel(String(localized: "Case sensitive"))
             }
 
             Spacer()
@@ -140,7 +142,18 @@ private struct SnippetCardView: View {
         .onTapGesture {
             viewModel.startEditing(snippet)
         }
+        // The card reads as one switch; Edit and Delete, which sighted users reach by
+        // clicking or through the context menu, become named actions.
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilitySummary)
+        .accessibilityActions {
+            Button(String(localized: "Edit")) {
+                viewModel.startEditing(snippet)
+            }
+            Button(String(localized: "Delete")) {
+                viewModel.deleteSnippet(snippet)
+            }
+        }
         .contextMenu {
             Button(String(localized: "Edit")) {
                 viewModel.startEditing(snippet)
@@ -150,6 +163,22 @@ private struct SnippetCardView: View {
                 viewModel.deleteSnippet(snippet)
             }
         }
+    }
+
+    /// "/thanks, expands to Thanks for …", with the arrow and the "Aa" badge spelled out.
+    private var accessibilitySummary: String {
+        let trigger = snippet.trigger
+        let replacement = snippet.replacement
+        var summary = localizedAppText(
+            "\(trigger), expands to \(replacement)",
+            de: "\(trigger), wird zu \(replacement)",
+            ja: "\(trigger)を\(replacement)に展開",
+            zh: "\(trigger)，展开为\(replacement)"
+        )
+        if snippet.caseSensitive {
+            summary += ", " + String(localized: "Case sensitive")
+        }
+        return summary
     }
 }
 
@@ -169,6 +198,7 @@ private struct SnippetEditorSheet: View {
             HStack {
                 Text(viewModel.isCreatingNew ? String(localized: "New Snippet") : String(localized: "Edit Snippet"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding()
@@ -183,16 +213,19 @@ private struct SnippetEditorSheet: View {
                             Text(String(localized: "Trigger"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             TextField(String(localized: "e.g. addr"), text: $viewModel.editTrigger)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                                 .focused($focusedField, equals: .trigger)
+                                .accessibilityLabel(String(localized: "Trigger"))
                         }
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(String(localized: "Replacement"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .accessibilityHidden(true)
                             TextEditor(text: $viewModel.editReplacement)
                                 .font(.body)
                                 .frame(height: 100)
@@ -201,6 +234,7 @@ private struct SnippetEditorSheet: View {
                                         .stroke(.separator, lineWidth: 1)
                                 )
                                 .focused($focusedField, equals: .replacement)
+                                .accessibilityLabel(String(localized: "Replacement"))
                         }
 
                         Toggle(String(localized: "Case sensitive"), isOn: $viewModel.editCaseSensitive)
@@ -283,17 +317,25 @@ private struct PlaceholderTag: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(placeholder)
-                .font(.system(size: 11, design: .monospaced))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.accentColor.opacity(0.15))
-                .foregroundStyle(Color.accentColor)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .onTapGesture {
-                    onInsert()
-                }
-                .help(String(localized: "Click to insert"))
+            // A plain button keeps the tag's look and makes it reachable by keyboard and VoiceOver.
+            Button(action: onInsert) {
+                Text(placeholder)
+                    .font(.system(size: 11, design: .monospaced))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.accentColor.opacity(0.15))
+                    .foregroundStyle(Color.accentColor)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "Click to insert"))
+            .accessibilityLabel(localizedAppText(
+                "Insert \(title) placeholder",
+                de: "Platzhalter „\(title)“ einfügen",
+                ja: "\(title)のプレースホルダを挿入",
+                zh: "插入\(title)占位符"
+            ))
+            .accessibilityHint(placeholder)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
@@ -303,6 +345,7 @@ private struct PlaceholderTag: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+            .accessibilityElement(children: .combine)
         }
         .frame(minWidth: 100, alignment: .leading)
     }

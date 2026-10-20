@@ -162,6 +162,7 @@ private struct PunctuationVerificationSheet: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(String(localized: "Test Spoken Punctuation"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(String(
                 format: String(localized: "Use these phrases with %@ in any text field. If the native output already matches the expected result, keep Native. Otherwise use Fallback for this combination."),
@@ -182,6 +183,7 @@ private struct PunctuationVerificationSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 4)
+                    .accessibilityElement(children: .combine)
                 }
                 .frame(minHeight: 220)
             }

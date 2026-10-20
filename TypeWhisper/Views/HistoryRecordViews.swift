@@ -13,6 +13,7 @@ struct HistorySectionHeader: View {
                 Image(systemName: "chevron.right")
                     .font(.caption2)
                     .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    .accessibilityHidden(true)
                 Text(group.displayName)
                 Text(count, format: .number)
                     .foregroundStyle(.tertiary)
@@ -60,7 +61,53 @@ struct HistoryRecordRow: View {
             .foregroundStyle(.secondary)
         }
         .padding(.vertical, 5)
-        .accessibilityElement(children: .combine)
+        // One spoken line per row: text, app, time, duration and every status,
+        // so the status icons and their tooltips are not the only cue.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(.isStaticText)
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [HistoryAccessibilityText.preview(rowText)]
+        parts.append(record.appName ?? record.source.displayName)
+        if record.appName != nil {
+            parts.append(record.source.displayName)
+        }
+        parts.append(HistoryAccessibilityText.relativeTime(record.timestamp))
+        if record.durationSeconds > 0 {
+            parts.append(HistoryAccessibilityText.duration(record.durationSeconds))
+        }
+        parts += statusDescriptions.filter { $0 != rowText }
+        return parts.joined(separator: ", ")
+    }
+
+    /// The statuses the row shows as icons, in the same order.
+    private var statusDescriptions: [String] {
+        var statuses: [String] = []
+        if record.isOpenInInbox {
+            statuses.append(String(localized: "Open in Inbox"))
+        }
+        if record.processingState == .importing || record.processingState == .transcribing {
+            statuses.append(String(localized: "Processing"))
+        }
+        if record.processingState == .failed {
+            statuses.append(String(localized: "Processing failed"))
+        }
+        if record.audioFileName != nil {
+            statuses.append(String(localized: "Audio available"))
+        }
+        if isSynchronizedFromOtherDevice {
+            statuses.append(String(localized: "Synchronized"))
+        }
+        return statuses
+    }
+
+    private var isSynchronizedFromOtherDevice: Bool {
+        let originPlatform = record.originPlatformRaw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !originPlatform.isEmpty
+            && originPlatform.caseInsensitiveCompare("macOS") != .orderedSame
     }
 
     private var rowText: String {
@@ -112,10 +159,7 @@ struct HistoryRecordRow: View {
                 .help(String(localized: "Audio available"))
                 .accessibilityLabel(String(localized: "Audio available"))
         }
-        let originPlatform = record.originPlatformRaw
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !originPlatform.isEmpty
-            && originPlatform.caseInsensitiveCompare("macOS") != .orderedSame {
+        if isSynchronizedFromOtherDevice {
             Image(systemName: "icloud")
                 .help(String(localized: "Synchronized"))
                 .accessibilityLabel(String(localized: "Synchronized"))
@@ -217,6 +261,10 @@ struct HistoryRecordDetailView: View {
         .onChange(of: record.speakerTranscriptData) { speakers.reload() }
         .onChange(of: record.speakerNamesData) { speakers.reload() }
         .onChange(of: record.speakerWordsData) { speakers.reload() }
+        .onChange(of: coordinator.stages[record.id] != nil) { wasDetecting, isDetecting in
+            guard wasDetecting, !isDetecting else { return }
+            announceSpeakerDetectionResult()
+        }
         .confirmationDialog(
             String(localized: "speakers.redetect.title"),
             isPresented: Binding(
@@ -239,6 +287,33 @@ struct HistoryRecordDetailView: View {
         record.speakerTranscriptData != nil
     }
 
+    /// Detection runs in the background and only changes the page, so
+    /// VoiceOver users hear how it ended. A failed or cancelled run keeps an
+    /// earlier transcript, so the run's own outcome decides the message.
+    private func announceSpeakerDetectionResult() {
+        guard let outcome = coordinator.outcomes[record.id] else { return }
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(
+            Self.speakerDetectionAnnouncement(for: outcome),
+            isUrgent: outcome == .failed
+        )
+    }
+
+    static func speakerDetectionAnnouncement(for outcome: SpeakerTranscriptCoordinator.Outcome) -> String {
+        switch outcome {
+        case .succeeded:
+            localizedAppText("Speakers detected", de: "Sprecher erkannt", ja: "話者を検出しました", zh: "已检测到说话人")
+        case .failed:
+            String(localized: "speakers.status.failed")
+        case .cancelled:
+            localizedAppText(
+                "Speaker detection cancelled",
+                de: "Sprechererkennung abgebrochen",
+                ja: "話者の検出をキャンセルしました",
+                zh: "已取消说话人检测"
+            )
+        }
+    }
+
     private var showsSpeakerTranscript: Bool {
         hasSpeakerTranscript && showsSpeakers
     }
@@ -248,6 +323,7 @@ struct HistoryRecordDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(record.timestamp, format: .dateTime.weekday().day().month().year().hour().minute())
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
                 headerControls
                 if record.isOpenInInbox {
@@ -263,19 +339,27 @@ struct HistoryRecordDetailView: View {
                 Label(record.source.displayName, systemImage: sourceImage)
                 if record.durationSeconds > 0 {
                     Text("·")
+                        .accessibilityHidden(true)
                     Text(Duration.seconds(record.durationSeconds).formatted(.time(pattern: .minuteSecond)))
+                        .accessibilityLabel(HistoryAccessibilityText.duration(record.durationSeconds))
                 }
                 if let appName = record.appName {
                     Text("·")
+                        .accessibilityHidden(true)
                     Text(appName)
                 }
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
 
             DisclosureGroup(String(localized: "Details")) {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
-                    metadataRow(String(localized: "Language"), record.language?.uppercased() ?? "—")
+                    metadataRow(
+                        String(localized: "Language"),
+                        record.language?.uppercased() ?? "—",
+                        spokenValue: record.language.map { localizedAppLanguageName(for: $0) }
+                    )
                     metadataRow(String(localized: "Engine"), record.modelUsed ?? record.engineUsed)
                     metadataRow(String(localized: "Words"), record.wordsCount.formatted())
                     metadataRow(String(localized: "Origin"), record.originPlatformRaw)
@@ -308,12 +392,14 @@ struct HistoryRecordDetailView: View {
         }
         .padding(14)
         .background(Color(nsColor: .controlBackgroundColor))
+        .accessibilityElement(children: .combine)
     }
 
     private var failureState: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "exclamationmark.triangle")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(String(localized: "Processing Failed"))
                     .font(.subheadline.weight(.medium))
@@ -325,6 +411,7 @@ struct HistoryRecordDetailView: View {
         }
         .padding(14)
         .background(Color(nsColor: .controlBackgroundColor))
+        .accessibilityElement(children: .combine)
     }
 
     /// Text version, the switch between the transcript by speaker and the
@@ -383,6 +470,12 @@ struct HistoryRecordDetailView: View {
                         .padding(14)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .disabled(!viewModel.canEditSelectedRecord)
+                        .accessibilityLabel(localizedAppText(
+                            "Transcript",
+                            de: "Transkript",
+                            ja: "文字起こし",
+                            zh: "转写文本"
+                        ))
                 }
             case .original:
                 readOnlyText(AttributedString(record.rawText))
@@ -399,7 +492,9 @@ struct HistoryRecordDetailView: View {
     private var changesContent: some View {
         switch viewModel.diffPresentation(for: record) {
         case .segments(let segments):
-            readOnlyText(diffAttributedString(segments))
+            // Colour, strikethrough and underline are not spoken, so VoiceOver
+            // reads the removed and added words with a word in front of them.
+            readOnlyText(diffAttributedString(segments), accessibilityText: diffAccessibilityText(segments))
         case .tooLarge:
             ContentUnavailableView(
                 String(localized: "Changes Unavailable"),
@@ -415,15 +510,49 @@ struct HistoryRecordDetailView: View {
         }
     }
 
-    private func readOnlyText(_ text: AttributedString) -> some View {
+    @ViewBuilder
+    private func readOnlyText(_ text: AttributedString, accessibilityText: String? = nil) -> some View {
         ScrollView {
-            Text(text)
-                .textSelection(.enabled)
-                .font(.body)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(20)
+            if let accessibilityText {
+                readOnlyTextBody(text)
+                    .accessibilityLabel(accessibilityText)
+            } else {
+                readOnlyTextBody(text)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func readOnlyTextBody(_ text: AttributedString) -> some View {
+        Text(text)
+            .textSelection(.enabled)
+            .font(.body)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+    }
+
+    private func diffAccessibilityText(_ segments: [DiffSegment]) -> String {
+        segments.map { segment in
+            switch segment {
+            case .unchanged(let text):
+                text
+            case .removed(let text):
+                localizedAppText(
+                    "(Removed: \(text))",
+                    de: "(Entfernt: \(text))",
+                    ja: "（削除: \(text)）",
+                    zh: "（已删除：\(text)）"
+                )
+            case .added(let text):
+                localizedAppText(
+                    "(Added: \(text))",
+                    de: "(Hinzugefügt: \(text))",
+                    ja: "（追加: \(text)）",
+                    zh: "（已添加：\(text)）"
+                )
+            }
+        }
+        .joined(separator: " ")
     }
 
     private var sourceImage: String {
@@ -440,10 +569,14 @@ struct HistoryRecordDetailView: View {
         }
     }
 
-    private func metadataRow(_ label: String, _ value: String) -> some View {
+    private func metadataRow(_ label: String, _ value: String, spokenValue: String? = nil) -> some View {
         GridRow {
             Text(label).foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            // Read as one "label, value" pair instead of two unrelated texts.
             Text(value).textSelection(.enabled)
+                .accessibilityLabel(label)
+                .accessibilityValue(spokenValue ?? value)
         }
     }
 
@@ -471,5 +604,38 @@ struct HistoryRecordDetailView: View {
             if index < segments.count - 1 { result += AttributedString(" ") }
         }
         return result
+    }
+}
+
+/// Spoken forms of values that the History shows in a compact visual form.
+enum HistoryAccessibilityText {
+    /// Spoken units follow the app language, like the localized words around them.
+    static var locale: Locale { Locale(identifier: preferredAppLanguageCode()) }
+
+    /// "2 months ago", in the app language.
+    static func relativeTime(_ date: Date) -> String {
+        date.formatted(.relative(presentation: .named, unitsStyle: .wide).locale(locale))
+    }
+
+    /// Rows show a single line, so VoiceOver reads the beginning of a long
+    /// text; the detail pane has the full text.
+    static func preview(_ text: String, limit: Int = 160) -> String {
+        guard text.count > limit else { return text }
+        let prefix = text.prefix(limit)
+        let cut = prefix.lastIndex(of: " ").map { prefix[..<$0] } ?? prefix
+        return String(cut) + "…"
+    }
+
+    /// "Duration 1 minute, 12 seconds" instead of "1:12".
+    static func duration(_ seconds: Double) -> String {
+        // Truncated like the visible "0:06".
+        let spoken = Duration.seconds(seconds.rounded(.towardZero))
+            .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide).locale(locale))
+        return localizedAppText(
+            "Duration \(spoken)",
+            de: "Dauer \(spoken)",
+            ja: "長さ \(spoken)",
+            zh: "时长 \(spoken)"
+        )
     }
 }

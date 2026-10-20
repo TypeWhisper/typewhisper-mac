@@ -138,7 +138,8 @@ struct IOSCompanionPromoView: View {
                 .frame(width: 110, height: 110)
                 .frame(width: 218, height: 388)
                 .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 24))
-                .accessibilityLabel(Text("TypeWhisper"))
+                // Decorative stand-in for the (also hidden) promo video.
+                .accessibilityHidden(true)
         }
     }
 
@@ -170,7 +171,9 @@ private struct QRCodeImageView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityLabel(localizedAppText(
             "QR code for TypeWhisper in the App Store",
-            de: "QR-Code für TypeWhisper im App Store"
+            de: "QR-Code für TypeWhisper im App Store",
+            ja: "App Store の TypeWhisper の QR コード",
+            zh: "App Store 中 TypeWhisper 的二维码"
         ))
     }
 }

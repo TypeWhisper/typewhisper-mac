@@ -109,8 +109,29 @@ enum IndicatorMotion {
     /// unfolds instead of switching content in place.
     static let revealScale: CGFloat = 0.92
 
+    /// Reduce Motion turns off the decorative pop-in and the recording pulse.
+    /// The indicator still changes its content for every state.
+    @MainActor static var reducesMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// Starts the slow pulse of the recording dot, unless Reduce Motion is on.
+    @MainActor static func startRecordingPulse(_ pulse: Binding<Bool>) {
+        guard !reducesMotion else {
+            pulse.wrappedValue = false
+            return
+        }
+        withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+            pulse.wrappedValue = true
+        }
+    }
+
     /// Runs the pop-in: snap to the reveal scale without animation, then spring to 1.
-    static func popIn(_ scale: Binding<CGFloat>) {
+    @MainActor static func popIn(_ scale: Binding<CGFloat>) {
+        guard !reducesMotion else {
+            scale.wrappedValue = 1
+            return
+        }
         var snap = Transaction()
         snap.disablesAnimations = true
         withTransaction(snap) { scale.wrappedValue = revealScale }

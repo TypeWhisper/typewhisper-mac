@@ -2,12 +2,45 @@ import SwiftUI
 
 /// Marks a control whose value an administrator sets.
 struct ManagedByOrganizationLabel: View {
-    var text = String(localized: "Managed by your organization.")
+    static var defaultText: String { String(localized: "Managed by your organization.") }
+
+    var text = ManagedByOrganizationLabel.defaultText
 
     var body: some View {
-        Label(text, systemImage: "building.2")
-            .font(.caption)
-            .foregroundStyle(.secondary)
+        Label {
+            Text(text)
+        } icon: {
+            Image(systemName: "building.2")
+                .accessibilityHidden(true)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        // Read as one sentence; the building icon only decorates it.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .accessibilityAddTraits(.isStaticText)
+    }
+}
+
+extension View {
+    /// A control that managed settings lock tells VoiceOver why, with the reason the
+    /// visible `ManagedByOrganizationLabel` next to it shows.
+    func managedLockAccessibilityHint(isLocked: Bool, reason: String?) -> some View {
+        modifier(ManagedLockAccessibilityHint(isLocked: isLocked, reason: reason))
+    }
+}
+
+private struct ManagedLockAccessibilityHint: ViewModifier {
+    let isLocked: Bool
+    let reason: String?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if isLocked {
+            content.accessibilityHint(reason ?? ManagedByOrganizationLabel.defaultText)
+        } else {
+            content
+        }
     }
 }
 
@@ -32,6 +65,8 @@ struct ManagedSettingsSection: View {
 
             if !rows.isEmpty {
                 Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
+                    // Each row below names its setting, scope and value, so the column
+                    // titles are only shown.
                     GridRow {
                         Text(String(localized: "Setting"))
                         Text(String(localized: "Scope"))
@@ -39,16 +74,24 @@ struct ManagedSettingsSection: View {
                     }
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
                     ForEach(rows) { row in
+                        // VoiceOver reads a row as one element on its first cell,
+                        // e.g. "AllowCloudTranscription, Enforced, Off".
                         GridRow {
                             Text(row.name)
                                 .font(.callout.monospaced())
                                 .textSelection(.enabled)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(Self.accessibilityLabel(for: row))
+                                .accessibilityAddTraits(.isStaticText)
                             Text(row.scope)
+                                .accessibilityHidden(true)
                             Text(row.value)
                                 .foregroundStyle(row.isInvalid ? Color.red : Color.primary)
                                 .textSelection(.enabled)
+                                .accessibilityHidden(true)
                         }
                         .font(.callout)
                     }
@@ -59,11 +102,20 @@ struct ManagedSettingsSection: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(String(localized: "Policy Problems"))
                         .font(.caption.weight(.semibold))
+                        .accessibilityAddTraits(.isHeader)
                     ForEach(problems, id: \.self) { problem in
-                        Label(problem, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
+                        Label {
+                            Text(problem)
+                        } icon: {
+                            Image(systemName: "exclamationmark.triangle")
+                                .accessibilityHidden(true)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(problem)
+                        .accessibilityAddTraits(.isStaticText)
                     }
                 }
             }
@@ -93,6 +145,11 @@ struct ManagedSettingsSection: View {
         var isInvalid = false
 
         var id: String { "\(name)|\(scope)" }
+    }
+
+    /// One spoken line per table row: setting, scope and value.
+    static func accessibilityLabel(for row: Row) -> String {
+        [row.name, row.scope, row.value].joined(separator: ", ")
     }
 
     static func summary(_ snapshot: ManagedPolicySnapshot) -> String {
