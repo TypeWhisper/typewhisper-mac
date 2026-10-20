@@ -34,6 +34,7 @@ struct SpeakerModelCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(String(localized: "premium.window.speakers.model.title"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(String(localized: "premium.window.speakers.model.description"))
                     .font(.callout)
@@ -71,6 +72,7 @@ struct SpeakerModelCard: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(String(localized: "Error: \(error)"))
                 }
             }
         }
@@ -86,6 +88,7 @@ struct SpeakerAutomaticDetectionCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(String(localized: "premium.window.speakers.automatic.title"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Toggle(
                     String(localized: "premium.window.speakers.automatic.calendarMeetings"),
@@ -121,6 +124,7 @@ struct VoiceProfilesCard: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text(String(localized: "premium.window.speakers.profiles.title"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 if voiceStore.profiles.isEmpty {
                     Text(String(localized: "premium.window.speakers.profiles.empty"))
@@ -164,6 +168,7 @@ private struct VoiceProfileRow: View {
     @State private var nameDraft = ""
     @State private var showsRecordings = false
     @FocusState private var isNameFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let service = ServiceContainer.shared.speakerVoiceProfileService
@@ -181,6 +186,12 @@ private struct VoiceProfileRow: View {
                         .onChange(of: isNameFocused) { _, focused in
                             if !focused { commit(service) }
                         }
+                        .accessibilityLabel(localizedAppText(
+                            "Rename \(profile.name)",
+                            de: "\(profile.name) umbenennen",
+                            ja: "\(profile.name)の名前を変更",
+                            zh: "重命名\(profile.name)"
+                        ))
                     Text(String.localizedStringWithFormat(
                         String(localized: "premium.window.speakers.profiles.learnedFormat"),
                         SpeakerTranscriptPresentation.timestamp(profile.enrolledSeconds),
@@ -192,48 +203,68 @@ private struct VoiceProfileRow: View {
                 Spacer()
                 if !appearances.isEmpty {
                     Button {
-                        withAnimation(.easeInOut(duration: 0.15)) { showsRecordings.toggle() }
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) { showsRecordings.toggle() }
                     } label: {
                         Image(systemName: showsRecordings ? "chevron.up" : "chevron.down")
                     }
                     .buttonStyle(.borderless)
                     .help(String(localized: "speakers.page.profile.recordings"))
                     .accessibilityLabel(String(localized: "speakers.page.profile.recordings"))
+                    .accessibilityValue(showsRecordings
+                        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+                        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠"))
                 }
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash")
                 }
                 .buttonStyle(.borderless)
                 .help(String(localized: "premium.window.speakers.profiles.delete"))
-                .accessibilityLabel(String(localized: "premium.window.speakers.profiles.delete"))
+                .accessibilityLabel(localizedAppText(
+                    "Delete Voice Profile of \(profile.name)",
+                    de: "Sprecherprofil von \(profile.name) löschen",
+                    ja: "\(profile.name)の声のプロフィールを削除",
+                    zh: "删除\(profile.name)的声音档案"
+                ))
             }
 
             if showsRecordings {
                 ForEach(appearances) { appearance in
+                    let speakingTime = SpeakerTranscriptPresentation.timestamp(
+                        appearance.turns.reduce(0) { $0 + max(0, $1.end - $1.start) }
+                    )
                     HStack(spacing: 8) {
+                        // The magnifier badge marks a suggested, unconfirmed match.
                         Image(systemName: appearance.isSuggestion ? "waveform.badge.magnifyingglass" : "waveform")
                             .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
+                            .accessibilityLabel(localizedAppText("Suggested", de: "Vorgeschlagen", ja: "提案", zh: "建议"))
+                            .accessibilityHidden(!appearance.isSuggestion)
                         Text(appearance.title)
                             .lineLimit(1)
                         Text(appearance.date, format: .dateTime.day().month().year())
                             .foregroundStyle(.secondary)
-                        Text(SpeakerTranscriptPresentation.timestamp(
-                            appearance.turns.reduce(0) { $0 + max(0, $1.end - $1.start) }
-                        ))
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
+                        Text(speakingTime)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .accessibilityLabel(String(localized: "speakers.speakingTime") + ": " + speakingTime)
                         Spacer()
                         Button(String(localized: "speakers.page.openInHistory")) {
                             SpeakerNavigation.openInHistory(appearance.recordID)
                         }
                         .buttonStyle(.link)
+                        .accessibilityLabel(localizedAppText(
+                            "Open \(appearance.title)",
+                            de: "\(appearance.title) öffnen",
+                            ja: "\(appearance.title)を開く",
+                            zh: "打开\(appearance.title)"
+                        ))
                     }
                     .font(.caption)
                     .padding(.leading, 28)
                 }
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(profile.name)
         .onAppear { nameDraft = profile.name }
         .onChange(of: profile.name) { _, name in
             if !isNameFocused { nameDraft = name }

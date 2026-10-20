@@ -10,6 +10,7 @@ struct SpeakerWorkspaceView: View {
     @ObservedObject var coordinator: SpeakerTranscriptCoordinator
     @ObservedObject var model: SpeakerWorkspaceModel
     @Environment(\.undoManager) private var undoManager
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var editedParagraph: SpeakerParagraph?
     @State private var textDraft = ""
@@ -54,7 +55,7 @@ struct SpeakerWorkspaceView: View {
                     Button {
                         model.followsPlayback = true
                         if let id = model.activeParagraphID {
-                            withAnimation { proxy.scrollTo(id, anchor: .center) }
+                            withAnimation(reduceMotion ? nil : .default) { proxy.scrollTo(id, anchor: .center) }
                         }
                     } label: {
                         Label(String(localized: "speakers.playback.return"), systemImage: "arrow.down.to.line")
@@ -66,7 +67,7 @@ struct SpeakerWorkspaceView: View {
             }
             .onChange(of: model.activeParagraphID) { _, id in
                 guard model.followsPlayback, model.playback.isPlaying, let id else { return }
-                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -133,8 +134,42 @@ struct SpeakerWorkspaceView: View {
         }
         .padding(.top, row.startsTurn ? 6 : 0)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(model.name(of: paragraph.speakerID)), \(SpeakerTranscriptPresentation.timestamp(paragraph.start)), \(paragraph.text)")
+        .accessibilityLabel(paragraphAccessibilityLabel(paragraph))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+        // Clicking the words plays them and clicking the name selects the turn; the
+        // context menu holds the rest. VoiceOver gets the common ones as actions.
+        .accessibilityActions {
+            if audioURL != nil {
+                Button(String(localized: "speakers.action.playFromHere")) {
+                    model.followsPlayback = true
+                    model.playback.play(from: paragraph.start)
+                }
+            }
+            Button(isSelected
+                ? localizedAppText("Deselect Turn", de: "Wortmeldung abwählen", ja: "発言の選択を解除", zh: "取消选择发言")
+                : localizedAppText("Select Turn", de: "Wortmeldung auswählen", ja: "発言を選択", zh: "选择发言")
+            ) {
+                model.select(turn: paragraph.turnIndex, extending: false, toggling: true)
+            }
+            if coordinator.hasPremiumAccess {
+                Button(String(localized: "speakers.action.editText")) {
+                    textDraft = paragraph.text
+                    editedParagraph = paragraph
+                }
+            }
+            Button(String(localized: "speakers.filter.show")) {
+                model.filteredSpeaker = paragraph.speakerID
+            }
+        }
+    }
+
+    /// Speaker, time and text; a name that is only suggested by voice says so.
+    private func paragraphAccessibilityLabel(_ paragraph: SpeakerParagraph) -> String {
+        var name = model.name(of: paragraph.speakerID)
+        if model.names?.isSuggestion(for: paragraph.speakerID) == true {
+            name += " (" + String(localized: "speakers.voice.recognized") + ")"
+        }
+        return "\(name), \(SpeakerTranscriptPresentation.timestamp(paragraph.start)), \(paragraph.text)"
     }
 
     /// The speaker above the first bubble of a turn; a click selects the turn.
@@ -268,6 +303,7 @@ struct SpeakerWorkspaceView: View {
             TextEditor(text: $textDraft)
                 .font(.body)
                 .frame(width: 420, height: 140)
+                .accessibilityLabel(String(localized: "speakers.action.editText"))
             HStack {
                 Button(String(localized: "Cancel")) { editedParagraph = nil }
                     .keyboardShortcut(.cancelAction)
@@ -375,6 +411,8 @@ private struct SpeakerStrip: View {
             .buttonStyle(.plain)
             .help(String(localized: isCollapsed ? "speakers.strip.show" : "speakers.strip.hide"))
             .accessibilityLabel(String(localized: isCollapsed ? "speakers.strip.show" : "speakers.strip.hide"))
+            // The collapsed strip shows the speakers only as initials in colored circles.
+            .accessibilityValue(isCollapsed ? model.speakerIDs.map(model.name(of:)).joined(separator: ", ") : "")
 
             if isCollapsed {
                 Spacer(minLength: 0)
@@ -519,6 +557,9 @@ private struct SpeakerChip: View {
         }
         .buttonStyle(.plain)
         .opacity(model.isAudible(speakerID) ? 1 : 0.55)
+        .accessibilityLabel(model.name(of: speakerID))
+        .accessibilityValue(accessibilityState(isFiltered: isFiltered))
+        .accessibilityAddTraits(isFiltered ? .isSelected : [])
         .onHover { isHovered = $0 }
         .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
             SpeakerInspectorRow(
@@ -531,6 +572,42 @@ private struct SpeakerChip: View {
             .frame(width: 270)
             .padding(8)
         }
+    }
+
+    /// The share and the headphone, muted and magnifier icons as words.
+    private func accessibilityState(isFiltered: Bool) -> String {
+        var parts: [String] = []
+        if let share {
+            parts.append(share.fraction.formatted(.percent.precision(.fractionLength(0))))
+        }
+        if model.soloedSpeakers.contains(speakerID) {
+            parts.append(localizedAppText(
+                "Only this speaker plays",
+                de: "Nur dieser Sprecher wird abgespielt",
+                ja: "この話者のみ再生",
+                zh: "仅播放此说话人"
+            ))
+        }
+        if model.mutedSpeakers.contains(speakerID) {
+            parts.append(localizedAppText(
+                "Skipped in playback",
+                de: "Wird bei der Wiedergabe übersprungen",
+                ja: "再生時にスキップ",
+                zh: "播放时跳过"
+            ))
+        }
+        if model.voiceState(of: speakerID) == .suggestion {
+            parts.append(String(localized: "speakers.voice.recognized"))
+        }
+        if isFiltered {
+            parts.append(localizedAppText(
+                "Only this speaker is shown",
+                de: "Nur dieser Sprecher wird angezeigt",
+                ja: "この話者のみ表示中",
+                zh: "仅显示此说话人"
+            ))
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -596,6 +673,8 @@ private struct SpeakerInspectorRow: View {
             HStack(spacing: 8) {
                 if let share {
                     Text(SpeakerTranscriptPresentation.timestamp(share.seconds))
+                        .accessibilityLabel(String(localized: "speakers.speakingTime")
+                            + ": " + SpeakerTranscriptPresentation.timestamp(share.seconds))
                 }
                 Spacer(minLength: 4)
                 if hasAudio {
@@ -637,6 +716,12 @@ private struct SpeakerInspectorRow: View {
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .accessibilityLabel(localizedAppText(
+                    "More Actions for \(model.name(of: speakerID))",
+                    de: "Weitere Aktionen für \(model.name(of: speakerID))",
+                    ja: "\(model.name(of: speakerID))のその他の操作",
+                    zh: "\(model.name(of: speakerID))的更多操作"
+                ))
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
@@ -987,6 +1072,7 @@ struct SpeakerPlayerBar: View {
                     Image(systemName: "waveform")
                         .font(.body.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
             }
             .frame(width: 30, height: 30)
@@ -1111,6 +1197,7 @@ struct SpeakerPlayerBar: View {
         .fixedSize()
         .help(String(localized: "speakers.playback.speed"))
         .accessibilityLabel(String(localized: "speakers.playback.speed"))
+        .accessibilityValue(Self.rateTitle(playback.rate))
     }
 
     private var volume: some View {
@@ -1153,12 +1240,26 @@ private struct SpeakerTimeline: View {
     @ObservedObject var clock: SpeakerPlaybackClock
 
     var body: some View {
+        let elapsed = SpeakerTranscriptPresentation.timestamp(clock.time)
+        let remaining = SpeakerTranscriptPresentation.timestamp(max(0, playback.duration - clock.time))
         HStack(spacing: 8) {
-            Text(SpeakerTranscriptPresentation.timestamp(clock.time))
+            Text(elapsed)
                 .frame(width: 46, alignment: .trailing)
+                .accessibilityLabel(localizedAppText(
+                    "\(elapsed) elapsed",
+                    de: "\(elapsed) abgespielt",
+                    ja: "経過 \(elapsed)",
+                    zh: "已播放 \(elapsed)"
+                ))
             SpeakerScrubber(model: model, playback: playback, time: clock.time)
-            Text("-" + SpeakerTranscriptPresentation.timestamp(max(0, playback.duration - clock.time)))
+            Text("-" + remaining)
                 .frame(width: 50, alignment: .leading)
+                .accessibilityLabel(localizedAppText(
+                    "\(remaining) remaining",
+                    de: "Noch \(remaining)",
+                    ja: "残り \(remaining)",
+                    zh: "剩余 \(remaining)"
+                ))
         }
         .font(.caption2.monospacedDigit())
         .foregroundStyle(.secondary)
@@ -1257,10 +1358,24 @@ private struct SpeakerScrubber: View {
         .frame(height: 16)
         .accessibilityElement()
         .accessibilityLabel(String(localized: "speakers.timeline.title"))
-        .accessibilityValue(SpeakerTranscriptPresentation.timestamp(time))
+        // The turns are colored by speaker; the value names who speaks at the position.
+        .accessibilityValue(accessibilityPosition)
         .accessibilityAdjustableAction { direction in
             playback.skip(by: direction == .increment ? 5 : -5)
         }
+    }
+
+    private var accessibilityPosition: String {
+        let stamp = SpeakerTranscriptPresentation.timestamp(time)
+        let total = SpeakerTranscriptPresentation.timestamp(max(playback.duration, model.turns.last?.end ?? 0))
+        let position = localizedAppText(
+            "\(stamp) of \(total)",
+            de: "\(stamp) von \(total)",
+            ja: "\(total)中 \(stamp)",
+            zh: "\(stamp)/\(total)"
+        )
+        guard let turn = SpeakerTranscriptPresentation.spokenTurn(in: model.turns, at: time) else { return position }
+        return position + ", " + model.name(of: turn.speakerID)
     }
 
     /// The time under the pointer and who speaks there.
