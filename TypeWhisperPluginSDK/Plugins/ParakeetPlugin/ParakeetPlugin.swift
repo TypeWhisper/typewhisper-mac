@@ -1453,9 +1453,11 @@ private struct ParakeetSettingsView: View {
                         if showHfToken {
                             TextField("hf_...", text: $hfTokenInput)
                                 .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                         } else {
                             SecureField("hf_...", text: $hfTokenInput)
                                 .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                         }
 
                         Button {
@@ -1464,6 +1466,7 @@ private struct ParakeetSettingsView: View {
                             Image(systemName: showHfToken ? "eye.slash" : "eye")
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel(showHfToken ? Text("Hide Hugging Face token", bundle: bundle) : Text("Show Hugging Face token", bundle: bundle))
 
                         if hasStoredHfToken {
                             Button(String(localized: "Remove", bundle: bundle)) {
@@ -1474,6 +1477,7 @@ private struct ParakeetSettingsView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                         }
 
                         Button(String(localized: "Save", bundle: bundle)) {
@@ -1482,6 +1486,7 @@ private struct ParakeetSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                        .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
                     }
 
                     if isValidatingToken {
@@ -1496,6 +1501,7 @@ private struct ParakeetSettingsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(tokenValidationResult ? .green : .red)
+                                .accessibilityHidden(true)
                             Text(
                                 tokenValidationResult
                                     ? String(localized: "Valid Hugging Face Token", bundle: bundle)
@@ -1599,21 +1605,29 @@ private struct ParakeetSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(modelState == .downloading)
+                .accessibilityLabel(
+                    downloadedVersions.contains(version)
+                        ? Text("Load \(version.modelDef.displayName)", bundle: bundle)
+                        : Text("Download and load \(version.modelDef.displayName)", bundle: bundle)
+                )
             }
 
         case .downloading:
             HStack(spacing: 8) {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
+                    .accessibilityLabel(Text("Downloading \(version.modelDef.displayName)", bundle: bundle))
                 Text("\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
+                    .accessibilityHidden(true)
             }
 
         case .ready:
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .accessibilityLabel(Text("Loaded", bundle: bundle))
                 Button(String(localized: "Unload", bundle: bundle)) {
                     plugin.unloadModel()
                     modelState = plugin.modelState
@@ -1622,6 +1636,7 @@ private struct ParakeetSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Unload \(version.modelDef.displayName)", bundle: bundle))
             }
 
         case .error(let message):
@@ -1629,6 +1644,7 @@ private struct ParakeetSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1639,6 +1655,7 @@ private struct ParakeetSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
+                .accessibilityLabel(Text("Retry \(version.modelDef.displayName)", bundle: bundle))
             }
         }
     }
@@ -1684,6 +1701,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "arrow.down.circle")
                             .foregroundStyle(.secondary)
                             .font(.caption)
+                            .accessibilityHidden(true)
                         Text("CTC model (~100 MB) - downloads automatically on first use, or:", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1707,6 +1725,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.caption)
+                            .accessibilityHidden(true)
                         if boostingTermCount > 0 {
                             Text("Ready - \(boostingTermCount) terms loaded", bundle: bundle)
                                 .font(.caption)
@@ -1721,6 +1740,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .font(.caption)
+                            .accessibilityLabel(Text("Error", bundle: bundle))
                         Text(message)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1733,6 +1753,7 @@ private struct ParakeetSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
+                        .accessibilityLabel(Text("Retry CTC model download", bundle: bundle))
                     }
                 }
             }

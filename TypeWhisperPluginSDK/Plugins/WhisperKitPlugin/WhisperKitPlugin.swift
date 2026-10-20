@@ -1490,9 +1490,11 @@ private struct WhisperKitSettingsView: View {
                     if showHfToken {
                         TextField("hf_...", text: $hfTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     } else {
                         SecureField("hf_...", text: $hfTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     }
 
                     Button {
@@ -1501,6 +1503,7 @@ private struct WhisperKitSettingsView: View {
                         Image(systemName: showHfToken ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showHfToken ? Text("Hide Hugging Face token", bundle: bundle) : Text("Show Hugging Face token", bundle: bundle))
 
                     if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -1511,6 +1514,7 @@ private struct WhisperKitSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                     }
 
                     Button(String(localized: "Save", bundle: bundle)) {
@@ -1519,6 +1523,7 @@ private struct WhisperKitSettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                    .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
                 }
 
                 if isValidatingToken {
@@ -1532,6 +1537,7 @@ private struct WhisperKitSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(tokenValidationResult ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(
                             tokenValidationResult
                                 ? String(localized: "Valid HuggingFace Token", bundle: bundle)
@@ -1559,6 +1565,7 @@ private struct WhisperKitSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1670,31 +1677,37 @@ private struct WhisperKitSettingsView: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .accessibilityLabel(Text("Loaded", bundle: bundle))
                 Button(String(localized: "Unload", bundle: bundle)) {
                     plugin.unloadModel()
                     syncViewStateFromPlugin()
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Unload \(modelDef.displayName)", bundle: bundle))
 
                 Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
                     removeDownloadedModel(modelDef)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Remove \(modelDef.displayName)", bundle: bundle))
             }
         } else if case .downloading = modelState, activeModelId == modelDef.id {
             HStack(spacing: 8) {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
+                    .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
                 Text("\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
+                    .accessibilityHidden(true)
             }
         } else if case .loading(let phase) = modelState, activeModelId == modelDef.id {
             HStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityHidden(true)
                 Text(phaseText(phase))
                     .font(.caption)
                 Button(String(localized: "Cancel", bundle: bundle)) {
@@ -1703,6 +1716,7 @@ private struct WhisperKitSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Cancel loading \(modelDef.displayName)", bundle: bundle))
             }
         } else {
             HStack(spacing: 8) {
@@ -1729,6 +1743,11 @@ private struct WhisperKitSettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(viewState.isBusy)
+                    .accessibilityLabel(
+                        isDownloaded
+                            ? Text("Load \(modelDef.displayName)", bundle: bundle)
+                            : Text("Download and load \(modelDef.displayName)", bundle: bundle)
+                    )
                 }
 
                 if isDownloaded {
@@ -1738,6 +1757,7 @@ private struct WhisperKitSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(viewState.isBusy)
+                    .accessibilityLabel(Text("Remove \(modelDef.displayName)", bundle: bundle))
                 }
             }
         }

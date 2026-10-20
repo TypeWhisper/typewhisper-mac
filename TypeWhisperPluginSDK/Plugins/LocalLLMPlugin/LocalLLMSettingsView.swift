@@ -64,6 +64,7 @@ struct LocalLLMSettingsView: View {
                         .onChange(of: generationTemperature) { _, newValue in
                             plugin.setGenerationTemperature(newValue)
                         }
+                        .accessibilityLabel(Text("Temperature", bundle: bundle))
 
                     HStack {
                         Text("Precise", bundle: bundle)
@@ -93,6 +94,7 @@ struct LocalLLMSettingsView: View {
                 HStack(spacing: 8) {
                     SecureField("hf_...", text: $hfTokenInput)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
 
                     Button(String(localized: "Save", bundle: bundle)) {
                         validateAndSaveHuggingFaceToken()
@@ -100,6 +102,7 @@ struct LocalLLMSettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                    .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
 
                     if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -110,6 +113,7 @@ struct LocalLLMSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                     }
                 }
 
@@ -124,6 +128,7 @@ struct LocalLLMSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(tokenValidationResult ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(
                             tokenValidationResult
                                 ? String(localized: "Valid HuggingFace Token", bundle: bundle)
@@ -155,6 +160,7 @@ struct LocalLLMSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -203,6 +209,8 @@ struct LocalLLMSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            // The taller experimental column would otherwise be read before the model name.
+            .accessibilitySortPriority(1)
 
             Spacer()
 
@@ -214,44 +222,53 @@ struct LocalLLMSettingsView: View {
                     if plugin.hasVisibleDownloadProgress {
                         ProgressView(value: downloadProgress)
                             .frame(width: 80)
+                            .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
                         Text("\(Int(downloadProgress * 100))%")
                             .font(.caption)
                             .monospacedDigit()
+                            .accessibilityHidden(true)
                     } else {
                         ProgressView()
                             .controlSize(.small)
+                            .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
                     }
                     Button(String(localized: "Cancel", bundle: bundle)) {
                         cancelCurrentLoad()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Cancel loading \(modelDef.displayName)", bundle: bundle))
                 }
             } else if case .loading = modelState, selectedModelId == modelDef.id {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Loading \(modelDef.displayName)", bundle: bundle))
                     Button(String(localized: "Cancel", bundle: bundle)) {
                         cancelCurrentLoad()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Cancel loading \(modelDef.displayName)", bundle: bundle))
                 }
             } else if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityLabel(Text("Loaded", bundle: bundle))
                     Button(String(localized: "Unload", bundle: bundle)) {
                         unloadCurrentModel()
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Unload \(modelDef.displayName)", bundle: bundle))
 
                     Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
                         removeDownloadedModel(modelDef)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Remove \(modelDef.displayName)", bundle: bundle))
                 }
             } else if isRecoverableCachedModelError(for: modelDef) {
                 Button(String(localized: "Delete cached model", bundle: bundle)) {
@@ -259,6 +276,7 @@ struct LocalLLMSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Delete cached model \(modelDef.displayName)", bundle: bundle))
             } else if isDownloaded || hasCachedModelFiles {
                 HStack(spacing: 8) {
                     if isDownloaded, modelDef.id == plugin.modelIdLoadedOnDemand, modelState == .notLoaded {
@@ -274,6 +292,11 @@ struct LocalLLMSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(modelState == .downloading || modelState == .loading)
+                        .accessibilityLabel(
+                            isDownloaded
+                                ? Text("Load \(modelDef.displayName)", bundle: bundle)
+                                : Text("Download and load \(modelDef.displayName)", bundle: bundle)
+                        )
                     }
 
                     Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
@@ -282,6 +305,7 @@ struct LocalLLMSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(modelState == .downloading || modelState == .loading)
+                    .accessibilityLabel(Text("Remove \(modelDef.displayName)", bundle: bundle))
                 }
             } else if let experimentalWarning = modelDef.experimentalWarning {
                 VStack(alignment: .trailing, spacing: 6) {
@@ -301,6 +325,7 @@ struct LocalLLMSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(modelState == .downloading || modelState == .loading)
+                    .accessibilityLabel(Text("Try \(modelDef.displayName) anyway", bundle: bundle))
                 }
             } else {
                 Button(String(localized: "Download & Load", bundle: bundle)) {
@@ -309,9 +334,11 @@ struct LocalLLMSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(modelState == .downloading || modelState == .loading)
+                .accessibilityLabel(Text("Download and load \(modelDef.displayName)", bundle: bundle))
             }
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
     }
 
     private func isRecoverableCachedModelError(for modelDef: LocalLLMModelDef) -> Bool {
