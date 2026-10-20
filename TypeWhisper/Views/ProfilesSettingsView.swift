@@ -47,6 +47,7 @@ struct ProfilesSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(localizedAppText("Rules", de: "Regeln"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(localizedAppText(
                     "When context X is detected, TypeWhisper uses behavior Y.",
                     de: "Wenn Kontext X erkannt wird, nutzt TypeWhisper Verhalten Y."
@@ -144,6 +145,7 @@ private struct ActiveRuleBanner: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(localizedAppText("Active Rule", de: "Aktive Regel"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -183,6 +185,7 @@ private struct PromptRuleFilterBanner: View {
             Image(systemName: "line.3.horizontal.decrease.circle.fill")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(localizedAppText("Showing rules linked to this prompt.", de: "Es werden Regeln zu diesem Prompt gezeigt."))
@@ -225,6 +228,7 @@ private struct RuleRow: View {
     @State private var isHovered = false
     @State private var isPressingReorderHandle = false
     @State private var showingDeleteConfirmation = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -274,6 +278,7 @@ private struct RuleRow: View {
                     ))
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .accessibilityLabel(String(localized: "Enable \(profile.name)"))
 
                     HStack(spacing: 6) {
                         Button {
@@ -282,6 +287,8 @@ private struct RuleRow: View {
                             Image(systemName: "pencil")
                         }
                         .buttonStyle(.borderless)
+                        .help(String(localized: "Edit"))
+                        .accessibilityLabel(String(localized: "Edit \(profile.name)"))
 
                         Button(role: .destructive) {
                             showingDeleteConfirmation = true
@@ -289,6 +296,8 @@ private struct RuleRow: View {
                             Image(systemName: "trash")
                         }
                         .buttonStyle(.borderless)
+                        .help(String(localized: "Delete"))
+                        .accessibilityLabel(String(localized: "Delete \(profile.name)"))
                     }
                 }
             }
@@ -319,6 +328,24 @@ private struct RuleRow: View {
         } isTargeted: { targeted in
             isDropTargeted = targeted
         }
+        // One group per rule keeps its controls together for VoiceOver, and the Move Up and
+        // Move Down actions replace dragging the reorder handle.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(accessibilityRowLabel)
+        .accessibilityActions {
+            if let profileIndex, profileIndex > 0 {
+                Button(String(localized: "Move Up")) {
+                    viewModel.moveProfile(fromIndex: profileIndex, toIndex: profileIndex - 1)
+                }
+            }
+            if let profileIndex, profileIndex < viewModel.profiles.count - 1 {
+                // Moving the next rule up is the same as moving this one down; moveProfile
+                // inserts before the target, so it cannot move a rule below its neighbour.
+                Button(String(localized: "Move Down")) {
+                    viewModel.moveProfile(fromIndex: profileIndex + 1, toIndex: profileIndex)
+                }
+            }
+        }
         .alert(localizedAppText("Delete rule?", de: "Regel löschen?"), isPresented: $showingDeleteConfirmation) {
             Button(localizedAppText("Delete", de: "Löschen"), role: .destructive) {
                 viewModel.deleteProfile(profile)
@@ -331,6 +358,17 @@ private struct RuleRow: View {
                 ja: "「\(profile.name)」を本当に削除しますか？"
             ))
         }
+    }
+
+    private var profileIndex: Int? {
+        viewModel.profiles.firstIndex(where: { $0.id == profile.id })
+    }
+
+    private var accessibilityRowLabel: String {
+        let status = profile.isEnabled
+            ? localizedAppText("Enabled", de: "Aktiv")
+            : localizedAppText("Disabled", de: "Deaktiviert")
+        return [profile.name, status].joined(separator: ", ")
     }
 
     private var rowHighlightColor: Color {
@@ -355,11 +393,13 @@ private struct RuleRow: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(isPressingReorderHandle ? Color.primary.opacity(0.08) : Color.clear)
             }
-            .animation(.easeInOut(duration: 0.12), value: isPressingReorderHandle)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.12), value: isPressingReorderHandle)
             .onLongPressGesture(minimumDuration: 0, maximumDistance: .infinity) {} onPressingChanged: { isPressing in
                 isPressingReorderHandle = isPressing
             }
             .help(localizedAppText("Change order via drag and drop", de: "Reihenfolge per Drag & Drop ändern"))
+            // The row's Move Up and Move Down actions stand in for the drag handle.
+            .accessibilityHidden(true)
     }
 }
 
@@ -432,6 +472,7 @@ private struct RuleEditorSheet: View {
                         : localizedAppText("Edit Rule", de: "Regel bearbeiten")
                 )
                 .font(.title2.weight(.semibold))
+                .accessibilityAddTraits(.isHeader)
 
                 Text(localizedAppText(
                     "From context to behavior in three clear steps.",
@@ -548,6 +589,7 @@ private struct RuleStepHeader: View {
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
             }
         }
@@ -558,6 +600,8 @@ private struct RuleStepHeader: View {
         let isCurrent = step == currentStep
         let isCompleted = step.rawValue < currentStep.rawValue
         let isReachable = step.rawValue <= currentStep.rawValue
+        let stepNumber = step.rawValue + 1
+        let stepCount = RuleEditorStep.allCases.count
 
         return HStack(spacing: 10) {
             ZStack {
@@ -583,6 +627,22 @@ private struct RuleStepHeader: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(isCurrent ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
+        // The step's state is otherwise only shown by its color and checkmark.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(localizedAppText(
+            "Step \(stepNumber) of \(stepCount): \(step.title)",
+            de: "Schritt \(stepNumber) von \(stepCount): \(step.title)",
+            ja: "ステップ \(stepNumber)/\(stepCount): \(step.title)",
+            zh: "第 \(stepNumber) 步，共 \(stepCount) 步：\(step.title)"
+        ))
+        .accessibilityValue(
+            isCurrent
+                ? localizedAppText("Current step", de: "Aktueller Schritt", ja: "現在のステップ", zh: "当前步骤")
+                : isCompleted
+                    ? localizedAppText("Completed", de: "Abgeschlossen", ja: "完了", zh: "已完成")
+                    : ""
+        )
+        .accessibilityAddTraits(isCurrent ? [.isStaticText, .isSelected] : .isStaticText)
     }
 
     private func stepCircleFill(isCurrent: Bool, isCompleted: Bool) -> some ShapeStyle {
@@ -618,6 +678,7 @@ private struct RuleStepHeader: View {
 
 private struct RuleScopeStep: View {
     @ObservedObject var viewModel: ProfilesViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -642,6 +703,7 @@ private struct RuleScopeStep: View {
                         Image(systemName: "sparkles")
                             .foregroundStyle(.orange)
                     }
+                    .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 4) {
                         Text(String(localized: "Prompt already selected"))
@@ -673,10 +735,13 @@ private struct RuleScopeStep: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(viewModel.editorBundleIdentifiers, id: \.self) { bundleId in
+                            let appName = viewModel.installedApps.first(where: { $0.id == bundleId })?.name ?? bundleId
+
                             HStack {
                                 if let app = viewModel.installedApps.first(where: { $0.id == bundleId }) {
                                     if let icon = app.icon {
                                         Image(nsImage: icon)
+                                            .accessibilityHidden(true)
                                     }
                                     Text(app.name)
                                 } else {
@@ -693,6 +758,8 @@ private struct RuleScopeStep: View {
                                         .foregroundStyle(.secondary)
                                 }
                                 .buttonStyle(.borderless)
+                                .help(String(localized: "Remove"))
+                                .accessibilityLabel(String(localized: "Remove \(appName)"))
                             }
                             .padding(10)
                             .background(Color.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -744,7 +811,7 @@ private struct RuleScopeStep: View {
     private var websiteScopeSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                     viewModel.showingWebsiteScope.toggle()
                 }
             } label: {
@@ -757,6 +824,7 @@ private struct RuleScopeStep: View {
                         Image(systemName: "globe")
                             .foregroundStyle(.orange)
                     }
+                    .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 8) {
@@ -780,10 +848,14 @@ private struct RuleScopeStep: View {
                     Image(systemName: viewModel.showingWebsiteScope ? "chevron.up" : "chevron.down")
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(websiteToggleTitle)
+            .accessibilityValue(ruleDisclosureState(isExpanded: viewModel.showingWebsiteScope))
+            .accessibilityHint(websiteToggleDescription)
 
             if viewModel.showingWebsiteScope {
                 websiteScopeContent
@@ -839,6 +911,7 @@ private struct RuleScopeStep: View {
                         HStack {
                             Image(systemName: "globe")
                                 .foregroundStyle(.orange)
+                                .accessibilityHidden(true)
                             Text(pattern)
                             Spacer()
                             Button {
@@ -848,6 +921,8 @@ private struct RuleScopeStep: View {
                                     .foregroundStyle(.secondary)
                             }
                             .buttonStyle(.borderless)
+                            .help(String(localized: "Remove"))
+                            .accessibilityLabel(String(localized: "Remove \(pattern)"))
                         }
                         .padding(10)
                         .background(Color.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -857,6 +932,7 @@ private struct RuleScopeStep: View {
                 HStack {
                     TextField(localizedAppText("e.g. github.com", de: "z. B. github.com"), text: $viewModel.urlPatternInput)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(localizedAppText("Website", de: "Website"))
                         .onSubmit {
                             viewModel.addUrlPattern()
                         }
@@ -880,6 +956,7 @@ private struct RuleScopeStep: View {
                                 HStack(spacing: 6) {
                                     Image(systemName: "globe")
                                         .font(.caption)
+                                        .accessibilityHidden(true)
                                     Text(domain)
                                         .font(.caption)
                                 }
@@ -1111,6 +1188,7 @@ private struct RuleBehaviorStep: View {
 
 private struct RuleReviewStep: View {
     @ObservedObject var viewModel: ProfilesViewModel
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1140,6 +1218,7 @@ private struct RuleReviewStep: View {
                         )
                     )
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel(localizedAppText("Rule Name", de: "Regelname"))
 
                     Toggle(localizedAppText("Enable Rule", de: "Regel aktivieren"), isOn: $viewModel.editorIsEnabled)
                 }
@@ -1160,7 +1239,7 @@ private struct RuleReviewStep: View {
 
             VStack(alignment: .leading, spacing: 0) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
                         viewModel.showingAdvancedSettings.toggle()
                     }
                 } label: {
@@ -1181,10 +1260,14 @@ private struct RuleReviewStep: View {
                         Image(systemName: viewModel.showingAdvancedSettings ? "chevron.up" : "chevron.down")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
+                            .accessibilityHidden(true)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(localizedAppText("Advanced Options", de: "Erweiterte Optionen"))
+                .accessibilityValue(ruleDisclosureState(isExpanded: viewModel.showingAdvancedSettings))
+                .accessibilityHint(localizedAppText("Manual override, priority, memory, and more details.", de: "Manuelle Übersteuerung, Priorität, Memory und weitere Details."))
 
                 if viewModel.showingAdvancedSettings {
                     VStack(alignment: .leading, spacing: 16) {
@@ -1310,6 +1393,7 @@ private struct RulePreviewCard: View {
                     Image(systemName: "sparkles")
                         .foregroundStyle(Color.accentColor)
                 }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
@@ -1355,10 +1439,12 @@ private func card<Content: View>(
                 Image(systemName: icon)
                     .foregroundStyle(tint)
             }
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -1371,6 +1457,14 @@ private func card<Content: View>(
     .background {
         elevatedPanel(cornerRadius: 20)
     }
+}
+
+/// The spoken state of a custom disclosure button, which otherwise only shows it by the
+/// direction of its chevron.
+private func ruleDisclosureState(isExpanded: Bool) -> String {
+    isExpanded
+        ? localizedAppText("Expanded", de: "Ausgeklappt", ja: "展開", zh: "已展开")
+        : localizedAppText("Collapsed", de: "Eingeklappt", ja: "折りたたみ", zh: "已折叠")
 }
 
 private func infoChip(_ text: String, tint: Color) -> some View {
@@ -1412,6 +1506,7 @@ private func settingTile<Content: View>(
             Image(systemName: icon)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tint)
+                .accessibilityHidden(true)
 
             Text(title)
                 .font(.caption.weight(.semibold))
@@ -1463,6 +1558,7 @@ private struct AppPickerSheet: View {
             HStack {
                 Text(localizedAppText("Select Apps", de: "Apps auswählen"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer()
             }
             .padding()
@@ -1472,8 +1568,11 @@ private struct AppPickerSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 TextField(localizedAppText("Search Apps…", de: "Apps durchsuchen…"), text: $viewModel.appSearchQuery)
                     .textFieldStyle(.plain)
+                    .accessibilityLabel(localizedAppText("Search Apps…", de: "Apps durchsuchen…"))
+                    .accessibilityAddTraits(.isSearchField)
                 if !viewModel.appSearchQuery.isEmpty {
                     Button {
                         viewModel.appSearchQuery = ""
@@ -1482,6 +1581,8 @@ private struct AppPickerSheet: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .help(String(localized: "Clear search"))
+                    .accessibilityLabel(String(localized: "Clear search"))
                 }
             }
             .padding(8)
@@ -1489,23 +1590,34 @@ private struct AppPickerSheet: View {
             Divider()
 
             List(viewModel.filteredApps) { app in
-                HStack {
-                    if let icon = app.icon {
-                        Image(nsImage: icon)
-                    }
-                    Text(app.name)
+                let isSelected = viewModel.editorBundleIdentifiers.contains(app.id)
 
-                    Spacer()
-
-                    if viewModel.editorBundleIdentifiers.contains(app.id) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.blue)
-                    }
-                }
-                .contentShape(Rectangle())
-                .onTapGesture {
+                // A plain button keeps the row's look but makes it reachable by keyboard and
+                // VoiceOver, which a tap gesture alone is not.
+                Button {
                     viewModel.toggleAppInEditor(app.id)
+                } label: {
+                    HStack {
+                        if let icon = app.icon {
+                            Image(nsImage: icon)
+                                .accessibilityHidden(true)
+                        }
+                        Text(app.name)
+
+                        Spacer()
+
+                        if isSelected {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.blue)
+                                .accessibilityHidden(true)
+                        }
+                    }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel(app.name)
+                .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
             .listStyle(.inset)
 
