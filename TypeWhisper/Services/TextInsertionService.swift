@@ -184,12 +184,13 @@ final class TextInsertionService {
         "com.mitchellh.ghostty",
         "com.cmuxterm.app"
     ]
-    // Gecko editors can report successful AX writes while applying text at
-    // the wrong position or more than once. Prefer one synthetic paste.
-    private let accessibilityInsertionExcludedBundleIdentifiers =
+    private static let geckoBundleIdentifiers =
         SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.union([
             "org.mozilla.thunderbird"
         ])
+    // Gecko editors can report successful AX writes while applying text at
+    // the wrong position or more than once. Prefer one synthetic paste.
+    private let accessibilityInsertionExcludedBundleIdentifiers = TextInsertionService.geckoBundleIdentifiers
     /// The nspasteboard.org transient markers keep clipboard history apps from recording the
     /// payload. Only use them when the clipboard gets restored; otherwise the text is meant to
     /// stay on the clipboard and should show up in clipboard history.
@@ -214,6 +215,7 @@ final class TextInsertionService {
     var accessibilityParentOverride: ((AXUIElement) -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
+    var generatedTextRangesOverride: ((AXUIElement) -> [NSRange])?
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
     var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
     var liveFieldElectronApplicationOverride: ((String) -> Bool)?
@@ -959,25 +961,14 @@ final class TextInsertionService {
 
     func captureInsertionContext() -> InsertionContext? {
         guard let state = captureFocusedTextState(),
-              let value = state.value,
-              let selectedRange = state.selectedRange,
-              let stringRange = Range(selectedRange, in: value) else {
+              let text = insertionText(of: state),
+              Range(text.selectedRange, in: text.value) != nil else {
             return nil
         }
-
-        let previousCharacter = stringRange.lowerBound > value.startIndex
-            ? value[value.index(before: stringRange.lowerBound)]
-            : nil
-        let nextCharacter = stringRange.upperBound < value.endIndex
-            ? value[stringRange.upperBound]
-            : nil
-
-        return InsertionContext(
-            value: value,
-            selectedRange: selectedRange,
+        return insertionContext(
+            value: text.value,
             selectedText: state.selectedText,
-            previousCharacter: previousCharacter,
-            nextCharacter: nextCharacter
+            selectedRange: text.selectedRange
         )
     }
 
@@ -1059,18 +1050,131 @@ final class TextInsertionService {
     }
 
     private func pinnedInsertionContext(from state: FocusedTextState) -> InsertionContext? {
-        guard let value = state.value,
-              let selectedRange = state.selectedRange,
-              selectedRange.length == 0,
+        guard let text = insertionText(of: state),
+              text.selectedRange.length == 0,
               state.selectedText?.isEmpty != false,
-              Range(selectedRange, in: value) != nil else {
+              Range(text.selectedRange, in: text.value) != nil else {
             return nil
         }
         return insertionContext(
-            value: value,
+            value: text.value,
             selectedText: state.selectedText,
-            selectedRange: selectedRange
+            selectedRange: text.selectedRange
         )
+    }
+
+    /// The field text and selection that surround an insertion, without text the app generated
+    /// for display only.
+    private func insertionText(of state: FocusedTextState) -> (value: String, selectedRange: NSRange)? {
+        guard let value = state.value, let selectedRange = state.selectedRange else { return nil }
+        let generatedRanges = generatedTextRanges(
+            in: state.element,
+            valueLength: (value as NSString).length
+        )
+        guard !generatedRanges.isEmpty else { return (value, selectedRange) }
+        return Self.removingGeneratedText(
+            from: value,
+            selectedRange: selectedRange,
+            generatedRanges: generatedRanges
+        )
+    }
+
+    /// Gecko includes CSS generated content in a field's value and caret offsets. Rich web
+    /// editors such as Tiptap draw their placeholder that way, so an empty Firefox composer reads
+    /// as "Ask anything" with the caret after it. Gecko marks those runs as auto-generated.
+    private func generatedTextRanges(in element: AXUIElement, valueLength: Int) -> [NSRange] {
+        if let generatedTextRangesOverride {
+            return generatedTextRangesOverride(element)
+        }
+        guard valueLength > 0, isGeckoElement(element) else { return [] }
+
+        var range = CFRange(location: 0, length: valueLength)
+        guard let rangeValue = AXValueCreate(.cfRange, &range) else { return [] }
+        var value: CFTypeRef?
+        guard AXUIElementCopyParameterizedAttributeValue(
+            element,
+            kAXAttributedStringForRangeParameterizedAttribute as CFString,
+            rangeValue,
+            &value
+        ) == .success,
+            let attributedString = value as? NSAttributedString,
+            attributedString.length == valueLength else {
+            return []
+        }
+
+        return Self.generatedTextRanges(in: attributedString)
+    }
+
+    static func generatedTextRanges(in attributedString: NSAttributedString) -> [NSRange] {
+        var generatedRanges: [NSRange] = []
+        attributedString.enumerateAttribute(
+            NSAttributedString.Key("auto-generated"),
+            in: NSRange(location: 0, length: attributedString.length)
+        ) { attribute, range, _ in
+            // Gecko reports the flag as the string "true".
+            let isGenerated = switch attribute {
+            case let flag as String: flag == "true"
+            case let flag as NSNumber: flag.boolValue
+            default: false
+            }
+            if isGenerated {
+                generatedRanges.append(range)
+            }
+        }
+        return generatedRanges
+    }
+
+    private func isGeckoElement(_ element: AXUIElement) -> Bool {
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(element, &processIdentifier) == .success,
+              let bundleIdentifier = NSRunningApplication(
+                processIdentifier: processIdentifier
+              )?.bundleIdentifier else {
+            return false
+        }
+        return Self.geckoBundleIdentifiers.contains(bundleIdentifier)
+    }
+
+    /// Removes `generatedRanges` from `value` and moves the selection onto the remaining text.
+    /// A selection boundary inside generated text moves to where that text was.
+    static func removingGeneratedText(
+        from value: String,
+        selectedRange: NSRange,
+        generatedRanges: [NSRange]
+    ) -> (value: String, selectedRange: NSRange)? {
+        let text = value as NSString
+        let fullRange = NSRange(location: 0, length: text.length)
+        guard NSMaxRange(selectedRange) <= text.length else { return nil }
+
+        var generated: [NSRange] = []
+        for range in generatedRanges
+            .map({ NSIntersectionRange($0, fullRange) })
+            .filter({ $0.length > 0 })
+            .sorted(by: { $0.location < $1.location }) {
+            if let last = generated.last, range.location <= NSMaxRange(last) {
+                generated[generated.count - 1] = NSUnionRange(last, range)
+            } else {
+                generated.append(range)
+            }
+        }
+
+        func contentOffset(_ offset: Int) -> Int {
+            offset - generated.reduce(0) { removed, range in
+                removed + min(max(offset - range.location, 0), range.length)
+            }
+        }
+
+        let content = NSMutableString()
+        var location = 0
+        for range in generated {
+            content.append(text.substring(with: NSRange(location: location, length: range.location - location)))
+            location = NSMaxRange(range)
+        }
+        content.append(text.substring(from: location))
+
+        let start = contentOffset(selectedRange.location)
+        let end = contentOffset(NSMaxRange(selectedRange))
+        return (content as String, NSRange(location: start, length: end - start))
     }
 
     private func makeLiveFieldTarget(

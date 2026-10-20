@@ -227,6 +227,12 @@ jobs:
           done
           exit 1
 
+      # The test host has the installed app's bundle identifier; the tests must not
+      # change that app's preferences.
+      - name: Snapshot App Preferences
+        id: app-preferences-snapshot
+        run: python3 scripts/check_test_host_preferences.py snapshot "$RUNNER_TEMP/app-preferences.json"
+
       - name: Run App Tests
         run: |
           set -o pipefail
@@ -239,6 +245,11 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO | tee test.log
+
+      # Also after failing tests, which can have written preferences before they failed.
+      - name: Check App Preferences Are Unchanged
+        if: always() && steps.app-preferences-snapshot.outcome == 'success'
+        run: python3 scripts/check_test_host_preferences.py verify "$RUNNER_TEMP/app-preferences.json"
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh test.log
