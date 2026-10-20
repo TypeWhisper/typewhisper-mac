@@ -250,6 +250,18 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         ])
     }
 
+    func testProfileMetadataKeysAreNeitherSettingsNorReported() {
+        let snapshot = validate(forced: [
+            "PayloadUUID": .string("668AB38C-BC32-560D-9C5D-C7FCB5D4FD32"),
+            "_manualProfile": .boolean(true),
+            "AllowCloudTranscription": .boolean(false),
+        ])
+
+        XCTAssertEqual(snapshot.enforcedValues, ["AllowCloudTranscription": .boolean(false)])
+        XCTAssertTrue(snapshot.issues.isEmpty)
+        XCTAssertEqual(validate(forced: ["PayloadUUID": .string("A"), "_manualProfile": .boolean(true)]).status, .absent)
+    }
+
     func testOtherForcedKeysOfTheDomainDoNotMakeThePolicyPresent() {
         let snapshot = validate(forced: ["SUEnableAutomaticChecks": .boolean(false)])
 
