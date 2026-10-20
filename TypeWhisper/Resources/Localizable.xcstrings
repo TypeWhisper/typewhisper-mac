@@ -1,6 +1,134 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Billed yearly" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年1回請求"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按年计费"
+          }
+        }
+      }
+    },
+    "Enterprise covers up to 50 devices with a reply within one business day and help with rollout and security reviews. For more devices, contact sales." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enterpriseは最大50台のデバイスを対象とし、1営業日以内の返信と、展開およびセキュリティレビューのサポートを提供します。それ以上のデバイスについては営業担当にお問い合わせください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "企业版最多覆盖 50 台设备，一个工作日内回复，并协助部署和安全审查。如需更多设备，请联系销售。"
+          }
+        }
+      }
+    },
+    "Enterprise is available as a monthly or yearly subscription; a year costs ten monthly prices." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enterpriseは月額または年額のサブスクリプションで提供されます。年額は月額10か月分の価格です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "企业版提供月度或年度订阅；一年的价格相当于十个月的月费。"
+          }
+        }
+      }
+    },
+    "from 199 EUR/mo" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月額199ユーロから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 199 EUR/mo"
+          }
+        }
+      }
+    },
+    "Monthly and yearly renew automatically; a year costs ten monthly prices. Lifetime is a one-time purchase for the same tier." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月額と年額は自動更新です。年額は月額10か月分の価格です。ライフタイムは同じ階層の買い切りプランです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月度和年度方案会自动续费；一年的价格相当于十个月的月费。同档位的终身版为一次性购买。"
+          }
+        }
+      }
+    },
+    "More than 50 devices? Contact sales" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50台を超えるデバイスが必要ですか？営業担当にお問い合わせください"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 50 台设备？请联系销售"
+          }
+        }
+      }
+    },
+    "per year" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年額"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每年"
+          }
+        }
+      }
+    },
+    "Recurring plan for up to 50 devices with faster support." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大50台のデバイスと迅速なサポートを含む継続プラン。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于最多 50 台设备并提供更快支持的周期续订计划。"
+          }
+        }
+      }
+    },
     "The language model provider your organization requires needs macOS 26 or later." : {
       "localizations" : {
         "de" : {
@@ -19,6 +147,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的组织要求的语言模型提供方需要 macOS 26 或更高版本。"
+          }
+        }
+      }
+    },
+    "The same 3-device Individual tier, billed once a year." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ3デバイスのIndividual階層を年1回請求。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一 3 台设备个人版，每年计费一次。"
+          }
+        }
+      }
+    },
+    "The same Enterprise tier with up to 50 devices, billed once a year." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大50台のデバイスの同じEnterprise階層を年1回請求。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一最多 50 台设备企业版，每年计费一次。"
+          }
+        }
+      }
+    },
+    "The same Team tier with up to 10 devices, billed once a year." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大10台のデバイスの同じTeam階層を年1回請求。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一最多 10 台设备团队版，每年计费一次。"
           }
         }
       }
@@ -63,6 +239,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的组织要求的转写提供方已关闭。"
+          }
+        }
+      }
+    },
+    "This Mac is covered by an enterprise license for your organization's rollout." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacは、組織での展開を対象としたエンタープライズライセンスでカバーされています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 已受企业许可证覆盖，适用于贵组织的部署。"
+          }
+        }
+      }
+    },
+    "Two months free" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2か月分無料"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免费两个月"
+          }
+        }
+      }
+    },
+    "Up to 50 devices, a reply within one business day, and help with rollout and security reviews." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大50台のデバイス、1営業日以内の返信、展開とセキュリティレビューのサポート。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多 50 台设备，一个工作日内回复，并协助部署和安全审查。"
+          }
+        }
+      }
+    },
+    "Yearly subscription" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年額サブスクリプション"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年度订阅"
           }
         }
       }
@@ -15585,22 +15825,6 @@
         }
       }
     },
-    "Company-wide rollout, procurement, and compliance-heavy setups." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全社的な展開、調達、およびコンプライアンスが重視されるセットアップ。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全公司范围部署、采购和合规性要求较高的配置方案。"
-          }
-        }
-      }
-    },
     "Compare" : {
       "localizations" : {
         "de" : {
@@ -19255,22 +19479,6 @@
         }
       }
     },
-    "Enterprise covers company-wide rollout, procurement, and unlimited devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enterpriseは、全社規模の展開、調達、および無制限のデバイスを対象とします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "企业版适用于全公司部署和采购，且不限制设备数量。"
-          }
-        }
-      }
-    },
     "entries" : {
       "localizations" : {
         "de" : {
@@ -20957,22 +21165,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从 19 EUR/mo"
-          }
-        }
-      }
-    },
-    "from 99 EUR/mo" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月額99ユーロから"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 99 EUR/mo"
           }
         }
       }
@@ -25479,22 +25671,6 @@
         }
       }
     },
-    "Monthly is recurring. Lifetime is a one-time purchase for the same tier." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月額は自動更新です。ライフタイムは同じ階層の買い切りプランです。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月度方案会定期续费；同档位的终身版为一次性购买。"
-          }
-        }
-      }
-    },
     "Monthly subscription" : {
       "localizations" : {
         "ja" : {
@@ -27893,22 +28069,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同一 3 台设备个人版的一次性付款，无需月度续订。"
-          }
-        }
-      }
-    },
-    "One payment for the same Enterprise rollout tier with unlimited devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無制限のデバイスでの同じEnterprise展開階層への1回のお支払い。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同一企业部署版的一次性付款，设备数无限制。"
           }
         }
       }
@@ -33741,22 +33901,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "定期账单"
-          }
-        }
-      }
-    },
-    "Recurring company-wide plan for rollout, procurement, and unlimited devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "展開、調達、無制限のデバイス向けの全社規模の継続プラン。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用于部署、采购和无限制设备的全公司周期续订计划。"
           }
         }
       }
@@ -39911,22 +40055,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此 Mac 已获得团队许可证授权，该许可证最多支持 10 台设备。"
-          }
-        }
-      }
-    },
-    "This Mac is covered by an enterprise license for company-wide rollout and unlimited devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このMacは、全社展開および無制限のデバイスを対象としたエンタープライズライセンスでカバーされています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Mac 已受企业许可证覆盖，支持全公司部署和无限制设备。"
           }
         }
       }
