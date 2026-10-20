@@ -942,3 +942,41 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         XCTAssertEqual(SpeakerChannelAttribution.combining(turns, ownSpeech: []), turns)
     }
 }
+
+/// The Speakers row, and the VoiceOver value read from it, show the step a record runs next.
+@MainActor
+final class SpeakerRecordingRowPhaseTests: XCTestCase {
+    private let transcribe = String(localized: "speakers.page.step.transcribe")
+    private let detect = String(localized: "speakers.page.step.detect")
+
+    func testAWaitingRecordShowsTheStepItsRunStartsWith() {
+        let waiting = String(localized: "speakers.status.waiting")
+
+        let transcribedFirst = SpeakerRecordingRow.Phase.speakerDetection(.waiting, startsWithTranscription: true)
+        XCTAssertEqual(transcribedFirst, .working(step: 1, detail: waiting, fraction: nil))
+        let spokenTranscribedFirst = SpeakerRecordingRow.accessibilityStatus(detail: "", phase: transcribedFirst)
+        XCTAssertTrue(spokenTranscribedFirst.contains(transcribe), spokenTranscribedFirst)
+        XCTAssertFalse(spokenTranscribedFirst.contains(detect), spokenTranscribedFirst)
+
+        let detectedRightAway = SpeakerRecordingRow.Phase.speakerDetection(.waiting, startsWithTranscription: false)
+        XCTAssertEqual(detectedRightAway, .working(step: 2, detail: waiting, fraction: nil))
+        let spokenDetectedRightAway = SpeakerRecordingRow.accessibilityStatus(detail: "", phase: detectedRightAway)
+        XCTAssertTrue(spokenDetectedRightAway.contains(detect), spokenDetectedRightAway)
+        XCTAssertFalse(spokenDetectedRightAway.contains(transcribe), spokenDetectedRightAway)
+    }
+
+    func testARunningRecordShowsTheStageItIsIn() {
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.transcribing, startsWithTranscription: false),
+            .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
+        )
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.downloadingModels(0.3), startsWithTranscription: true),
+            .working(step: 2, detail: String(localized: "speakers.status.downloadingModel"), fraction: nil)
+        )
+        XCTAssertEqual(
+            SpeakerRecordingRow.Phase.speakerDetection(.detecting(0.5), startsWithTranscription: true),
+            .working(step: 2, detail: "", fraction: 0.5)
+        )
+    }
+}

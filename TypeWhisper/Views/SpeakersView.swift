@@ -349,19 +349,8 @@ struct SpeakersView: View {
     }
 
     private func phase(of record: TranscriptionRecord) -> SpeakerRecordingRow.Phase {
-        switch coordinator.stages[record.id] {
-        case .waiting:
-            // The step the record runs next: a record without timing is transcribed first.
-            let step = coordinator.runStartsWithTranscription(for: record) ? 1 : 2
-            return .working(step: step, detail: String(localized: "speakers.status.waiting"), fraction: nil)
-        case .transcribing:
-            return .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
-        case .downloadingModels:
-            return .working(step: 2, detail: String(localized: "speakers.status.downloadingModel"), fraction: nil)
-        case .detecting(let fraction):
-            return .working(step: 2, detail: "", fraction: fraction)
-        case nil:
-            break
+        if let stage = coordinator.stages[record.id] {
+            return .speakerDetection(stage, startsWithTranscription: coordinator.runStartsWithTranscription(for: record))
         }
         switch record.speakerTranscriptState {
         case .ready: return .ready(NamedSpeakerShare.shares(of: record))
@@ -565,5 +554,30 @@ struct SpeakersView: View {
             handled = true
         }
         return handled
+    }
+}
+
+extension SpeakerRecordingRow.Phase {
+    /// The phase of a History record whose speaker detection is queued or running. A waiting
+    /// record shows the step its run starts with: step 1 when it is transcribed again for timing
+    /// it lacks, step 2 when it goes straight to detection.
+    static func speakerDetection(
+        _ stage: SpeakerTranscriptCoordinator.Stage,
+        startsWithTranscription: Bool
+    ) -> Self {
+        switch stage {
+        case .waiting:
+            .working(
+                step: startsWithTranscription ? 1 : 2,
+                detail: String(localized: "speakers.status.waiting"),
+                fraction: nil
+            )
+        case .transcribing:
+            .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
+        case .downloadingModels:
+            .working(step: 2, detail: String(localized: "speakers.status.downloadingModel"), fraction: nil)
+        case .detecting(let fraction):
+            .working(step: 2, detail: "", fraction: fraction)
+        }
     }
 }
