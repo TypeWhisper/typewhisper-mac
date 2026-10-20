@@ -1085,6 +1085,8 @@ private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
 }
 
 private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
+    // The plugin's load task and the test read and write the defaults at the same time.
+    private let defaultsLock = NSLock()
     private var defaults: [String: Any]
 
     let pluginDataDirectory: URL
@@ -1109,8 +1111,8 @@ private final class MockHostServices: HostServices, HostModelLifecyclePolicyProv
 
     func storeSecret(key: String, value: String) throws {}
     func loadSecret(key: String) -> String? { nil }
-    func userDefault(forKey key: String) -> Any? { defaults[key] }
-    func setUserDefault(_ value: Any?, forKey key: String) { defaults[key] = value }
+    func userDefault(forKey key: String) -> Any? { defaultsLock.withLock { defaults[key] } }
+    func setUserDefault(_ value: Any?, forKey key: String) { defaultsLock.withLock { defaults[key] = value } }
     func notifyCapabilitiesChanged() {}
     func setStreamingDisplayActive(_ active: Bool) {}
 }
