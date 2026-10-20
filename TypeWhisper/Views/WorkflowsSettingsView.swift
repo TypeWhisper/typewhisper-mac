@@ -91,6 +91,8 @@ private struct MyWorkflowsPage: View {
 
     @State private var searchText = ""
     @State private var pendingDeleteWorkflowId: UUID?
+    @FocusState private var focusedFallbackArrow: ReorderArrowFocus?
+    @FocusState private var focusedWorkflowArrow: ReorderArrowFocus?
 
     private var trimmedSearchText: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -293,7 +295,9 @@ private struct MyWorkflowsPage: View {
         let fallbacks = promptProcessingService.fallbackPriorityList
 
         return VStack(spacing: 0) {
-            ForEach(Array(fallbacks.enumerated()), id: \.element.id) { index, item in
+            // Rows are identified by position, so the keyboard focus can follow a moved row (see
+            // ReorderArrowButtons).
+            ForEach(Array(fallbacks.enumerated()), id: \.offset) { index, item in
                 LLMFallbackPriorityRow(
                     item: item,
                     index: index,
@@ -302,7 +306,8 @@ private struct MyWorkflowsPage: View {
                     onMove: { item, offset in
                         moveFallback(item, by: offset)
                     },
-                    onDrop: moveFallback(draggedID:droppedOn:)
+                    onDrop: moveFallback(draggedID:droppedOn:),
+                    arrowFocus: $focusedFallbackArrow
                 )
 
                 if index < fallbacks.count - 1 {
@@ -473,9 +478,14 @@ private struct MyWorkflowsPage: View {
         let canReorder = !isFilteringWorkflows
 
         return LazyVStack(spacing: 0) {
-            ForEach(Array(filteredWorkflows.enumerated()), id: \.element.id) { index, workflow in
+            // Rows are identified by position, so the keyboard focus can follow a moved row (see
+            // ReorderArrowButtons).
+            ForEach(Array(filteredWorkflows.enumerated()), id: \.offset) { index, workflow in
                 WorkflowRow(
                     workflow: workflow,
+                    position: orderedIds.firstIndex(of: workflow.id) ?? index,
+                    count: orderedIds.count,
+                    arrowFocus: $focusedWorkflowArrow,
                     canMoveUp: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 > 0 } ?? false),
                     canMoveDown: canReorder && (orderedIds.firstIndex(of: workflow.id).map { $0 < orderedIds.count - 1 } ?? false),
                     isReorderingEnabled: canReorder,
@@ -528,6 +538,7 @@ private struct LLMFallbackPriorityRow: View {
     @ObservedObject var promptProcessingService: PromptProcessingService
     let onMove: (LLMFallbackPriorityItem, Int) -> Void
     let onDrop: (UUID, LLMFallbackPriorityItem) -> Bool
+    let arrowFocus: FocusState<ReorderArrowFocus?>.Binding
 
     @State private var isDropTargeted = false
     @State private var isHovered = false
@@ -628,6 +639,8 @@ private struct LLMFallbackPriorityRow: View {
 
             statusLabel
 
+            moveButtons
+
             Button {
                 promptProcessingService.removeLLMFallback(item)
             } label: {
@@ -691,6 +704,26 @@ private struct LLMFallbackPriorityRow: View {
             moveUp: { onMove(item, -1) },
             moveDown: { onMove(item, 1) }
         ))
+    }
+
+    /// Moves the row with the keyboard as well as by dragging. They use the same move as the
+    /// context menu and the VoiceOver actions; the locked list disables them with the whole row.
+    private var moveButtons: some View {
+        let providerName = promptProcessingService.displayName(for: item.providerId)
+        let isLocked = promptProcessingService.isFallbackListLocked
+        return ReorderArrowButtons(
+            position: index,
+            count: count,
+            canMoveUp: canMoveUp && !isLocked,
+            canMoveDown: canMoveDown && !isLocked,
+            upLabel: String(localized: "Move \(providerName) up"),
+            downLabel: String(localized: "Move \(providerName) down"),
+            spacing: 2,
+            focus: arrowFocus,
+            moveUp: { onMove(item, -1) },
+            moveDown: { onMove(item, 1) }
+        )
+        .font(.system(size: 12))
     }
 
     @ViewBuilder
@@ -850,6 +883,78 @@ private struct LLMFallbackPriorityRow: View {
     }
 }
 
+/// The reorder arrow that has the keyboard focus, by row position.
+private struct ReorderArrowFocus: Hashable {
+    enum Arrow: Hashable {
+        case up
+        case down
+    }
+
+    let position: Int
+    let arrow: Arrow
+}
+
+/// Up and down buttons that reorder a row from the keyboard as well as by dragging. With keyboard
+/// navigation on, Tab reaches them and Space presses them. After a move the focus goes to the
+/// row's new position: to the same arrow, or to the other one once the row reaches the top or
+/// bottom, so the row can be moved again right away.
+///
+/// The list must identify its rows by position. A row identified by its item is rebuilt when it
+/// moves, and its arrows then show the focus ring without receiving key presses.
+private struct ReorderArrowButtons: View {
+    let position: Int
+    let count: Int
+    let canMoveUp: Bool
+    let canMoveDown: Bool
+    let upLabel: String
+    let downLabel: String
+    var spacing: CGFloat = 6
+    let focus: FocusState<ReorderArrowFocus?>.Binding
+    let moveUp: () -> Void
+    let moveDown: () -> Void
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            arrowButton(.up)
+            arrowButton(.down)
+        }
+    }
+
+    private func arrowButton(_ arrow: ReorderArrowFocus.Arrow) -> some View {
+        let canMove = arrow == .up ? canMoveUp : canMoveDown
+        // Plain buttons: in the fallback list, a focused borderless (AppKit-backed) arrow that
+        // was disabled while it handled Space hung the app in SwiftUI's focus update.
+        return Button {
+            press(arrow)
+        } label: {
+            Image(systemName: arrow == .up ? "arrow.up" : "arrow.down")
+        }
+        .buttonStyle(.plain)
+        .disabled(!canMove)
+        .reorderArrowStyle(canMove: canMove)
+        .focused(focus, equals: ReorderArrowFocus(position: position, arrow: arrow))
+        .help(arrow == .up ? String(localized: "Move Up") : String(localized: "Move Down"))
+        .accessibilityLabel(arrow == .up ? upLabel : downLabel)
+    }
+
+    private func press(_ arrow: ReorderArrowFocus.Arrow) {
+        let hadFocus = focus.wrappedValue == ReorderArrowFocus(position: position, arrow: arrow)
+        arrow == .up ? moveUp() : moveDown()
+        guard hadFocus else { return }
+
+        let newPosition = position + (arrow == .up ? -1 : 1)
+        let canMoveAgain = arrow == .up ? newPosition > 0 : newPosition < count - 1
+        let target = ReorderArrowFocus(
+            position: newPosition,
+            arrow: canMoveAgain ? arrow : (arrow == .up ? .down : .up)
+        )
+        // The arrow at the new position is enabled once the moved row is drawn there.
+        DispatchQueue.main.async {
+            focus.wrappedValue = target
+        }
+    }
+}
+
 /// Offers Move Up and Move Down as accessibility actions so rows that sort by drag and drop
 /// can also be reordered with VoiceOver.
 private struct ReorderAccessibilityActions: ViewModifier {
@@ -877,6 +982,12 @@ private struct ReorderAccessibilityActions: ViewModifier {
 }
 
 private extension View {
+    /// Reorder arrows use the secondary colour, which hides the dimmed look of a disabled
+    /// button, so an arrow that cannot move gets a fainter colour.
+    func reorderArrowStyle(canMove: Bool) -> some View {
+        foregroundStyle(canMove ? AnyShapeStyle(.secondary) : AnyShapeStyle(.tertiary))
+    }
+
     @ViewBuilder
     func fallbackPriorityReordering(
         fallbackID: String,
@@ -899,6 +1010,10 @@ private extension View {
 
 private struct WorkflowRow: View {
     let workflow: Workflow
+    /// The row's place in the full workflow order.
+    let position: Int
+    let count: Int
+    let arrowFocus: FocusState<ReorderArrowFocus?>.Binding
     let canMoveUp: Bool
     let canMoveDown: Bool
     let isReorderingEnabled: Bool
@@ -1012,31 +1127,27 @@ private struct WorkflowRow: View {
                 .controlSize(.small)
                 .accessibilityLabel(String(localized: "Enable \(workflow.name)"))
 
-                Button(action: onMoveUp) {
-                    Image(systemName: "arrow.up")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!canMoveUp)
-                .help(String(localized: "Move Up"))
-                .accessibilityLabel(localizedAppText(
-                    "Move \(workflow.name) up",
-                    de: "\(workflow.name) nach oben bewegen",
-                    ja: "\(workflow.name)を上へ移動",
-                    zh: "上移 \(workflow.name)"
-                ))
-
-                Button(action: onMoveDown) {
-                    Image(systemName: "arrow.down")
-                }
-                .buttonStyle(.borderless)
-                .disabled(!canMoveDown)
-                .help(String(localized: "Move Down"))
-                .accessibilityLabel(localizedAppText(
-                    "Move \(workflow.name) down",
-                    de: "\(workflow.name) nach unten bewegen",
-                    ja: "\(workflow.name)を下へ移動",
-                    zh: "下移 \(workflow.name)"
-                ))
+                ReorderArrowButtons(
+                    position: position,
+                    count: count,
+                    canMoveUp: canMoveUp,
+                    canMoveDown: canMoveDown,
+                    upLabel: localizedAppText(
+                        "Move \(workflow.name) up",
+                        de: "\(workflow.name) nach oben bewegen",
+                        ja: "\(workflow.name)を上へ移動",
+                        zh: "上移 \(workflow.name)"
+                    ),
+                    downLabel: localizedAppText(
+                        "Move \(workflow.name) down",
+                        de: "\(workflow.name) nach unten bewegen",
+                        ja: "\(workflow.name)を下へ移動",
+                        zh: "下移 \(workflow.name)"
+                    ),
+                    focus: arrowFocus,
+                    moveUp: onMoveUp,
+                    moveDown: onMoveDown
+                )
 
                 Button(action: onEdit) {
                     Image(systemName: "pencil")
