@@ -1,82 +1,338 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Billed yearly" : {
+    "Billing" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "年払い"
+            "value" : "請求"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按年计费"
+            "value" : "计费"
           }
         }
       }
     },
-    "Enterprise covers up to 50 devices with a reply within one business day and help with rollout and security reviews. For more devices, contact sales." : {
+    "Choose" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enterpriseは最大50台のデバイスを対象とし、1営業日以内の返信と、展開およびセキュリティレビューのサポートを提供します。それ以上のデバイスについては営業担当にお問い合わせください。"
+            "value" : "選択"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "企业版最多覆盖 50 台设备，一个工作日内回复，并协助部署和安全审查。如需更多设备，请联系销售。"
+            "value" : "选择"
           }
         }
       }
     },
-    "Enterprise is available as a monthly or yearly subscription; a year costs ten monthly prices." : {
+    "Community support on Discord" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enterpriseは月額または年額のサブスクリプションで提供されます。年額は月額10か月分の価格です。"
+            "value" : "Discordでのコミュニティサポート"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "企业版提供月度或年度订阅；一年的价格相当于十个月的月费。"
+            "value" : "Discord 社区支持"
           }
         }
       }
     },
-    "from 199 EUR/mo" : {
+    "Core dictation stays free and open source. A commercial license unlocks Sync Dictionary & Snippets, Learn from Corrections, non-GPL terms, procurement, and support." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "月額199ユーロから"
+            "value" : "基本の音声入力は無料でオープンソースのままです。商用ライセンスで「辞書とスニペットの同期」「修正からの学習」、GPL以外の条件、調達、サポートが利用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 199 EUR/mo"
+            "value" : "核心听写功能始终免费且开源。商用许可证可解锁「同步词典与片段」「从更正中学习」、非 GPL 条款、采购和技术支持。"
           }
         }
       }
     },
-    "Monthly and yearly renew automatically; a year costs ten monthly prices. Lifetime is a one-time purchase for the same tier." : {
+    "Dictation, local engines, workflows, and add-ons" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "月額と年額は自動更新です。年額は月額10か月分の価格です。ライフタイムは同じ階層の買い切りプランです。"
+            "value" : "音声入力、ローカルエンジン、ワークフロー、アドオン"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "月度和年度方案会自动续费；一年的价格相当于十个月的月费。同档位的终身版为一次性购买。"
+            "value" : "听写、本地引擎、工作流和插件"
+          }
+        }
+      }
+    },
+    "Everything in Individual included" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人のすべてを含む"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含个人版的全部内容"
+          }
+        }
+      }
+    },
+    "Everything in Team included" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チームのすべてを含む"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含团队版的全部内容"
+          }
+        }
+      }
+    },
+    "For one person" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1人向け"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于个人"
+          }
+        }
+      }
+    },
+    "For organizations" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織向け"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于组织"
+          }
+        }
+      }
+    },
+    "For small teams" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小規模チーム向け"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于小型团队"
+          }
+        }
+      }
+    },
+    "Full source code on GitHub" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHubで全ソースコードを公開"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GitHub 上的完整源代码"
+          }
+        }
+      }
+    },
+    "Get this license" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このライセンスを購入"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "获取此许可证"
+          }
+        }
+      }
+    },
+    "Help with rollout and security reviews" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "展開とセキュリティレビューのサポート"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "协助部署和安全审查"
+          }
+        }
+      }
+    },
+    "If you already bought a supporter key, enter it below. GitHub Sponsors can still be claimed on the web." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すでにサポーターキーをお持ちの場合は下に入力してください。GitHub Sponsorsはウェブで引き続き申請できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果你已购买支持者密钥，请在下方输入。GitHub Sponsors 仍可在网页上申领。"
+          }
+        }
+      }
+    },
+    "License key" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライセンスキー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可证密钥"
+          }
+        }
+      }
+    },
+    "Licensing" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライセンス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可"
+          }
+        }
+      }
+    },
+    "Local engines keep audio on your Mac" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルエンジンなら音声はMacから出ません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地引擎让音频留在你的 Mac 上"
+          }
+        }
+      }
+    },
+    "Local first" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカル優先"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地优先"
+          }
+        }
+      }
+    },
+    "Managed by your organization" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織によって管理されています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "由你的组织管理"
+          }
+        }
+      }
+    },
+    "Managed license" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "管理対象ライセンス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "托管许可证"
+          }
+        }
+      }
+    },
+    "Monthly" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月額"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "月付"
           }
         }
       }
@@ -97,6 +353,102 @@
         }
       }
     },
+    "No account needed" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アカウント不要"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无需账户"
+          }
+        }
+      }
+    },
+    "Non-GPL terms, invoices, and support" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPL以外の条件、請求書、サポート"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "非 GPL 条款、发票和支持"
+          }
+        }
+      }
+    },
+    "One invoice for the whole team" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "チーム全体で1つの請求書"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "整个团队一张发票"
+          }
+        }
+      }
+    },
+    "Open source under GPLv3. Premium when you need it." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPLv3のオープンソース。必要なときにPremiumを。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "GPLv3 开源。需要时再升级 Premium。"
+          }
+        }
+      }
+    },
+    "Opens the Polar.sh customer portal where you can manage your subscription, update payment methods, or cancel. Deactivating removes the license from this device; you can reactivate it on another Mac." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Polar.shのカスタマーポータルが開き、サブスクリプションの管理、支払い方法の更新、解約ができます。無効化するとこのデバイスからライセンスが削除され、別のMacで再度有効化できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Polar.sh 客户门户，可管理订阅、更新付款方式或取消。停用会从此设备移除许可证，你可以在另一台 Mac 上重新激活。"
+          }
+        }
+      }
+    },
+    "Pay what you want from the listed price. Checkout opens at polar.sh in your browser." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示価格以上でお好きな金額をお支払いいただけます。購入手続きはブラウザーでpolar.shが開きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在标价基础上自定金额。结账将在浏览器中打开 polar.sh。"
+          }
+        }
+      }
+    },
     "per year" : {
       "localizations" : {
         "ja" : {
@@ -113,6 +465,54 @@
         }
       }
     },
+    "Personal or internal use" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "個人または社内での利用"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人或内部使用"
+          }
+        }
+      }
+    },
+    "Plans" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "方案"
+          }
+        }
+      }
+    },
+    "Purchase" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "購入"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "购买"
+          }
+        }
+      }
+    },
     "Recurring plan for up to 50 devices with faster support." : {
       "localizations" : {
         "ja" : {
@@ -125,6 +525,54 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "适用于最多 50 台设备并提供更快支持的周期续订计划。"
+          }
+        }
+      }
+    },
+    "Reply within one business day" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1営業日以内に返信"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一个工作日内回复"
+          }
+        }
+      }
+    },
+    "Sync Dictionary & Snippets, Learn from Corrections" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "辞書とスニペットの同期、修正からの学習"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同步词典与片段、从更正中学习"
+          }
+        }
+      }
+    },
+    "The core app stays open source" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コアアプリはオープンソースのままです"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "核心应用始终开源"
           }
         }
       }
@@ -275,34 +723,98 @@
         }
       }
     },
-    "Up to 50 devices, a reply within one business day, and help with rollout and security reviews." : {
+    "Up to 10 devices" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最大50台のデバイス、1営業日以内の返信、展開とセキュリティレビューのサポート。"
+            "value" : "最大10台のデバイス"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最多 50 台设备，一个工作日内回复，并协助部署和安全审查。"
+            "value" : "最多 10 台设备"
           }
         }
       }
     },
-    "Yearly subscription" : {
+    "Up to 3 devices" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "年額サブスクリプション"
+            "value" : "最大3台のデバイス"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "年度订阅"
+            "value" : "最多 3 台设备"
+          }
+        }
+      }
+    },
+    "Up to 50 devices" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大50台のデバイス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最多 50 台设备"
+          }
+        }
+      }
+    },
+    "Yearly" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年額"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "年付"
+          }
+        }
+      }
+    },
+    "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライセンスは管理者が提供します。TypeWhisperはキーを手入力することなく自動的に有効化します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "许可证由管理员提供。TypeWhisper 会自动激活，无需手动输入密钥。"
+          }
+        }
+      }
+    },
+    "Your license" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お使いのライセンス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的许可证"
           }
         }
       }
@@ -7143,6 +7655,22 @@
         }
       }
     },
+    "Your plan" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のプラン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的方案"
+          }
+        }
+      }
+    },
     "“um”, “ah” and “eh” are only removed from English text because they are real words in other languages." : {
       "localizations" : {
         "de" : {
@@ -13898,22 +14426,6 @@
         }
       }
     },
-    "Best Value" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一番お得"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最佳性价比"
-          }
-        }
-      }
-    },
     "Boosting" : {
       "comment" : "A group of controls that lets the user configure how a term is boosted.",
       "isCommentAutoGenerated" : true,
@@ -14852,22 +15364,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择此工作流应产生的具体结果。"
-          }
-        }
-      }
-    },
-    "Choose the plan that fits." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最適なプランを選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择最适合的方案。"
           }
         }
       }
@@ -19633,22 +20129,6 @@
         }
       }
     },
-    "Everything stays on this page. Pick the plan that matches how you use TypeWhisper." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このページ内ですべて完結します。TypeWhisperの用途に合ったプランを選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所有选项都在此页面中。请选择符合你使用场景的方案。"
-          }
-        }
-      }
-    },
     "Example: EN <-> DE translation with formatting preserved." : {
       "localizations" : {
         "ja" : {
@@ -21137,38 +21617,6 @@
         }
       }
     },
-    "from 5 EUR/mo" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月額5ユーロから"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 5 EUR/mo"
-          }
-        }
-      }
-    },
-    "from 19 EUR/mo" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月額19ユーロから"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从 19 EUR/mo"
-          }
-        }
-      }
-    },
     "From context to behavior in three clear steps." : {
       "localizations" : {
         "ja" : {
@@ -22045,22 +22493,6 @@
         }
       }
     },
-    "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "すでにサポーターキーを購入済みの場合は、上記に入力してください。GitHub Sponsorsは引き続きウェブから申請できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "如果你已购买支持者密钥，请在上方输入。GitHub Sponsors 身份仍可在网页上验证。"
-          }
-        }
-      }
-    },
     "If you need non-GPL terms, procurement, support, or proprietary redistribution rights, purchase a commercial license on Polar.sh and enter the key below." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -22464,22 +22896,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "个人商业许可证，最多支持 3 台设备，按期续费。"
-          }
-        }
-      }
-    },
-    "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 3 devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Individualは、非GPL条件、調達、サポート、または最大3台のデバイスでの独自の配布を必要とする1人のユーザーを対象とします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "个人版适用于需要非 GPL 条款、采购支持、技术支持或最多 3 台设备专有分发权的单人用户。"
           }
         }
       }
@@ -25671,22 +26087,6 @@
         }
       }
     },
-    "Monthly subscription" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月額サブスクリプション"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "月度订阅"
-          }
-        }
-      }
-    },
     "Monthly Subscription" : {
       "localizations" : {
         "de" : {
@@ -28140,22 +28540,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "一次性付款。永久商业使用 TypeWhisper，无需续订费用。"
-          }
-        }
-      }
-    },
-    "One-time purchase" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "買い切り"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "一次性购买"
           }
         }
       }
@@ -30886,22 +31270,6 @@
         }
       }
     },
-    "Pricing in short" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "料金の概要"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "价格概览"
-          }
-        }
-      }
-    },
     "Pricing, lifetime options, procurement, and support are clearer on the website." : {
       "localizations" : {
         "ja" : {
@@ -31152,22 +31520,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "采购、支持、席位管理和多设备部署。"
-          }
-        }
-      }
-    },
-    "Procurement, support, managed seats, and up to 10 devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "調達、サポート、シート管理、および最大10台のデバイス。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "包含采购、支持、席位管理，最多支持 10 台设备。"
           }
         }
       }
@@ -34305,28 +34657,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "移除麦克风"
-          }
-        }
-      }
-    },
-    "Removes the license from this device. You can reactivate it on another Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entfernt die Lizenz von diesem Gerät. Du kannst sie auf einem anderen Mac wieder aktivieren."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このデバイスからライセンスを削除します。別のMacで再度アクティベートできます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "从此设备移除许可证。之后可以在另一台 Mac 上重新激活。"
           }
         }
       }
@@ -38582,22 +38912,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "团队版"
-          }
-        }
-      }
-    },
-    "Team covers procurement-friendly licensing, support, managed seats, and up to 10 devices." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Teamは、調達しやすいライセンス、サポート、管理されたシート、および最大10台のデバイスを対象とします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "团队版提供便于采购的许可方式、技术支持和席位管理，最多支持 10 台设备。"
           }
         }
       }
