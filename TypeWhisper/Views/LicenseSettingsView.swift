@@ -61,6 +61,15 @@ struct LicenseSettingsView: View {
                     .padding(SettingsLayoutMetrics.pagePadding)
                 }
                 .frame(minWidth: 560, minHeight: 360)
+                .onChange(of: activationNotice) { _, notice in
+                    announceActivationResult(notice, isError: false)
+                }
+                .onChange(of: license.activationError) { _, error in
+                    announceActivationResult(error, isError: true)
+                }
+                .onChange(of: license.supporterActivationError) { _, error in
+                    announceActivationResult(error, isError: true)
+                }
                 .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
                     if license.isSupporter {
                         await supporterDiscord.refreshStatusIfNeeded()
@@ -81,6 +90,7 @@ struct LicenseSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Label(localizedAppText("Managed by your organization", de: "Von deiner Organisation verwaltet"), systemImage: "building.2")
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
                 Text(localizedAppText(
                     "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry.",
                     de: "Deine Administration stellt die Lizenz bereit. TypeWhisper aktiviert sie automatisch ohne manuelle Schlüsseleingabe."
@@ -90,9 +100,12 @@ struct LicenseSettingsView: View {
                 if license.isActivating {
                     ProgressView()
                         .controlSize(.small)
+                        .accessibilityLabel(activatingAccessibilityLabel)
                 } else if let error = license.managedLicenseError {
+                    // Only the red color marks this text as an error.
                     Text(error)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(String(localized: "Error: \(error)"))
                 } else if license.hasCommercialLicense {
                     Label(localizedAppText("Licensed", de: "Lizenziert"), systemImage: "checkmark.seal.fill")
                         .foregroundStyle(.green)
@@ -116,6 +129,7 @@ struct LicenseSettingsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(localizedAppText("Choose the plan that fits.", de: "Wähle den passenden Plan."))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(localizedAppText(
                 "Everything stays on this page. Pick the plan that matches how you use TypeWhisper.",
@@ -188,6 +202,7 @@ struct LicenseSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(localizedAppText("Already have a key?", de: "Bereits einen Schlüssel?"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(localizedAppText(
                     "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise.",
@@ -243,6 +258,7 @@ struct LicenseSettingsView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(localizedAppText("Pricing in short", de: "Preise im Überblick"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     if let selectedCommercialTier {
                         HStack(alignment: .top, spacing: 12) {
@@ -322,6 +338,7 @@ struct LicenseSettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(localizedAppText("Manage this Mac and your subscription", de: "Diesen Mac und dein Abo verwalten"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     pricingWebsiteLink
 
@@ -351,6 +368,7 @@ struct LicenseSettingsView: View {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.red)
                             .font(.caption)
+                            .accessibilityLabel(String(localized: "Error: \(error)"))
                     }
                 }
             }
@@ -380,6 +398,7 @@ struct LicenseSettingsView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(localizedAppText("Supporter", de: "Supporter"))
                     .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(supporterDescriptionText)
                     .foregroundStyle(.secondary)
@@ -411,6 +430,7 @@ struct LicenseSettingsView: View {
                         Label(error, systemImage: "exclamationmark.triangle")
                             .foregroundStyle(.red)
                             .font(.caption)
+                            .accessibilityLabel(String(localized: "Error: \(error)"))
                     }
                 } else {
                     if license.isLicenseManaged {
@@ -476,6 +496,12 @@ struct LicenseSettingsView: View {
             TextField(localizedAppText("TYPEWHISPER-xxxx-xxxx", de: "TYPEWHISPER-xxxx-xxxx"), text: input)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedField, equals: .licenseKey)
+                .accessibilityLabel(localizedAppText(
+                    "License key",
+                    de: "Lizenzschlüssel",
+                    ja: "ライセンスキー",
+                    zh: "许可证密钥"
+                ))
 
             Button(localizedAppText("Activate", de: "Aktivieren")) {
                 Task { await action() }
@@ -486,13 +512,25 @@ struct LicenseSettingsView: View {
         if isActivating {
             ProgressView()
                 .controlSize(.small)
+                .accessibilityLabel(activatingAccessibilityLabel)
         }
 
         if let error {
             Label(error, systemImage: "exclamationmark.triangle")
                 .foregroundStyle(.red)
                 .font(.caption)
+                .accessibilityLabel(String(localized: "Error: \(error)"))
         }
+    }
+
+    private var activatingAccessibilityLabel: String {
+        localizedAppText("Activating license", de: "Lizenz wird aktiviert", ja: "ライセンスを有効化中", zh: "正在激活许可证")
+    }
+
+    /// The result of an activation appears below the field, where VoiceOver focus usually is not.
+    private func announceActivationResult(_ message: String?, isError: Bool) {
+        guard let message, !message.isEmpty else { return }
+        AccessibilityAnnouncementService().announce(isError ? String(localized: "Error: \(message)") : message)
     }
 
     // MARK: - Helpers
@@ -584,6 +622,12 @@ struct LicenseSettingsView: View {
             if supporterDiscord.isWorking {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(localizedAppText(
+                        "Checking Discord status",
+                        de: "Discord-Status wird geprüft",
+                        ja: "Discordのステータスを確認中",
+                        zh: "正在检查 Discord 状态"
+                    ))
             }
 
             if let message = supporterDiscord.claimStatus.errorMessage,
@@ -619,6 +663,8 @@ struct LicenseSettingsView: View {
             )
         }
         .buttonStyle(.plain)
+        // The border and the check mark show the chosen plan only visually.
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func planSummaryCard(
@@ -948,6 +994,7 @@ struct LicenseSettingsView: View {
             VStack(spacing: 6) {
                 Image(systemName: supporterTierIcon(tier))
                     .foregroundStyle(supporterTierColor(tier))
+                    .accessibilityHidden(true)
                 Text(supporterTierDisplayName(tier))
                     .font(.caption.bold())
                 Text("\(price) EUR")
@@ -957,6 +1004,10 @@ struct LicenseSettingsView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
         }
+        // Only the prominent button style marks the tier you already support with.
+        .accessibilityValue(isCurrentTier
+            ? localizedAppText("Your current tier", de: "Deine aktuelle Stufe", ja: "現在のランク", zh: "你当前的等级")
+            : "")
 
         if isCurrentTier {
             button.buttonStyle(.borderedProminent)
@@ -1062,6 +1113,7 @@ private struct PurchaseOptionCardView: View {
     let action: () -> Void
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -1112,6 +1164,7 @@ private struct PurchaseOptionCardView: View {
                                         .font(.subheadline.weight(.semibold))
                                         .foregroundStyle(accent)
                                 }
+                                .accessibilityHidden(true)
 
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(eyebrow)
@@ -1166,7 +1219,7 @@ private struct PurchaseOptionCardView: View {
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .offset(y: isHovering ? -1 : 0)
+            .offset(y: isHovering && !reduceMotion ? -1 : 0)
             .shadow(
                 color: accent.opacity(emphasized
                     ? (isHovering ? 0.14 : 0.10)
@@ -1196,6 +1249,7 @@ private struct PlanSelectionCardView: View {
     let descriptionMinHeight: CGFloat
 
     @State private var isHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -1231,6 +1285,7 @@ private struct PlanSelectionCardView: View {
                     if selected {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(accent)
+                            .accessibilityHidden(true)
                     } else if let trailingLabel {
                         Text(trailingLabel)
                             .font(.caption.weight(.semibold))
@@ -1251,7 +1306,7 @@ private struct PlanSelectionCardView: View {
             .padding(16)
         }
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .offset(y: isHovering ? -1 : 0)
+        .offset(y: isHovering && !reduceMotion ? -1 : 0)
         .shadow(
             color: (selected ? accent : .black).opacity(isHovering ? 0.12 : 0.05),
             radius: isHovering ? 7 : 4,
