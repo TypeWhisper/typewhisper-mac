@@ -1,6 +1,28 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "The language model provider your organization requires needs macOS 26 or later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, benötigt macOS 26 oder neuer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "組織が指定した言語モデルプロバイダーには macOS 26 以降が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的组织要求的语言模型提供方需要 macOS 26 或更高版本。"
+          }
+        }
+      }
+    },
     "The transcription provider your organization requires is not installed." : {
       "localizations" : {
         "de" : {
