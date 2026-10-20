@@ -221,6 +221,25 @@ private struct PromptRuleFilterBanner: View {
     }
 }
 
+enum RuleReorder {
+    /// Indices in the full rule list of the visible rules before and after `id`,
+    /// or nil where it has no visible neighbour.
+    static func visibleNeighbourIndices<ID: Equatable>(
+        of id: ID,
+        visibleIDs: [ID],
+        allIDs: [ID]
+    ) -> (previous: Int?, next: Int?) {
+        guard let position = visibleIDs.firstIndex(of: id) else { return (nil, nil) }
+        let previous = position > visibleIDs.startIndex
+            ? allIDs.firstIndex(of: visibleIDs[position - 1])
+            : nil
+        let next = position < visibleIDs.index(before: visibleIDs.endIndex)
+            ? allIDs.firstIndex(of: visibleIDs[position + 1])
+            : nil
+        return (previous, next)
+    }
+}
+
 private struct RuleRow: View {
     let profile: Profile
     @ObservedObject var viewModel: ProfilesViewModel
@@ -333,16 +352,22 @@ private struct RuleRow: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityRowLabel)
         .accessibilityActions {
-            if let profileIndex, profileIndex > 0 {
+            // Neighbours are the rules the user sees: a prompt filter can hide rules in between.
+            let neighbours = RuleReorder.visibleNeighbourIndices(
+                of: profile.id,
+                visibleIDs: viewModel.visibleProfiles.map(\.id),
+                allIDs: viewModel.profiles.map(\.id)
+            )
+            if let profileIndex, let previous = neighbours.previous {
                 Button(String(localized: "Move Up")) {
-                    viewModel.moveProfile(fromIndex: profileIndex, toIndex: profileIndex - 1)
+                    viewModel.moveProfile(fromIndex: profileIndex, toIndex: previous)
                 }
             }
-            if let profileIndex, profileIndex < viewModel.profiles.count - 1 {
+            if let profileIndex, let next = neighbours.next {
                 // Moving the next rule up is the same as moving this one down; moveProfile
                 // inserts before the target, so it cannot move a rule below its neighbour.
                 Button(String(localized: "Move Down")) {
-                    viewModel.moveProfile(fromIndex: profileIndex + 1, toIndex: profileIndex)
+                    viewModel.moveProfile(fromIndex: next, toIndex: profileIndex)
                 }
             }
         }
