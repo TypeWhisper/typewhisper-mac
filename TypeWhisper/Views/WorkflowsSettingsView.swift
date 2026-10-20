@@ -1317,6 +1317,9 @@ private struct WorkflowEditorPage: View {
     @ObservedObject private var navigation = WorkflowsNavigationCoordinator.shared
 
     @State private var draft: WorkflowDraft
+    /// The draft as the editor opened it, to tell whether closing would lose changes.
+    @State private var savedDraft: WorkflowDraft
+    @State private var isConfirmingDiscard = false
     @State private var validationMessage: String?
     @State private var isAdvancedExpanded = false
     @State private var showingAppPicker = false
@@ -1329,7 +1332,9 @@ private struct WorkflowEditorPage: View {
 
     init(workflow: Workflow?) {
         self.workflow = workflow
-        _draft = State(initialValue: workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText))
+        let initialDraft = workflow.map(WorkflowDraft.init) ?? WorkflowDraft(template: .cleanedText)
+        _draft = State(initialValue: initialDraft)
+        _savedDraft = State(initialValue: initialDraft)
     }
 
     private var isEditing: Bool { workflow != nil }
@@ -1360,6 +1365,29 @@ private struct WorkflowEditorPage: View {
                 selectedBundleIdentifiers: $draft.appBundleIdentifiers
             )
         }
+        .alert(
+            String(localized: "Do you want to save the changes to “\(draft.resolvedName)”?"),
+            isPresented: $isConfirmingDiscard
+        ) {
+            Button(String(localized: "Save")) {
+                save()
+            }
+            Button(String(localized: "Discard Changes"), role: .destructive) {
+                navigation.goBackToList()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "Your changes will be lost if you don’t save them."))
+        }
+    }
+
+    /// Back and Esc leave the editor; with unsaved changes they ask first.
+    private func close() {
+        if draft.hasUnsavedChanges(comparedTo: savedDraft) {
+            isConfirmingDiscard = true
+        } else {
+            navigation.goBackToList()
+        }
     }
 
     private var header: some View {
@@ -1373,16 +1401,20 @@ private struct WorkflowEditorPage: View {
         ) {
             HStack(spacing: 12) {
                 Button {
-                    navigation.goBackToList()
+                    close()
                 } label: {
                     Label(localizedAppText("Back", de: "Zurück"), systemImage: "chevron.left")
                 }
                 .buttonStyle(.borderless)
+                // Esc, like Cancel in a sheet, also when no control has focus. Open menus, the
+                // search field and the shortcut recorder still get Esc first.
+                .keyboardShortcut(.cancelAction)
 
                 Button(localizedAppText("Save Workflow", de: "Workflow speichern")) {
                     save()
                 }
                 .buttonStyle(.borderedProminent)
+                .keyboardShortcut("s", modifiers: .command)
             }
         }
     }
@@ -3576,6 +3608,34 @@ struct WorkflowDraft {
             autoEnterMode: autoEnterMode,
             targetActionPluginId: template == .dictation ? nil : targetActionPluginId,
             numberNormalizationModeRaw: numberNormalizationMode == .inherit ? nil : numberNormalizationMode.rawValue
+        )
+    }
+
+    /// Whether saving this draft would store something other than saving `savedDraft` would.
+    /// It compares what the editor saves, so an edit that was undone, or one that saving drops
+    /// (such as apps picked for an app trigger that is switched off), is not an unsaved change.
+    func hasUnsavedChanges(comparedTo savedDraft: WorkflowDraft) -> Bool {
+        savedValues != savedDraft.savedValues
+    }
+
+    private struct SavedValues: Equatable {
+        let name: String
+        let isEnabled: Bool
+        let template: WorkflowTemplate
+        let trigger: WorkflowTrigger?
+        let behavior: WorkflowBehavior
+        let output: WorkflowOutput
+    }
+
+    /// The values `WorkflowEditorPage.save()` writes to the workflow.
+    private var savedValues: SavedValues {
+        SavedValues(
+            name: resolvedName,
+            isEnabled: isEnabled,
+            template: template,
+            trigger: resolvedTrigger(),
+            behavior: resolvedBehavior(),
+            output: resolvedOutput()
         )
     }
 

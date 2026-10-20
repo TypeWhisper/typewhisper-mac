@@ -17929,6 +17929,28 @@
         }
       }
     },
+    "Discard Changes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Änderungen verwerfen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更を破棄"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放弃更改"
+          }
+        }
+      }
+    },
     "Disconnected" : {
       "localizations" : {
         "de" : {
@@ -18089,6 +18111,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "显示"
+          }
+        }
+      }
+    },
+    "Do you want to save the changes to “%@”?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Möchtest du die Änderungen an „%@“ sichern?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」への変更を保存しますか？"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要保存对“%@”的更改吗？"
           }
         }
       }
@@ -45514,6 +45558,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Appleアカウントを使って、PolarとApp Storeの利用権をMacとiPhoneで共有できます。"
+          }
+        }
+      }
+    },
+    "Your changes will be lost if you don’t save them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Änderungen gehen verloren, wenn du sie nicht sicherst."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存しない場合、変更内容は失われます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果不保存，你的更改将会丢失。"
           }
         }
       }
