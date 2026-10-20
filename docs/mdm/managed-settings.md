@@ -120,7 +120,8 @@ the HTTP API, regardless of the selected engine, workflow overrides or per-featu
 engines. An API request that asks for another engine or model gets 403. The engine and
 model pickers are locked. The user's own engine selection is kept and applies again
 once the pair is removed; the model the user had selected in that engine is restored
-then as well.
+then as well. If the engine had no model selected, the enforced model stays selected,
+because plugins cannot clear a selection.
 
 An **enforced LLM pair** replaces the provider and model of every language model call.
 The workflow editor and the fallback list keep their saved selections but are locked.

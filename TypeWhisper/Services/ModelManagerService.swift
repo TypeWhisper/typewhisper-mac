@@ -777,6 +777,8 @@ final class ModelManagerService: ObservableObject {
         guard !retained.isEmpty else { return }
         for (providerId, modelId) in retained {
             guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { continue }
+            // An empty value means the engine had no model selected. Plugins cannot clear a
+            // selection, so the enforced model stays selected then.
             if !modelId.isEmpty {
                 engine.selectModel(modelId)
             }
