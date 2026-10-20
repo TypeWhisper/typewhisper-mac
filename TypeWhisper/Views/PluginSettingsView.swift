@@ -1647,7 +1647,7 @@ struct PluginSettingsView: View {
 
         // The install button disappears with the page change, so VoiceOver users hear the outcome instead.
         let name = installedPlugin.manifest.name
-        AccessibilityAnnouncementService().announce(localizedAppText(
+        ServiceContainer.shared.accessibilityAnnouncementService.announce(localizedAppText(
             "\(name) installed",
             de: "\(name) installiert",
             ja: "\(name)をインストールしました",
@@ -2630,9 +2630,11 @@ private struct PluginInstallStateView: View {
     private func announce(_ state: PluginRegistryService.InstallState) {
         switch state {
         case .error(let message):
-            AccessibilityAnnouncementService().announce(String(localized: "Error: \(message)"))
+            ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
         case .restartRequired:
-            AccessibilityAnnouncementService().announce(String(localized: "Restart TypeWhisper to finish updating."))
+            ServiceContainer.shared.accessibilityAnnouncementService.announce(
+                String(localized: "Restart TypeWhisper to finish updating.")
+            )
         case .downloading, .extracting:
             break
         }

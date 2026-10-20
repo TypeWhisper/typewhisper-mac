@@ -530,7 +530,13 @@ struct LicenseSettingsView: View {
     /// The result of an activation appears below the field, where VoiceOver focus usually is not.
     private func announceActivationResult(_ message: String?, isError: Bool) {
         guard let message, !message.isEmpty else { return }
-        AccessibilityAnnouncementService().announce(isError ? String(localized: "Error: \(message)") : message)
+        // The shared service filters repeats; errors interrupt current speech.
+        let announcer = ServiceContainer.shared.accessibilityAnnouncementService
+        if isError {
+            announcer.announceError(message)
+        } else {
+            announcer.announce(message)
+        }
     }
 
     // MARK: - Helpers
