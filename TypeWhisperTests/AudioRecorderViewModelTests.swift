@@ -158,6 +158,35 @@ final class AudioRecorderViewModelTests: XCTestCase {
         await Task.yield()
     }
 
+    /// A recording resets the error; the same error in a later recording is announced again.
+    func testSameRecorderErrorAndWarningAreAnnouncedAgainAfterBeingCleared() throws {
+        final class Announcements {
+            var messages: [String] = []
+            var now = ContinuousClock.now
+        }
+        let announcements = Announcements()
+        let announcer = AccessibilityAnnouncementService()
+        announcer.isVoiceOverEnabled = { true }
+        // Far apart, so the service's one-second duplicate window never applies here.
+        announcer.now = {
+            announcements.now = announcements.now.advanced(by: .seconds(5))
+            return announcements.now
+        }
+        announcer.post = { message, _ in announcements.messages.append(message) }
+        let viewModel = makeViewModel(defaults: try makeDefaults(), accessibilityAnnouncementService: announcer)
+
+        viewModel.errorMessage = "Microphone unavailable"
+        viewModel.errorMessage = "Microphone unavailable"
+        viewModel.errorMessage = nil
+        viewModel.errorMessage = "Microphone unavailable"
+        viewModel.systemAudioWarningMessage = "No system audio"
+        viewModel.systemAudioWarningMessage = nil
+        viewModel.systemAudioWarningMessage = "No system audio"
+
+        let error = String(localized: "Error: \("Microphone unavailable")")
+        XCTAssertEqual(announcements.messages, [error, error, "No system audio", "No system audio"])
+    }
+
     private struct RestorableRecorderFixture {
         let viewModel: AudioRecorderViewModel
         let plugin: AudioRecorderRestorableTranscriptionPlugin
@@ -2530,7 +2559,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         speechRegionDetector: any SpeechRegionDetecting = WholeRecordingSpeechDetector(),
         recordingsLoader: AudioRecorderViewModel.RecordingsLoader? = nil,
         recorderCompletionsLoader: AudioRecorderViewModel.RecorderCompletionsLoader? = nil,
-        livePreviewStartObserver: (() -> Void)? = nil
+        livePreviewStartObserver: (() -> Void)? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
         let resolvedRecorderService = recorderService ?? {
@@ -2548,7 +2578,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
             speechRegionDetector: speechRegionDetector,
             recordingsLoader: recordingsLoader,
             recorderCompletionsLoader: recorderCompletionsLoader,
-            livePreviewStartObserver: livePreviewStartObserver
+            livePreviewStartObserver: livePreviewStartObserver,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
     }
 

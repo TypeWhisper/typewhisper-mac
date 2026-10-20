@@ -610,18 +610,20 @@ final class AudioRecorderViewModel: ObservableObject {
             .store(in: &cancellables)
 
         // Recorder errors and warnings appear on the Recorder page, which VoiceOver
-        // users rarely have in front of them while a recording runs.
+        // users rarely have in front of them while a recording runs. Duplicates are
+        // removed before nil is dropped, so a message that was cleared in between
+        // (a new recording resets it) is announced again.
         $errorMessage
-            .compactMap { $0 }
             .removeDuplicates()
+            .compactMap { $0 }
             .sink { [weak self] message in
                 self?.accessibilityAnnouncementService?.announceError(message)
             }
             .store(in: &cancellables)
 
         $systemAudioWarningMessage
-            .compactMap { $0 }
             .removeDuplicates()
+            .compactMap { $0 }
             .sink { [weak self] message in
                 self?.accessibilityAnnouncementService?.announceWarning(message)
             }
