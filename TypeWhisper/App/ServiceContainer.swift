@@ -214,6 +214,7 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        pluginRegistryService.accessibilityAnnouncementService = accessibilityAnnouncementService
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()

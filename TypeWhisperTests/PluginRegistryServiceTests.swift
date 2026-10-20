@@ -6,6 +6,45 @@ import XCTest
 final class PluginRegistryServiceTests: XCTestCase {
     private let sdkCompatibilityVersion = "v1"
 
+    /// The service announces install outcomes itself, so they are heard after the
+    /// Settings page that started the install has gone away.
+    @MainActor
+    func testInstallErrorsAndRestartNoticesAreAnnouncedOnceByTheService() throws {
+        final class Announcements {
+            var items: [(message: String, isUrgent: Bool)] = []
+            var now = ContinuousClock.now
+        }
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginInstallAnnouncementCache")
+        defer { TestSupport.remove(cacheDirectory) }
+        let announcements = Announcements()
+        let announcer = AccessibilityAnnouncementService()
+        announcer.isVoiceOverEnabled = { true }
+        // Far apart, so the service's one-second duplicate window never applies here.
+        announcer.now = {
+            announcements.now = announcements.now.advanced(by: .seconds(5))
+            return announcements.now
+        }
+        announcer.post = { message, isUrgent in announcements.items.append((message, isUrgent)) }
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        service.accessibilityAnnouncementService = announcer
+
+        service.installStates["com.example.a"] = .downloading(0.5)
+        service.installStates["com.example.a"] = .error("Failed to extract ZIP")
+        service.installStates["com.example.b"] = .restartRequired
+        // Unchanged states, e.g. while another install updates its progress, are not repeated.
+        service.installStates["com.example.c"] = .downloading(0.1)
+
+        XCTAssertEqual(announcements.items.map { $0.message }, [
+            String(localized: "Error: \("Failed to extract ZIP")"),
+            String(localized: "Restart TypeWhisper to finish updating."),
+        ])
+        XCTAssertEqual(announcements.items.map { $0.isUrgent }, [true, false])
+    }
+
     func testFlatRegistryEntryWithoutReleasesDoesNotResolve() throws {
         let data = Data(
             """

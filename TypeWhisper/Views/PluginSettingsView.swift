@@ -2560,11 +2560,10 @@ private struct PluginInstallStateView: View {
     let state: PluginRegistryService.InstallState
     let name: String
 
+    // Errors and restart notices are announced by PluginRegistryService, which keeps
+    // observing an install after this view has gone away.
     var body: some View {
         stateContent
-            .onChange(of: state) { _, newState in
-                announce(newState)
-            }
     }
 
     @ViewBuilder
@@ -2622,21 +2621,6 @@ private struct PluginInstallStateView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isStaticText)
             .accessibilityLabel(String(localized: "Error: \(message)"))
-        }
-    }
-
-    /// Progress is visible next to the button that started it; the outcome is spoken because
-    /// VoiceOver focus has usually moved on by the time it arrives.
-    private func announce(_ state: PluginRegistryService.InstallState) {
-        switch state {
-        case .error(let message):
-            ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
-        case .restartRequired:
-            ServiceContainer.shared.accessibilityAnnouncementService.announce(
-                String(localized: "Restart TypeWhisper to finish updating.")
-            )
-        case .downloading, .extracting:
-            break
         }
     }
 }
