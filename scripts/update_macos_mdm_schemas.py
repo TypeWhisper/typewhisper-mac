@@ -26,8 +26,6 @@ EDITIONS = {
     "com.typewhisper.mac": "TypeWhisper",
     "com.typewhisper.typewhisper-app": "TypeWhisper (App Store)",
 }
-# Keys the App Store edition ignores (ManagedSettingsSection.problems in ManagedSettingsView.swift).
-APP_STORE_IGNORED = {"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads", "ManagedLicenseKey"}
 RECOMMENDED_TITLE = "Recommended settings (users can change)"
 RECOMMENDED_DESCRIPTION = "Defaults that apply until the user makes a choice."
 DESCRIPTIONS = {
@@ -57,11 +55,20 @@ ENUMERATION_TITLES = {
 JSON_TYPES = {"boolean": "boolean", "enumeration": "integer", "list": "array", "text": "string"}
 
 
-def load_keys():
+def load_generator():
     spec = importlib.util.spec_from_file_location("make_typewhisper_profile", DEPLOYMENT / "make-typewhisper-profile.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.KEYS
+    return module
+
+
+GENERATOR = load_generator()
+# Keys the App Store edition ignores, shared with the generator.
+APP_STORE_IGNORED = GENERATOR.APP_STORE_IGNORED
+
+
+def load_keys():
+    return GENERATOR.KEYS
 
 
 def keys_for(domain, keys):

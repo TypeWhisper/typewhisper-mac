@@ -116,7 +116,8 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual({frozenset(pair) for pair in GENERATOR.PAIRS}, expected)
 
     def test_schema_script_matches_the_app(self):
-        self.assertEqual(SCHEMAS.APP_STORE_IGNORED, APP_STORE_IGNORED)
+        self.assertEqual(GENERATOR.APP_STORE_IGNORED, APP_STORE_IGNORED)
+        self.assertEqual(SCHEMAS.APP_STORE_IGNORED, GENERATOR.APP_STORE_IGNORED)
         self.assertEqual(len(APP_STORE_IGNORED), 5)
         self.assertEqual(set(SCHEMAS.DESCRIPTIONS), set(CATALOG))
         for name, (kind, _, maximum, _) in CATALOG.items():
@@ -188,6 +189,35 @@ class GeneratorTests(unittest.TestCase):
             "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
         )
         self.assertEqual([item["PayloadType"] for item in profile["PayloadContent"]], list(EDITION_DOMAINS))
+
+    def test_leaves_keys_the_app_store_edition_ignores_out_of_its_payload(self):
+        status, profile, stderr = self.generate(
+            "--set", "UpdateMode=external", "--set", "SuppressOptionalPrompts=true",
+            "--recommend", "UpdateChannel=stable", "--recommend", "LaunchAtLogin=true",
+            "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual(self.settings(profile, EDITION_DOMAINS[0]), {
+            "UpdateMode": 0,
+            "SuppressOptionalPrompts": True,
+            "Recommended": {"UpdateChannel": 0, "LaunchAtLogin": True},
+        })
+        self.assertEqual(self.settings(profile, EDITION_DOMAINS[1]), {
+            "SuppressOptionalPrompts": True,
+            "Recommended": {"LaunchAtLogin": True},
+        })
+        self.assertIn("com.typewhisper.typewhisper-app: left out UpdateChannel, UpdateMode", stderr)
+
+    def test_writes_no_payload_for_an_edition_none_of_the_values_apply_to(self):
+        status, profile, _ = self.generate(
+            "--set", "UpdateMode=external", "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
+        )
+        self.assertEqual(status, 0)
+        self.assertEqual([item["PayloadType"] for item in profile["PayloadContent"]], [EDITION_DOMAINS[0]])
+
+        status, _, stderr = self.generate("--set", "ManagedLicenseKey=KEY", "--domain", "com.typewhisper.typewhisper-app.dev")
+        self.assertEqual(status, 2)
+        self.assertIn("none of the values apply to the App Store edition", stderr)
 
     def test_refuses_invalid_input(self):
         cases = [

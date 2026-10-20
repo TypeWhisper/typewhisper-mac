@@ -248,8 +248,10 @@ the identifier, so regenerating it with new values keeps them.
 
 Restrictive keys apply only to the domains you include. To manage both editions,
 include both domains (or deploy one profile per domain): the App Store edition reads
-only `com.typewhisper.typewhisper-app`. Values that do not apply to the App Store
-edition are listed there as policy problems and have no effect.
+only `com.typewhisper.typewhisper-app`. The App Store edition ignores `UpdateMode`,
+`UpdateChannel`, `AllowedUpdateChannels`, `AllowPluginDownloads` and
+`ManagedLicenseKey` and lists them as policy problems; the generator leaves them out
+of its payload and says so.
 
 ### Iru
 

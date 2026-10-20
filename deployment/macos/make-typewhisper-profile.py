@@ -65,6 +65,10 @@ DOMAINS = (
     "com.typewhisper.mac.dev",
     "com.typewhisper.typewhisper-app.dev",
 )
+APP_STORE_DOMAINS = ("com.typewhisper.typewhisper-app", "com.typewhisper.typewhisper-app.dev")
+# Keys the App Store edition ignores (notApplicable in ManagedSettingsView.swift); a test keeps
+# them equal. They are left out of App Store payloads, where they would only be reported.
+APP_STORE_IGNORED = frozenset({"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads", "ManagedLicenseKey"})
 MAXIMUM_TEXT_LENGTH = 1024
 MAXIMUM_LIST_ENTRIES = 256
 
@@ -142,6 +146,15 @@ def stable_uuid(*parts: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_URL, "/".join(parts))).upper()
 
 
+def settings_for(domain: str, enforced: dict, recommended: dict) -> dict:
+    ignored = APP_STORE_IGNORED if domain in APP_STORE_DOMAINS else frozenset()
+    settings = {key: value for key, value in enforced.items() if key not in ignored}
+    kept = {key: value for key, value in recommended.items() if key not in ignored}
+    if kept:
+        settings["Recommended"] = kept
+    return settings
+
+
 def build_profile(
     enforced: dict,
     recommended: dict,
@@ -151,15 +164,20 @@ def build_profile(
     name: str,
     organization: str | None,
     scope: str,
+    notes: list[str] | None = None,
 ) -> dict:
     if not enforced and not recommended:
         raise ProfileError("set at least one value with --set or --recommend")
-    settings = dict(enforced)
-    if recommended:
-        settings["Recommended"] = dict(recommended)
     payloads = []
     # A repeated domain would add a second payload with the same identifier and UUID.
     for domain in dict.fromkeys(domains):
+        settings = settings_for(domain, enforced, recommended)
+        left_out = sorted(APP_STORE_IGNORED.intersection(enforced) | APP_STORE_IGNORED.intersection(recommended)) \
+            if domain in APP_STORE_DOMAINS else []
+        if left_out and notes is not None:
+            notes.append(f"{domain}: left out {', '.join(left_out)}, which the App Store edition ignores")
+        if not settings:
+            continue
         # A payload whose type is the domain forces its other keys, like the custom settings
         # payload, and System Settings shows them as a list of settings instead of a property list.
         payloads.append({
@@ -170,6 +188,8 @@ def build_profile(
             "PayloadDisplayName": f"TypeWhisper managed settings ({domain})",
             **settings,
         })
+    if not payloads:
+        raise ProfileError("none of the values apply to the App Store edition; add --domain com.typewhisper.mac")
     profile = {
         "PayloadType": "Configuration",
         "PayloadVersion": 1,
@@ -196,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scope", choices=("System", "User"), default="System")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
+    notes: list[str] = []
     try:
         profile = build_profile(
             parse_assignments(args.set, recommended=False),
@@ -205,10 +226,13 @@ def main(argv: list[str] | None = None) -> int:
             name=args.name,
             organization=args.organization,
             scope=args.scope,
+            notes=notes,
         )
     except ProfileError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    for note in notes:
+        print(f"note: {note}", file=sys.stderr)
     with args.output.open("wb") as file:
         plistlib.dump(profile, file)
     print(f"Wrote {args.output}")
