@@ -29,6 +29,7 @@ struct BackupExportSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(localizedAppText("Export Settings", de: "Einstellungen exportieren"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text(localizedAppText(
                         "Choose what to include in the backup file.",
                         de: "Wähle aus, was in die Sicherungsdatei aufgenommen werden soll."
@@ -87,6 +88,7 @@ struct BackupImportSheet: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(localizedAppText("Import Settings", de: "Einstellungen importieren"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
                     Text(backup == nil
                          ? localizedAppText("Choose a TypeWhisper settings backup file.", de: "Wähle eine TypeWhisper-Sicherungsdatei aus.")
                          : localizedAppText("Choose what to restore from this file.", de: "Wähle aus, was aus dieser Datei wiederhergestellt werden soll."))
@@ -162,6 +164,7 @@ struct BackupImportSheet: View {
             Image(systemName: "tray.and.arrow.down")
                 .font(.system(size: 36))
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Button(localizedAppText("Choose File…", de: "Datei auswählen…")) {
                 chooseFile()
             }
@@ -172,6 +175,7 @@ struct BackupImportSheet: View {
                     .foregroundStyle(.red)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 320)
+                    .accessibilityLabel(String(localized: "Error: \(loadErrorMessage)"))
             }
             Spacer()
         }
@@ -189,6 +193,8 @@ struct BackupImportSheet: View {
             selected = availableCategories(in: parsed)
         } catch {
             loadErrorMessage = error.localizedDescription
+            // The red message appears silently below the button.
+            ServiceContainer.shared.accessibilityAnnouncementService.announceError(error.localizedDescription)
         }
     }
 }
@@ -231,10 +237,11 @@ private struct BackupCategoryRow: View {
             Image(systemName: category.icon)
                 .frame(width: 20)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
 
             HStack(spacing: 4) {
                 Text(category.title)
-                SettingsInfoButton(text: category.infoText)
+                SettingsInfoButton(text: category.infoText, topic: category.title)
             }
 
             Spacer()
@@ -242,6 +249,7 @@ private struct BackupCategoryRow: View {
             Text("\(count)")
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
+                .accessibilityLabel(itemCountText)
 
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
@@ -251,6 +259,13 @@ private struct BackupCategoryRow: View {
         }
         .padding(.vertical, 6)
         .opacity(count == 0 ? 0.45 : 1)
+    }
+
+    /// A bare number would be read without context.
+    private var itemCountText: String {
+        count == 1
+            ? localizedAppText("1 item", de: "1 Eintrag", ja: "1件", zh: "1 项")
+            : localizedAppText("\(count) items", de: "\(count) Einträge", ja: "\(count)件", zh: "\(count) 项")
     }
 }
 

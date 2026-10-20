@@ -138,7 +138,8 @@ struct IOSCompanionPromoView: View {
                 .frame(width: 110, height: 110)
                 .frame(width: 218, height: 388)
                 .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 24))
-                .accessibilityLabel(Text("TypeWhisper"))
+                // Decorative stand-in for the (also hidden) promo video.
+                .accessibilityHidden(true)
         }
     }
 

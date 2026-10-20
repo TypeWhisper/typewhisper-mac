@@ -9,9 +9,11 @@ struct WelcomeSheet: View {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable()
                 .frame(width: 80, height: 80)
+                .accessibilityHidden(true)
 
             Text(String(localized: "Welcome to TypeWhisper!"))
                 .font(.title2.bold())
+                .accessibilityAddTraits(.isHeader)
 
             Text(localizedAppText(
                 "Choose the scenario closest to you. You can change it later in Settings > License.",
@@ -71,6 +73,7 @@ struct WelcomeSheet: View {
                     .font(.title3)
                     .foregroundStyle(Color.accentColor)
                     .frame(width: 24)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
