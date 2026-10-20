@@ -155,6 +155,28 @@
         }
       }
     },
+    "The menu bar icon is hidden too, so nothing on screen shows that a recording is running." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Menüleistensymbol ist ebenfalls ausgeblendet, daher zeigt nichts auf dem Bildschirm an, dass eine Aufnahme läuft."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニューバーアイコンも非表示のため、録音中であることは画面に表示されません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单栏图标也已隐藏，因此屏幕上不会显示正在录音。"
+          }
+        }
+      }
+    },
     "The transcription provider your organization requires is not installed." : {
       "localizations" : {
         "de" : {
