@@ -242,7 +242,8 @@ final class ServiceContainer: ObservableObject {
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         let recoveryViewModel = DictationRecoveryViewModel(
             audioRecordingService: audioRecordingService,
@@ -380,7 +381,8 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             audioFileService: audioFileService,
             dictionaryService: dictionaryService,
-            detectsSpeakers: true
+            detectsSpeakers: true,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         speakerTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)

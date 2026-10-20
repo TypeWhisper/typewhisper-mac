@@ -76,6 +76,61 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.files.first?.result?.text, "Decoded Opus audio")
     }
 
+    /// Results only appear on the page, so VoiceOver users hear failures and the end of the batch.
+    func testBatchAnnouncesFailuresAndResultForVoiceOver() async throws {
+        final class Announcements {
+            var items: [(message: String, isUrgent: Bool)] = []
+        }
+        struct TranscriptionFailure: LocalizedError {
+            var errorDescription: String? { "Engine unavailable" }
+        }
+        let announcements = Announcements()
+        let announcer = AccessibilityAnnouncementService()
+        announcer.isVoiceOverEnabled = { true }
+        announcer.post = { message, isUrgent in
+            announcements.items.append((message, isUrgent))
+        }
+        let goodURL = makeTemporaryFile(named: "interview.wav")
+        let badURL = makeTemporaryFile(named: "broken.wav")
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults(),
+            audioSamplesLoader: { url, _, _ in
+                url.lastPathComponent == "broken.wav" ? [1] : [0]
+            },
+            transcriptionRunner: { samples, _, _, _, _, _, _, _ in
+                guard samples == [0] else { throw TranscriptionFailure() }
+                return TranscriptionResult(
+                    text: "Hello",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: "test",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true },
+            accessibilityAnnouncementService: announcer
+        )
+
+        viewModel.addFiles([goodURL, badURL])
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(announcements.items.count, 2)
+        let failure = try XCTUnwrap(announcements.items.first)
+        XCTAssertTrue(failure.message.contains("broken.wav"))
+        XCTAssertTrue(failure.message.contains("Engine unavailable"))
+        XCTAssertTrue(failure.isUrgent)
+        // The summary names how many of the two files succeeded and failed.
+        let summary = try XCTUnwrap(announcements.items.last)
+        XCTAssertTrue(summary.message.contains("1"))
+        XCTAssertTrue(summary.message.contains("2"))
+        XCTAssertFalse(summary.isUrgent)
+    }
+
     func testOpusDecodingHonorsProgressCancellation() async throws {
         let url = try makeOpusFile()
         do {
