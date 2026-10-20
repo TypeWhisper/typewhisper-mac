@@ -1615,6 +1615,7 @@ public struct MemoryRowView: View {
                 TextField("", text: $editText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { saveEdit() }
+                    .accessibilityLabel(Text("Memory"))
                 HStack {
                     Button(String(localized: "Cancel")) { isEditing = false }
                         .buttonStyle(.borderless).font(.caption)
@@ -1640,9 +1641,11 @@ public struct MemoryRowView: View {
                 Button { editText = memory.content; isEditing = true } label: {
                     Image(systemName: "pencil").font(.caption)
                 }.buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "Edit \(memory.content)"))
                 Button(role: .destructive, action: onDelete) {
                     Image(systemName: "trash").font(.caption)
                 }.buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "Delete \(memory.content)"))
             }
         }
         .padding(.vertical, 2)
