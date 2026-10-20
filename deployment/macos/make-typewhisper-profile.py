@@ -27,9 +27,11 @@ release-candidate, or their numbers.
 from __future__ import annotations
 
 import argparse
+import os
 import plistlib
 import re
 import sys
+import tempfile
 import unicodedata
 import uuid
 from pathlib import Path
@@ -244,9 +246,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     for note in notes:
         print(f"note: {note}", file=sys.stderr)
-    # Serialized first, so a failure cannot leave a partly written profile behind.
+    # Serialized first and written next to the output, which it then replaces in one step, so a
+    # failure cannot leave a partly written profile behind.
     data = plistlib.dumps(profile)
-    args.output.write_bytes(data)
+    directory = args.output.resolve().parent
+    with tempfile.NamedTemporaryFile(dir=directory, prefix=f".{args.output.name}.", delete=False) as file:
+        file.write(data)
+        temporary = Path(file.name)
+    try:
+        # Temporary files are private; give the profile the permissions a plain write would.
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(temporary, 0o666 & ~umask)
+        os.replace(temporary, args.output)
+    except OSError:
+        temporary.unlink(missing_ok=True)
+        raise
     print(f"Wrote {args.output}")
     return 0
 
