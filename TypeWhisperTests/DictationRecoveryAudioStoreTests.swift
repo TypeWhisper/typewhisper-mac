@@ -787,3 +787,27 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         )
     }
 }
+
+/// Recovery errors are announced per recording, so a second recording that fails with
+/// the same message as another one is still heard.
+@MainActor
+final class DictationRecoveryErrorAnnouncementTests: XCTestCase {
+    func testNewErrorsAreComparedPerRecording() {
+        let failed = "No speech recognized"
+
+        XCTAssertEqual(DictationRecoveryView.newRecoveryErrors(previous: [:], current: ["a": failed]), [failed])
+        XCTAssertEqual(
+            DictationRecoveryView.newRecoveryErrors(previous: ["a": failed], current: ["a": failed, "b": failed]),
+            [failed],
+            "The second recording's identical error is new"
+        )
+        XCTAssertTrue(
+            DictationRecoveryView.newRecoveryErrors(previous: ["a": failed], current: ["a": failed]).isEmpty,
+            "An error that stays is not repeated"
+        )
+        XCTAssertEqual(
+            DictationRecoveryView.newRecoveryErrors(previous: ["a": failed], current: ["a": "Engine unavailable"]),
+            ["Engine unavailable"]
+        )
+    }
+}

@@ -29,11 +29,28 @@ struct DictationRecoveryView: View {
                 zh: "已保存到历史记录"
             ))
         }
-        .onChange(of: viewModel.recoveries.map(\.errorMessage)) { previous, current in
-            for message in current.compactMap({ $0 }) where !previous.contains(message) {
+        .onChange(of: recoveryErrors) { previous, current in
+            for message in Self.newRecoveryErrors(previous: previous, current: current) {
                 ServiceContainer.shared.accessibilityAnnouncementService.announceError(message)
             }
         }
+    }
+
+    /// The current error of each recording, keyed by recording.
+    private var recoveryErrors: [String: String] {
+        Dictionary(
+            viewModel.recoveries.compactMap { item in item.errorMessage.map { (item.id, $0) } },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    /// Errors that a recording did not have before, compared per recording, so a second
+    /// recording failing with the same message as another one is still announced.
+    static func newRecoveryErrors(previous: [String: String], current: [String: String]) -> [String] {
+        current
+            .filter { previous[$0.key] != $0.value }
+            .sorted { $0.key < $1.key }
+            .map(\.value)
     }
 
     private func announce(_ message: String) {
