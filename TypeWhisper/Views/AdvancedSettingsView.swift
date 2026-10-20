@@ -126,7 +126,7 @@ struct AdvancedSettingsView: View {
             }
 
                 // MARK: - Your Data
-                Section(localizedAppText("Your Data", de: "Deine Daten")) {
+                Section(localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据")) {
                 HStack {
                     Button {
                         exportAllData()
@@ -159,7 +159,7 @@ struct AdvancedSettingsView: View {
                     SettingsInfoButton(text: localizedAppText(
                         "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
                         de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
-                    ), topic: localizedAppText("Your Data", de: "Deine Daten"))
+                    ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据"))
                 }
                 .confirmationDialog(
                     localizedAppText("Delete All Data?", de: "Alle Daten löschen?"),
@@ -625,7 +625,7 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung")
+                let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
                         Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
@@ -637,10 +637,10 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App")
+                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App")
                 integrationRow(systemImage: "iphone", title: companionAppTitle) {
                     HStack {
-                        Button(localizedAppText("Show", de: "Anzeigen")) {
+                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示")) {
                             IOSCompanionPromoCoordinator.shared.requestManualPresentation()
                         }
                         .accessibilityLabel(localizedAppText(

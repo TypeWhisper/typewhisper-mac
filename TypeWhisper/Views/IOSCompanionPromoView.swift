@@ -171,7 +171,9 @@ private struct QRCodeImageView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityLabel(localizedAppText(
             "QR code for TypeWhisper in the App Store",
-            de: "QR-Code für TypeWhisper im App Store"
+            de: "QR-Code für TypeWhisper im App Store",
+            ja: "App Store の TypeWhisper の QR コード",
+            zh: "App Store 中 TypeWhisper 的二维码"
         ))
     }
 }
