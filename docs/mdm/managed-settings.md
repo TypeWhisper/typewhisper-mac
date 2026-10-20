@@ -226,6 +226,7 @@ so launch it once after installation.
 | `examples/TypeWhisper-RecommendedDefaults.mobileconfig` | Editable defaults for both editions. |
 | `examples/TypeWhisper-LoginItem.mobileconfig` | Approves the login item (Service Management payload). |
 | `examples/TypeWhisper-Privacy.mobileconfig` | Privacy preferences (PPPC), see [permissions](#permissions). |
+| `examples/TypeWhisper-AppSettings-Privacy.json` | Declarative app settings for macOS 27 and later that propose Accessibility and the microphone, see [permissions](#permissions). |
 | `jamf/<domain>.json` | Jamf Pro custom schemas, one per edition. The App Store schema leaves out the keys that edition ignores. |
 | `ProfileManifests/<domain>.plist` | The same settings in the [ProfileManifests](https://github.com/ProfileManifests/ProfileManifests) format of profile editors such as iMazing Profile Editor. |
 
@@ -306,16 +307,30 @@ covers the permissions every installation needs: Accessibility, PostEvent, Input
 Monitoring and Screen Recording. Calendars and Automation are optional; add their
 entries yourself if the organization wants them pre-approved.
 
+From macOS 27, Accessibility in a PPPC profile is deprecated: macOS notifies the user
+and lets them turn it off in System Settings. Apple's replacement is the `Privacy` key
+of the declarative app settings configuration (`com.apple.configuration.app.settings`)
+for supervised Macs with macOS 27 or later. It sets permission defaults per app,
+matched by bundle identifier and code requirement, which the user confirms in one
+prompt when the app launches, together with your organization's justification. It can
+propose Accessibility, the microphone and local network access but never grants them
+silently. The
+[app settings example](../../deployment/macos/examples/TypeWhisper-AppSettings-Privacy.json)
+proposes Accessibility and the microphone for both editions; adapt its
+`OrganizationJustification`. Deliver it with an MDM that supports declarative device
+management, and keep the privacy profile for earlier macOS versions and for PostEvent,
+Input Monitoring and Screen Recording.
+
 | Permission | Used for | PPPC |
 | --- | --- | --- |
-| Microphone | Dictation and recording | Cannot be pre-approved; users approve the prompt. |
-| Accessibility | Direct download: dictation shortcuts, inserting text and reading the active app's context. | `Accessibility`: Allow. |
+| Microphone | Dictation and recording | Cannot be pre-approved; users approve the prompt. From macOS 27, the app settings configuration can propose it (`Microphone`: Allow). |
+| Accessibility | Direct download: dictation shortcuts, inserting text and reading the active app's context. | `Accessibility`: Allow; deprecated from macOS 27, where the app settings configuration proposes it instead. |
 | Accessibility (post events) | Pasting the transcript; in the App Store edition, the Accessibility entry in System Settings. | `PostEvent`: Allow. |
 | Input Monitoring | App Store edition: dictation shortcuts. Direct download: shortcuts the system cannot register and Esc in other apps. | `ListenEvent`: only "Allow Standard User To Set System Service", which lets users without administrator rights approve it. |
 | Screen & System Audio Recording | System audio in the Recorder. | `ScreenCapture`: only "Allow Standard User To Set System Service". |
 | Automation (Apple Events) | Reading the current browser URL for profiles. | `AppleEvents`: Allow, with one entry per browser as receiver. |
 | Calendars | Meeting reminders and starting recordings. | `Calendar`: Allow, if the organization wants it. |
-| Local Network | Paired iPhones and iPads that use the Mac for transcription. | Not configurable; users approve the prompt. |
+| Local Network | Paired iPhones and iPads that use the Mac for transcription. | Not configurable; users approve the prompt. From macOS 27, the app settings configuration can propose it (`LocalNetwork`: Allow). |
 
 The code requirements in the example are TypeWhisper's designated requirements. To
 check them against an installed app, run `codesign -dr - /Applications/TypeWhisper.app`.

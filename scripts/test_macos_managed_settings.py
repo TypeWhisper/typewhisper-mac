@@ -244,6 +244,28 @@ class GeneratorTests(unittest.TestCase):
 
 
 class ProfileTests(unittest.TestCase):
+    def test_app_settings_example_proposes_permissions_for_both_editions(self):
+        """macOS 27 replaces Accessibility in PPPC with declarative app settings."""
+        declaration = json.loads((DEPLOYMENT / "examples" / "TypeWhisper-AppSettings-Privacy.json").read_text())
+        self.assertEqual(declaration["Type"], "com.apple.configuration.app.settings")
+        self.assertTrue(declaration["Identifier"])
+        self.assertTrue(declaration["ServerToken"])
+        pppc = plistlib.loads((DEPLOYMENT / "examples" / "TypeWhisper-Privacy.mobileconfig").read_bytes())
+        requirements = {
+            entry["Identifier"]: entry["CodeRequirement"]
+            for payload in pppc["PayloadContent"]
+            if payload["PayloadType"] == "com.apple.TCC.configuration-profile-policy"
+            for entries in payload["Services"].values()
+            for entry in entries
+        }
+        defaults = declaration["Payload"]["Privacy"]["PermissionDefaults"]
+        # Apps are matched by "Bundle-ID {Designated-Requirement}", the same requirement as in PPPC.
+        self.assertEqual(set(defaults), {f"{bundle} {{{requirements[bundle]}}}" for bundle in EDITION_DOMAINS})
+        for permissions in defaults.values():
+            permissions = dict(permissions)
+            self.assertTrue(permissions.pop("OrganizationJustification").strip())
+            self.assertEqual(permissions, {"Accessibility": "Allow", "Microphone": "Allow"})
+
     def test_example_profiles_hold_only_supported_values(self):
         profiles = sorted((DEPLOYMENT / "examples").glob("*.mobileconfig"))
         self.assertGreaterEqual(len(profiles), 6)
