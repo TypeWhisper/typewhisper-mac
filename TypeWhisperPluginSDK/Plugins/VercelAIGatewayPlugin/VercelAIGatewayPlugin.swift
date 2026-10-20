@@ -918,9 +918,11 @@ private struct VercelAIGatewaySettingsView: View {
                         TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -929,6 +931,7 @@ private struct VercelAIGatewaySettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if hasUnsavedApiKeyInput {
                         Button(String(localized: "Save", bundle: bundle)) {
@@ -937,6 +940,7 @@ private struct VercelAIGatewaySettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
 
                     if plugin.isAvailable {
@@ -950,6 +954,7 @@ private struct VercelAIGatewaySettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     }
                 }
 
@@ -964,6 +969,7 @@ private struct VercelAIGatewaySettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -1002,13 +1008,15 @@ private struct VercelAIGatewaySettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh transcription models", bundle: bundle))
                     }
 
                     TextField(String(localized: "Search models...", bundle: bundle), text: $transcriptionSearchText)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("Search transcription models", bundle: bundle))
 
                     let models = filteredTranscriptionModels
-                    Picker("Transcription Model", selection: $selectedTranscriptionModel) {
+                    Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedTranscriptionModel) {
                         ForEach(models, id: \.id) { model in
                             Text(model.name).tag(model.id)
                         }
@@ -1046,13 +1054,15 @@ private struct VercelAIGatewaySettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
                     }
 
                     TextField(String(localized: "Search models...", bundle: bundle), text: $llmSearchText)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(Text("Search LLM models", bundle: bundle))
 
                     let models = filteredLLMModels
-                    Picker("LLM Model", selection: $selectedLLMModel) {
+                    Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                         ForEach(models, id: \.id) { model in
                             Text("\(model.name) - \(model.formattedPricing)").tag(model.id)
                         }
@@ -1099,6 +1109,7 @@ private struct VercelAIGatewaySettingsView: View {
                             .onChange(of: llmTemperatureValue) {
                                 plugin.setLLMTemperatureValue(llmTemperatureValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
                     }
                 }
             }

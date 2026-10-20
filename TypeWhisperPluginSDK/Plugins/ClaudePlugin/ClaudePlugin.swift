@@ -1634,9 +1634,11 @@ private struct ClaudeSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -1645,6 +1647,7 @@ private struct ClaudeSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isAvailable {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -1657,6 +1660,7 @@ private struct ClaudeSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -1664,6 +1668,7 @@ private struct ClaudeSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -1678,6 +1683,7 @@ private struct ClaudeSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(validationLabel(isValid: result))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -1717,7 +1723,7 @@ private struct ClaudeSettingsView: View {
                         .disabled(isRefreshing)
                     }
 
-                    Picker("Model", selection: $selectedModel) {
+                    Picker(String(localized: "Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -1785,6 +1791,7 @@ private struct ClaudeSettingsView: View {
                             .onChange(of: llmTemperatureValue) {
                                 plugin.setLLMTemperatureValue(llmTemperatureValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
 
                         if plugin.ignoresCustomTemperature(for: selectedModelId, reasoningEffortId: reasoningEffortId) {
                             Text("Custom temperature is ignored for this model or while a reasoning effort is set.", bundle: bundle)

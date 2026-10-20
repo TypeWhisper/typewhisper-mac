@@ -24,7 +24,7 @@ struct DictationRecoveryView: View {
             guard recordID != nil else { return }
             announce(localizedAppText(
                 "Saved to History",
-                de: "In Verlauf gespeichert",
+                de: "Im Verlauf gespeichert",
                 ja: "履歴に保存しました",
                 zh: "已保存到历史记录"
             ))
@@ -102,7 +102,7 @@ struct DictationRecoveryView: View {
                             .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(localizedAppText("Saved to History", de: "In Verlauf gespeichert"))
+                            Text(localizedAppText("Saved to History", de: "Im Verlauf gespeichert"))
                                 .font(.body.weight(.medium))
                             Text(lastSavedRecoveryFileName)
                                 .font(.caption)

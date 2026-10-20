@@ -611,6 +611,81 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(draft.resolvedBehavior().microphoneBoostOverride, true)
     }
 
+    func testWorkflowDraftWithoutEditsHasNoUnsavedChanges() {
+        let workflow = Workflow(
+            name: "Claude Cleanup",
+            template: .summary,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["ai.anthropic.Claude"],
+                websitePatterns: ["claude.ai"]
+            ),
+            behavior: WorkflowBehavior(fineTuning: "Keep it short.")
+        )
+        let savedDraft = WorkflowDraft(workflow)
+
+        XCTAssertFalse(WorkflowDraft(workflow).hasUnsavedChanges(comparedTo: savedDraft))
+        XCTAssertFalse(
+            WorkflowDraft(template: .cleanedText)
+                .hasUnsavedChanges(comparedTo: WorkflowDraft(template: .cleanedText))
+        )
+    }
+
+    func testWorkflowDraftEditsThatSavingStoresAreUnsavedChanges() {
+        let hotkey = UnifiedHotkey(keyCode: 15, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+        let workflow = Workflow(
+            name: "Polish",
+            template: .cleanedText,
+            trigger: .hotkeys([hotkey]),
+            behavior: WorkflowBehavior(fineTuning: "Keep it short.")
+        )
+        let savedDraft = WorkflowDraft(workflow)
+        let edits: [(String, (inout WorkflowDraft) -> Void)] = [
+            ("name", { $0.name = "Polish Mail" }),
+            ("enabled", { $0.isEnabled.toggle() }),
+            ("fine-tuning", { $0.fineTuning = "Keep it formal." }),
+            ("trigger mode", { $0.triggerMode = .manual }),
+            ("hotkey removed", { $0.hotkeys = [] }),
+            ("app trigger", {
+                $0.isAppTriggerEnabled = true
+                $0.appBundleIdentifiers = ["com.apple.mail"]
+            }),
+            ("auto enter", { $0.autoEnterMode = .always }),
+        ]
+
+        for (label, edit) in edits {
+            var draft = WorkflowDraft(workflow)
+            edit(&draft)
+            XCTAssertTrue(draft.hasUnsavedChanges(comparedTo: savedDraft), label)
+        }
+
+        var newDraft = WorkflowDraft(template: .cleanedText)
+        newDraft.selectTemplate(.summary)
+        XCTAssertTrue(newDraft.hasUnsavedChanges(comparedTo: WorkflowDraft(template: .cleanedText)))
+    }
+
+    func testWorkflowDraftUndoneOrDroppedEditsAreNotUnsavedChanges() {
+        let workflow = Workflow(
+            name: "Polish",
+            template: .cleanedText,
+            trigger: .hotkeys([
+                UnifiedHotkey(keyCode: 17, modifierFlags: 0, isFn: false)
+            ])
+        )
+        let savedDraft = WorkflowDraft(workflow)
+
+        var undone = WorkflowDraft(workflow)
+        undone.name = "Polish Mail"
+        undone.name = "Polish"
+        XCTAssertFalse(undone.hasUnsavedChanges(comparedTo: savedDraft))
+
+        // Saving trims the name and ignores apps picked for an app trigger that is off.
+        var dropped = WorkflowDraft(workflow)
+        dropped.name = "Polish "
+        dropped.appBundleIdentifiers = ["com.apple.mail"]
+        XCTAssertFalse(dropped.hasUnsavedChanges(comparedTo: savedDraft))
+    }
+
     func testWorkflowDraftPreservesMicrophoneBoostOverrideForNonDictationWorkflow() throws {
         let workflow = Workflow(
             name: "Boosted Summary",

@@ -69,6 +69,7 @@ struct ContributorSettingsView: View {
                 .font(.title2)
                 .foregroundStyle(.secondary)
                 .frame(width: 28)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(contributorText(
@@ -105,6 +106,11 @@ struct ContributorSettingsView: View {
             Toggle("", isOn: $captureEnabled)
                 .labelsHidden()
                 .toggleStyle(.switch)
+                .accessibilityLabel(contributorText(
+                    "Collect corrections",
+                    de: "Korrekturen sammeln",
+                    ja: "修正を収集"
+                ))
                 .onChange(of: captureEnabled) { _, enabled in
                     plugin.updateCaptureEnabled(enabled)
                 }
@@ -280,11 +286,19 @@ private struct ContributionRow: View {
                     ja: "送信用に選択"
                 ))
                 .frame(width: 18, height: 18)
+                .accessibilityLabel(contributorText(
+                    "Select for sending",
+                    de: "Zum Versand auswählen",
+                    ja: "送信用に選択"
+                ))
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             } else {
+                // The status is also written out next to the text.
                 Image(systemName: contributionStatusSymbol(record.status))
                     .foregroundStyle(contributionStatusColor(record.status))
                     .frame(width: 18, height: 18)
                     .help(contributionStatusTitle(record.status))
+                    .accessibilityHidden(true)
             }
 
             Button(action: onPreview) {
@@ -318,6 +332,11 @@ private struct ContributionRow: View {
             }
             .buttonStyle(.plain)
             .help(contributorText(
+                "Delete correction",
+                de: "Korrektur löschen",
+                ja: "修正を削除"
+            ))
+            .accessibilityLabel(contributorText(
                 "Delete correction",
                 de: "Korrektur löschen",
                 ja: "修正を削除"

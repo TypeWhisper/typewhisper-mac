@@ -882,9 +882,11 @@ private struct CartesiaSettingsView: View {
                         TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -893,6 +895,7 @@ private struct CartesiaSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -901,6 +904,7 @@ private struct CartesiaSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -908,6 +912,7 @@ private struct CartesiaSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -947,6 +952,7 @@ private struct CartesiaSettingsView: View {
                         }
                         .controlSize(.small)
                         .disabled(isRefreshingVoices)
+                        .accessibilityLabel(Text("Refresh voices", bundle: bundle))
                     }
 
                     Picker(String(localized: "Text-to-Speech Voice", bundle: bundle), selection: $selectedVoiceId) {
@@ -963,12 +969,14 @@ private struct CartesiaSettingsView: View {
                         TextField(String(localized: "Custom Voice ID", bundle: bundle), text: $customVoiceId)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("Custom Voice ID", bundle: bundle))
                         Button(String(localized: "Use", bundle: bundle)) {
                             plugin.setCustomVoiceId(customVoiceId)
                             selectedVoiceId = plugin.selectedVoiceId ?? CartesiaPlugin.defaultVoiceId
                         }
                         .controlSize(.small)
                         .disabled(customVoiceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Use custom voice ID", bundle: bundle))
                     }
                 }
             }
@@ -997,6 +1005,7 @@ private struct CartesiaSettingsView: View {
             HStack(spacing: 4) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.red)
+                    .accessibilityLabel(Text("Error", bundle: bundle))
                 Text(settingsErrorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)

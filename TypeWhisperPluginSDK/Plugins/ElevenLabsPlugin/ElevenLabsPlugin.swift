@@ -866,9 +866,11 @@ private struct ElevenLabsSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -877,6 +879,7 @@ private struct ElevenLabsSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if hasStoredKey && isEditingStoredKey && validationResult?.isValid != false {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -887,6 +890,7 @@ private struct ElevenLabsSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -894,6 +898,7 @@ private struct ElevenLabsSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(trimmedInputKey.isEmpty || isValidating)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -908,6 +913,7 @@ private struct ElevenLabsSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result.isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result.isValid ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(
                             result.isValid
                                 ? String(localized: "Valid API Key", bundle: bundle)
@@ -926,7 +932,7 @@ private struct ElevenLabsSettingsView: View {
                     Text("Model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Model", selection: $selectedModel) {
+                    Picker(String(localized: "Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -941,7 +947,7 @@ private struct ElevenLabsSettingsView: View {
                     Text("Transcription mode", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Transcription mode", selection: $transcriptionMode) {
+                    Picker(String(localized: "Transcription mode", bundle: bundle), selection: $transcriptionMode) {
                         Text("Auto (Realtime with REST fallback)", bundle: bundle)
                             .tag(ElevenLabsTranscriptionMode.automatic)
                         Text("REST only (Batch Scribe v2)", bundle: bundle)

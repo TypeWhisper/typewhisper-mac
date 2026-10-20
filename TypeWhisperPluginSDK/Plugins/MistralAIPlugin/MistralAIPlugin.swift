@@ -501,15 +501,18 @@ struct MistralSettingsView: View {
                     if showApiKey {
                         TextField(String(localized: "e.g. LFztgP5WA...", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField(String(localized: "e.g. LFztgP5WA...", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
                     
                     Button(action: { showApiKey.toggle() }) {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
                     
                     if !plugin.apiKey.isEmpty {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -520,6 +523,7 @@ struct MistralSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     }
                     
                     Button(String(localized: "Save", bundle: bundle)) {
@@ -528,6 +532,7 @@ struct MistralSettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty || isValidating)
+                    .accessibilityLabel(Text("Save API key", bundle: bundle))
                 }
                 
                 if isValidating {
@@ -541,6 +546,7 @@ struct MistralSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundColor(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundColor(result ? .green : .red)
@@ -623,6 +629,7 @@ struct MistralSettingsView: View {
                             .onChange(of: llmTemperatureValue) { _, newValue in
                                 plugin.setLLMTemperatureValue(newValue)
                             }
+                            .accessibilityLabel(Text("Temperature", bundle: bundle))
                     }
                 }
             }

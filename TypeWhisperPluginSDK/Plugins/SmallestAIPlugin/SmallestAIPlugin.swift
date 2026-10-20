@@ -421,9 +421,11 @@ private struct SmallestAISettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -432,6 +434,7 @@ private struct SmallestAISettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -440,6 +443,7 @@ private struct SmallestAISettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -447,6 +451,7 @@ private struct SmallestAISettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
                     }
                 }
 
@@ -461,6 +466,7 @@ private struct SmallestAISettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.red)
+                            .accessibilityLabel(Text("Error", bundle: bundle))
                         Text(settingsErrorMessage)
                             .font(.caption)
                             .foregroundStyle(.red)
@@ -484,7 +490,7 @@ private struct SmallestAISettingsView: View {
                     Text("Language Mode", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Language Mode", selection: $selectedModel) {
+                    Picker(String(localized: "Language Mode", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }

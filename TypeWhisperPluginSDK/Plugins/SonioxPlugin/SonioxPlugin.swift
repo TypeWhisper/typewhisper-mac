@@ -2520,9 +2520,11 @@ private struct SonioxSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -2531,6 +2533,7 @@ private struct SonioxSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
 
                     if plugin.isConfigured, !hasPendingApiKeyChange {
                         Button(String(localized: "Check", bundle: bundle)) {
@@ -2549,6 +2552,7 @@ private struct SonioxSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove API key", bundle: bundle))
                     } else {
                         Button(String(localized: "Save", bundle: bundle)) {
                             saveApiKey()
@@ -2556,6 +2560,7 @@ private struct SonioxSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(trimmedApiKeyInput.isEmpty || isValidating)
+                        .accessibilityLabel(Text("Save API key", bundle: bundle))
 
                         if plugin.isConfigured {
                             Button(String(localized: "Remove", bundle: bundle)) {
@@ -2567,6 +2572,7 @@ private struct SonioxSettingsView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .foregroundStyle(.red)
+                            .accessibilityLabel(Text("Remove API key", bundle: bundle))
                         }
                     }
                 }
@@ -2582,6 +2588,7 @@ private struct SonioxSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(result ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(result ? String(localized: "Valid API Key", bundle: bundle) : String(localized: "Invalid API Key", bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(result ? .green : .red)
@@ -2622,9 +2629,10 @@ private struct SonioxSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .disabled(isRefreshingModels)
+                        .accessibilityLabel(Text("Refresh models", bundle: bundle))
                     }
 
-                    Picker("Realtime model", selection: $selectedModel) {
+                    Picker(String(localized: "Realtime model", bundle: bundle), selection: $selectedModel) {
                         Text("Automatic (Latest)", bundle: bundle).tag(SonioxModelSelection.automatic)
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
@@ -2655,6 +2663,7 @@ private struct SonioxSettingsView: View {
                     .onChange(of: transcriptionContext) {
                         plugin.setTranscriptionContext(transcriptionContext)
                     }
+                    .accessibilityLabel(Text("Transcription Context", bundle: bundle))
 
                     Text("Sent to Soniox with every transcription. Dictionary terms are added automatically.", bundle: bundle)
                         .font(.caption)

@@ -15,6 +15,7 @@ generator and schemas for Jamf Pro and profile editors are in
 | TypeWhisper (direct download) | `com.typewhisper.mac` |
 | TypeWhisper from the Mac App Store | `com.typewhisper.typewhisper-app` |
 | Development builds | the same domains with a `.dev` suffix |
+| Screenshot runs (`--store-screenshots`, Debug builds) | `com.typewhisper.mac.screenshots` |
 
 ## Profile layout
 
@@ -126,11 +127,17 @@ Apple Intelligence has a single model and accepts any model ID, for example
 An **enforced transcription pair** is used by dictation, its live preview, file
 transcription, the Recorder, watch folders, recovery, history re-transcription and
 the HTTP API, regardless of the selected engine, workflow overrides or per-feature
-engines. An API request that asks for another engine or model gets 403. The engine and
-model pickers are locked. The user's own engine selection is kept and applies again
-once the pair is removed; the model the user had selected in that engine is restored
-then as well. If the engine had no model selected, the enforced model stays selected,
-because plugins cannot clear a selection.
+engines. An API request that asks for another engine or model, or to load another
+model, gets 403. The engine and model pickers are locked. The user's own engine
+selection is kept and applies again once the pair is removed.
+
+Parakeet 1.5.0 and WhisperKit 1.3.0 or later use the enforced model without saving it.
+Once the pair is removed, they return to the model the user had selected, or to no
+model, also when the profile was removed while TypeWhisper was not running. A model the
+user picks on the engine's settings page meanwhile is saved and used after the pair is
+removed. Other engines save the enforced model as their selection: TypeWhisper selects
+the user's model again once the pair is removed, but if the engine had no model
+selected, the enforced model stays selected.
 
 An **enforced LLM pair** replaces the provider and model of every language model call.
 The workflow editor and the fallback list keep their saved selections but are locked.

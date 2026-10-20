@@ -833,6 +833,7 @@ private struct GoogleCloudSTTSettingsView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(.quaternary, lineWidth: 1)
                     }
+                    .accessibilityLabel(Text("Service Account JSON", bundle: bundle))
 
                 Text("Google Speech-to-Text does not accept simple API keys. Paste a Google Cloud service-account JSON key here. Credentials are stored in the macOS Keychain.", bundle: bundle)
                     .font(.caption)
@@ -870,6 +871,7 @@ private struct GoogleCloudSTTSettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
+                        .accessibilityLabel(Text("Remove credentials", bundle: bundle))
                     }
                 }
 
@@ -884,6 +886,7 @@ private struct GoogleCloudSTTSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: validationResult.isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(validationResult.isValid ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(validationResult.localizedMessage(bundle: bundle))
                             .font(.caption)
                             .foregroundStyle(validationResult.isValid ? .green : .red)
@@ -922,6 +925,7 @@ private struct GoogleCloudSTTSettingsView: View {
                     .onChange(of: defaultLanguageCode) {
                         plugin.setDefaultLanguageCode(defaultLanguageCode)
                     }
+                    .accessibilityLabel(Text("Default Language", bundle: bundle))
 
                 Text("If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.", bundle: bundle)
                     .font(.caption)

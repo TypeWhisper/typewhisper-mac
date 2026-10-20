@@ -278,3 +278,82 @@ final class AccessibilityAnnouncementServiceTests: XCTestCase {
         XCTAssertEqual(recorder.announcements.count, 3)
     }
 }
+
+/// Actions such as copying or exporting show a short confirmation, which VoiceOver hears too.
+@MainActor
+final class ActionConfirmationTests: XCTestCase {
+    private final class Recorder {
+        var announcements: [(message: String, isUrgent: Bool)] = []
+        var now = ContinuousClock.now
+    }
+
+    private func makeAnnouncementService(recorder: Recorder) -> AccessibilityAnnouncementService {
+        let service = AccessibilityAnnouncementService()
+        service.isVoiceOverEnabled = { true }
+        // Far apart, so the duplicate filter does not hide a repeated confirmation.
+        service.now = {
+            recorder.now = recorder.now.advanced(by: .seconds(5))
+            return recorder.now
+        }
+        service.post = { message, isUrgent in
+            recorder.announcements.append((message, isUrgent))
+        }
+        return service
+    }
+
+    func testShowsTheMessageAnnouncesItAndHidesItAfterTheDuration() async throws {
+        let recorder = Recorder()
+        let confirmation = ActionConfirmation(
+            duration: .milliseconds(100),
+            announcementService: makeAnnouncementService(recorder: recorder)
+        )
+
+        confirmation.show("Copied to clipboard", source: "status")
+
+        XCTAssertEqual(confirmation.message?.text, "Copied to clipboard")
+        XCTAssertEqual(confirmation.message?.isError, false)
+        XCTAssertEqual(confirmation.message(for: "status")?.text, "Copied to clipboard")
+        XCTAssertNil(confirmation.message(for: "models"), "Another row must not show the confirmation")
+        XCTAssertEqual(recorder.announcements.map(\.message), ["Copied to clipboard"])
+        XCTAssertEqual(recorder.announcements.map(\.isUrgent), [false])
+
+        for _ in 0..<100 where confirmation.message != nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNil(confirmation.message)
+    }
+
+    func testANewerMessageReplacesTheOlderOne() async throws {
+        let recorder = Recorder()
+        let confirmation = ActionConfirmation(
+            duration: .milliseconds(100),
+            announcementService: makeAnnouncementService(recorder: recorder)
+        )
+
+        confirmation.show("Copied to clipboard", source: "status")
+        confirmation.show("Copied to clipboard", source: "models")
+
+        XCTAssertEqual(confirmation.message?.source, "models")
+        XCTAssertNil(confirmation.message(for: "status"))
+        XCTAssertEqual(recorder.announcements.count, 2)
+
+        for _ in 0..<100 where confirmation.message != nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNil(confirmation.message)
+    }
+
+    func testErrorsAreUrgentAnnouncements() {
+        let recorder = Recorder()
+        let confirmation = ActionConfirmation(announcementService: makeAnnouncementService(recorder: recorder))
+
+        confirmation.show("History could not be deleted.", isError: true)
+
+        XCTAssertEqual(confirmation.message?.isError, true)
+        XCTAssertEqual(recorder.announcements.map(\.isUrgent), [true])
+        XCTAssertEqual(
+            recorder.announcements.map(\.message),
+            [String(localized: "Error: \("History could not be deleted.")")]
+        )
+    }
+}

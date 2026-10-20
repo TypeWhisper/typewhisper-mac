@@ -1565,6 +1565,7 @@ private struct DictionaryCardView: View {
         .onTapGesture {
             editEntry()
         }
+        .keyboardActivatableCard(action: editEntry)
         // The row reads as one switch; editing and deleting, which sighted users reach
         // by clicking or through the context menu, become named actions. The combined
         // row already offers the Add Alias button as an action.
@@ -1734,6 +1735,7 @@ private struct DictionaryCorrectionAliasRow: View {
         .onTapGesture {
             editEntry()
         }
+        .keyboardActivatableCard(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, action: editEntry)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(dictionaryEntryAccessibilitySummary(row, includesType: false))
         .accessibilityActions {

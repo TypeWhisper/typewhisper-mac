@@ -443,6 +443,7 @@ private struct CloudflareASRSettingsView: View {
                 )
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+                    .accessibilityLabel(Text("Server URL", bundle: bundle))
             }
 
             // Cloudflare Tunnel Auth
@@ -453,15 +454,18 @@ private struct CloudflareASRSettingsView: View {
                 TextField("CF-Access-Client-Id", text: $cfClientIdInput)
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
+                    .accessibilityLabel(Text(verbatim: "CF-Access-Client-Id"))
 
                 HStack(spacing: 8) {
                     if showCFSecret {
                         TextField("CF-Access-Client-Secret", text: $cfClientSecretInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text(verbatim: "CF-Access-Client-Secret"))
                     } else {
                         SecureField("CF-Access-Client-Secret", text: $cfClientSecretInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text(verbatim: "CF-Access-Client-Secret"))
                     }
 
                     Button {
@@ -470,6 +474,7 @@ private struct CloudflareASRSettingsView: View {
                         Image(systemName: showCFSecret ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showCFSecret ? Text("Hide client secret", bundle: bundle) : Text("Show client secret", bundle: bundle))
                 }
 
                 Text("Service token credentials for Cloudflare Access. Stored in macOS Keychain.", bundle: bundle)
@@ -487,9 +492,11 @@ private struct CloudflareASRSettingsView: View {
                         TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -498,6 +505,7 @@ private struct CloudflareASRSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
                 }
 
                 Text("Optional Bearer token for the upstream API behind the tunnel.", bundle: bundle)
@@ -527,6 +535,7 @@ private struct CloudflareASRSettingsView: View {
                 } else if let result = connectionResult {
                     Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(result ? .green : .red)
+                        .accessibilityHidden(true)
                     Text(result ? String(localized: "Connected", bundle: bundle) : String(localized: "Connection Failed", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(result ? .green : .red)
@@ -549,6 +558,7 @@ private struct CloudflareASRSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Refresh models", bundle: bundle))
                     }
 
                     if hasModels {

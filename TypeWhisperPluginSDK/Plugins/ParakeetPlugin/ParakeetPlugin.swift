@@ -92,7 +92,7 @@ final class ParakeetModelPrewarm: @unchecked Sendable {
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, TransientModelSelectionProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     static let vocabularyAssetFileName = "parakeet_vocab.json"
@@ -107,7 +107,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
     fileprivate var loadedAsrModels: AsrModels?
-    fileprivate var loadedModelId: String?
+    fileprivate(set) var loadedModelId: String?
     fileprivate var _selectedModelId: String?
     var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
@@ -146,6 +146,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     private let modelLoadGate = PluginLocalInferenceGate()
+    /// A model the host uses in place of the user's selection, which is never saved.
+    /// `_selectedModelId` and `selectedVersion` follow it while it lasts.
+    let transientSelection = PluginTransientModelSelection()
+    private var versionBeforeTransientSelection: ParakeetVersion?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -184,6 +188,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     func deactivate() {
+        transientSelection.end()
+        versionBeforeTransientSelection = nil
         passiveRestoreController.cancel()
         modelPrewarm.cancel()
         clearVocabularyBoostingState(resetModelState: true)
@@ -224,23 +230,83 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
     }
 
-    var selectedModelId: String? { _selectedModelId }
+    var selectedModelId: String? { transientSelection.modelId ?? _selectedModelId }
     var allowsTranscriptPreviewFallback: Bool { true }
     var supportsStreaming: Bool { true }
 
     func selectModel(_ modelId: String) {
         guard let version = ParakeetVersion.from(modelId: modelId) else { return }
+        if transientSelection.modelId != nil {
+            saveUserSelection(version)
+            return
+        }
+        let revision = transientSelection.revision
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
         if version == selectedVersion && loadedModelId == modelId { return }
         Task {
+            // A transient selection that began meanwhile keeps its model in use.
+            guard transientSelection.revision == revision else {
+                saveUserSelection(version)
+                return
+            }
             unloadModel(clearPersistence: false)
             selectedVersion = version
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
             host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
-            await loadModel()
+            await loadModel(requestedAt: revision)
         }
+    }
+
+    // MARK: - Transient Model Selection
+
+    var transientModelId: String? { transientSelection.modelId }
+
+    func beginTransientModelSelection(_ modelId: String) {
+        guard host != nil, let version = ParakeetVersion.from(modelId: modelId) else { return }
+        let wasTransient = transientSelection.modelId != nil
+        guard transientSelection.begin(version.modelDef.id) else { return }
+        if !wasTransient {
+            versionBeforeTransientSelection = selectedVersion
+        }
+        _selectedModelId = version.modelDef.id
+        selectedVersion = version
+        if loadedModelId != nil, loadedModelId != version.modelDef.id {
+            unloadModel(clearPersistence: false)
+        } else {
+            host?.notifyCapabilitiesChanged()
+        }
+        requestPassiveRestoreOfSelection()
+    }
+
+    func endTransientModelSelection() {
+        guard let host, transientSelection.end() != nil else { return }
+        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+        selectedVersion = _selectedModelId.flatMap(ParakeetVersion.from(modelId:))
+            ?? (host.userDefault(forKey: "selectedVersion") as? String).flatMap(ParakeetVersion.init(rawValue:))
+            ?? versionBeforeTransientSelection
+            ?? selectedVersion
+        versionBeforeTransientSelection = nil
+        // Only the model the user loaded last stays loaded, as after a relaunch.
+        if loadedModelId != nil, loadedModelId != host.userDefault(forKey: "loadedModel") as? String {
+            unloadModel(clearPersistence: false)
+        } else {
+            host.notifyCapabilitiesChanged()
+        }
+        requestPassiveRestoreOfSelection()
+    }
+
+    /// Saves a model the user chose while a transient model is in use; it applies once that ends.
+    private func saveUserSelection(_ version: ParakeetVersion) {
+        host?.setUserDefault(version.modelDef.id, forKey: "selectedModel")
+        host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+    }
+
+    /// Loads the model now in use from installed files, if the host keeps models loaded.
+    private func requestPassiveRestoreOfSelection() {
+        guard host?.shouldRestoreLoadedModelsPassively == true else { return }
+        requestPassiveModelRestore()
     }
 
     var supportsTranslation: Bool { false }
@@ -839,16 +905,29 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(version: ParakeetVersion? = nil, passively: Bool = false) async {
+    func loadModel(
+        version: ParakeetVersion? = nil,
+        passively: Bool = false,
+        requestedAt revision: Int? = nil
+    ) async {
+        let revision = revision ?? transientSelection.revision
         let version = version ?? selectedVersion
+        if !passively, let transientModelId = transientSelection.modelId, version.modelDef.id != transientModelId {
+            // Chosen in the settings while a transient model is in use: saved for later, not loaded.
+            saveUserSelection(version)
+            selectedVersion = ParakeetVersion.from(modelId: transientModelId) ?? selectedVersion
+            requestPassiveRestoreOfSelection()
+            return
+        }
         let didLoad = (try? await modelLoadGate.withLock { [self] () -> Bool in
             guard host != nil else { return false }
+            guard transientSelection.permitsLoad(of: version.modelDef.id, requestedAt: revision) else { return false }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured,
                       isModelInstalled(version: version) else { return false }
             }
             guard !(isConfigured && loadedModelId == version.modelDef.id) else { return false }
-            return await performModelLoad(version: version, allowDownloads: !passively)
+            return await performModelLoad(version: version, allowDownloads: !passively, requestedAt: revision)
         }) ?? false
 
         // Optional vocabulary preparation remains on the explicit/first-use path;
@@ -861,7 +940,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     /// Returns whether the model was loaded.
-    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool) async -> Bool {
+    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool, requestedAt revision: Int) async -> Bool {
         modelState = .downloading
         downloadProgress = 0.1
 
@@ -908,16 +987,29 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             try Task.checkCancellation()
             guard host != nil else { return false }
-            selectedVersion = version
-            asrManager = manager
-            loadedAsrModels = models
-            loadedModelId = version.modelDef.id
-            _selectedModelId = version.modelDef.id
-            modelState = .ready
+            var isTransient = false
+            let installed = transientSelection.installIfPermitted(version.modelDef.id, requestedAt: revision) { transient in
+                isTransient = transient
+                selectedVersion = version
+                asrManager = manager
+                loadedAsrModels = models
+                loadedModelId = version.modelDef.id
+                _selectedModelId = version.modelDef.id
+                modelState = .ready
+            }
+            guard installed else {
+                // The transient selection changed while loading, so another model is in use now.
+                modelState = isConfigured ? .ready : .notLoaded
+                downloadProgress = 0
+                return false
+            }
 
-            host?.setUserDefault(version.modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(version.modelDef.id, forKey: "loadedModel")
-            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+            // A transient model is never saved as the user's selection or as the model to restore.
+            if !isTransient {
+                host?.setUserDefault(version.modelDef.id, forKey: "selectedModel")
+                host?.setUserDefault(version.modelDef.id, forKey: "loadedModel")
+                host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+            }
             host?.notifyCapabilitiesChanged()
             return true
         } catch is CancellationError {
@@ -1092,17 +1184,25 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
               let version = ParakeetVersion.from(modelId: modelId) else {
             return
         }
+        let revision = transientSelection.revision
+        let transientModelId = transientSelection.modelId
+        if let transientModelId, transientModelId != modelId {
+            saveUserSelection(version)
+            return
+        }
         if loadedModelId != nil, loadedModelId != modelId {
             unloadModel(clearPersistence: false)
         }
         _selectedModelId = modelId
         selectedVersion = version
-        host?.setUserDefault(modelId, forKey: "selectedModel")
-        host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        if transientModelId == nil {
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        }
         markRestoreInFlight()
         guard !suppressAsyncRestoreForTests else { return }
         Task {
-            await loadModel()
+            await loadModel(version: version, requestedAt: revision)
             finishRestoreTrigger()
         }
     }
@@ -1143,7 +1243,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         loadedModelId = nil
         modelState = .notLoaded
         downloadProgress = 0
-        if clearPersistence {
+        // The saved model to restore is the user's, not the transient one in use.
+        if clearPersistence, transientSelection.modelId == nil {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
         host?.notifyCapabilitiesChanged()
@@ -1151,13 +1252,16 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
         guard !Task.isCancelled else { return }
+        let revision = transientSelection.revision
         if passively {
             guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
-        guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else { return }
+        // A transient model replaces the model the user loaded last.
+        guard let savedModelId = transientSelection.modelId
+            ?? host?.userDefault(forKey: "loadedModel") as? String else { return }
         let version = ParakeetVersion.from(modelId: savedModelId) ?? selectedVersion
         guard allowDownloads || isModelDownloaded(version: version) else { return }
-        await loadModel(version: version, passively: passively)
+        await loadModel(version: version, passively: passively, requestedAt: revision)
     }
 
     /// FluidAudio skips complete files and resumes `.partial` files in the cache
@@ -1453,9 +1557,11 @@ private struct ParakeetSettingsView: View {
                         if showHfToken {
                             TextField("hf_...", text: $hfTokenInput)
                                 .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                         } else {
                             SecureField("hf_...", text: $hfTokenInput)
                                 .textFieldStyle(.roundedBorder)
+                                .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                         }
 
                         Button {
@@ -1464,6 +1570,7 @@ private struct ParakeetSettingsView: View {
                             Image(systemName: showHfToken ? "eye.slash" : "eye")
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel(showHfToken ? Text("Hide Hugging Face token", bundle: bundle) : Text("Show Hugging Face token", bundle: bundle))
 
                         if hasStoredHfToken {
                             Button(String(localized: "Remove", bundle: bundle)) {
@@ -1474,6 +1581,7 @@ private struct ParakeetSettingsView: View {
                             }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                         }
 
                         Button(String(localized: "Save", bundle: bundle)) {
@@ -1482,6 +1590,7 @@ private struct ParakeetSettingsView: View {
                         .buttonStyle(.borderedProminent)
                         .controlSize(.small)
                         .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                        .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
                     }
 
                     if isValidatingToken {
@@ -1496,6 +1605,7 @@ private struct ParakeetSettingsView: View {
                         HStack(spacing: 4) {
                             Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
                                 .foregroundStyle(tokenValidationResult ? .green : .red)
+                                .accessibilityHidden(true)
                             Text(
                                 tokenValidationResult
                                     ? String(localized: "Valid Hugging Face Token", bundle: bundle)
@@ -1599,21 +1709,29 @@ private struct ParakeetSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(modelState == .downloading)
+                .accessibilityLabel(
+                    downloadedVersions.contains(version)
+                        ? Text("Load \(version.modelDef.displayName)", bundle: bundle)
+                        : Text("Download and load \(version.modelDef.displayName)", bundle: bundle)
+                )
             }
 
         case .downloading:
             HStack(spacing: 8) {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
+                    .accessibilityLabel(Text("Downloading \(version.modelDef.displayName)", bundle: bundle))
                 Text("\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
+                    .accessibilityHidden(true)
             }
 
         case .ready:
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+                    .accessibilityLabel(Text("Loaded", bundle: bundle))
                 Button(String(localized: "Unload", bundle: bundle)) {
                     plugin.unloadModel()
                     modelState = plugin.modelState
@@ -1622,6 +1740,7 @@ private struct ParakeetSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityLabel(Text("Unload \(version.modelDef.displayName)", bundle: bundle))
             }
 
         case .error(let message):
@@ -1629,6 +1748,7 @@ private struct ParakeetSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -1639,6 +1759,7 @@ private struct ParakeetSettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.mini)
+                .accessibilityLabel(Text("Retry \(version.modelDef.displayName)", bundle: bundle))
             }
         }
     }
@@ -1684,6 +1805,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "arrow.down.circle")
                             .foregroundStyle(.secondary)
                             .font(.caption)
+                            .accessibilityHidden(true)
                         Text("CTC model (~100 MB) - downloads automatically on first use, or:", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1707,6 +1829,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.caption)
+                            .accessibilityHidden(true)
                         if boostingTermCount > 0 {
                             Text("Ready - \(boostingTermCount) terms loaded", bundle: bundle)
                                 .font(.caption)
@@ -1721,6 +1844,7 @@ private struct ParakeetSettingsView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                             .font(.caption)
+                            .accessibilityLabel(Text("Error", bundle: bundle))
                         Text(message)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1733,6 +1857,7 @@ private struct ParakeetSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.mini)
+                        .accessibilityLabel(Text("Retry CTC model download", bundle: bundle))
                     }
                 }
             }

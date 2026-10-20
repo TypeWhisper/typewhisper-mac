@@ -1,6 +1,8 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Choose executable for %@": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Programm für %@ auswählen"}},"ja":{"stringUnit":{"state":"translated","value":"%@の実行ファイルを選択"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"为 %@ 选择可执行文件"}}}},
+    "Use automatic detection for %@": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatische Erkennung für %@ verwenden"}},"ja":{"stringUnit":{"state":"translated","value":"%@に自動検出を使用"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"为 %@ 使用自动检测"}}}},
     "Anthropic account via Claude Code": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Anthropic-Konto über Claude Code"}},"ja":{"stringUnit":{"state":"translated","value":"Claude Code経由のAnthropicアカウント"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"通过 Claude Code 使用 Anthropic 账户"}}}},
     "Authenticated Provider CLIs": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Authentifizierte Anbieter-CLIs"}},"ja":{"stringUnit":{"state":"translated","value":"認証済みプロバイダーCLI"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已认证的提供商 CLI"}}}},
     "Available models": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verfügbare Modelle"}},"ja":{"stringUnit":{"state":"translated","value":"利用可能なモデル"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"可用模型"}}}},

@@ -2226,6 +2226,7 @@ private struct OpenAICompatibleSettingsView: View {
                 }
                 .buttonStyle(.borderless)
                 .help(Text("Add Profile", bundle: bundle))
+                .accessibilityLabel(Text("Add Profile", bundle: bundle))
             }
 
             ScrollView {
@@ -2237,6 +2238,7 @@ private struct OpenAICompatibleSettingsView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: profile.isDefault ? "server.rack" : "server.rack.fill")
                                     .frame(width: 18)
+                                    .accessibilityHidden(true)
                                 Text(profile.displayName)
                                     .lineLimit(1)
                                 Spacer(minLength: 0)
@@ -2252,6 +2254,8 @@ private struct OpenAICompatibleSettingsView: View {
                             )
                         }
                         .buttonStyle(.plain)
+                        // The selected profile is otherwise only shown by its background.
+                        .accessibilityAddTraits(selectedProfileId == profile.id ? .isSelected : [])
                     }
                 }
             }
@@ -2267,6 +2271,10 @@ private struct OpenAICompatibleSettingsView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .disabled(selectedProfile?.isDefault != false)
+            .accessibilityLabel(
+                selectedProfile.map { Text("Delete \($0.displayName)", bundle: bundle) }
+                    ?? Text("Delete", bundle: bundle)
+            )
         }
         .padding()
     }
@@ -2311,6 +2319,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .onChange(of: nameInput) {
                     saveProfileName()
                 }
+                .accessibilityLabel(Text("Profile Name", bundle: bundle))
         }
     }
 
@@ -2326,6 +2335,7 @@ private struct OpenAICompatibleSettingsView: View {
                 )
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
+                .accessibilityLabel(Text("Server URL", bundle: bundle))
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -2342,6 +2352,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .onChange(of: apiVersionInput) {
                     saveApiVersion()
                 }
+                .accessibilityLabel(Text("API Version", bundle: bundle))
 
                 Text("Some servers require an API version. Deployment-scoped batch endpoints require a dated version; realtime endpoints may require a preview version. Leave blank when the server does not require one.", bundle: bundle)
                     .font(.caption)
@@ -2357,9 +2368,11 @@ private struct OpenAICompatibleSettingsView: View {
                         TextField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     } else {
                         SecureField("API Key", text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("API Key", bundle: bundle))
                     }
 
                     Button {
@@ -2368,6 +2381,7 @@ private struct OpenAICompatibleSettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showApiKey ? Text("Hide API key", bundle: bundle) : Text("Show API key", bundle: bundle))
                 }
 
                 Text("Optional for local servers like Ollama or LM Studio", bundle: bundle)
@@ -2379,7 +2393,7 @@ private struct OpenAICompatibleSettingsView: View {
                 Text("Server Kind", bundle: bundle)
                     .font(.headline)
 
-                Picker("Server Kind", selection: $serverKind) {
+                Picker(String(localized: "Server Kind", bundle: bundle), selection: $serverKind) {
                     ForEach(OpenAICompatibleServerKind.allCases, id: \.self) { kind in
                         Text(LocalizedStringKey(kind.displayName), bundle: bundle).tag(kind)
                     }
@@ -2412,6 +2426,7 @@ private struct OpenAICompatibleSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .foregroundStyle(.red)
+                    .accessibilityLabel(Text("Remove API key", bundle: bundle))
                 }
 
                 if isTesting {
@@ -2422,6 +2437,7 @@ private struct OpenAICompatibleSettingsView: View {
                 } else if let result = connectionResult {
                     Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(result ? .green : .red)
+                        .accessibilityHidden(true)
                     Text(result ? String(localized: "Connected", bundle: bundle) : String(localized: "Connection Failed", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(result ? .green : .red)
@@ -2448,6 +2464,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 .disabled(baseURLInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityLabel(Text("Refresh models", bundle: bundle))
             }
 
             if hasModels, let selectedProfile {
@@ -2477,7 +2494,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Picker("LLM API", selection: $llmAPI) {
+            Picker(String(localized: "LLM API", bundle: bundle), selection: $llmAPI) {
                 Text("Chat Completions", bundle: bundle).tag(OpenAICompatibleLLMAPI.chatCompletions)
                 Text("Responses", bundle: bundle).tag(OpenAICompatibleLLMAPI.responses)
             }
@@ -2506,7 +2523,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Picker("Transcription Transport", selection: $transcriptionTransport) {
+            Picker(String(localized: "Transcription Transport", bundle: bundle), selection: $transcriptionTransport) {
                 Text("Auto", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.auto)
                 Text("Batch", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.batch)
                 Text("Realtime", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.realtime)
@@ -2529,7 +2546,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Picker("Batch Transcription Endpoint", selection: $batchEndpoint) {
+            Picker(String(localized: "Batch Transcription Endpoint", bundle: bundle), selection: $batchEndpoint) {
                 Text("Standard v1", bundle: bundle).tag(OpenAICompatibleBatchEndpoint.standard)
                 Text("Deployment-scoped", bundle: bundle).tag(OpenAICompatibleBatchEndpoint.deploymentScoped)
             }
@@ -2551,7 +2568,7 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
-            Picker("Upload Format", selection: $uploadFormat) {
+            Picker(String(localized: "Upload Format", bundle: bundle), selection: $uploadFormat) {
                 Text("Auto", bundle: bundle).tag(OpenAICompatibleUploadFormat.auto)
                 Text("WAV", bundle: bundle).tag(OpenAICompatibleUploadFormat.wav)
             }
@@ -2577,7 +2594,7 @@ private struct OpenAICompatibleSettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                Picker("Transcription Model", selection: $selectedTranscriptionModel) {
+                Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedTranscriptionModel) {
                     Text(String(localized: "None", bundle: bundle)).tag("")
                     ForEach(profile.fetchedModels, id: \.id) { model in
                         Text(model.id).tag(model.id)
@@ -2595,7 +2612,7 @@ private struct OpenAICompatibleSettingsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
 
-                Picker("LLM Model", selection: $selectedLLMModel) {
+                Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                     Text(String(localized: "None", bundle: bundle)).tag("")
                     ForEach(profile.fetchedModels, id: \.id) { model in
                         Text(model.id).tag(model.id)
@@ -2657,11 +2674,13 @@ private struct OpenAICompatibleSettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
                     .onSubmit(save)
+                    .accessibilityLabel(Text(title))
 
                 Button(String(localized: "Save", bundle: bundle), action: save)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel(Text("Save \(title)", bundle: bundle))
             }
         }
     }
@@ -2700,6 +2719,7 @@ private struct OpenAICompatibleSettingsView: View {
                         plugin.setLLMTemperatureValue(llmTemperatureValue, for: selectedProfile.id)
                         reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
                     }
+                    .accessibilityLabel(Text("Temperature", bundle: bundle))
             }
 
             if llmAPI == .responses, reasoningEffort != .providerDefault {
@@ -2737,7 +2757,7 @@ private struct OpenAICompatibleSettingsView: View {
             Text("Reasoning Effort", bundle: bundle)
                 .font(.headline)
 
-            Picker("Reasoning Effort", selection: $reasoningEffort) {
+            Picker(String(localized: "Reasoning Effort", bundle: bundle), selection: $reasoningEffort) {
                 ForEach(OpenAICompatibleReasoningEffort.allCases, id: \.self) { effort in
                     Text(String(localized: String.LocalizationValue(effort.displayName), bundle: bundle))
                         .tag(effort)
@@ -2753,6 +2773,10 @@ private struct OpenAICompatibleSettingsView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private var timeoutTitle: String {
+        String(localized: "LLM Request Timeout", bundle: bundle)
     }
 
     private var timeoutSection: some View {
@@ -2772,6 +2796,7 @@ private struct OpenAICompatibleSettingsView: View {
                 Button(String(localized: "Save", bundle: bundle), action: saveChatTimeout)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Save \(timeoutTitle)", bundle: bundle))
             }
 
             Text("Seconds to wait for the LLM response. Increase for local servers (LM Studio, Ollama) that take a long time on large prompts. Higher values wait longer before failing. Default 30.", bundle: bundle)

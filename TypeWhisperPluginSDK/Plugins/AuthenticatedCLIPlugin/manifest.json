@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.authenticated-cli",
     "name": "Authenticated Provider CLIs",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",

@@ -128,6 +128,11 @@ struct SpeakerRecordingRow: View {
 
     /// Date and duration, then where the recording stands, all as words.
     private var accessibilityStatus: String {
+        Self.accessibilityStatus(detail: detail, phase: phase)
+    }
+
+    /// The VoiceOver value of a row; the tile shows the same step.
+    static func accessibilityStatus(detail: String, phase: Phase) -> String {
         let status: String
         switch phase {
         case .queued:

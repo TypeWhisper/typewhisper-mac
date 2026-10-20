@@ -409,6 +409,274 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertEqual(draft.transcriptionEngineId, "removed-engine", "The override is kept for later")
     }
 
+    // MARK: Transient model selections
+
+    func testRemovingThePairRestoresNoSelectionThroughATransientSelection() {
+        let engine = TransientPairEngine(savedModelId: nil)
+        let (manager, modelManager) = makeTransientManager([engine])
+
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "transient-engine")
+        XCTAssertEqual(engine.selectedModelId, "large")
+        XCTAssertEqual(engine.transientModelId, "large")
+        XCTAssertNil(engine.savedModelId, "The enforced model is not saved as the user's selection")
+        XCTAssertTrue(retainedModels().isEmpty, "Nothing is retained for an engine with a transient selection")
+
+        manager.applySelectionPolicy(.unmanaged)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNil(engine.selectedModelId, "No model is selected again")
+        XCTAssertNil(engine.transientModelId)
+        XCTAssertEqual(engine.savedSelections, [], "The host never selected a model")
+        XCTAssertTrue(retainedModels().isEmpty)
+    }
+
+    func testRemovingThePairRestoresTheUsersModelThroughATransientSelection() {
+        let engine = TransientPairEngine(savedModelId: "small")
+        let (manager, modelManager) = makeTransientManager([engine])
+
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(engine.selectedModelId, "large")
+        XCTAssertEqual(engine.savedModelId, "small")
+
+        manager.applySelectionPolicy(.unmanaged)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selectedModelId, "small")
+        XCTAssertNil(engine.transientModelId)
+        XCTAssertEqual(engine.savedSelections, [])
+    }
+
+    func testEngineWithoutTransientSelectionKeepsTheRetainedSelection() {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        let modelManager = ModelManagerService()
+        let engine = PairTestEngine(providerID: "local-engine", models: ["small", "large"], selectedModelId: nil)
+        manager.loadedPlugins[0] = loaded(engine, id: "com.typewhisper.tests.pair.local", locality: "local", categories: ["transcription"])
+        defer { manager.applySelectionPolicy(.unmanaged) }
+
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.local", modelId: "large")
+        ))
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(engine.selectedModelId, "large")
+        XCTAssertEqual(retainedModels(), ["local-engine": ""], "Plugins without the capability keep the retention")
+
+        manager.applySelectionPolicy(.unmanaged)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selectedModelId, "large", "Without a transient selection the enforced model stays selected")
+        XCTAssertTrue(retainedModels().isEmpty)
+    }
+
+    func testRelaunchAppliesTheTransientSelectionAgainWhileThePairLasts() {
+        let engine = TransientPairEngine(savedModelId: "small")
+        let (manager, modelManager) = makeTransientManager([engine])
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        // A relaunch or reload starts a new plugin instance from what the plugin saved.
+        let relaunched = TransientPairEngine(savedModelId: engine.savedModelId)
+        manager.loadedPlugins = [loaded(relaunched, id: TransientPairEngine.pluginId, locality: "local", categories: ["transcription"])]
+        ModelManagerService().restoreProviderSelection()
+
+        XCTAssertEqual(relaunched.selectedModelId, "large")
+        XCTAssertEqual(relaunched.savedModelId, "small")
+        XCTAssertEqual(relaunched.savedSelections, [])
+    }
+
+    func testRelaunchAfterThePairWasRemovedKeepsNothingEnforced() {
+        let engine = TransientPairEngine(savedModelId: nil)
+        let (manager, modelManager) = makeTransientManager([engine])
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        // The profile was removed while TypeWhisper was not running.
+        manager.applySelectionPolicy(.unmanaged)
+        let relaunched = TransientPairEngine(savedModelId: engine.savedModelId)
+        manager.loadedPlugins = [loaded(relaunched, id: TransientPairEngine.pluginId, locality: "local", categories: ["transcription"])]
+        ModelManagerService().restoreProviderSelection()
+
+        XCTAssertNil(relaunched.selectedModelId)
+        XCTAssertNil(relaunched.transientModelId)
+        XCTAssertTrue(retainedModels().isEmpty)
+    }
+
+    func testDeactivatedPluginGetsTheTransientSelectionAgain() {
+        let engine = TransientPairEngine(savedModelId: "small")
+        let (manager, modelManager) = makeTransientManager([engine])
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        engine.deactivate()
+        XCTAssertEqual(engine.selectedModelId, "small", "Deactivation drops the transient selection")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selectedModelId, "large")
+        XCTAssertEqual(engine.savedModelId, "small")
+    }
+
+    func testChangingThePairMovesTheTransientSelection() {
+        let first = TransientPairEngine(savedModelId: "small")
+        let second = TransientPairEngine(providerID: "second-engine", savedModelId: nil)
+        let (manager, modelManager) = makeTransientManager([first, second])
+
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(first.transientModelId, "large")
+
+        enforce(manager, "small")
+        modelManager.restoreProviderSelection()
+        XCTAssertEqual(first.transientModelId, "small", "Another model of the same engine replaces the transient one")
+        XCTAssertEqual(first.savedModelId, "small")
+
+        enforce(manager, "large", engine: "second-engine")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.selectedProviderId, "second-engine")
+        XCTAssertNil(first.transientModelId, "The engine the pair no longer names returns to its selection")
+        XCTAssertEqual(first.selectedModelId, "small")
+        XCTAssertEqual(second.selectedModelId, "large")
+        XCTAssertNil(second.savedModelId)
+        XCTAssertEqual(first.savedSelections + second.savedSelections, [])
+    }
+
+    func testUnusablePairEndsTransientSelections() {
+        let engine = TransientPairEngine(savedModelId: nil)
+        let (manager, modelManager) = makeTransientManager([engine])
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        enforce(manager, "missing")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNil(modelManager.selectedProviderId, "The unusable pair still blocks")
+        XCTAssertNil(engine.transientModelId)
+        XCTAssertNil(engine.selectedModelId)
+    }
+
+    func testTransientSelectionNeitherSelectsNorLoadsAModel() {
+        let engine = TransientPairEngine(savedModelId: nil)
+        let (manager, modelManager) = makeTransientManager([engine])
+        XCTAssertFalse(modelManager.canPrepareForTranscription(engine), "No model to restore yet")
+
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.beginCount, 1, "A transient selection already in effect is not begun again")
+        XCTAssertEqual(engine.savedSelections, [], "selectModel(_:) can start a download in some plugins")
+        XCTAssertEqual(engine.restoreRequests, 0, "Applying the pair does not load the model")
+        XCTAssertTrue(modelManager.canPrepareForTranscription(engine), "The transient model loads on first use")
+
+        manager.applySelectionPolicy(.unmanaged)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.restoreRequests, 0)
+        XCTAssertFalse(modelManager.canPrepareForTranscription(engine))
+    }
+
+    func testModelRetainedBeforeTheTransientSelectionIsSavedAgain() {
+        // The earlier approach saved the enforced model as the user's selection and retained theirs.
+        UserDefaults.standard.set(["transient-engine": "small", "second-engine": ""], forKey: UserDefaultsKeys.managedTranscriptionModelRetention)
+        let engine = TransientPairEngine(savedModelId: "large")
+        let second = TransientPairEngine(providerID: "second-engine", savedModelId: "large")
+        let (manager, modelManager) = makeTransientManager([engine, second])
+
+        enforce(manager, "large")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.savedModelId, "small", "The retained model is saved again")
+        XCTAssertEqual(engine.selectedModelId, "large", "The enforced model stays in use")
+        XCTAssertEqual(retainedModels(), ["second-engine": ""], "Entries of engines the pair does not use wait")
+
+        enforce(manager, "large", engine: "second-engine")
+        modelManager.restoreProviderSelection()
+        XCTAssertTrue(retainedModels().isEmpty)
+        XCTAssertEqual(second.savedModelId, "large", "An empty entry cannot clear the saved selection")
+
+        manager.applySelectionPolicy(.unmanaged)
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(engine.selectedModelId, "small")
+        XCTAssertNil(engine.transientModelId)
+    }
+
+    /// The host's pass and the bundled plugins' own code, with the plugin's saved values in a
+    /// store that stands in for its `plugin.<id>.*` defaults.
+    func testBundledEnginesReturnToTheirSavedSelectionWhenThePairIsRemoved() throws {
+        let cases: [(id: String, providerId: String, users: String, enforced: String, make: () -> TranscriptionEnginePlugin)] = [
+            ("com.typewhisper.parakeet", "parakeet", "parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", {
+                let plugin = ParakeetPlugin()
+                plugin.restoresModelOnActivate = false
+                return plugin
+            }),
+            ("com.typewhisper.whisperkit", "whisper", "openai_whisper-tiny", "openai_whisper-large-v3_turbo", { WhisperKitPlugin() }),
+        ]
+        for testCase in cases {
+            for saved in [nil, testCase.users] {
+                let host = PairPluginHost(directory: directory, defaults: saved.map { ["selectedModel": $0] } ?? [:])
+                let manager = PluginManager(appSupportDirectory: directory)
+                PluginManager.shared = manager
+                func launch() -> TranscriptionEnginePlugin {
+                    let plugin = testCase.make()
+                    plugin.activate(host: host)
+                    manager.loadedPlugins = [loaded(plugin, id: testCase.id, locality: "local", categories: ["transcription"])]
+                    return plugin
+                }
+                var plugin = launch()
+                let modelManager = ModelManagerService()
+                modelManager.selectProvider(testCase.providerId)
+
+                manager.applySelectionPolicy(ManagedSelectionPolicy(
+                    enforcedTranscription: ManagedSelectionPair(providerId: testCase.id, modelId: testCase.enforced)
+                ))
+                modelManager.restoreProviderSelection()
+                XCTAssertEqual(plugin.selectedModelId, testCase.enforced, testCase.id)
+
+                // A relaunch while the profile is installed applies the model again.
+                plugin.deactivate()
+                plugin = launch()
+                XCTAssertEqual(plugin.selectedModelId, saved, "\(testCase.id): the enforced model was saved")
+                ModelManagerService().restoreProviderSelection()
+                XCTAssertEqual(plugin.selectedModelId, testCase.enforced, testCase.id)
+
+                manager.applySelectionPolicy(.unmanaged)
+                ModelManagerService().restoreProviderSelection()
+
+                XCTAssertEqual(plugin.selectedModelId, saved, testCase.id)
+                XCTAssertEqual(host.value(forKey: "selectedModel"), saved, testCase.id)
+                XCTAssertNil(host.value(forKey: "loadedModel"), testCase.id)
+                XCTAssertTrue(retainedModels().isEmpty, testCase.id)
+                plugin.deactivate()
+            }
+        }
+    }
+
+    private func makeTransientManager(_ engines: [TransientPairEngine]) -> (PluginManager, ModelManagerService) {
+        let manager = PluginManager(appSupportDirectory: directory)
+        let main = engines[0]
+        main.additionalEngines = Array(engines.dropFirst())
+        manager.loadedPlugins = [loaded(main, id: TransientPairEngine.pluginId, locality: "local", categories: ["transcription"])]
+        PluginManager.shared = manager
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(main.providerId)
+        return (manager, modelManager)
+    }
+
+    private func enforce(_ manager: PluginManager, _ modelId: String, engine: String = "transient-engine") {
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "\(TransientPairEngine.pluginId):\(engine)", modelId: modelId)
+        ))
+    }
+
+    private func retainedModels() -> [String: String] {
+        UserDefaults.standard.dictionary(forKey: UserDefaultsKeys.managedTranscriptionModelRetention) as? [String: String] ?? [:]
+    }
+
     private func makeManager() -> PluginManager {
         let manager = PluginManager(appSupportDirectory: directory)
         manager.loadedPlugins = [
@@ -446,6 +714,12 @@ private final class PairTestEngine: NSObject, TranscriptionEnginePlugin, @unchec
         self.providerID = providerID
         self.models = models
         self.selectedModelId = models.first
+    }
+
+    init(providerID: String, models: [String], selectedModelId: String?) {
+        self.providerID = providerID
+        self.models = models
+        self.selectedModelId = selectedModelId
     }
 
     required override init() {
@@ -535,4 +809,101 @@ private final class DownloadingPairEngine: NSObject, TranscriptionEnginePlugin, 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         PluginTranscriptionResult(text: "ok", detectedLanguage: language)
     }
+}
+
+/// Stands in for Parakeet and WhisperKit: `savedModelId` is the selection the plugin saves for the user.
+private final class TransientPairEngine: NSObject, TransientModelSelectionProviding, AdditionalTranscriptionEnginesProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.tests.pair-transient"
+    static let pluginName = "Transient Pair Engine"
+
+    private let providerID: String
+    private let transient = PluginTransientModelSelection()
+    var savedModelId: String?
+    var additionalEngines: [TransientPairEngine] = []
+    private(set) var savedSelections: [String] = []
+    private(set) var beginCount = 0
+    private(set) var restoreRequests = 0
+
+    init(providerID: String = "transient-engine", savedModelId: String?) {
+        self.providerID = providerID
+        self.savedModelId = savedModelId
+    }
+
+    required override init() {
+        providerID = "transient-engine"
+    }
+
+    var providerId: String { providerID }
+    var providerDisplayName: String { providerID }
+    var isConfigured: Bool { false }
+    var transcriptionModels: [PluginModelInfo] { ["small", "large"].map { PluginModelInfo(id: $0, displayName: $0) } }
+    var additionalTranscriptionEngines: [any TranscriptionEnginePlugin] { additionalEngines }
+    var supportsTranslation: Bool { false }
+    var selectedModelId: String? { transient.modelId ?? savedModelId }
+    var transientModelId: String? { transient.modelId }
+
+    func activate(host: HostServices) {}
+    func deactivate() { transient.end() }
+
+    func selectModel(_ modelId: String) {
+        savedSelections.append(modelId)
+        savedModelId = modelId
+    }
+
+    func beginTransientModelSelection(_ modelId: String) {
+        guard transcriptionModels.contains(where: { $0.id == modelId }) else { return }
+        beginCount += 1
+        transient.begin(modelId)
+    }
+
+    func endTransientModelSelection() {
+        transient.end()
+    }
+
+    @objc func triggerRestoreModel() {
+        restoreRequests += 1
+    }
+
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        restoreRequests += 1
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+}
+
+/// Stands in for the host services of a bundled plugin; nothing reaches the keychain or real defaults.
+private final class PairPluginHost: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private var defaults: [String: Any]
+    let pluginDataDirectory: URL
+    let eventBus: EventBusProtocol = PairPluginEventBus()
+    var activeAppBundleId: String? { nil }
+    var activeAppName: String? { nil }
+    var availableRuleNames: [String] { [] }
+    var shouldRestoreLoadedModelsPassively: Bool { false }
+
+    init(directory: URL, defaults: [String: Any]) {
+        pluginDataDirectory = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        self.defaults = defaults
+    }
+
+    func value(forKey key: String) -> String? {
+        userDefault(forKey: key) as? String
+    }
+
+    func storeSecret(key: String, value: String) throws {}
+    func loadSecret(key: String) -> String? { nil }
+    func userDefault(forKey key: String) -> Any? { lock.withLock { defaults[key] } }
+    func setUserDefault(_ value: Any?, forKey key: String) { lock.withLock { defaults[key] = value } }
+    func notifyCapabilitiesChanged() {}
+    func setStreamingDisplayActive(_ active: Bool) {}
+}
+
+private final class PairPluginEventBus: EventBusProtocol, @unchecked Sendable {
+    @discardableResult
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
+    func unsubscribe(id: UUID) {}
 }

@@ -797,9 +797,11 @@ private struct VoxtralSettingsView: View {
                     if showHfToken {
                         TextField("hf_...", text: $hfTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     } else {
                         SecureField("hf_...", text: $hfTokenInput)
                             .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(Text("Hugging Face token", bundle: bundle))
                     }
 
                     Button {
@@ -808,6 +810,7 @@ private struct VoxtralSettingsView: View {
                         Image(systemName: showHfToken ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+                    .accessibilityLabel(showHfToken ? Text("Hide Hugging Face token", bundle: bundle) : Text("Show Hugging Face token", bundle: bundle))
 
                     if hasStoredHfToken {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -818,6 +821,7 @@ private struct VoxtralSettingsView: View {
                         }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
+                        .accessibilityLabel(Text("Remove Hugging Face token", bundle: bundle))
                     }
 
                     Button(String(localized: "Save", bundle: bundle)) {
@@ -826,6 +830,7 @@ private struct VoxtralSettingsView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
                     .disabled(trimmedHfTokenInput.isEmpty || isValidatingToken)
+                    .accessibilityLabel(Text("Save Hugging Face token", bundle: bundle))
                 }
 
                 if isValidatingToken {
@@ -839,6 +844,7 @@ private struct VoxtralSettingsView: View {
                     HStack(spacing: 4) {
                         Image(systemName: tokenValidationResult ? "checkmark.circle.fill" : "xmark.circle.fill")
                             .foregroundStyle(tokenValidationResult ? .green : .red)
+                            .accessibilityHidden(true)
                         Text(
                             tokenValidationResult
                                 ? String(localized: "Valid HuggingFace Token", bundle: bundle)
@@ -871,6 +877,7 @@ private struct VoxtralSettingsView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
+                        .accessibilityLabel(Text("Error", bundle: bundle))
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -932,10 +939,12 @@ private struct VoxtralSettingsView: View {
             if case .loading = modelState, selectedModelId == modelDef.id {
                 ProgressView()
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Loading \(modelDef.displayName)", bundle: bundle))
             } else if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
+                        .accessibilityLabel(Text("Loaded", bundle: bundle))
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
                         if !modelDef.id.hasPrefix("custom-") {
@@ -945,6 +954,7 @@ private struct VoxtralSettingsView: View {
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .accessibilityLabel(Text("Unload \(modelDef.displayName)", bundle: bundle))
                 }
             } else if modelDef.id == onDemandModelId, modelState == .notLoaded {
                 PluginModelLoadsOnDemandStatus(bundle: bundle)
@@ -962,6 +972,7 @@ private struct VoxtralSettingsView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
                 .disabled(modelState == .loading)
+                .accessibilityLabel(modelDef.id.hasPrefix("custom-") ? Text("Load \(modelDef.displayName)", bundle: bundle) : Text("Download and load \(modelDef.displayName)", bundle: bundle))
             }
         }
         .padding(.vertical, 4)
