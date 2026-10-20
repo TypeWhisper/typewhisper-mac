@@ -97,7 +97,7 @@ diagnostics contain the same information; the license key appears only as `[set]
 | `ManagedLicenseKey` | String | enforced | Activates a commercial license for the signed-in user. See [managed license activation](README.md). A changed key is applied without restarting. Not available in the App Store edition. |
 | `UpdateMode` | Integer 0–2 | enforced | 0 = External: no update checks, downloads or installations; Settings states that the organization manages updates. 1 = CheckOnly: TypeWhisper checks at launch, when the policy changes and on Sparkle's schedule, and shows a newer version in Settings > About without installing it. 2 = UserInitiated: updates install only when the user chooses Check for Updates; automatic background downloads are refused. Unset keeps the normal update behavior. In every mode the app does not ask whether to check automatically. |
 | `UpdateChannel` | Integer 0–2 | enforced or recommended | 0 = Stable, 1 = Daily, 2 = Release Candidate. Enforced locks the channel picker; recommended is the channel of a user who never chose one. |
-| `AllowedUpdateChannels` | Array | enforced | Entries `stable`, `daily`, `release-candidate`. The picker offers only these channels, and checks on any other channel are refused. An empty array, or `none`, turns app updates off. An enforced `UpdateChannel` outside the list is a policy problem that turns updates off; TypeWhisper never switches channels on its own. |
+| `AllowedUpdateChannels` | Array | enforced | Entries `stable`, `daily`, `release-candidate`. The picker offers only these channels, and checks on any other channel are refused. An empty array, or `none` as the only entry, turns app updates off; next to a channel, `none` is ignored. An enforced `UpdateChannel` outside the list is a policy problem that turns updates off; TypeWhisper never switches channels on its own. |
 | `LaunchAtLogin` | Boolean | enforced or recommended | Enforced registers or removes TypeWhisper's login item and locks the setting. The state before enforcement is restored once the value is removed. Recommended applies once, to a user who has not completed setup and has not chosen. See [login items](#login-items). |
 | `SkipOnboardingWhenReady` | Boolean | enforced | `true` keeps the setup wizard closed when a transcription engine is ready, the microphone and (outside the App Store edition) Accessibility are granted, and a dictation shortcut exists. Otherwise setup opens at the first missing step instead of the welcome page. Nothing is marked as completed, so setup returns if a prerequisite goes missing or the value is removed. |
 | `TranscriptionProviderId`, `TranscriptionModelId` | String pair | enforced or recommended | Enforced fixes the transcription engine and model for every entry point; see [provider and model pairs](#provider-and-model-pairs). Recommended is the initial selection of a user who never chose an engine. Both values must be set at the same scope. |
@@ -281,9 +281,11 @@ Jamf Pro can configure the settings through a form generated from a schema:
    can change)".
 4. Scope the profile and save. Add a second payload for the other edition if needed.
 
-Jamf Pro delivers these values as managed preferences, which TypeWhisper treats as
-enforced. Uploading a profile built with the generator (Configuration Profiles >
-Upload) works as well and is the way to deploy the login item and privacy examples.
+Jamf Pro delivers the configured top-level values as managed preferences, which
+TypeWhisper treats as enforced; values under "Recommended settings (users can change)"
+are defaults users can change. Uploading a profile built with the generator
+(Configuration Profiles > Upload) works as well and is the way to deploy the login
+item and privacy examples.
 
 ### Other MDMs
 
@@ -303,9 +305,10 @@ TypeWhisper asks for these permissions when a feature first needs them. A privac
 preferences profile (PPPC, `com.apple.TCC.configuration-profile-policy`) delivered by
 MDM can pre-approve some of them. The
 [privacy example](../../deployment/macos/examples/TypeWhisper-Privacy.mobileconfig)
-covers the permissions every installation needs: Accessibility, PostEvent, Input
-Monitoring and Screen Recording. Calendars and Automation are optional; add their
-entries yourself if the organization wants them pre-approved.
+contains entries for Accessibility, PostEvent, Input Monitoring and Screen Recording.
+Each belongs to the features in the table below; pre-approve only the entries your
+features and edition need. Calendars and Automation are optional; add their entries
+yourself if the organization wants them pre-approved.
 
 From macOS 27, Accessibility in a PPPC profile is deprecated: macOS notifies the user
 and lets them turn it off in System Settings. Apple's replacement is the `Privacy` key

@@ -338,7 +338,7 @@
     },
     "AllowedUpdateChannels": {
       "title": "Allowed update channels",
-      "description": "Entries stable, daily, release-candidate. An empty list or none turns app updates off.",
+      "description": "Entries stable, daily, release-candidate. An empty list or none alone turns app updates off; do not combine none with a channel.",
       "property_order": 70,
       "links": [
         {

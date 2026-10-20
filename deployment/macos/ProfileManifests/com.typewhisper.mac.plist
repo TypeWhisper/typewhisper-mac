@@ -309,7 +309,7 @@
 		</dict>
 		<dict>
 			<key>pfm_description</key>
-			<string>Entries stable, daily, release-candidate. An empty list or none turns app updates off.</string>
+			<string>Entries stable, daily, release-candidate. An empty list or none alone turns app updates off; do not combine none with a channel.</string>
 			<key>pfm_documentation_url</key>
 			<string>https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md</string>
 			<key>pfm_name</key>

@@ -42,7 +42,7 @@ DESCRIPTIONS = {
     "AllowModelDownloads": ("Allow model downloads", "Off refuses model downloads. Installed models keep working."),
     "UpdateMode": ("Update mode", "Who installs app updates."),
     "UpdateChannel": ("Update channel", "The release channel for app updates."),
-    "AllowedUpdateChannels": ("Allowed update channels", "Entries stable, daily, release-candidate. An empty list or none turns app updates off."),
+    "AllowedUpdateChannels": ("Allowed update channels", "Entries stable, daily, release-candidate. An empty list or none alone turns app updates off; do not combine none with a channel."),
     "LaunchAtLogin": ("Launch at login", "Registers or removes TypeWhisper's login item and locks the setting."),
     "SkipOnboardingWhenReady": ("Skip setup when ready", "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready."),
     "SuppressOptionalPrompts": ("Hide optional prompts", "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button."),
