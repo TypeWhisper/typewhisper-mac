@@ -28,6 +28,7 @@ struct CalendarMeetingSettingsSection: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "calendarMeeting.settings.recordingStart"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     Picker(
                         String(localized: "calendarMeeting.settings.startMode"),
@@ -53,6 +54,7 @@ struct CalendarMeetingSettingsSection: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(String(localized: "recorder.transcription"))
                         .font(.headline)
+                        .accessibilityAddTraits(.isHeader)
 
                     Toggle(
                         String(localized: "recorder.createTranscriptAfterRecording"),
@@ -115,6 +117,7 @@ struct CalendarMeetingSettingsSection: View {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(String(localized: "calendarMeeting.settings.permissions"))
                             .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         permissionStatus
                     }
                 }
@@ -135,6 +138,7 @@ struct CalendarMeetingSettingsSection: View {
                         VStack(alignment: .leading, spacing: 9) {
                             Text(String(localized: "calendarMeeting.settings.stopping"))
                                 .font(.headline)
+                                .accessibilityAddTraits(.isHeader)
 
                             Toggle(
                                 String(localized: "calendarMeeting.settings.autoStop"),
@@ -295,6 +299,7 @@ struct CalendarMeetingSettingsSection: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(String(localized: "calendarMeeting.settings.calendars"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(String(localized: "calendarMeeting.settings.calendarsHelp"))
                 .font(.caption)
@@ -346,6 +351,7 @@ struct CalendarMeetingSettingsSection: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(String(localized: "calendarMeeting.settings.providers"))
                 .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
             Text(String(localized: "calendarMeeting.settings.providersHelp"))
                 .font(.caption)
