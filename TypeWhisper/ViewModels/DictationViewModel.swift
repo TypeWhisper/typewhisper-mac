@@ -3111,6 +3111,9 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 // Route to action plugin or insert text
+                // The action's result appears in the banner; VoiceOver hears it after the
+                // transcription announcement below.
+                var actionResultAnnouncement: String?
                 if let actionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
                     cancelLiveFieldTranscriptSession()
@@ -3118,6 +3121,7 @@ final class DictationViewModel: ObservableObject {
                         actionPlugin, pluginId: actionPluginId, text: text,
                         activeApp: activeApp, language: language, originalText: result.text
                     )
+                    actionResultAnnouncement = actionFeedbackMessage
                     pinnedInsertionTarget = nil
                     updateLatencyTrace(sessionID: sessionID) { trace in
                         trace.insertion = .actionPlugin
@@ -3333,6 +3337,9 @@ final class DictationViewModel: ObservableObject {
                 let wordCount = text.split(separator: " ").count
                 let detectedLang = result.detectedLanguage ?? language
                 accessibilityAnnouncementService.announceTranscriptionComplete(wordCount: wordCount)
+                if let actionResultAnnouncement {
+                    accessibilityAnnouncementService.announce(actionResultAnnouncement)
+                }
                 speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
                 lastTranscribedText = text
                 lastTranscriptionLanguage = detectedLang

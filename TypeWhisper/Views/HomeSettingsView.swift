@@ -315,7 +315,11 @@ struct HomeSettingsView: View {
 
     /// Full text, time and app, without the visual "- App" dash and chevron.
     private func recentTranscriptionAccessibilityLabel(_ record: TranscriptionRecord) -> String {
-        var parts = [record.displayText, record.timestamp.formatted(.relative(presentation: .named))]
+        // The relative time is spoken in the app language, like the History rows.
+        var parts = [
+            record.displayText,
+            record.timestamp.formatted(.relative(presentation: .named).locale(HistoryAccessibilityText.locale))
+        ]
         if let appName = record.appName, !appName.isEmpty {
             parts.append(appName)
         }

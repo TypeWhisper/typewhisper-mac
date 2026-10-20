@@ -11256,7 +11256,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         MockTranscriptionPlugin.reset()
         MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        final class Announcements {
+            var messages: [String] = []
+        }
+        let announcements = Announcements()
+        let announcer = AccessibilityAnnouncementService()
+        announcer.isVoiceOverEnabled = { true }
+        announcer.post = { message, _ in announcements.messages.append(message) }
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            accessibilityAnnouncementService: announcer
+        )
         let context = try XCTUnwrap(dictationContext)
         let actionPlugin = MockActionPlugin(name: "Capture Action", id: "capture-action")
         let pluginManager: PluginManager = PluginManager.shared
@@ -11320,6 +11330,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.transcription?.text, "Ready to send")
         XCTAssertEqual(actionPlugin.executedInputs, ["Ready to send"])
         XCTAssertEqual(returnCount, 0)
+        // The action's result (the mock returns its input) is announced after the transcription.
+        for _ in 0..<40 where announcements.messages.last != "Ready to send" {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(announcements.messages.last, "Ready to send")
     }
 
     @MainActor

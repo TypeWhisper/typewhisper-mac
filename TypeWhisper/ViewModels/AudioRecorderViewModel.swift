@@ -625,7 +625,7 @@ final class AudioRecorderViewModel: ObservableObject {
             .removeDuplicates()
             .compactMap { $0 }
             .sink { [weak self] message in
-                self?.accessibilityAnnouncementService?.announceWarning(message)
+                self?.accessibilityAnnouncementService?.announceWarning(message, isUrgent: true)
             }
             .store(in: &cancellables)
 

@@ -86,8 +86,10 @@ class AccessibilityAnnouncementService {
     }
 
     /// A warning the indicator shows during a recording, such as the cancel
-    /// confirmation or a silent microphone.
-    func announceWarning(_ message: String) {
-        announce(message, isUrgent: true)
+    /// confirmation or a silent microphone. These use the replaceable default
+    /// priority, so the result that follows (e.g. "Cancelled") or an error is not
+    /// held back. Time-critical warnings, such as a countdown, pass `isUrgent`.
+    func announceWarning(_ message: String, isUrgent: Bool = false) {
+        announce(message, isUrgent: isUrgent)
     }
 }

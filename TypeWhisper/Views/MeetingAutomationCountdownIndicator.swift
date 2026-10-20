@@ -289,7 +289,7 @@ struct MeetingAutomationCountdownIndicator: View {
         )
         let parts = [headline, countdownText(remainingSeconds), actionAccessibilityHint]
             .filter { !$0.isEmpty }
-        ServiceContainer.shared.accessibilityAnnouncementService.announceWarning(parts.joined(separator: ". "))
+        ServiceContainer.shared.accessibilityAnnouncementService.announceWarning(parts.joined(separator: ". "), isUrgent: true)
     }
 
     private func countdownContent(now: Date) -> some View {

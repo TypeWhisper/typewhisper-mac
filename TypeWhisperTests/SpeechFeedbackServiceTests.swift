@@ -236,14 +236,18 @@ final class AccessibilityAnnouncementServiceTests: XCTestCase {
         )
     }
 
-    func testErrorsAndWarningsAreUrgentAndStatusUpdatesAreNot() {
+    /// Errors are urgent. Dictation warnings such as the Esc confirmation stay
+    /// replaceable, so the "Cancelled" that follows is not held back; time-critical
+    /// warnings (countdown, recorder) ask for urgency explicitly.
+    func testErrorsAreUrgentAndWarningsOnlyWhenTheyAskForIt() {
         let (service, recorder) = makeService()
 
         service.announceFeedback("Copied to clipboard", isError: false)
         service.announceFeedback("No speech recognized", isError: true)
         service.announceWarning("Press Esc again to cancel recording")
+        service.announceWarning("Meeting recording starts in 10 seconds", isUrgent: true)
 
-        XCTAssertEqual(recorder.announcements.map { $0.isUrgent }, [false, true, true])
+        XCTAssertEqual(recorder.announcements.map { $0.isUrgent }, [false, true, false, true])
         XCTAssertEqual(recorder.announcements.first?.message, "Copied to clipboard")
         XCTAssertEqual(
             recorder.announcements.dropFirst().first?.message,
