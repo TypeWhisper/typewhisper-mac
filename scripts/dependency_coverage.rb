@@ -100,8 +100,10 @@ module DependencyCoverage
     purl.start_with?("pkg:swift/github.com/") ? purl.split("@", 2).then { |name, version| "#{name.downcase}@#{version}" } : purl
   end
 
+  # Bundler locks precompiled gems as "name (version-platform)" next to "name (version)".
+  # GitHub's dependency graph lists such a gem once, under its plain version.
   def self.gems(sha)
-    gems = read("Gemfile.lock", sha).scan(/^    ([A-Za-z0-9_-]+) \(([^ )]+)\)/)
+    gems = read("Gemfile.lock", sha).scan(/^    ([A-Za-z0-9_-]+) \(([^ )-]+)(?:-[^ )]+)?\)/).uniq
     raise "No Ruby dependencies found" if gems.empty?
     gems
   end
