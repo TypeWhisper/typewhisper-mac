@@ -2,7 +2,7 @@ import XCTest
 @preconcurrency import AVFoundation
 import CryptoKit
 import FluidAudio
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import ParakeetPlugin
 
@@ -731,7 +731,7 @@ final class ParakeetPluginTests: XCTestCase {
         let plugin = makePlugin()
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
-            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "parakeet-tdt-0.6b-v2"]
+            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "fluid-speech-mini", "parakeet-tdt-0.6b-v2"]
         )
         XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
         XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
@@ -866,6 +866,138 @@ final class ParakeetPluginTests: XCTestCase {
         let words = result.segments.map(\.text).joined(separator: " ")
         XCTAssertFalse(words.contains("<unk>"), words)
         XCTAssertEqual(words, "an M&A deal.")
+    }
+
+    // MARK: - Fluid Speech Mini
+
+    func testFluidSpeechMiniIsAnEnglishUltraFineTuneWithoutLanguageHint() {
+        let version = ParakeetVersion.fluidSpeechMini
+        XCTAssertEqual(ParakeetVersion.from(modelId: "fluid-speech-mini"), version)
+        XCTAssertEqual(version.supportedLanguages, ["en"])
+        XCTAssertEqual(version.asrModelVersion, .ultra)
+        XCTAssertFalse(version.acceptsLanguageHint, "Its joint network has no top-K outputs")
+        XCTAssertTrue(ParakeetVersion.ultra.acceptsLanguageHint)
+        XCTAssertEqual(version.jointFileName, ModelNames.ASR.jointFile)
+        XCTAssertEqual(ParakeetVersion.ultra.jointFileName, ModelNames.ASR.jointV3File)
+        XCTAssertEqual(version.huggingFaceRepository, "FluidVoice-Labs/fluid-speech-mini-coreml")
+        XCTAssertNotNil(FluidSpeechMini.revision.range(of: "^[0-9a-f]{40}$", options: .regularExpression))
+        XCTAssertEqual(version.installDirectory.lastPathComponent, "fluid-speech-mini-coreml")
+        XCTAssertNotEqual(version.installDirectory, ParakeetVersion.ultra.installDirectory)
+        XCTAssertTrue(
+            version.settingsDescription(bundle: Bundle(for: ParakeetPlugin.self))
+                .contains("Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra"),
+            "CC BY 4.0 attribution"
+        )
+    }
+
+    func testFluidSpeechMiniInstallMovesACompleteDownloadIntoPlace() async throws {
+        let directory = try makeTemporaryDirectory().appendingPathComponent("fluid-speech-mini-coreml")
+        let files = Self.fluidSpeechMiniFiles
+        let downloads = FluidSpeechMiniTransfers()
+        let progress = ProgressValues()
+
+        try await FluidSpeechMini.install(
+            into: directory,
+            listFiles: { files },
+            downloadFile: { path, destination in
+                await downloads.record(path)
+                try Self.writeFile(of: files, path: path, to: destination)
+            },
+            progress: { progress.append($0) }
+        )
+
+        XCTAssertTrue(FluidSpeechMini.isInstalled(at: directory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: FluidSpeechMini.stagingDirectory(for: directory).path))
+        let downloaded = await downloads.paths
+        XCTAssertEqual(downloaded, files.map(\.path))
+        XCTAssertEqual(progress.values.last, 1)
+    }
+
+    func testFluidSpeechMiniInstallResumesWithoutRefetchingFinishedFiles() async throws {
+        let directory = try makeTemporaryDirectory().appendingPathComponent("fluid-speech-mini-coreml")
+        let files = Self.fluidSpeechMiniFiles
+        let finished = files[0]
+        let staged = FluidSpeechMini.stagingDirectory(for: directory).appendingPathComponent(finished.path)
+        try FileManager.default.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Self.writeFile(of: files, path: finished.path, to: staged)
+        let downloads = FluidSpeechMiniTransfers()
+
+        try await FluidSpeechMini.install(
+            into: directory,
+            listFiles: { files },
+            downloadFile: { path, destination in
+                await downloads.record(path)
+                try Self.writeFile(of: files, path: path, to: destination)
+            },
+            progress: { _ in }
+        )
+
+        let downloaded = await downloads.paths
+        XCTAssertFalse(downloaded.contains(finished.path))
+        XCTAssertEqual(downloaded.count, files.count - 1)
+        XCTAssertTrue(FluidSpeechMini.isInstalled(at: directory))
+    }
+
+    func testFluidSpeechMiniInstallRejectsPathsOutsideTheModelFolder() async throws {
+        let directory = try makeTemporaryDirectory().appendingPathComponent("fluid-speech-mini-coreml")
+        let files = [PluginHuggingFaceDownloadSize.RemoteFile(path: "../escaped.bin", size: 4)]
+
+        do {
+            try await FluidSpeechMini.install(
+                into: directory,
+                listFiles: { files },
+                downloadFile: { _, _ in XCTFail("An unsafe path must not be downloaded") },
+                progress: { _ in }
+            )
+            XCTFail("Expected an error")
+        } catch is FluidSpeechMini.DownloadError {}
+        XCTAssertFalse(FluidSpeechMini.isInstalled(at: directory))
+    }
+
+    func testFluidSpeechMiniInstallRejectsATruncatedFile() async throws {
+        let directory = try makeTemporaryDirectory().appendingPathComponent("fluid-speech-mini-coreml")
+        let files = Self.fluidSpeechMiniFiles
+
+        do {
+            try await FluidSpeechMini.install(
+                into: directory,
+                listFiles: { files },
+                downloadFile: { _, destination in try Data([1]).write(to: destination) },
+                progress: { _ in }
+            )
+            XCTFail("Expected an error")
+        } catch is FluidSpeechMini.DownloadError {}
+        XCTAssertFalse(FluidSpeechMini.isInstalled(at: directory))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    private static let fluidSpeechMiniFiles: [PluginHuggingFaceDownloadSize.RemoteFile] =
+        FluidSpeechMini.modelFolders.sorted().flatMap { folder in
+            [
+                PluginHuggingFaceDownloadSize.RemoteFile(path: "\(folder)/coremldata.bin", size: 8),
+                PluginHuggingFaceDownloadSize.RemoteFile(path: "\(folder)/weights/weight.bin", size: 16),
+            ]
+        } + [PluginHuggingFaceDownloadSize.RemoteFile(path: ModelNames.ASR.vocabularyFile, size: 12)]
+
+    private static func writeFile(
+        of files: [PluginHuggingFaceDownloadSize.RemoteFile],
+        path: String,
+        to destination: URL
+    ) throws {
+        let size = try XCTUnwrap(files.first { $0.path == path }?.size)
+        try Data(repeating: 7, count: Int(size)).write(to: destination)
+    }
+
+    private actor FluidSpeechMiniTransfers {
+        private(set) var paths: [String] = []
+        func record(_ path: String) { paths.append(path) }
+    }
+
+    private final class ProgressValues: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: [Double] = []
+        var values: [Double] { lock.withLock { stored } }
+        func append(_ value: Double) { lock.withLock { stored.append(value) } }
     }
 
     private actor LoadedVersions {

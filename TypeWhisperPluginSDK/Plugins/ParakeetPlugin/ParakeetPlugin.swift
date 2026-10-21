@@ -400,7 +400,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             minimumDuration: 1.0,
             sampleRate: 16_000
         )
-        let fluidLanguage = Self.fluidAudioLanguage(for: language)
+        let loadedVersion = loadedModelId.flatMap(ParakeetVersion.from(modelId:)) ?? selectedVersion
+        let fluidLanguage = loadedVersion.acceptsLanguageHint ? Self.fluidAudioLanguage(for: language) : nil
         let progressTask: Task<Void, Never>? = if Self.shouldObserveSourceProgress(sampleCount: normalizedSamples.count) {
             Task { [asrManager, duration = audio.duration, onSourceProgress] in
                 let stream = await asrManager.transcriptionProgressStream
@@ -1008,18 +1009,23 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                     ? nil
                     : try await reserveDownloadSpace(for: version)
                 defer { spaceReservation?.release() }
-                try await ensureVocabularyAsset(for: version)
-                models = try await AsrModels.downloadAndLoad(
-                    version: version.asrModelVersion,
-                    progressHandler: { [weak self] progress in
-                        guard let self, self.modelState == .downloading,
-                              case .downloading = progress.phase else { return }
-                        self.downloadProgress = Self.downloadProgress(
-                            after: self.downloadProgress,
-                            downloadFraction: progress.fractionCompleted
-                        )
-                    }
-                )
+                if version == .fluidSpeechMini {
+                    try await installFluidSpeechMini()
+                    models = try Self.loadInstalledModels(version: version)
+                } else {
+                    try await ensureVocabularyAsset(for: version)
+                    models = try await AsrModels.downloadAndLoad(
+                        version: version.asrModelVersion,
+                        progressHandler: { [weak self] progress in
+                            guard let self, self.modelState == .downloading,
+                                  case .downloading = progress.phase else { return }
+                            self.downloadProgress = Self.downloadProgress(
+                                after: self.downloadProgress,
+                                downloadFraction: progress.fractionCompleted
+                            )
+                        }
+                    )
+                }
             } else {
                 models = try Self.loadInstalledModels(version: version)
             }
@@ -1079,10 +1085,25 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         return max(current, 0.1 + fraction * 0.6)
     }
 
+    private func installFluidSpeechMini() async throws {
+        let token = Self.currentHuggingFaceToken()
+        let listFiles: FluidSpeechMini.FileLister = {
+            try await FluidSpeechMini.listRemoteFiles(token: token)
+        }
+        let downloadFile: FluidSpeechMini.FileDownloader = { remotePath, destination in
+            try await FluidSpeechMini.downloadRemoteFile(remotePath, to: destination, token: token)
+        }
+        try await FluidSpeechMini.install(listFiles: listFiles, downloadFile: downloadFile) { [weak self] fraction in
+            guard let self, self.modelState == .downloading else { return }
+            // The download fills the 10-70% band that precedes model loading.
+            self.downloadProgress = max(self.downloadProgress, 0.1 + min(max(fraction, 0), 1) * 0.6)
+        }
+    }
+
     /// FluidAudio's high-level loaders can delete and re-download a corrupt cache,
     /// even when every file exists. Passive restore must use local Core ML loading.
     static func loadInstalledModels(version: ParakeetVersion, directory: URL? = nil) throws -> AsrModels {
-        let directory = directory ?? AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        let directory = directory ?? version.installDirectory
         let vocabularyURL = directory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
         let tokens = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: vocabularyURL))
         var vocabulary: [Int: String] = [:]
@@ -1096,7 +1117,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let preprocessorConfiguration = MLModelConfiguration()
         preprocessorConfiguration.computeUnits = .cpuOnly
         preprocessorConfiguration.allowLowPrecisionAccumulationOnGPU = true
-        let jointFile = version.asrModelVersion.isV3Family ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
+        let jointFile = version.jointFileName
         return try AsrModels(
             encoder: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.encoderFile), configuration: configuration),
             preprocessor: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.preprocessorFile), configuration: preprocessorConfiguration),
@@ -1109,11 +1130,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
-        URL(string: "https://huggingface.co/\(version.repository.remotePath)/resolve/main/\(vocabularyAssetFileName)")!
+        let revision = version == .fluidSpeechMini ? FluidSpeechMini.revision : "main"
+        return URL(string: "https://huggingface.co/\(version.huggingFaceRepository)/resolve/\(revision)/\(vocabularyAssetFileName)")!
     }
 
     static func vocabularyAssetDirectory(for version: ParakeetVersion) -> URL {
-        AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        version.installDirectory
     }
 
     func ensureVocabularyAsset(
@@ -1315,9 +1337,23 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// FluidAudio skips complete files and resumes `.partial` files in the cache
     /// directory, so those bytes count toward the download instead of being deleted.
     private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
-        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        let cacheDir = version.installDirectory
+        if version == .fluidSpeechMini {
+            // Files download into the staging folder and move into place when complete.
+            let staging = FluidSpeechMini.stagingDirectory(for: cacheDir)
+            return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+                repositoryID: FluidSpeechMini.repository,
+                revision: FluidSpeechMini.revision,
+                matching: FluidSpeechMini.filePatterns,
+                token: _hfToken,
+                destination: cacheDir,
+                trackedDirectory: staging,
+                localRepositoryRoot: staging,
+                modelName: version.modelDef.displayName
+            )
+        }
         return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
-            repositoryID: version.repository.remotePath,
+            repositoryID: version.huggingFaceRepository,
             matching: version.requiredModelFiles.sorted().map { "\($0)/*" } + ["*vocab*.json"],
             token: _hfToken,
             destination: cacheDir,
@@ -1342,8 +1378,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
-        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
-        return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
+        if version == .fluidSpeechMini {
+            return FluidSpeechMini.isInstalled(at: version.installDirectory)
+        }
+        return AsrModels.modelsExist(at: version.installDirectory, version: version.asrModelVersion)
     }
 
     /// Whether `loadInstalledModels` finds everything it needs without downloading.
@@ -1418,30 +1456,58 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 enum ParakeetVersion: String, CaseIterable {
     case ultra
     case v3
+    case fluidSpeechMini
     case v2
 
     var asrModelVersion: AsrModelVersion {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
-        case .ultra: return .ultra
+        // Fluid Speech Mini keeps Ultra's decoder, joint network and decode contract.
+        case .ultra, .fluidSpeechMini: return .ultra
         }
     }
 
-    var repository: Repo {
+    /// Hugging Face repository the model files come from.
+    var huggingFaceRepository: String {
         switch self {
-        case .v2: return .parakeetV2
-        case .v3: return .parakeetV3
-        case .ultra: return .parakeetUltra
+        case .v2: return Repo.parakeetV2.remotePath
+        case .v3: return Repo.parakeetV3.remotePath
+        case .ultra: return Repo.parakeetUltra.remotePath
+        case .fluidSpeechMini: return FluidSpeechMini.repository
         }
     }
 
-    /// Model folders `AsrModels.download` fetches with its default int8 encoder.
+    /// Folder the model is installed in.
+    var installDirectory: URL {
+        switch self {
+        case .v2, .v3, .ultra: return AsrModels.defaultCacheDirectory(for: asrModelVersion)
+        case .fluidSpeechMini: return FluidSpeechMini.directory
+        }
+    }
+
+    /// Model folders `AsrModels.download` fetches with its default int8 encoder, or that
+    /// the plugin downloads itself for Fluid Speech Mini.
     var requiredModelFiles: Set<String> {
         switch self {
         case .v2: return ModelNames.ASR.requiredModels
         case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
+        case .fluidSpeechMini: return FluidSpeechMini.modelFolders
         }
+    }
+
+    /// Fluid Speech Mini's joint network has no top-K outputs, so it keeps the plain name.
+    var jointFileName: String {
+        switch self {
+        case .v2, .fluidSpeechMini: return ModelNames.ASR.jointFile
+        case .v3, .ultra: return ModelNames.ASR.jointV3File
+        }
+    }
+
+    /// FluidAudio filters tokens by a language's script through the joint network's top-K
+    /// outputs, which Fluid Speech Mini does not have; v2 ignores the hint.
+    var acceptsLanguageHint: Bool {
+        self != .fluidSpeechMini
     }
 
     var modelDef: ParakeetModelDef {
@@ -1467,12 +1533,19 @@ enum ParakeetVersion: String, CaseIterable {
                 sizeDescription: "~630 MB",
                 ramRequirement: "8 GB+"
             )
+        case .fluidSpeechMini:
+            return ParakeetModelDef(
+                id: "fluid-speech-mini",
+                displayName: "Fluid Speech Mini",
+                sizeDescription: "~250 MB",
+                ramRequirement: "8 GB+"
+            )
         }
     }
 
     var supportedLanguages: [String] {
         switch self {
-        case .v2:
+        case .v2, .fluidSpeechMini:
             return ["en"]
         case .v3, .ultra:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
@@ -1491,11 +1564,149 @@ enum ParakeetVersion: String, CaseIterable {
             return String(localized: "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
         case .ultra:
             return String(localized: "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.", bundle: bundle)
+        case .fluidSpeechMini:
+            // CC BY 4.0 asks for this attribution wherever the model is offered.
+            return String(localized: "Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Smallest download, English only, no API key required.", bundle: bundle)
         }
     }
 
     static func from(modelId: String) -> ParakeetVersion? {
         allCases.first { $0.modelDef.id == modelId }
+    }
+}
+
+// MARK: - Fluid Speech Mini
+
+/// Fluid Speech Mini (FluidVoice-Labs, CC BY 4.0) is a Parakeet fine-tune that FluidAudio's
+/// model registry does not list, so the plugin downloads its Core ML folders itself, pinned to
+/// a reviewed revision, next to FluidAudio's own Parakeet folders.
+enum FluidSpeechMini {
+    static let repository = "FluidVoice-Labs/fluid-speech-mini-coreml"
+    static let revision = "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a"
+    static let modelFolders: Set<String> = [
+        ModelNames.ASR.preprocessorFile,
+        ModelNames.ASR.encoderFile,
+        ModelNames.ASR.decoderFile,
+        ModelNames.ASR.jointFile,
+    ]
+    static let filePatterns = modelFolders.sorted().map { "\($0)/*" } + [ModelNames.ASR.vocabularyFile]
+
+    static var directory: URL {
+        AsrModels.defaultCacheDirectory(for: .v3)
+            .deletingLastPathComponent()
+            .appendingPathComponent("fluid-speech-mini-coreml", isDirectory: true)
+    }
+
+    /// Files land here first and move into place once all of them are complete, so an
+    /// interrupted download resumes instead of leaving a broken model folder.
+    static func stagingDirectory(for directory: URL) -> URL {
+        directory.deletingLastPathComponent()
+            .appendingPathComponent(".\(directory.lastPathComponent).download", isDirectory: true)
+    }
+
+    static func isInstalled(at directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        let foldersExist = modelFolders.allSatisfy {
+            fileManager.fileExists(atPath: directory.appendingPathComponent($0).appendingPathComponent("coremldata.bin").path)
+        }
+        let vocabulary = directory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
+        return foldersExist && (fileSize(of: vocabulary) ?? 0) > 0
+    }
+
+    typealias FileLister = @Sendable () async throws -> [PluginHuggingFaceDownloadSize.RemoteFile]
+    typealias FileDownloader = @Sendable (_ remotePath: String, _ destination: URL) async throws -> Void
+
+    struct DownloadError: LocalizedError, Equatable {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Downloads the pinned revision into `directory`, skipping files a previous attempt finished.
+    static func install(
+        into directory: URL = FluidSpeechMini.directory,
+        listFiles: FileLister,
+        downloadFile: FileDownloader,
+        progress: @Sendable (Double) -> Void
+    ) async throws {
+        guard !isInstalled(at: directory) else { return }
+        let files = try await listFiles()
+        guard !files.isEmpty else {
+            throw DownloadError(message: "Fluid Speech Mini has no files at revision \(revision)")
+        }
+        let staging = stagingDirectory(for: directory)
+        let fileManager = FileManager.default
+        let total = max(1, files.reduce(Int64(0)) { $0 + $1.size })
+        var completed: Int64 = 0
+        for file in files {
+            try Task.checkCancellation()
+            guard isSafeRelativePath(file.path) else {
+                throw DownloadError(message: "Unexpected file path in Fluid Speech Mini: \(file.path)")
+            }
+            let target = staging.appendingPathComponent(file.path, isDirectory: false)
+            if fileSize(of: target) != file.size {
+                try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try await downloadFile(file.path, target)
+                guard fileSize(of: target) == file.size else {
+                    try? fileManager.removeItem(at: target)
+                    throw DownloadError(message: "Incomplete download of \(file.path)")
+                }
+            }
+            completed += file.size
+            progress(Double(completed) / Double(total))
+        }
+        guard isInstalled(at: staging) else {
+            throw DownloadError(message: "Fluid Speech Mini is missing model files after the download")
+        }
+        if fileManager.fileExists(atPath: directory.path) {
+            try fileManager.removeItem(at: directory)
+        }
+        try fileManager.moveItem(at: staging, to: directory)
+    }
+
+    static func listRemoteFiles(token: String?) async throws -> [PluginHuggingFaceDownloadSize.RemoteFile] {
+        try await PluginHuggingFaceDownloadSize.files(
+            repositoryID: repository,
+            revision: revision,
+            matching: filePatterns,
+            token: token
+        )
+    }
+
+    static func downloadRemoteFile(_ remotePath: String, to destination: URL, token: String?) async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        guard let url = URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(remotePath)") else {
+            throw DownloadError(message: "Invalid Fluid Speech Mini file path: \(remotePath)")
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 600
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (temporaryFile, response) = try await URLSession.shared.download(for: request)
+        defer { try? FileManager.default.removeItem(at: temporaryFile) }
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode
+            throw DownloadError(message: "HTTP \(status.map(String.init) ?? "error") while downloading \(remotePath)")
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: temporaryFile, to: destination)
+    }
+
+    static func isSafeRelativePath(_ path: String) -> Bool {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+        return !path.hasPrefix("/") && !components.isEmpty
+            && components.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+
+    private static func fileSize(of url: URL) -> Int64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              (attributes[.type] as? FileAttributeType) == .typeRegular,
+              let size = attributes[.size] as? NSNumber else {
+            return nil
+        }
+        return size.int64Value
     }
 }
 

@@ -800,6 +800,28 @@
         }
       }
     },
+    "Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Smallest download, English only, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fluid Speech Mini von FluidVoice, basiert auf NVIDIA Parakeet TDT 0.6B v3 und Moondream Parakeet Ultra. Kleinster Download, nur Englisch, kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FluidVoiceのFluid Speech Mini。NVIDIA Parakeet TDT 0.6B v3とMoondream Parakeet Ultraをベースにしています。ダウンロードサイズが最も小さく、英語のみ、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FluidVoice 的 Fluid Speech Mini，基于 NVIDIA Parakeet TDT 0.6B v3 和 Moondream Parakeet Ultra。下载体积最小，仅支持英语，无需 API 密钥。"
+          }
+        }
+      }
+    },
     "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.": {
       "localizations": {
         "de": {
