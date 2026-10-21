@@ -96,7 +96,7 @@ struct MeetingLinkParser: Sendable {
         if host == "facetime.apple.com" {
             return parseFaceTimeWebLink(components)
         }
-        if host.hasSuffix(".ktalk.ru") {
+        if isKonturTalkSpaceHost(host) {
             return parseKonturTalkLink(components, host: host)
         }
         return nil
@@ -287,6 +287,14 @@ struct MeetingLinkParser: Sendable {
         let normalized = normalizedZoomIdentifier(value)
         guard !normalized.isEmpty, normalized.allSatisfy(\.isNumber) else { return nil }
         return normalized
+    }
+
+    /// A Talk space is a single label before `.ktalk.ru`, such as `company.ktalk.ru`.
+    private func isKonturTalkSpaceHost(_ host: String) -> Bool {
+        let suffix = ".ktalk.ru"
+        guard host.hasSuffix(suffix) else { return false }
+        let space = host.dropLast(suffix.count)
+        return !space.isEmpty && !space.contains(".")
     }
 
     private func isZoomHost(_ host: String) -> Bool {

@@ -111,6 +111,7 @@ final class MeetingLinkParserTests: XCTestCase {
         https://acme.ktalk.ru/room.name
         https://ktalk.ru/weekly-sync
         https://acme.ktalk.ru.evil.example/weekly-sync
+        https://acme.other.ktalk.ru/weekly-sync
         https://acmektalk.ru/weekly-sync
         """
 
