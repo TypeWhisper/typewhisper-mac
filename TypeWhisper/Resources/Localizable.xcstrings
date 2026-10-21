@@ -81,6 +81,22 @@
         }
       }
     },
+    "Enterprise: yearly subscription instead of Lifetime" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エンタープライズ: ライフタイムの代わりに年額サブスクリプション"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "企业版：以年度订阅代替终身版"
+          }
+        }
+      }
+    },
     "Everything in Individual included" : {
       "localizations" : {
         "ja" : {
@@ -843,22 +859,6 @@
         }
       }
     },
-    "The same 3-device Individual tier, billed once a year." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "3台のデバイスに対応する同じIndividual階層を、年1回のお支払いで利用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同样的个人版，支持 3 台设备，每年计费一次。"
-          }
-        }
-      }
-    },
     "The same Enterprise tier with up to 50 devices, billed once a year." : {
       "localizations" : {
         "ja" : {
@@ -871,22 +871,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "同样的企业版，最多支持 50 台设备，每年计费一次。"
-          }
-        }
-      }
-    },
-    "The same Team tier with up to 10 devices, billed once a year." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最大10台のデバイスに対応する同じTeam階層を、年1回のお支払いで利用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同样的团队版，最多支持 10 台设备，每年计费一次。"
           }
         }
       }

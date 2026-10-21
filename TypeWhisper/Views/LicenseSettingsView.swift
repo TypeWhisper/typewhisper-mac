@@ -273,7 +273,7 @@ struct LicenseSettingsView: View {
     private var purchaseSection: some View {
         if let tier = selectedCommercialTier {
             let cadences = commercialPurchaseCadences(for: tier)
-            let cadence = cadences.contains(purchaseCadence) ? purchaseCadence : .monthly
+            let cadence = commercialPurchaseCadence(for: tier, preferring: purchaseCadence)
 
             licenseSection(eyebrow: localizedAppText("Purchase", de: "Kauf")) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -285,27 +285,41 @@ struct LicenseSettingsView: View {
 
                     SettingsCard {
                         VStack(alignment: .leading, spacing: 16) {
-                            HStack(alignment: .firstTextBaseline) {
-                                Text(businessTierDisplayName(tier))
-                                    .font(.title3.weight(.semibold))
-                                    .accessibilityAddTraits(.isHeader)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(businessTierDisplayName(tier))
+                                        .font(.title3.weight(.semibold))
+                                        .accessibilityAddTraits(.isHeader)
 
-                                Spacer(minLength: 16)
+                                    Spacer(minLength: 16)
 
-                                Picker(
-                                    localizedAppText("Billing", de: "Abrechnung"),
-                                    selection: Binding(
-                                        get: { cadence },
-                                        set: { purchaseCadence = $0 }
-                                    )
-                                ) {
-                                    ForEach(cadences, id: \.self) { option in
-                                        Text(cadenceTitle(option)).tag(option)
+                                    Picker(
+                                        localizedAppText("Billing", de: "Abrechnung"),
+                                        selection: Binding(
+                                            get: { cadence },
+                                            set: { purchaseCadence = $0 }
+                                        )
+                                    ) {
+                                        ForEach(cadences, id: \.self) { option in
+                                            Text(cadenceTitle(option)).tag(option)
+                                        }
                                     }
+                                    .pickerStyle(.segmented)
+                                    .labelsHidden()
+                                    .fixedSize()
                                 }
-                                .pickerStyle(.segmented)
-                                .labelsHidden()
-                                .fixedSize()
+
+                                // The picker shows Yearly where the other plans show Lifetime.
+                                if tier == .enterprise {
+                                    Text(localizedAppText(
+                                        "Enterprise: yearly subscription instead of Lifetime",
+                                        de: "Unternehmensplan: Jahresabo statt Dauerlizenz"
+                                    ))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                    .multilineTextAlignment(.trailing)
+                                }
                             }
 
                             if let pricing = commercialPurchaseOptionCopy(for: tier, cadence: cadence) {
@@ -850,16 +864,6 @@ struct LicenseSettingsView: View {
                 "Recurring plan for up to 50 devices with faster support.",
                 de: "Wiederkehrender Plan für bis zu 50 Geräte mit schnellerem Support."
             )
-        case (.individual, .yearly):
-            return localizedAppText(
-                "The same 3-device Individual tier, billed once a year.",
-                de: "Dasselbe Einzelnutzer-Paket mit 3 Geräten, einmal im Jahr abgerechnet."
-            )
-        case (.team, .yearly):
-            return localizedAppText(
-                "The same Team tier with up to 10 devices, billed once a year.",
-                de: "Dasselbe Team-Paket mit bis zu 10 Geräten, einmal im Jahr abgerechnet."
-            )
         case (.enterprise, .yearly):
             return localizedAppText(
                 "The same Enterprise tier with up to 50 devices, billed once a year.",
@@ -875,7 +879,7 @@ struct LicenseSettingsView: View {
                 "One payment for the same Team tier with up to 10 devices and no renewal cycle.",
                 de: "Eine Zahlung für dasselbe Team-Paket mit bis zu 10 Geräten und ohne Verlängerungszyklus."
             )
-        case (.enterprise, .lifetime):
+        case (.individual, .yearly), (.team, .yearly), (.enterprise, .lifetime):
             return nil
         }
     }
@@ -898,12 +902,10 @@ struct LicenseSettingsView: View {
         case (.individual, .monthly): AppConstants.Polar.checkoutURLIndividual
         case (.team, .monthly): AppConstants.Polar.checkoutURLTeam
         case (.enterprise, .monthly): AppConstants.Polar.checkoutURLEnterprise
-        case (.individual, .yearly): AppConstants.Polar.checkoutURLIndividualYearly
-        case (.team, .yearly): AppConstants.Polar.checkoutURLTeamYearly
         case (.enterprise, .yearly): AppConstants.Polar.checkoutURLEnterpriseYearly
         case (.individual, .lifetime): AppConstants.Polar.checkoutURLIndividualLifetime
         case (.team, .lifetime): AppConstants.Polar.checkoutURLTeamLifetime
-        case (.enterprise, .lifetime): nil
+        case (.individual, .yearly), (.team, .yearly), (.enterprise, .lifetime): nil
         }
         guard let urlString else { return nil }
 
@@ -1093,13 +1095,28 @@ enum CommercialPurchaseCadence: String, CaseIterable {
     case lifetime
 }
 
-/// The ways a tier can be bought. Enterprise is sold as a subscription only.
+/// The ways a tier can be bought. Individual and Team are sold monthly or as
+/// Lifetime; Enterprise is a subscription only and the one tier sold yearly.
 func commercialPurchaseCadences(for tier: LicenseTier) -> [CommercialPurchaseCadence] {
     switch tier {
     case .individual, .team:
-        [.monthly, .yearly, .lifetime]
+        [.monthly, .lifetime]
     case .enterprise:
         [.monthly, .yearly]
+    }
+}
+
+/// The billing choice to show for a tier. Enterprise offers its yearly
+/// subscription in place of Lifetime, so switching plans keeps the second
+/// option selected instead of falling back to monthly.
+func commercialPurchaseCadence(for tier: LicenseTier, preferring preferred: CommercialPurchaseCadence) -> CommercialPurchaseCadence {
+    switch (tier, preferred) {
+    case (.enterprise, .lifetime):
+        .yearly
+    case (.individual, .yearly), (.team, .yearly):
+        .lifetime
+    default:
+        preferred
     }
 }
 
@@ -1123,8 +1140,6 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
             billingLabel: monthly,
             detail: localizedAppText("Lower upfront cost", de: "Geringerer Einstiegspreis")
         )
-    case (.individual, .yearly):
-        return CommercialPurchaseOptionCopy(price: "50 EUR", billingLabel: yearly, detail: twoMonthsFree)
     case (.individual, .lifetime):
         return CommercialPurchaseOptionCopy(price: "99 EUR", billingLabel: oneTime, detail: payOnce)
     case (.team, .monthly):
@@ -1133,8 +1148,6 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
             billingLabel: monthly,
             detail: localizedAppText("Recurring billing", de: "Wiederkehrende Abrechnung")
         )
-    case (.team, .yearly):
-        return CommercialPurchaseOptionCopy(price: "190 EUR", billingLabel: yearly, detail: twoMonthsFree)
     case (.team, .lifetime):
         return CommercialPurchaseOptionCopy(price: "299 EUR", billingLabel: oneTime, detail: payOnce)
     case (.enterprise, .monthly):
@@ -1149,7 +1162,7 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
             billingLabel: yearly,
             detail: twoMonthsFree
         )
-    case (.enterprise, .lifetime):
+    case (.individual, .yearly), (.team, .yearly), (.enterprise, .lifetime):
         return nil
     }
 }

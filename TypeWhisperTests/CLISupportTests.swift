@@ -717,24 +717,21 @@ final class CLISupportTests: XCTestCase {
         )
 
         XCTAssertEqual(
-            commercialPurchaseOptionCopy(for: .team, cadence: .yearly),
+            commercialPurchaseOptionCopy(for: .enterprise, cadence: .yearly),
             CommercialPurchaseOptionCopy(
-                price: "190 EUR",
+                price: localizedAppText("1,990 EUR", de: "1.990 EUR"),
                 billingLabel: localizedAppText("per year", de: "pro Jahr"),
                 detail: localizedAppText("Two months free", de: "Zwei Monate gratis")
             )
         )
-
-        XCTAssertEqual(
-            commercialPurchaseOptionCopy(for: .enterprise, cadence: .yearly)?.price,
-            localizedAppText("1,990 EUR", de: "1.990 EUR")
-        )
         XCTAssertNil(commercialPurchaseOptionCopy(for: .enterprise, cadence: .lifetime))
+        XCTAssertNil(commercialPurchaseOptionCopy(for: .individual, cadence: .yearly))
+        XCTAssertNil(commercialPurchaseOptionCopy(for: .team, cadence: .yearly))
     }
 
-    func testEnterpriseIsSoldAsSubscriptionOnly() {
-        XCTAssertEqual(commercialPurchaseCadences(for: .individual), [.monthly, .yearly, .lifetime])
-        XCTAssertEqual(commercialPurchaseCadences(for: .team), [.monthly, .yearly, .lifetime])
+    func testOnlyEnterpriseIsSoldYearlyAndOnlyAsSubscription() {
+        XCTAssertEqual(commercialPurchaseCadences(for: .individual), [.monthly, .lifetime])
+        XCTAssertEqual(commercialPurchaseCadences(for: .team), [.monthly, .lifetime])
         XCTAssertEqual(commercialPurchaseCadences(for: .enterprise), [.monthly, .yearly])
 
         for tier in [LicenseTier.individual, .team, .enterprise] {
@@ -742,6 +739,24 @@ final class CLISupportTests: XCTestCase {
                 XCTAssertNotNil(
                     commercialPurchaseOptionCopy(for: tier, cadence: cadence),
                     "\(tier) \(cadence) is offered without a price"
+                )
+            }
+        }
+    }
+
+    func testSwitchingPlansKeepsTheSecondBillingOption() {
+        XCTAssertEqual(commercialPurchaseCadence(for: .enterprise, preferring: .lifetime), .yearly)
+        XCTAssertEqual(commercialPurchaseCadence(for: .individual, preferring: .yearly), .lifetime)
+        XCTAssertEqual(commercialPurchaseCadence(for: .team, preferring: .yearly), .lifetime)
+
+        for tier in [LicenseTier.individual, .team, .enterprise] {
+            XCTAssertEqual(commercialPurchaseCadence(for: tier, preferring: .monthly), .monthly)
+            for cadence in CommercialPurchaseCadence.allCases {
+                XCTAssertTrue(
+                    commercialPurchaseCadences(for: tier).contains(
+                        commercialPurchaseCadence(for: tier, preferring: cadence)
+                    ),
+                    "\(tier) shows a billing option it does not offer for \(cadence)"
                 )
             }
         }
