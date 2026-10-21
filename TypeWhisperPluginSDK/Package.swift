@@ -331,6 +331,7 @@ let package = Package(
             resources: [
                 .copy("gigaam_v3_preprocessor.onnx"),
                 .copy("THIRD_PARTY_LICENSE.txt"),
+                .copy("sber.svg"),
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),
             ]

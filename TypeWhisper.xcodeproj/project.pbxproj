@@ -13,6 +13,7 @@
 		6A6A00000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000C /* Localizable.xcstrings */; };
 		6A6A00000000000000000005 /* gigaam_v3_preprocessor.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */; };
 		6A6A0000000000000000001B /* THIRD_PARTY_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */; };
+		6A6A0000000000000000001D /* sber.svg in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000001C /* sber.svg */; };
 		6A6A00000000000000000006 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000017 /* TypeWhisperPluginSDK */; };
 		6A6A00000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000018 /* onnxruntime */; };
 		6A6A00000000000000000008 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000019 /* HuggingFace */; };
@@ -801,6 +802,7 @@
 		6A6A0000000000000000000C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = gigaam_v3_preprocessor.onnx; sourceTree = "<group>"; };
 		6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_LICENSE.txt; sourceTree = "<group>"; };
+		6A6A0000000000000000001C /* sber.svg */ = {isa = PBXFileReference; lastKnownFileType = text.xml.svg; path = sber.svg; sourceTree = "<group>"; };
 		6A6A0000000000000000000E /* GigaAMPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GigaAMPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47A00000000000000000006 /* UserDataExportAndEraseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataExportAndEraseTests.swift; sourceTree = "<group>"; };
 		D47A00000000000000000004 /* UserDataEraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataEraser.swift; sourceTree = "<group>"; };
@@ -1945,6 +1947,7 @@
 				6A6A0000000000000000000A /* GigaAMRuntime.swift */,
 				6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */,
 				6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */,
+				6A6A0000000000000000001C /* sber.svg */,
 				6A6A0000000000000000000B /* manifest.json */,
 				6A6A0000000000000000000C /* Localizable.xcstrings */,
 			);
@@ -4633,6 +4636,7 @@
 				6A6A00000000000000000004 /* Localizable.xcstrings in Resources */,
 				6A6A00000000000000000005 /* gigaam_v3_preprocessor.onnx in Resources */,
 				6A6A0000000000000000001B /* THIRD_PARTY_LICENSE.txt in Resources */,
+				6A6A0000000000000000001D /* sber.svg in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -2,6 +2,9 @@ gigaam_v3_preprocessor.onnx is the GigaAM v3 feature extractor from onnx-asr
 (https://github.com/istupakov/onnx-asr, version 0.12.0, onnx_asr/preprocessors/data/gigaam_v3.onnx).
 The GigaAM v3 model weights the plugin downloads come from https://huggingface.co/istupakov/gigaam-v3-onnx
 (MIT) and are based on GigaAM by Sber (https://github.com/salute-developers/GigaAM, MIT).
+sber.svg is the symbol of the Sber logo (2020), cut from "Sberbank Logo 2020.svg" on Wikimedia Commons
+(https://commons.wikimedia.org/wiki/File:Sberbank_Logo_2020.svg, public domain, trademark of Sberbank).
+Paths and gradients are unchanged; colors are written as hex values.
 
 MIT License
 
