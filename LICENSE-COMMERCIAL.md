@@ -7,7 +7,7 @@ TypeWhisper is available under a dual-licensing model:
 
 You do not need a commercial license merely to install and run an unmodified GPL copy of TypeWhisper, including for internal professional or commercial work.
 
-You do need a commercial license if you want to use TypeWhisper in a proprietary product, closed-source distribution, rebranded distribution, or any other use case that is not compliant with GPLv3 obligations. A commercial license can also be used for procurement, invoicing, priority support, or other institutional requirements.
+You do need a commercial license if you want to distribute, embed, or rebrand TypeWhisper in a proprietary or closed-source product, or for any other use case that is not compliant with GPLv3 obligations. A commercial license also unlocks Premium features in the app, such as Learn from Corrections. It can also be used for procurement, invoicing, priority support, managed licensing, or other institutional requirements.
 
 License inquiries:
 

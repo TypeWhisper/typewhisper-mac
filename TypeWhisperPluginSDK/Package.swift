@@ -320,6 +320,23 @@ let package = Package(
             ]
         ),
         .target(
+            name: "GigaAMPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
+            ],
+            path: "Plugins/GigaAMPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .copy("gigaam_v3_preprocessor.onnx"),
+                .copy("THIRD_PARTY_LICENSE.txt"),
+                .copy("sber.svg"),
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "FileMemoryPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/FileMemoryPlugin",
@@ -712,6 +729,15 @@ let package = Package(
                 "SupertonicPlugin",
             ],
             path: "Plugins/SupertonicPlugin/Tests"
+        ),
+        .testTarget(
+            name: "GigaAMPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "GigaAMPlugin",
+            ],
+            path: "Plugins/GigaAMPlugin/Tests"
         ),
         .testTarget(
             name: "FileMemoryPluginTests",
