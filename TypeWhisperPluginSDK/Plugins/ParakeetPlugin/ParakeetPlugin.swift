@@ -432,7 +432,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             to: result,
             audioSamples: normalizedSamples
         )
-        let trimmedText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = Self.removingUnknownTokens(from: finalResult.text)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if audio.duration < Self.shortClipConfidenceGateDuration {
             Self.logger.info(
@@ -461,8 +462,25 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             segments = []
         }
 
-        _ = onProgress(finalResult.text)
-        return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+        _ = onProgress(text)
+        return PluginTranscriptionResult(text: text, detectedLanguage: nil, segments: segments)
+    }
+
+    /// Parakeet's vocabulary has no token for a few characters, mostly "&", brackets and some
+    /// quotes. v3 never writes them, but Ultra learned to and emits "<unk>" in their place
+    /// ("M<unk>A", "spectroscopy <unk> FTIR"). Between capitals it stands for "&" (M&A, P&L,
+    /// R&D); elsewhere it is dropped, so the marker never reaches the user's text.
+    static func removingUnknownTokens(from text: String) -> String {
+        let marker = "<unk>"
+        guard text.contains(marker) else { return text }
+        var cleaned = text
+            .replacingOccurrences(of: "(?<=[A-Z])<unk>(?=[A-Z])", with: "&", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=\\w)<unk>(?=\\w)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: marker, with: " ")
+        cleaned = cleaned
+            .replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " +([,.;:!?)\\]])", with: "$1", options: .regularExpression)
+        return cleaned.trimmingCharacters(in: .whitespaces)
     }
 
     private func runInference(_ samples: [Float], manager: AsrManager, language: Language?) async throws -> ASRResult {
@@ -586,7 +604,11 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         if !lastTrimmed.isEmpty {
             words.append(PluginWordTiming(text: lastTrimmed, start: wordStart, end: wordEnd))
         }
-        return words
+        return words.compactMap { word in
+            let text = removingUnknownTokens(from: word.text)
+            guard !text.isEmpty else { return nil }
+            return text == word.text ? word : PluginWordTiming(text: text, start: word.start, end: word.end)
+        }
     }
 
     /// Groups words into sentence segments (split at sentence-ending punctuation or pause > 0.8s).

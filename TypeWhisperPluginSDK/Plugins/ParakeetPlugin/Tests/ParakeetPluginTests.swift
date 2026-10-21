@@ -770,6 +770,51 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(versions, [.v3])
     }
 
+    // MARK: - Unknown tokens
+
+    func testUnknownTokensBecomeAmpersandsBetweenCapitalsAndAreDroppedElsewhere() {
+        let cases: [(String, String)] = [
+            ("whether that's an M<unk>A or supporting new products", "whether that's an M&A or supporting new products"),
+            ("booked directly into P<unk>L, into the selling cost line.", "booked directly into P&L, into the selling cost line."),
+            ("compared by infrared spectroscopy <unk> FTIR.", "compared by infrared spectroscopy FTIR."),
+            ("alongside the word <unk>say<unk> for you", "alongside the word say for you"),
+            ("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil"),
+            ("<unk>Hello there<unk>", "Hello there"),
+            ("no markers here", "no markers here"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(ParakeetPlugin.removingUnknownTokens(from: input), expected, input)
+        }
+    }
+
+    func testTranscriptAndWordTimingsNeverContainUnknownTokens() async throws {
+        let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
+        let plugin = makePlugin()
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        let timings = [
+            TokenTiming(token: "▁an", tokenId: 1, startTime: 0.0, endTime: 0.2, confidence: 1),
+            TokenTiming(token: "▁M", tokenId: 2, startTime: 0.3, endTime: 0.4, confidence: 1),
+            TokenTiming(token: "<unk>", tokenId: 0, startTime: 0.4, endTime: 0.5, confidence: 1),
+            TokenTiming(token: "A", tokenId: 3, startTime: 0.5, endTime: 0.6, confidence: 1),
+            TokenTiming(token: "▁<unk>", tokenId: 0, startTime: 0.7, endTime: 0.8, confidence: 1),
+            TokenTiming(token: "▁deal.", tokenId: 4, startTime: 0.9, endTime: 1.0, confidence: 1),
+        ]
+        plugin.asrTranscriptionOverrideForTests = { samples in
+            ASRResult(text: "an M<unk>A <unk> deal.", confidence: 1, duration: Double(samples.count) / 16_000,
+                      processingTime: 0, tokenTimings: timings)
+        }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.restoreLoadedModel()
+
+        let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "an M&A deal.")
+        let words = result.segments.map(\.text).joined(separator: " ")
+        XCTAssertFalse(words.contains("<unk>"), words)
+        XCTAssertEqual(words, "an M&A deal.")
+    }
+
     private actor LoadedVersions {
         private(set) var versions: [ParakeetVersion] = []
         func append(_ version: ParakeetVersion) { versions.append(version) }
