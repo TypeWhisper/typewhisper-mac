@@ -33,6 +33,7 @@ extension ServiceContainer {
 
         seedScreenshotHistory(content.history, languageCode: language.rawValue)
         usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
+        seedScreenshotFileTranscriptionQueue(languageCode: language.rawValue)
 
         dictionaryService.addEntries(
             content.terms.map {
@@ -333,6 +334,24 @@ extension ServiceContainer {
         )
         voices.enroll("S1", inRecordID: recordID)
         historyViewModel.requestRecordSelection([recordID])
+    }
+
+    /// A file waiting in the File Transcription queue, so the page shows the
+    /// engine and model pickers that only appear next to queued files.
+    private func seedScreenshotFileTranscriptionQueue(languageCode: String) {
+        guard AppConstants.screenshotState == "file-transcription-queue" else { return }
+        let url = AppConstants.appSupportDirectory
+            .appendingPathComponent("ScreenshotMedia", isDirectory: true)
+            .appendingPathComponent(languageCode == "de" ? "Wochenplanung.m4a" : "Weekly planning.m4a")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let samples = (0..<Int(12 * SpeakerAudioWriter.sampleRate)).map {
+            Float(sin(Double($0) * 0.06)) * 0.05
+        }
+        guard (try? SpeakerAudioWriter.writeAAC(samples: samples, to: url)) != nil else { return }
+        fileTranscriptionViewModel.addFiles([url])
     }
 
     private func seedScreenshotPluginRegistry() {

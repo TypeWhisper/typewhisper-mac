@@ -50,7 +50,7 @@ struct SettingsView: View {
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
-        case "file-transcription": return .fileTranscription
+        case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
         case "recorder": return .recorder
         case "history": return .history
