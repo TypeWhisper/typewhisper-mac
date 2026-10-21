@@ -160,7 +160,7 @@ is managed on the Speakers page and is not listed in the marketplace.
 | Status | Plugins |
 |---|---|
 | Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
-| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), and the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB) |
+| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB), and the Russian-only GigaAM (adds a second ONNX Runtime copy next to Supertonic) |
 | Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local): they run external programs or downloaded binaries |
 
 Some bundled plugins are reduced in the App Store edition (`#if APPSTORE`):

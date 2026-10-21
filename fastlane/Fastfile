@@ -63,6 +63,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "filler-words", target: "FillerWordsPlugin", id: "com.typewhisper.filler-words" },
   { slug: "fireworks", target: "FireworksPlugin", id: "com.typewhisper.fireworks" },
   { slug: "gemini", target: "GeminiPlugin", id: "com.typewhisper.gemini" },
+  { slug: "gigaam", target: "GigaAMPlugin", id: "com.typewhisper.gigaam", size: [560, 400] },
   { slug: "gladia", target: "GladiaPlugin", id: "com.typewhisper.gladia" },
   { slug: "google-cloud-stt", target: "GoogleCloudSTTPlugin", id: "com.typewhisper.google-cloud-stt" },
   { slug: "granite", target: "GranitePlugin", id: "com.typewhisper.granite" },
