@@ -2,7 +2,7 @@ import Foundation
 
 struct MeetingLinkParser: Sendable {
     private static let candidateExpression = try? NSRegularExpression(
-        pattern: #"(?i)(?:(?:https?|zoommtg|msteams|facetime):(?://)?[^\s<>\"']+|(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|facetime\.apple\.com)/[^\s<>\"']+)"#
+        pattern: #"(?i)(?:(?:https?|zoommtg|msteams|facetime):(?://)?[^\s<>\"']+|(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|facetime\.apple\.com|ktalk\.ru)/[^\s<>\"']+)"#
     )
 
     func parse(
@@ -96,7 +96,33 @@ struct MeetingLinkParser: Sendable {
         if host == "facetime.apple.com" {
             return parseFaceTimeWebLink(components)
         }
+        if host.hasSuffix(".ktalk.ru") {
+            return parseKonturTalkLink(components, host: host)
+        }
         return nil
+    }
+
+    // Web app sections that share the space host with room links.
+    private static let konturTalkReservedPaths: Set<String> = [
+        "admin", "api", "auth", "calendar", "chats", "contacts", "files", "help",
+        "login", "logout", "profile", "recordings", "settings", "signin", "signup",
+        "static", "system", "webinars"
+    ]
+
+    /// Kontur Talk rooms live directly under the organization's space,
+    /// for example `company.ktalk.ru/room`.
+    private func parseKonturTalkLink(
+        _ components: URLComponents,
+        host: String
+    ) -> CalendarMeetingCanonicalLink? {
+        let parts = decodedPathParts(components)
+        guard parts.count == 1 else { return nil }
+        let room = normalizedIdentifier(parts[0])
+        guard room.range(of: #"^[a-z0-9][a-z0-9_-]*$"#, options: .regularExpression) != nil,
+              !Self.konturTalkReservedPaths.contains(room) else {
+            return nil
+        }
+        return CalendarMeetingCanonicalLink(provider: .konturTalk, identity: "\(host)/\(room)")
     }
 
     private func parseZoomWebLink(_ components: URLComponents) -> CalendarMeetingCanonicalLink? {

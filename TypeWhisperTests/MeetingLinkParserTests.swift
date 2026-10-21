@@ -86,6 +86,37 @@ final class MeetingLinkParserTests: XCTestCase {
         ))
     }
 
+    func testKonturTalkRoomLinksCanonicalizePerSpace() {
+        XCTAssertEqual(
+            parser.parse(text: "Join https://Acme.ktalk.ru/Weekly-Sync?pincode=1234.").first,
+            CalendarMeetingCanonicalLink(provider: .konturTalk, identity: "acme.ktalk.ru/weekly-sync")
+        )
+        XCTAssertEqual(
+            parser.parse(text: "Room: acme.ktalk.ru/k6v8zhtvwgxr/"),
+            [CalendarMeetingCanonicalLink(provider: .konturTalk, identity: "acme.ktalk.ru/k6v8zhtvwgxr")]
+        )
+        XCTAssertNotEqual(
+            parser.parse(text: "https://acme.ktalk.ru/weekly-sync"),
+            parser.parse(text: "https://other.ktalk.ru/weekly-sync"),
+            "Rooms with the same name in different spaces are different meetings"
+        )
+    }
+
+    func testKonturTalkRejectsAppPagesAndLookalikes() {
+        let text = """
+        https://acme.ktalk.ru/
+        https://acme.ktalk.ru/chats
+        https://acme.ktalk.ru/calendar
+        https://acme.ktalk.ru/recordings/abc123
+        https://acme.ktalk.ru/room.name
+        https://ktalk.ru/weekly-sync
+        https://acme.ktalk.ru.evil.example/weekly-sync
+        https://acmektalk.ru/weekly-sync
+        """
+
+        XCTAssertTrue(parser.parse(text: text).isEmpty)
+    }
+
     func testRejectsLookalikesHomepagesTitlesAndInvalidSchemes() {
         let text = """
         Zoom meeting

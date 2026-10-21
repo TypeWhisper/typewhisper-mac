@@ -42004,25 +42004,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erkennt auch Mikrofonaktivität von Zoom und Teams sowie Browser-Meetings wie Google Meet, auch in Hintergrund-Tabs. Kalenderzugriff ist optional. Der gewählte Startmodus und die ausgewählten Anbieter gelten auch für diese Anrufe."
+            "value" : "Erkennt auch Mikrofonaktivität von Zoom, Teams und Kontur Talk sowie Browser-Meetings wie Google Meet, auch in Hintergrund-Tabs. Kalenderzugriff ist optional. Der gewählte Startmodus und die ausgewählten Anbieter gelten auch für diese Anrufe."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Also detect Zoom and Teams microphone activity and browser meetings such as Google Meet, even in background tabs. Calendar access is optional. The selected start mode and providers apply to these calls too."
+            "value" : "Also detect Zoom, Teams and Kontur Talk microphone activity and browser meetings such as Google Meet, even in background tabs. Calendar access is optional. The selected start mode and providers apply to these calls too."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ZoomとTeamsのマイク使用、およびバックグラウンドのタブを含むGoogle Meetなどのブラウザでのミーティングも検出します。カレンダーへのアクセスは任意です。選択した開始モードとサービスはこれらの通話にも適用されます。"
+            "value" : "Zoom、Teams、Kontur Talkのマイク使用、およびバックグラウンドのタブを含むGoogle Meetなどのブラウザでのミーティングも検出します。カレンダーへのアクセスは任意です。選択した開始モードとサービスはこれらの通話にも適用されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同时检测 Zoom 和 Teams 的麦克风活动，以及 Google Meet 等浏览器会议，包括后台标签页。无需授予日历访问权限。所选的启动模式和服务也适用于这些通话。"
+            "value" : "同时检测 Zoom、Teams 和 Kontur Talk 的麦克风活动，以及 Google Meet 等浏览器会议，包括后台标签页。无需授予日历访问权限。所选的启动模式和服务也适用于这些通话。"
           }
         }
       }
@@ -43656,25 +43656,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zoom · Teams · Meet · FaceTime"
+            "value" : "Zoom · Teams · Meet · FaceTime · Talk"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zoom · Teams · Meet · FaceTime"
+            "value" : "Zoom · Teams · Meet · FaceTime · Talk"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zoom · Teams · Meet · FaceTime"
+            "value" : "Zoom · Teams · Meet · FaceTime · Talk"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zoom · Teams · Meet · FaceTime"
+            "value" : "Zoom · Teams · Meet · FaceTime · Talk"
           }
         }
       }
