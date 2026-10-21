@@ -1713,6 +1713,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.filler-words": "filler-words",
     "com.typewhisper.fireworks": "fireworks",
     "com.typewhisper.gemini": "gemini",
+    "com.typewhisper.gigaam": "gigaam",
     "com.typewhisper.gemma4": "local-llm-mlx",
     "com.typewhisper.gladia": "gladia",
     "com.typewhisper.google-cloud-stt": "google-cloud-stt",

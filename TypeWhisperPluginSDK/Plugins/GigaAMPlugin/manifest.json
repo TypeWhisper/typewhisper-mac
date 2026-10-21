@@ -17,5 +17,6 @@
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "GigaAMPlugin",
-    "locality": "local"
+    "locality": "local",
+    "detailsURL": "https://www.typewhisper.com/addons/gigaam/"
 }
