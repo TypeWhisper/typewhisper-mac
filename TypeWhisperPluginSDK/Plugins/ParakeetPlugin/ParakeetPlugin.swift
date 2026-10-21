@@ -463,8 +463,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             segments = []
         }
 
-        _ = onProgress(text)
-        return PluginTranscriptionResult(text: text, detectedLanguage: nil, segments: segments)
+        _ = onProgress(trimmedText)
+        return PluginTranscriptionResult(text: trimmedText, detectedLanguage: nil, segments: segments)
     }
 
     /// Parakeet's vocabulary has no token for a few characters, mostly "&", brackets and some
