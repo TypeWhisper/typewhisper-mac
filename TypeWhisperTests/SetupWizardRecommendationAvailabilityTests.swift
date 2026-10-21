@@ -120,7 +120,19 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         XCTAssertNil(providerId)
     }
 
-    func testParakeetRecommendationPrefersV3Model() {
+    func testParakeetRecommendationPrefersUltraModel() {
+        let modelId = SetupWizardParakeetRecommendation.preferredModelId(
+            from: [
+                PluginModelInfo(id: "parakeet-tdt-0.6b-v2", displayName: "Parakeet TDT v2"),
+                PluginModelInfo(id: "parakeet-tdt-0.6b-v3", displayName: "Parakeet TDT v3"),
+                PluginModelInfo(id: "parakeet-ultra", displayName: "Parakeet Ultra")
+            ]
+        )
+
+        XCTAssertEqual(modelId, "parakeet-ultra")
+    }
+
+    func testParakeetRecommendationFallsBackToV3WithoutUltra() {
         let modelId = SetupWizardParakeetRecommendation.preferredModelId(
             from: [
                 PluginModelInfo(id: "parakeet-tdt-0.6b-v2", displayName: "Parakeet TDT v2"),

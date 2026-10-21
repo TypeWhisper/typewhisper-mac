@@ -727,15 +727,52 @@ final class ParakeetPluginTests: XCTestCase {
         )
     }
 
-    func testUltraIsOfferedWithV3LanguagesAndFiles() throws {
+    func testUltraIsOfferedFirstWithV3LanguagesAndFiles() throws {
         let plugin = makePlugin()
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
-            ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", "parakeet-ultra"]
+            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "parakeet-tdt-0.6b-v2"]
         )
         XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
         XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
         XCTAssertEqual(ParakeetVersion.ultra.requiredModelFiles, ParakeetVersion.v3.requiredModelFiles)
+    }
+
+    func testUltraLoadsWhenNoModelWasChosenYet() async throws {
+        let host = try PluginTestHostServices(defaults: [:], shouldRestoreLoadedModelsPassively: false)
+        let plugin = makePlugin()
+        let loaded = LoadedVersions()
+        plugin.asrModelLoadOverrideForTests = { version in await loaded.append(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.loadModel()
+
+        let versions = await loaded.versions
+        XCTAssertEqual(versions, [.ultra])
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-ultra")
+    }
+
+    func testSavedV3SelectionStaysV3() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "parakeet-tdt-0.6b-v3", "selectedVersion": "v3"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = makePlugin()
+        let loaded = LoadedVersions()
+        plugin.asrModelLoadOverrideForTests = { version in await loaded.append(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.loadModel()
+
+        let versions = await loaded.versions
+        XCTAssertEqual(versions, [.v3])
+    }
+
+    private actor LoadedVersions {
+        private(set) var versions: [ParakeetVersion] = []
+        func append(_ version: ParakeetVersion) { versions.append(version) }
     }
 
     func testEnsureVocabularyAssetSkipsExistingFile() async throws {

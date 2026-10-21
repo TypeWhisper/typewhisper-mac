@@ -118,7 +118,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 
 ### Transcription
 
-- **Local and cloud engines** - Choose from WhisperKit, Parakeet (TDT v3 and Ultra), Apple
+- **Local and cloud engines** - Choose from WhisperKit, Parakeet (Ultra, TDT v3 and v2), Apple
   SpeechAnalyzer, Granite Speech, Qwen3 ASR, Voxtral, Cohere Transcribe, Groq
   Whisper, OpenAI Whisper, Soniox, Smallest Pulse, xAI/Grok STT, OpenAI
   Compatible, and additional bundled or community providers
@@ -286,7 +286,7 @@ TypeWhisper includes the Local LLM (MLX) plugin for on-device prompt processing 
 | RAM | Recommended Models |
 |-----|-------------------|
 | < 8 GB | Whisper Tiny, Whisper Base |
-| 8-16 GB | Whisper Small, Whisper Large v3 Turbo, Parakeet TDT v3, Voxtral Mini 4B |
+| 8-16 GB | Whisper Small, Whisper Large v3 Turbo, Parakeet Ultra, Voxtral Mini 4B |
 | > 16 GB | Whisper Large v3 |
 
 ## Build

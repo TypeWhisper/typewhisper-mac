@@ -111,7 +111,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate var _selectedModelId: String?
     var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
-    fileprivate var selectedVersion: ParakeetVersion = .v3
+    fileprivate var selectedVersion: ParakeetVersion = .ultra
     fileprivate var _hfToken: String?
     var restoresModelOnActivate = true
 
@@ -1365,10 +1365,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
 // MARK: - Model Version
 
+/// Ordered as offered: Ultra is the default because it is more accurate than v3 and keeps
+/// transcribing the person dictating when someone else talks in the background.
 enum ParakeetVersion: String, CaseIterable {
-    case v2
-    case v3
     case ultra
+    case v3
+    case v2
 
     var asrModelVersion: AsrModelVersion {
         switch self {
@@ -1514,7 +1516,7 @@ private struct ParakeetSettingsView: View {
     private let bundle = Bundle(for: ParakeetPlugin.self)
     @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
-    @State private var selectedVersion: ParakeetVersion = .v3
+    @State private var selectedVersion: ParakeetVersion = .ultra
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var downloadedVersions: Set<ParakeetVersion> = []

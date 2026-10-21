@@ -1982,7 +1982,8 @@ enum SetupWizardParakeetRecommendation {
     }
 
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
-        models.first { $0.id == "parakeet-tdt-0.6b-v3" }?.id
+        models.first { $0.id == "parakeet-ultra" }?.id
+            ?? models.first { $0.id == "parakeet-tdt-0.6b-v3" }?.id
             ?? models.first { $0.id.localizedCaseInsensitiveContains("v3") }?.id
             ?? models.first?.id
     }
