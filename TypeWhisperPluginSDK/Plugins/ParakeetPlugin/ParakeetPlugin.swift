@@ -480,7 +480,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             .replacingOccurrences(of: marker, with: " ")
         cleaned = cleaned
             .replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: " +([,.;:!?)\\]])", with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: " +([,.;:!?)\\]}…])", with: "$1", options: .regularExpression)
         return cleaned.trimmingCharacters(in: .whitespaces)
     }
 
@@ -634,6 +634,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         return cleaned
     }
 
+    /// Same characters as the spacing rule in `removingUnknownTokens(from:)`.
     private static let closingPunctuation: Set<Character> = [",", ".", ";", ":", "!", "?", ")", "]", "}", "…"]
     private static let openingPunctuation: Set<Character> = ["(", "[", "{"]
 
