@@ -605,20 +605,37 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         if !lastTrimmed.isEmpty {
             words.append(PluginWordTiming(text: lastTrimmed, start: wordStart, end: wordEnd))
         }
+        // A dropped marker can leave punctuation on its own ("hello <unk>, world", "<unk>(note").
+        // Closing punctuation joins the previous word and opening punctuation the next one, so
+        // the words do not read "hello , world" or "hello( note".
         var cleaned: [PluginWordTiming] = []
+        var opening: PluginWordTiming?
         for word in words {
-            let text = removingUnknownTokens(from: word.text)
+            var text = removingUnknownTokens(from: word.text)
             guard !text.isEmpty else { continue }
-            // A dropped marker can leave punctuation that belongs to the previous word
-            // ("hello <unk>,"), which would otherwise be joined as "hello ,".
-            if text != word.text, text.allSatisfy(\.isPunctuation), let previous = cleaned.popLast() {
+            let leftByMarker = text != word.text
+            if leftByMarker, text.allSatisfy(closingPunctuation.contains), let previous = cleaned.popLast() {
                 cleaned.append(PluginWordTiming(text: previous.text + text, start: previous.start, end: word.end))
                 continue
             }
-            cleaned.append(text == word.text ? word : PluginWordTiming(text: text, start: word.start, end: word.end))
+            if leftByMarker, text.allSatisfy(openingPunctuation.contains) {
+                opening = PluginWordTiming(text: (opening?.text ?? "") + text, start: opening?.start ?? word.start, end: word.end)
+                continue
+            }
+            var start = word.start
+            if let pending = opening {
+                text = pending.text + text
+                start = pending.start
+                opening = nil
+            }
+            cleaned.append(text == word.text ? word : PluginWordTiming(text: text, start: start, end: word.end))
         }
+        if let opening { cleaned.append(opening) }
         return cleaned
     }
+
+    private static let closingPunctuation: Set<Character> = [",", ".", ";", ":", "!", "?", ")", "]", "}", "…"]
+    private static let openingPunctuation: Set<Character> = ["(", "[", "{"]
 
     /// Groups words into sentence segments (split at sentence-ending punctuation or pause > 0.8s).
     static func groupWordsIntoSegments(_ words: [PluginWordTiming]) -> [PluginTranscriptionSegment] {

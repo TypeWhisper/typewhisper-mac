@@ -821,6 +821,23 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(ParakeetPlugin.groupWordsIntoSegments(words).map(\.text), ["hello, world."])
     }
 
+    func testOpeningPunctuationLeftByADroppedMarkerJoinsTheNextWord() {
+        let timings = [
+            TokenTiming(token: "▁hello", tokenId: 1, startTime: 0.0, endTime: 0.3, confidence: 1),
+            TokenTiming(token: "▁<unk>(", tokenId: 0, startTime: 0.3, endTime: 0.4, confidence: 1),
+            TokenTiming(token: "▁world", tokenId: 2, startTime: 0.4, endTime: 0.7, confidence: 1),
+            TokenTiming(token: "▁<unk>)", tokenId: 0, startTime: 0.7, endTime: 0.8, confidence: 1),
+            TokenTiming(token: "▁now.", tokenId: 3, startTime: 0.9, endTime: 1.2, confidence: 1),
+        ]
+
+        let words = ParakeetPlugin.groupTokensIntoWords(timings)
+
+        XCTAssertEqual(words.map(\.text), ["hello", "(world)", "now."])
+        XCTAssertEqual(words[1].start, 0.3)
+        XCTAssertEqual(words[1].end, 0.8)
+        XCTAssertEqual(ParakeetPlugin.groupWordsIntoSegments(words).map(\.text), ["hello (world) now."])
+    }
+
     func testTranscriptAndWordTimingsNeverContainUnknownTokens() async throws {
         let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
         let plugin = makePlugin()
