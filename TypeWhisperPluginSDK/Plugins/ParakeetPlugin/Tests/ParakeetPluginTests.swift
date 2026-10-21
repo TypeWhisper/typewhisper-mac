@@ -776,6 +776,7 @@ final class ParakeetPluginTests: XCTestCase {
         let cases: [(String, String)] = [
             ("whether that's an M<unk>A or supporting new products", "whether that's an M&A or supporting new products"),
             ("booked directly into P<unk>L, into the selling cost line.", "booked directly into P&L, into the selling cost line."),
+            ("die Ä<unk>Ö-Regel", "die Ä&Ö-Regel"),
             ("compared by infrared spectroscopy <unk> FTIR.", "compared by infrared spectroscopy FTIR."),
             ("alongside the word <unk>say<unk> for you", "alongside the word say for you"),
             ("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil"),

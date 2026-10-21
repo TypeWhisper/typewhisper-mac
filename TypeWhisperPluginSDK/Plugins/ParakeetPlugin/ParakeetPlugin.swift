@@ -475,7 +475,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let marker = "<unk>"
         guard text.contains(marker) else { return text }
         var cleaned = text
-            .replacingOccurrences(of: "(?<=[A-Z])<unk>(?=[A-Z])", with: "&", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=\\p{Lu})<unk>(?=\\p{Lu})", with: "&", options: .regularExpression)
             .replacingOccurrences(of: "(?<=\\w)<unk>(?=\\w)", with: "", options: .regularExpression)
             .replacingOccurrences(of: marker, with: " ")
         cleaned = cleaned
