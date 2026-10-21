@@ -1836,6 +1836,96 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(fixture.workflowService.workflows.count, 1)
     }
 
+    func testRoundTripKeepsAlwaysWorkflowExclusions() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        let trigger = WorkflowTrigger.global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        source.workflowService.addWorkflow(name: "Polish", template: .cleanedText, trigger: trigger)
+
+        let backup = try exportBackup(from: source)
+        let data = try SettingsBackupExporter.encodedJSON(backup)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let workflows = try XCTUnwrap(root["workflows"] as? [[String: Any]])
+        let exportedTrigger = try XCTUnwrap(workflows.first?["trigger"] as? [String: Any])
+        XCTAssertEqual(exportedTrigger["kind"] as? String, "global")
+        XCTAssertEqual(exportedTrigger["excludedAppBundleIdentifiers"] as? [String], ["com.apple.Terminal"])
+        XCTAssertEqual(exportedTrigger["excludedWebsitePatterns"] as? [String], ["github.com"])
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        let result = await importBackup(backup, into: destination)
+
+        XCTAssertEqual(result.workflowsImported, 1)
+        XCTAssertEqual(destination.workflowService.workflows.first?.trigger, trigger)
+        XCTAssertNil(destination.workflowService.matchWorkflow(bundleIdentifier: "com.apple.Terminal"))
+        XCTAssertNil(destination.workflowService.matchWorkflow(
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://docs.github.com"
+        ))
+    }
+
+    func testAlwaysWorkflowBackupWithoutExclusionsKeepsItsFormat() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        source.workflowService.addWorkflow(name: "Polish", template: .cleanedText, trigger: .global())
+
+        // A workflow without exclusions exports the trigger keys older builds wrote and read.
+        let backup = try exportBackup(from: source)
+        let data = try SettingsBackupExporter.encodedJSON(backup)
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let workflows = try XCTUnwrap(root["workflows"] as? [[String: Any]])
+        let exportedTrigger = try XCTUnwrap(workflows.first?["trigger"] as? [String: Any])
+        XCTAssertEqual(
+            Set(exportedTrigger.keys),
+            ["kind", "appBundleIdentifiers", "websitePatterns", "hotkeys", "hotkeyBehavior"]
+        )
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        let result = await importBackup(try SettingsBackupExporter.parse(data), into: destination)
+
+        XCTAssertEqual(result.workflowsImported, 1)
+        XCTAssertEqual(destination.workflowService.workflows.first?.trigger, .global())
+    }
+
+    func testAlwaysWorkflowExclusionsAreWorkflowContentButNotTheirOrder() async throws {
+        let fixture = try makeFixture()
+        defer { teardown(fixture) }
+        fixture.workflowService.addWorkflow(name: "Polish", template: .cleanedText, trigger: .global())
+        let backup = try exportBackup(from: fixture)
+        let workflow = try XCTUnwrap(backup.workflows.first)
+        func makeBackup(trigger: WorkflowTrigger) -> SettingsBackupExporter.SettingsBackup {
+            editedBackup(backup, workflows: [SettingsBackupExporter.WorkflowDTO(
+                name: workflow.name,
+                isEnabled: workflow.isEnabled,
+                sortOrder: workflow.sortOrder,
+                template: workflow.template,
+                trigger: trigger,
+                behavior: workflow.behavior,
+                output: workflow.output
+            )])
+        }
+
+        let replaced = await importBackup(
+            makeBackup(trigger: .global(excludingApps: ["com.apple.Terminal", "com.apple.Notes"], websites: ["github.com"])),
+            into: fixture,
+            mode: .replace
+        )
+        XCTAssertEqual(replaced.workflowsUpdated, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+        XCTAssertEqual(
+            fixture.workflowService.workflows.first?.trigger?.excludedAppBundleIdentifiers,
+            ["com.apple.Terminal", "com.apple.Notes"]
+        )
+
+        let reordered = await importBackup(
+            makeBackup(trigger: .global(excludingApps: ["com.apple.Notes", "com.apple.Terminal"], websites: ["github.com"])),
+            into: fixture
+        )
+        XCTAssertEqual(reordered.workflowsSkipped, 1)
+        XCTAssertEqual(fixture.workflowService.workflows.count, 1)
+    }
+
     func testHistoryMatchRequiresSameApp() async throws {
         let source = try makeFixture()
         defer { teardown(source) }

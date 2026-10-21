@@ -25002,6 +25002,28 @@
         }
       }
     },
+    "No apps excluded yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Apps ausgeschlossen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したアプリはまだありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未排除应用。"
+          }
+        }
+      }
+    },
     "No available plugins match this search or filter." : {
       "localizations" : {
         "de" : {
@@ -25856,6 +25878,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未添加网站。"
+          }
+        }
+      }
+    },
+    "No websites excluded yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Websites ausgeschlossen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したウェブサイトはまだありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未排除网站。"
           }
         }
       }
@@ -32637,6 +32681,72 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "当没有匹配的应用或网站工作流时运行。快捷键仍保持直接触发。"
+          }
+        }
+      }
+    },
+    "Exclude apps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps ausschließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを除外"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排除应用"
+          }
+        }
+      }
+    },
+    "Exclude websites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Websites ausschließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ウェブサイトを除外"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排除网站"
+          }
+        }
+      }
+    },
+    "This workflow does not run in excluded apps and websites. Other matching workflows still do." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In ausgeschlossenen Apps und Websites läuft dieser Workflow nicht. Andere passende Workflows laufen dort weiterhin."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したアプリやウェブサイトでは、このワークフローは実行されません。一致する他のワークフローは引き続き実行されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此工作流不会在已排除的应用和网站中运行。其他匹配的工作流仍会运行。"
           }
         }
       }
@@ -40501,6 +40611,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网站触发"
+          }
+        }
+      }
+    },
+    "Excluded website" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgeschlossene Website"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したウェブサイト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已排除的网站"
+          }
+        }
+      }
+    },
+    "Website to exclude" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auszuschließende Website"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外するウェブサイト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要排除的网站"
           }
         }
       }

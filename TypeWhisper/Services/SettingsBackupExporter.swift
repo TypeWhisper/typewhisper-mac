@@ -1223,14 +1223,16 @@ extension SettingsBackupExporter.WorkflowDTO {
             && lhs.numberNormalizationMode == rhs.numberNormalizationMode
     }
 
-    /// Workflow matching checks apps, websites, and hotkeys with `contains`,
-    /// so their order doesn't change which workflow runs.
+    /// Workflow matching checks apps, websites, hotkeys, and exclusions with
+    /// `contains`, so their order doesn't change which workflow runs.
     private static func hasSameSelectors(_ lhs: WorkflowTrigger, _ rhs: WorkflowTrigger) -> Bool {
         lhs.kind == rhs.kind
             && lhs.hotkeyBehavior == rhs.hotkeyBehavior
             && Set(lhs.appBundleIdentifiers) == Set(rhs.appBundleIdentifiers)
             && Set(lhs.websitePatterns) == Set(rhs.websitePatterns)
             && Set(lhs.hotkeys) == Set(rhs.hotkeys)
+            && Set(lhs.excludedAppBundleIdentifiers) == Set(rhs.excludedAppBundleIdentifiers)
+            && Set(lhs.excludedWebsitePatterns) == Set(rhs.excludedWebsitePatterns)
     }
 }
 

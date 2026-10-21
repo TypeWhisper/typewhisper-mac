@@ -886,6 +886,8 @@ When you start dictating, TypeWhisper matches the active app and browser URL aga
 3. **App-only match** - generic app workflows (e.g. all of Chrome)
 4. **Always fallback** - global workflow when no more specific workflow matches
 
+An Always workflow can exclude apps and websites. In an excluded app or on an excluded website it does not run, and TypeWhisper behaves as if the workflow did not exist. Website exclusions use the same subdomain matching as website triggers.
+
 Hotkeys are direct workflow shortcuts, not context conditions in the app/URL matching order. Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
 
 The active workflow name is shown as a badge in the indicator, together with a short explanation of why it matched.
