@@ -727,15 +727,150 @@ final class ParakeetPluginTests: XCTestCase {
         )
     }
 
-    func testUltraIsOfferedWithV3LanguagesAndFiles() throws {
+    func testUltraIsOfferedFirstWithV3LanguagesAndFiles() throws {
         let plugin = makePlugin()
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
-            ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", "parakeet-ultra"]
+            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "parakeet-tdt-0.6b-v2"]
         )
         XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
         XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
         XCTAssertEqual(ParakeetVersion.ultra.requiredModelFiles, ParakeetVersion.v3.requiredModelFiles)
+    }
+
+    func testUltraLoadsWhenNoModelWasChosenYet() async throws {
+        let host = try PluginTestHostServices(defaults: [:], shouldRestoreLoadedModelsPassively: false)
+        let plugin = makePlugin()
+        let loaded = LoadedVersions()
+        plugin.asrModelLoadOverrideForTests = { version in await loaded.append(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.loadModel()
+
+        let versions = await loaded.versions
+        XCTAssertEqual(versions, [.ultra])
+        XCTAssertEqual(plugin.loadedModelId, "parakeet-ultra")
+    }
+
+    func testSavedV3SelectionStaysV3() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "parakeet-tdt-0.6b-v3", "selectedVersion": "v3"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = makePlugin()
+        let loaded = LoadedVersions()
+        plugin.asrModelLoadOverrideForTests = { version in await loaded.append(version) }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await plugin.loadModel()
+
+        let versions = await loaded.versions
+        XCTAssertEqual(versions, [.v3])
+    }
+
+    // MARK: - Unknown tokens
+
+    func testUnknownTokensBecomeAmpersandsBetweenCapitalsAndAreDroppedElsewhere() {
+        let cases: [(String, String)] = [
+            ("whether that's an M<unk>A or supporting new products", "whether that's an M&A or supporting new products"),
+            ("booked directly into P<unk>L, into the selling cost line.", "booked directly into P&L, into the selling cost line."),
+            ("die Ä<unk>Ö-Regel", "die Ä&Ö-Regel"),
+            ("hello <unk>… world", "hello… world"),
+            ("{set <unk>} done", "{set} done"),
+            ("compared by infrared spectroscopy <unk> FTIR.", "compared by infrared spectroscopy FTIR."),
+            ("alongside the word <unk>say<unk> for you", "alongside the word say for you"),
+            ("is the 'pay amolai<unk>, bred with olive oil", "is the 'pay amolai, bred with olive oil"),
+            ("<unk>Hello there<unk>", "Hello there"),
+            ("no markers here", "no markers here"),
+        ]
+        for (input, expected) in cases {
+            XCTAssertEqual(ParakeetPlugin.removingUnknownTokens(from: input), expected, input)
+        }
+    }
+
+    func testTranscriptIsTrimmedWithAndWithoutUnknownTokens() async throws {
+        for (raw, expected) in [("\nhello world\n", "hello world"), ("\n<unk>hello world \n", "hello world")] {
+            let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
+            let plugin = makePlugin()
+            plugin.asrModelLoadOverrideForTests = { _ in }
+            plugin.asrTranscriptionOverrideForTests = { samples in
+                ASRResult(text: raw, confidence: 1, duration: Double(samples.count) / 16_000, processingTime: 0)
+            }
+            plugin.activate(host: host)
+            await plugin.restoreLoadedModel()
+
+            let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+
+            XCTAssertEqual(result.text, expected, raw)
+            plugin.deactivate()
+        }
+    }
+
+    func testPunctuationLeftByADroppedMarkerJoinsThePreviousWord() {
+        let timings = [
+            TokenTiming(token: "▁hello", tokenId: 1, startTime: 0.0, endTime: 0.3, confidence: 1),
+            TokenTiming(token: "▁<unk>", tokenId: 0, startTime: 0.3, endTime: 0.4, confidence: 1),
+            TokenTiming(token: ",", tokenId: 2, startTime: 0.4, endTime: 0.5, confidence: 1),
+            TokenTiming(token: "▁world.", tokenId: 3, startTime: 0.6, endTime: 1.0, confidence: 1),
+        ]
+
+        let words = ParakeetPlugin.groupTokensIntoWords(timings)
+
+        XCTAssertEqual(words.map(\.text), ["hello,", "world."])
+        XCTAssertEqual(words.first?.end, 0.5)
+        XCTAssertEqual(ParakeetPlugin.groupWordsIntoSegments(words).map(\.text), ["hello, world."])
+    }
+
+    func testOpeningPunctuationLeftByADroppedMarkerJoinsTheNextWord() {
+        let timings = [
+            TokenTiming(token: "▁hello", tokenId: 1, startTime: 0.0, endTime: 0.3, confidence: 1),
+            TokenTiming(token: "▁<unk>(", tokenId: 0, startTime: 0.3, endTime: 0.4, confidence: 1),
+            TokenTiming(token: "▁world", tokenId: 2, startTime: 0.4, endTime: 0.7, confidence: 1),
+            TokenTiming(token: "▁<unk>)", tokenId: 0, startTime: 0.7, endTime: 0.8, confidence: 1),
+            TokenTiming(token: "▁now.", tokenId: 3, startTime: 0.9, endTime: 1.2, confidence: 1),
+        ]
+
+        let words = ParakeetPlugin.groupTokensIntoWords(timings)
+
+        XCTAssertEqual(words.map(\.text), ["hello", "(world)", "now."])
+        XCTAssertEqual(words[1].start, 0.3)
+        XCTAssertEqual(words[1].end, 0.8)
+        XCTAssertEqual(ParakeetPlugin.groupWordsIntoSegments(words).map(\.text), ["hello (world) now."])
+    }
+
+    func testTranscriptAndWordTimingsNeverContainUnknownTokens() async throws {
+        let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
+        let plugin = makePlugin()
+        plugin.asrModelLoadOverrideForTests = { _ in }
+        let timings = [
+            TokenTiming(token: "▁an", tokenId: 1, startTime: 0.0, endTime: 0.2, confidence: 1),
+            TokenTiming(token: "▁M", tokenId: 2, startTime: 0.3, endTime: 0.4, confidence: 1),
+            TokenTiming(token: "<unk>", tokenId: 0, startTime: 0.4, endTime: 0.5, confidence: 1),
+            TokenTiming(token: "A", tokenId: 3, startTime: 0.5, endTime: 0.6, confidence: 1),
+            TokenTiming(token: "▁<unk>", tokenId: 0, startTime: 0.7, endTime: 0.8, confidence: 1),
+            TokenTiming(token: "▁deal.", tokenId: 4, startTime: 0.9, endTime: 1.0, confidence: 1),
+        ]
+        plugin.asrTranscriptionOverrideForTests = { samples in
+            ASRResult(text: "an M<unk>A <unk> deal.", confidence: 1, duration: Double(samples.count) / 16_000,
+                      processingTime: 0, tokenTimings: timings)
+        }
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.restoreLoadedModel()
+
+        let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "an M&A deal.")
+        let words = result.segments.map(\.text).joined(separator: " ")
+        XCTAssertFalse(words.contains("<unk>"), words)
+        XCTAssertEqual(words, "an M&A deal.")
+    }
+
+    private actor LoadedVersions {
+        private(set) var versions: [ParakeetVersion] = []
+        func append(_ version: ParakeetVersion) { versions.append(version) }
     }
 
     func testEnsureVocabularyAssetSkipsExistingFile() async throws {

@@ -111,7 +111,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate var _selectedModelId: String?
     var modelState: ParakeetModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
-    fileprivate var selectedVersion: ParakeetVersion = .v3
+    fileprivate var selectedVersion: ParakeetVersion = .ultra
     fileprivate var _hfToken: String?
     var restoresModelOnActivate = true
 
@@ -432,7 +432,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             to: result,
             audioSamples: normalizedSamples
         )
-        let trimmedText = finalResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = Self.removingUnknownTokens(from: finalResult.text)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if audio.duration < Self.shortClipConfidenceGateDuration {
             Self.logger.info(
@@ -461,8 +462,25 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             segments = []
         }
 
-        _ = onProgress(finalResult.text)
-        return PluginTranscriptionResult(text: finalResult.text, detectedLanguage: nil, segments: segments)
+        _ = onProgress(trimmedText)
+        return PluginTranscriptionResult(text: trimmedText, detectedLanguage: nil, segments: segments)
+    }
+
+    /// Parakeet's vocabulary has no token for a few characters, mostly "&", brackets and some
+    /// quotes. v3 never writes them, but Ultra learned to and emits "<unk>" in their place
+    /// ("M<unk>A", "spectroscopy <unk> FTIR"). Between capitals it stands for "&" (M&A, P&L,
+    /// R&D); elsewhere it is dropped, so the marker never reaches the user's text.
+    static func removingUnknownTokens(from text: String) -> String {
+        let marker = "<unk>"
+        guard text.contains(marker) else { return text }
+        var cleaned = text
+            .replacingOccurrences(of: "(?<=\\p{Lu})<unk>(?=\\p{Lu})", with: "&", options: .regularExpression)
+            .replacingOccurrences(of: "(?<=\\w)<unk>(?=\\w)", with: "", options: .regularExpression)
+            .replacingOccurrences(of: marker, with: " ")
+        cleaned = cleaned
+            .replacingOccurrences(of: " {2,}", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: " +([,.;:!?)\\]}…])", with: "$1", options: .regularExpression)
+        return cleaned.trimmingCharacters(in: .whitespaces)
     }
 
     private func runInference(_ samples: [Float], manager: AsrManager, language: Language?) async throws -> ASRResult {
@@ -586,8 +604,38 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         if !lastTrimmed.isEmpty {
             words.append(PluginWordTiming(text: lastTrimmed, start: wordStart, end: wordEnd))
         }
-        return words
+        // A dropped marker can leave punctuation on its own ("hello <unk>, world", "<unk>(note").
+        // Closing punctuation joins the previous word and opening punctuation the next one, so
+        // the words do not read "hello , world" or "hello( note".
+        var cleaned: [PluginWordTiming] = []
+        var opening: PluginWordTiming?
+        for word in words {
+            var text = removingUnknownTokens(from: word.text)
+            guard !text.isEmpty else { continue }
+            let leftByMarker = text != word.text
+            if leftByMarker, text.allSatisfy(closingPunctuation.contains), let previous = cleaned.popLast() {
+                cleaned.append(PluginWordTiming(text: previous.text + text, start: previous.start, end: word.end))
+                continue
+            }
+            if leftByMarker, text.allSatisfy(openingPunctuation.contains) {
+                opening = PluginWordTiming(text: (opening?.text ?? "") + text, start: opening?.start ?? word.start, end: word.end)
+                continue
+            }
+            var start = word.start
+            if let pending = opening {
+                text = pending.text + text
+                start = pending.start
+                opening = nil
+            }
+            cleaned.append(text == word.text ? word : PluginWordTiming(text: text, start: start, end: word.end))
+        }
+        if let opening { cleaned.append(opening) }
+        return cleaned
     }
+
+    /// Same characters as the spacing rule in `removingUnknownTokens(from:)`.
+    private static let closingPunctuation: Set<Character> = [",", ".", ";", ":", "!", "?", ")", "]", "}", "…"]
+    private static let openingPunctuation: Set<Character> = ["(", "[", "{"]
 
     /// Groups words into sentence segments (split at sentence-ending punctuation or pause > 0.8s).
     static func groupWordsIntoSegments(_ words: [PluginWordTiming]) -> [PluginTranscriptionSegment] {
@@ -1365,10 +1413,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
 // MARK: - Model Version
 
+/// Ordered as offered: Ultra is the default because it is more accurate than v3 and keeps
+/// transcribing the person dictating when someone else talks in the background.
 enum ParakeetVersion: String, CaseIterable {
-    case v2
-    case v3
     case ultra
+    case v3
+    case v2
 
     var asrModelVersion: AsrModelVersion {
         switch self {
@@ -1514,7 +1564,7 @@ private struct ParakeetSettingsView: View {
     private let bundle = Bundle(for: ParakeetPlugin.self)
     @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
-    @State private var selectedVersion: ParakeetVersion = .v3
+    @State private var selectedVersion: ParakeetVersion = .ultra
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var downloadedVersions: Set<ParakeetVersion> = []
