@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		6A6A00000000000000000001 /* GigaAMPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6A00000000000000000009 /* GigaAMPlugin.swift */; };
+		6A6A00000000000000000002 /* GigaAMRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000A /* GigaAMRuntime.swift */; };
+		6A6A00000000000000000003 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000B /* manifest.json */; };
+		6A6A00000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000C /* Localizable.xcstrings */; };
+		6A6A00000000000000000005 /* gigaam_v3_preprocessor.onnx in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */; };
+		6A6A0000000000000000001B /* THIRD_PARTY_LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */; };
+		6A6A00000000000000000006 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000017 /* TypeWhisperPluginSDK */; };
+		6A6A00000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000018 /* onnxruntime */; };
+		6A6A00000000000000000008 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = 6A6A00000000000000000019 /* HuggingFace */; };
 		D47A00000000000000000005 /* UserDataExportAndEraseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47A00000000000000000006 /* UserDataExportAndEraseTests.swift */; };
 		D47A00000000000000000003 /* UserDataEraser.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47A00000000000000000004 /* UserDataEraser.swift */; };
 		D47A00000000000000000001 /* UserDataExportService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D47A00000000000000000002 /* UserDataExportService.swift */; };
@@ -786,6 +795,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		6A6A00000000000000000009 /* GigaAMPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GigaAMPlugin.swift; sourceTree = "<group>"; };
+		6A6A0000000000000000000A /* GigaAMRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GigaAMRuntime.swift; sourceTree = "<group>"; };
+		6A6A0000000000000000000B /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		6A6A0000000000000000000C /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; path = gigaam_v3_preprocessor.onnx; sourceTree = "<group>"; };
+		6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = THIRD_PARTY_LICENSE.txt; sourceTree = "<group>"; };
+		6A6A0000000000000000000E /* GigaAMPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GigaAMPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		D47A00000000000000000006 /* UserDataExportAndEraseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataExportAndEraseTests.swift; sourceTree = "<group>"; };
 		D47A00000000000000000004 /* UserDataEraser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataEraser.swift; sourceTree = "<group>"; };
 		D47A00000000000000000002 /* UserDataExportService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataExportService.swift; sourceTree = "<group>"; };
@@ -1415,6 +1431,16 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		6A6A00000000000000000012 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A6A00000000000000000006 /* TypeWhisperPluginSDK in Frameworks */,
+				6A6A00000000000000000007 /* onnxruntime in Frameworks */,
+				6A6A00000000000000000008 /* HuggingFace in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1C1000000000000000000032 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1912,6 +1938,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		6A6A0000000000000000000F /* GigaAMPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				6A6A00000000000000000009 /* GigaAMPlugin.swift */,
+				6A6A0000000000000000000A /* GigaAMRuntime.swift */,
+				6A6A0000000000000000000D /* gigaam_v3_preprocessor.onnx */,
+				6A6A0000000000000000001A /* THIRD_PARTY_LICENSE.txt */,
+				6A6A0000000000000000000B /* manifest.json */,
+				6A6A0000000000000000000C /* Localizable.xcstrings */,
+			);
+			name = GigaAMPlugin;
+			path = TypeWhisperPluginSDK/Plugins/GigaAMPlugin;
+			sourceTree = "<group>";
+		};
 		4E2BF06351BDA040CC87C5D5 /* OS X */ = {
 			isa = PBXGroup;
 			children = (
@@ -1981,6 +2021,7 @@
 				CC00000000000000000035 /* FileMemoryPlugin */,
 				C10000000000000000000001 /* SystemTTSPlugin */,
 				D20200000000000000000001 /* SupertonicPlugin */,
+				6A6A0000000000000000000F /* GigaAMPlugin */,
 				CC00000000000000000036 /* OpenAIVectorMemoryPlugin */,
 				4D45504C4143450000000009 /* MemPalacePlugin */,
 				CC00000000000000000037 /* FireworksPlugin */,
@@ -3083,6 +3124,7 @@
 				BB00000000000000000231 /* FileMemoryPlugin.bundle */,
 				B10000000000000000000003 /* SystemTTSPlugin.bundle */,
 				D20100000000000000000006 /* SupertonicPlugin.bundle */,
+				6A6A0000000000000000000E /* GigaAMPlugin.bundle */,
 				BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */,
 				4D45504C4143450000000008 /* MemPalacePlugin.bundle */,
 				BB00000000000000000254 /* FireworksPlugin.bundle */,
@@ -3234,6 +3276,28 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		6A6A00000000000000000010 /* GigaAMPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6A6A00000000000000000016 /* Build configuration list for PBXNativeTarget "GigaAMPlugin" */;
+			buildPhases = (
+				6A6A00000000000000000011 /* Sources */,
+				6A6A00000000000000000012 /* Frameworks */,
+				6A6A00000000000000000013 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GigaAMPlugin;
+			packageProductDependencies = (
+				6A6A00000000000000000017 /* TypeWhisperPluginSDK */,
+				6A6A00000000000000000018 /* onnxruntime */,
+				6A6A00000000000000000019 /* HuggingFace */,
+			);
+			productName = GigaAMPlugin;
+			productReference = 6A6A0000000000000000000E /* GigaAMPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 52E9F6F513650CA6EC4DDCA3 /* Build configuration list for PBXNativeTarget "TypeWhisperTests" */;
@@ -4535,6 +4599,7 @@
 				DD00000000000000000023 /* FileMemoryPlugin */,
 				D10000000000000000000001 /* SystemTTSPlugin */,
 				D20300000000000000000001 /* SupertonicPlugin */,
+				6A6A00000000000000000010 /* GigaAMPlugin */,
 				DD00000000000000000024 /* OpenAIVectorMemoryPlugin */,
 				4D45504C4143450000000015 /* MemPalacePlugin */,
 				DD00000000000000000025 /* FireworksPlugin */,
@@ -4560,6 +4625,17 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		6A6A00000000000000000013 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A6A00000000000000000003 /* manifest.json in Resources */,
+				6A6A00000000000000000004 /* Localizable.xcstrings in Resources */,
+				6A6A00000000000000000005 /* gigaam_v3_preprocessor.onnx in Resources */,
+				6A6A0000000000000000001B /* THIRD_PARTY_LICENSE.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1C1000000000000000000033 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -5084,6 +5160,15 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6A6A00000000000000000011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A6A00000000000000000001 /* GigaAMPlugin.swift in Sources */,
+				6A6A00000000000000000002 /* GigaAMRuntime.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1C1000000000000000000031 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -9013,9 +9098,88 @@
 			};
 			name = Debug;
 		};
+		6A6A00000000000000000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GigaAM;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GigaAMPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gigaam;
+				PRODUCT_NAME = GigaAMPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		6A6A00000000000000000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = arm64;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = GigaAM;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = GigaAMPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@loader_path/../Frameworks",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.gigaam;
+				PRODUCT_NAME = GigaAMPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TypeWhisperPluginSDK/build/$(CONFIGURATION)";
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6A6A00000000000000000016 /* Build configuration list for PBXNativeTarget "GigaAMPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6A6A00000000000000000014 /* Debug */,
+				6A6A00000000000000000015 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		1C1000000000000000000043 /* Build configuration list for PBXNativeTarget "TypeWhisperICloudBridge" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -9641,6 +9805,20 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6A6A00000000000000000017 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		6A6A00000000000000000018 /* onnxruntime */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */;
+			productName = onnxruntime;
+		};
+		6A6A00000000000000000019 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0E300000000000000000070 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
 		67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
