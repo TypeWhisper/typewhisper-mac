@@ -16,7 +16,8 @@ enum NativeMeetingAudioProcessRegistry {
         "us.zoom.xos",
         "com.microsoft.teams2",
         "com.microsoft.teams",
-        "com.apple.FaceTime"
+        "com.apple.FaceTime",
+        "kontur.talk"
     ]
 
     nonisolated static func provider(for bundleIdentifier: String) -> MeetingProvider? {
@@ -25,6 +26,10 @@ enum NativeMeetingAudioProcessRegistry {
             .zoom
         case "com.microsoft.teams2", "com.microsoft.teams":
             .teams
+        case "kontur.talk":
+            // Kontur Talk is an Electron app. Its `kontur.talk.helper*` processes
+            // count as the app through the namespace rule below.
+            .konturTalk
         case "com.apple.FaceTime",
              "com.apple.FaceTime.FTConversationService",
              "com.apple.avconferenced",
