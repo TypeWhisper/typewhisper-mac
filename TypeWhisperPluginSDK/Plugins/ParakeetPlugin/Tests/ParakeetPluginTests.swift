@@ -788,6 +788,24 @@ final class ParakeetPluginTests: XCTestCase {
         }
     }
 
+    func testTranscriptIsTrimmedWithAndWithoutUnknownTokens() async throws {
+        for (raw, expected) in [("\nhello world\n", "hello world"), ("\n<unk>hello world \n", "hello world")] {
+            let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
+            let plugin = makePlugin()
+            plugin.asrModelLoadOverrideForTests = { _ in }
+            plugin.asrTranscriptionOverrideForTests = { samples in
+                ASRResult(text: raw, confidence: 1, duration: Double(samples.count) / 16_000, processingTime: 0)
+            }
+            plugin.activate(host: host)
+            await plugin.restoreLoadedModel()
+
+            let result = try await plugin.transcribe(audio: fakeSpeech, language: nil, translate: false, prompt: nil)
+
+            XCTAssertEqual(result.text, expected, raw)
+            plugin.deactivate()
+        }
+    }
+
     func testTranscriptAndWordTimingsNeverContainUnknownTokens() async throws {
         let host = try PluginTestHostServices(defaults: ["loadedModel": "parakeet-ultra"])
         let plugin = makePlugin()
