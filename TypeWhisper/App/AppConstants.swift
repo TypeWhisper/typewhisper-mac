@@ -378,9 +378,8 @@ enum AppConstants {
         static let checkoutURLTeam = "https://buy.polar.sh/polar_cl_kSqGfvss0Ces3W7R4xw7hr5NdgvEbPbhhUGRH4ad3Hj"
         static let checkoutURLEnterprise = "https://buy.polar.sh/polar_cl_uzCNIsF0vY9gx2peWljyJU7JQoEzxHUueCPTA0MoOQe"
 
-        // Business Yearly: ten monthly prices for a year
-        static let checkoutURLIndividualYearly = "https://buy.polar.sh/polar_cl_lnRsYNgI93u4CRXftmZU8JPn5EIGnbcbzGqLi3VBfzK"
-        static let checkoutURLTeamYearly = "https://buy.polar.sh/polar_cl_1MgHf8OcRjqEoxOvw3sorOKSPfAi6OIHVj3aN0nXytG"
+        // Business Yearly: ten monthly prices for a year. Only Enterprise is
+        // sold yearly; Individual and Team are monthly or Lifetime.
         static let checkoutURLEnterpriseYearly = "https://buy.polar.sh/polar_cl_LZkXVmog2aWoQqfWhIp19yEsaZNqHc0r3jU020T2oRi"
 
         // Business Lifetime. Enterprise is sold as a subscription only.
