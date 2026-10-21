@@ -24,6 +24,29 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         }
     }
 
+    func testProvidersAddedAfterASavedSelectionStartEnabled() {
+        XCTAssertEqual(
+            CalendarMeetingEnabledProviders.resolve(storedEnabledIDs: nil, storedKnownIDs: nil),
+            Set(MeetingProvider.allCases)
+        )
+        // Saved before Kontur Talk existed: Talk is new, the unchecked Zoom stays off.
+        XCTAssertEqual(
+            CalendarMeetingEnabledProviders.resolve(
+                storedEnabledIDs: ["teams", "googleMeet", "faceTime"],
+                storedKnownIDs: nil
+            ),
+            [.teams, .googleMeet, .faceTime, .konturTalk]
+        )
+        // Once a provider is known, unchecking it sticks.
+        XCTAssertEqual(
+            CalendarMeetingEnabledProviders.resolve(
+                storedEnabledIDs: ["zoom"],
+                storedKnownIDs: MeetingProvider.allCases.map(\.rawValue)
+            ),
+            [.zoom]
+        )
+    }
+
     func testReminderActionArmsOccurrenceWithoutStartingUntilStableJoinAndCountdown() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(5 * 60))

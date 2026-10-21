@@ -23672,8 +23672,26 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
+    func testAdHocKonturTalkCallStartsRecorderWithProviderSelectionSavedBeforeTalk() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(
+            adHoc: true, browser: false, nativeBundleIdentifier: "kontur.talk",
+            storedProviderIDs: ["faceTime", "googleMeet", "teams", "zoom"]
+        )
+    }
+
+    @MainActor
+    func testAdHocKonturTalkBrowserRoomStartsRecorder() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(
+            adHoc: true, browser: true, meetingTabURL: URL(string: "https://acme.ktalk.ru/weekly-sync")!
+        )
+    }
+
+    @MainActor
     private func exerciseMeetingAutoStopWithoutNotifications(
-        adHoc: Bool, browser: Bool, deferForComparison: Bool = false
+        adHoc: Bool, browser: Bool, deferForComparison: Bool = false,
+        nativeBundleIdentifier: String = "us.zoom.xos",
+        meetingTabURL: URL = URL(string: "https://meet.google.com/abc-defg-hij")!,
+        storedProviderIDs: [String]? = nil
     ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let suite = "MeetingRuntime-\(UUID().uuidString)"
@@ -23686,6 +23704,9 @@ extension TypeWhisperIntegrationTests {
         defaults.set(CalendarMeetingStartMode.automatic.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
         defaults.set(true, forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
         defaults.set(adHoc, forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
+        if let storedProviderIDs {
+            defaults.set(storedProviderIDs, forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs)
+        }
         let context = Self.makeDictationContext(appSupportDirectory: directory)
         let recorderService = AudioRecorderService()
         recorderService.recordingsDirectoryOverride = directory
@@ -23715,7 +23736,7 @@ extension TypeWhisperIntegrationTests {
         )
         let events = MeetingRuntimeEventProvider(occurrences: adHoc ? [] : [calendarOccurrence])
         let notifications = MeetingRuntimeNotifications(authorization: browser ? .authorized : .denied)
-        let browserResolver = MeetingRuntimeBrowserResolver()
+        let browserResolver = MeetingRuntimeBrowserResolver(meetingURL: meetingTabURL)
         let controller = CalendarMeetingAutomationController(
             licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
                 keychainCopyMatching: { _, _ in errSecItemNotFound }),
@@ -23740,7 +23761,7 @@ extension TypeWhisperIntegrationTests {
         XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled))
 
         let process = MeetingAudioProcess(audioObjectID: 1, processID: 123,
-            bundleIdentifier: browser ? SupportedMeetingBrowser.chrome : "us.zoom.xos",
+            bundleIdentifier: browser ? SupportedMeetingBrowser.chrome : nativeBundleIdentifier,
             isRunningInput: true, isRunningOutput: true)
         await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available, processes: [process]))
         now = initialTime.addingTimeInterval(adHoc ? (browser ? 20 : 5) : 3)
@@ -24165,12 +24186,16 @@ private actor MeetingRuntimeCameraCollector: MeetingCameraActivityCollecting {
 }
 
 private actor MeetingRuntimeBrowserResolver: BrowserURLResolving {
+    private let meetingURL: URL
     private var hasMeeting = true
+    init(meetingURL: URL = URL(string: "https://meet.google.com/abc-defg-hij")!) {
+        self.meetingURL = meetingURL
+    }
     func removeMeetingTab() { hasMeeting = false }
     func activeURL(for bundleIdentifier: String) -> URL? { URL(string: "https://example.com/document") }
     func meetingTabURLs(for bundleIdentifier: String) -> [URL]? {
         var urls = [URL(string: "https://example.com/document")!]
-        if hasMeeting { urls.append(URL(string: "https://meet.google.com/abc-defg-hij")!) }
+        if hasMeeting { urls.append(meetingURL) }
         return urls
     }
 }

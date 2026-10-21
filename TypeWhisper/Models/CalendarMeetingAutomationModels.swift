@@ -47,6 +47,7 @@ enum MeetingProvider: String, Codable, Sendable, CaseIterable, Identifiable {
     case teams
     case googleMeet
     case faceTime
+    case konturTalk
 
     var id: String { rawValue }
 
@@ -56,7 +57,26 @@ enum MeetingProvider: String, Codable, Sendable, CaseIterable, Identifiable {
         case .teams: "Microsoft Teams"
         case .googleMeet: "Google Meet"
         case .faceTime: "FaceTime"
+        case .konturTalk: "Kontur Talk"
         }
+    }
+}
+
+enum CalendarMeetingEnabledProviders {
+    /// Providers that shipped before the known-provider list was stored.
+    static let legacyKnownProviderIDs: Set<String> = ["zoom", "teams", "googleMeet", "faceTime"]
+
+    /// Providers added after the user last saved a selection start enabled, like they
+    /// would for a user who never changed the selection.
+    static func resolve(
+        storedEnabledIDs: [String]?,
+        storedKnownIDs: [String]?
+    ) -> Set<MeetingProvider> {
+        guard let storedEnabledIDs else { return Set(MeetingProvider.allCases) }
+        let known = storedKnownIDs.map(Set.init) ?? legacyKnownProviderIDs
+        let enabled = storedEnabledIDs.compactMap(MeetingProvider.init(rawValue:))
+        let added = MeetingProvider.allCases.filter { !known.contains($0.rawValue) }
+        return Set(enabled + added)
     }
 }
 

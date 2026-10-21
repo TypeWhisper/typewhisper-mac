@@ -115,7 +115,8 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         let expectedProviders: [(String, MeetingProvider)] = [
             ("us.zoom.xos", .zoom),
             ("com.microsoft.teams2", .teams),
-            ("com.microsoft.teams", .teams)
+            ("com.microsoft.teams", .teams),
+            ("kontur.talk", .konturTalk)
         ]
 
         for (bundleIdentifier, expectedProvider) in expectedProviders {
@@ -146,7 +147,11 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
             ("com.microsoft.teams2.modulehost", "com.microsoft.teams2", .teams),
             ("com.microsoft.teams.helper", "com.microsoft.teams", .teams),
             ("us.zoom.xos.helper", "us.zoom.xos", .zoom),
-            ("com.apple.FaceTime.helper", "com.apple.FaceTime", .faceTime)
+            ("com.apple.FaceTime.helper", "com.apple.FaceTime", .faceTime),
+            ("kontur.talk.helper", "kontur.talk", .konturTalk),
+            ("kontur.talk.helper.Renderer", "kontur.talk", .konturTalk),
+            ("kontur.talk.helper.GPU", "kontur.talk", .konturTalk),
+            ("kontur.talk.helper.Plugin", "kontur.talk", .konturTalk)
         ]
 
         for (helper, app, provider) in expectedApps {
@@ -168,6 +173,7 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
             "com.microsoft.teams2x.modulehost",
             "com.microsoft.teamsupdater",
             "us.zoom.xosx",
+            "kontur.talkative",
             "com.google.Chrome.updater"
         ] {
             XCTAssertNil(

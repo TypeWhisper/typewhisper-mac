@@ -271,11 +271,27 @@ final class CalendarMeetingAutomationController: ObservableObject {
         if defaults.object(forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs) == nil {
             enabledProviders = Set(MeetingProvider.allCases)
         } else {
-            enabledProviders = Set(
-                (defaults.stringArray(forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs) ?? [])
-                    .compactMap(MeetingProvider.init(rawValue:))
+            enabledProviders = CalendarMeetingEnabledProviders.resolve(
+                storedEnabledIDs: defaults.stringArray(
+                    forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs
+                ) ?? [],
+                storedKnownIDs: defaults.stringArray(
+                    forKey: UserDefaultsKeys.calendarMeetingKnownProviderIDs
+                )
             )
+            persistEnabledProviders()
         }
+    }
+
+    private func persistEnabledProviders() {
+        defaults.set(
+            enabledProviders.map(\.rawValue).sorted(),
+            forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs
+        )
+        defaults.set(
+            MeetingProvider.allCases.map(\.rawValue).sorted(),
+            forKey: UserDefaultsKeys.calendarMeetingKnownProviderIDs
+        )
     }
 
     #if DEBUG
@@ -536,10 +552,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         } else {
             enabledProviders.remove(provider)
         }
-        defaults.set(
-            enabledProviders.map(\.rawValue).sorted(),
-            forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs
-        )
+        persistEnabledProviders()
         applyPolicyConfiguration(now: nowProvider())
         requestRefresh()
     }
@@ -1267,7 +1280,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             // Shared FaceTime/telephony services are only trustworthy in the
             // context of a matching calendar event, not as ad-hoc call identity.
             if detectAdHocMeetings, enabledProviders.contains(provider),
-               provider == .zoom || provider == .teams,
+               provider != .faceTime,
                !hasCalendarMatch(provider: provider, link: nil, at: snapshot.capturedAt) {
                 detectedActivities.append(DetectedMeetingActivity(
                     sourceID: "native:\(provider.rawValue)",
