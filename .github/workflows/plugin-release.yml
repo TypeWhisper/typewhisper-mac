@@ -120,6 +120,7 @@ jobs:
             livetranscript) TARGET="LiveTranscriptPlugin" ;;
             granite) TARGET="GranitePlugin" ;;
             canary) TARGET="CanaryPlugin" ;;
+            gigaam) TARGET="GigaAMPlugin" ;;
             cloudflare-asr) TARGET="CloudflareASRPlugin" ;;
             file-memory) TARGET="FileMemoryPlugin" ;;
             mempalace) TARGET="MemPalacePlugin" ;;
