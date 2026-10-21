@@ -92,7 +92,8 @@ extension SpeakerTranscriptPresentation {
     /// The sentences of `text` with times from another transcription of the
     /// same audio. A pass that only provides timing must not replace the
     /// saved text, so its words are matched to the text like word timing of
-    /// another engine. Empty for text without spaces between words.
+    /// another engine. Text without spaces between words, such as Japanese,
+    /// or a single word is matched by its characters instead.
     static func timedSentences(
         of text: String,
         duration: TimeInterval,
@@ -115,11 +116,14 @@ extension SpeakerTranscriptPresentation {
         let end = max(duration, words.last?.end ?? 0)
         guard source.length > 0, !words.isEmpty, end > 0 else { return [] }
 
+        let ranges = wordRanges(in: source)
+        guard ranges.count > 1 else {
+            return sentencesTimedByCharacters(of: source, words: words, end: end)
+        }
         let paragraph = SpeakerParagraph(turnIndex: 0, speakerID: "", start: 0, end: end, text: text, segmentRange: 0..<1)
         let segment = SpeakerTranscriptSegment(text: text, start: 0, end: end, speakerID: nil, speakerConfidence: nil)
-        let ranges = wordRanges(in: source)
         let timed = timedWords(of: paragraph, segments: [segment], words: words)
-        guard ranges.count > 1, ranges.count == timed.count else { return [] }
+        guard ranges.count == timed.count else { return [] }
 
         var sentences: [NSRange] = []
         source.enumerateSubstrings(
@@ -147,6 +151,74 @@ extension SpeakerTranscriptPresentation {
                 utf16Length: range.length
             )
         }
+    }
+
+    /// Sentence times for text without spaces between words, or a single
+    /// word: the timed words are found in the text by their characters. A
+    /// sentence starts with the first word found in it; one without a found
+    /// word is placed by its position between the words found around it.
+    private static func sentencesTimedByCharacters(
+        of source: NSString,
+        words: [TranscriptionWord],
+        end: TimeInterval
+    ) -> [TimedTextEntry] {
+        let found = TimedTextEntry.map(
+            textParts: words.map { ($0.text, $0.start, $0.end) },
+            in: source as String
+        )
+        var sentences: [NSRange] = []
+        source.enumerateSubstrings(
+            in: NSRange(location: 0, length: source.length),
+            options: [.bySentences, .substringNotRequired]
+        ) { _, range, _, _ in
+            let trimmed = trimmedRange(range, in: source)
+            if trimmed.length > 0 { sentences.append(trimmed) }
+        }
+
+        // Linear in the text position between two known points.
+        func time(
+            at location: Int,
+            from a: (location: Int, time: TimeInterval),
+            to b: (location: Int, time: TimeInterval)
+        ) -> TimeInterval {
+            guard b.location > a.location else { return a.time }
+            return a.time + (b.time - a.time) * Double(location - a.location) / Double(b.location - a.location)
+        }
+        var starts: [TimeInterval] = []
+        for sentence in sentences {
+            let start: TimeInterval
+            if let first = found.first(where: { NSLocationInRange($0.utf16Location, sentence) }) {
+                start = first.start
+            } else {
+                let before = found.last { $0.utf16Location < sentence.location }
+                let after = found.first { $0.utf16Location >= NSMaxRange(sentence) }
+                start = time(
+                    at: sentence.location,
+                    from: before.map { ($0.utf16Location, $0.start) } ?? (0, 0),
+                    to: after.map { ($0.utf16Location, $0.start) } ?? (source.length, end)
+                )
+            }
+            starts.append(max(start, starts.last ?? 0))
+        }
+        return sentences.enumerated().map { index, range in
+            let following = index + 1 < starts.count ? starts[index + 1] : end
+            return TimedTextEntry(
+                text: source.substring(with: range),
+                start: starts[index],
+                end: max(starts[index], following),
+                utf16Location: range.location,
+                utf16Length: range.length
+            )
+        }
+    }
+
+    /// The range without the spaces and line breaks at its ends.
+    private static func trimmedRange(_ range: NSRange, in source: NSString) -> NSRange {
+        let visible = CharacterSet.whitespacesAndNewlines.inverted
+        let first = source.rangeOfCharacter(from: visible, options: [], range: range)
+        guard first.location != NSNotFound else { return NSRange(location: range.location, length: 0) }
+        let last = source.rangeOfCharacter(from: visible, options: .backwards, range: range)
+        return NSRange(location: first.location, length: NSMaxRange(last) - first.location)
     }
 
     private static func wordRanges(in source: NSString) -> [NSRange] {

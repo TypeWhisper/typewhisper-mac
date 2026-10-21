@@ -550,6 +550,106 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.finalText, "Hello there. How are you today?")
     }
 
+    /// Issue #1558: text without spaces between words, such as Japanese, kept
+    /// the timing pass's wording instead of the saved text.
+    func testTimingPassKeepsTheSavedTextWithoutSpacesBetweenWords() async throws {
+        let id = UUID()
+        let text = "おはようございます。今日は会議を始めましょう。"
+        let audioFileName = history.writeAudioFile([Float](repeating: 0.1, count: 64_000), forRecordID: id)
+        XCTAssertTrue(history.addRecord(
+            id: id,
+            rawText: text,
+            finalText: text,
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 4,
+            language: "ja",
+            engineUsed: "test",
+            audioFileName: audioFileName
+        ))
+        provider.turns = [
+            PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 1.4),
+            PluginSpeakerTurn(speakerLabel: "y", start: 1.4, end: 4),
+        ]
+        let coordinator = makeCoordinator()
+        coordinator.timingSource = { _, language in
+            TranscriptionResult(
+                text: "おはようございます。今日は会議を始めよう。",
+                detectedLanguage: language,
+                duration: 4,
+                processingTime: 0.1,
+                engineUsed: "test",
+                segments: [
+                    TranscriptionSegment(text: "おはようございます。", start: 0, end: 1.2),
+                    TranscriptionSegment(text: "今日は会議を始めよう。", start: 1.6, end: 3.8),
+                ],
+                words: [
+                    TranscriptionWord(text: "おはよう", start: 0, end: 0.6),
+                    TranscriptionWord(text: "ございます", start: 0.6, end: 1.2),
+                    TranscriptionWord(text: "今日", start: 1.6, end: 2.0),
+                    TranscriptionWord(text: "は", start: 2.0, end: 2.1),
+                    TranscriptionWord(text: "会議", start: 2.1, end: 2.6),
+                    TranscriptionWord(text: "を", start: 2.6, end: 2.7),
+                    TranscriptionWord(text: "始めよう", start: 2.7, end: 3.8),
+                ]
+            )
+        }
+
+        XCTAssertNil(coordinator.start(recordID: id))
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        XCTAssertEqual(record.timedText.map(\.text), ["おはようございます。", "今日は会議を始めましょう。"])
+        XCTAssertEqual(record.timedText.map(\.start), [0, 1.6])
+        XCTAssertEqual(record.speakerWordsAreFromSecondPass, true)
+        let transcript = try XCTUnwrap(record.speakerTranscript)
+        XCTAssertEqual(transcript.segments.map(\.text), ["おはようございます。", "今日は会議を始めましょう。"])
+        XCTAssertEqual(transcript.segments.map(\.speakerID), ["S1", "S2"])
+        XCTAssertEqual(record.finalText, text)
+    }
+
+    /// Issue #1558: detecting speakers again after a paragraph edit rebuilt the
+    /// transcript from the transcription and lost the edit, while `finalText`
+    /// kept it.
+    func testDetectingSpeakersAgainKeepsAParagraphEdit() async throws {
+        provider.turns = [
+            PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 1),
+            PluginSpeakerTurn(speakerLabel: "y", start: 1, end: 2),
+            PluginSpeakerTurn(speakerLabel: "x", start: 2, end: 3),
+        ]
+        let coordinator = makeCoordinator()
+        let addedID = await coordinator.addRecording(input())
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+        let first = try XCTUnwrap(history.record(withID: id)?.speakerTranscript)
+        XCTAssertTrue(history.updateSpeakerTranscript(
+            first.replacingText(ofSegmentsIn: 1..<2, with: "Good morning to you."),
+            names: nil,
+            forRecordID: id,
+            updatesText: true
+        ))
+        let editedText = "Good morning. Good morning to you. Let's start."
+        XCTAssertEqual(history.record(withID: id)?.finalText, editedText)
+
+        // The second run hears the first two sentences from one speaker.
+        provider.turns = [
+            PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 2),
+            PluginSpeakerTurn(speakerLabel: "y", start: 2, end: 3),
+        ]
+        XCTAssertNil(coordinator.start(recordID: id))
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        let second = try XCTUnwrap(record.speakerTranscript)
+        XCTAssertNotEqual(second.revision, first.revision)
+        XCTAssertEqual(second.segments.map(\.text), ["Good morning.", "Good morning to you.", "Let's start."])
+        XCTAssertEqual(second.segments.map(\.speakerID), ["S1", "S1", "S2"])
+        XCTAssertEqual(second.joinedText, record.finalText)
+        XCTAssertEqual(record.finalText, editedText)
+        XCTAssertEqual(record.rawText, "Good morning. Morning. Let's start.")
+        XCTAssertEqual(record.timedText.map(\.text), ["Good morning.", "Morning.", "Let's start."])
+    }
+
     func testRecordingWithoutWordTimingGetsItFromTheSecondPass() async throws {
         provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
         let coordinator = makeCoordinator()

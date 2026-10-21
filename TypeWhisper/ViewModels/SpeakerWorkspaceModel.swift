@@ -426,9 +426,12 @@ final class SpeakerWorkspaceModel: ObservableObject {
         )
     }
 
+    /// - Parameter savedVoices: The voices stored for `transcript` before, when
+    ///   undo or redo brings it back; moving them along again would lose some.
     private func apply(
         _ transcript: SpeakerTranscript,
         names: SpeakerNameTable?,
+        restoring savedVoices: RecordingSpeakerEmbeddings? = nil,
         updatesText: Bool = false,
         actionName: String,
         undoManager: UndoManager?
@@ -443,15 +446,18 @@ final class SpeakerWorkspaceModel: ObservableObject {
             reload()
             return
         }
+        // Read after the update, which may first stamp them with the previous transcript.
+        let previousVoices = voices?.storedVoices(ofRecordID: recordID)
         reload()
         if let old = previous.transcript, let new = self.transcript, old != new {
-            voices?.transcriptCorrected(recordID: recordID, from: old, to: new)
+            voices?.transcriptCorrected(recordID: recordID, from: old, to: new, restoring: savedVoices)
         }
         guard let undoManager, let previousTranscript = previous.transcript else { return }
         undoManager.registerUndo(withTarget: self) { model in
             model.apply(
                 previousTranscript,
                 names: previous.names,
+                restoring: previousVoices,
                 updatesText: updatesText,
                 actionName: actionName,
                 undoManager: undoManager

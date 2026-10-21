@@ -133,6 +133,52 @@ final class SpeakerWorkspaceTests: XCTestCase {
         XCTAssertEqual(carried.lost, ["Anna", "Ben"])
     }
 
+    func testARejectedSuggestionIsKeptAcrossCorrectionsButNotSynced() throws {
+        let revision = UUID()
+        let profileID = UUID()
+        var names = SpeakerNameTable(transcriptRevision: revision)
+        names.setName("Anna", for: "S1")
+        names.setName("Ben", for: "S3", profileID: profileID, isSuggestion: true)
+        names.rejectSuggestion(for: "S1")
+        XCTAssertEqual(names.displayName(for: "S1"), "Anna", "only suggestions can be rejected")
+
+        names.rejectSuggestion(for: "S3")
+        XCTAssertNil(names.displayName(for: "S3"))
+        XCTAssertEqual(names.rejectedProfileIDs(for: "S3"), [profileID])
+        XCTAssertTrue(names.hasSameNames(as: {
+            var anna = SpeakerNameTable(transcriptRevision: revision)
+            anna.setName("Anna", for: "S1")
+            return anna
+        }()), "a rejection is no name change")
+
+        // A correction numbers S3 as S2; the rejection moves with it.
+        let renumbered = names.renamingSpeakers(["S1": "S1", "S3": "S2"])
+        XCTAssertEqual(renumbered.rejectedProfileIDs(for: "S2"), [profileID])
+        XCTAssertTrue(renumbered.rejectedProfileIDs(for: "S3").isEmpty)
+        XCTAssertTrue(names.renamingSpeakers(["S1": "S1"]).rejectedProfileIDs(for: "S3").isEmpty)
+
+        // Stored on this device, older tables without rejections still read.
+        let decoded = try JSONDecoder().decode(SpeakerNameTable.self, from: JSONEncoder().encode(names))
+        XCTAssertEqual(decoded, names)
+        let legacy = Data(#"{"transcriptRevision":"\#(revision.uuidString)","entries":[]}"#.utf8)
+        XCTAssertTrue(try JSONDecoder().decode(SpeakerNameTable.self, from: legacy).rejected.isEmpty)
+        var onlyRejected = SpeakerNameTable(transcriptRevision: revision)
+        onlyRejected.setName("Ben", for: "S2", profileID: profileID, isSuggestion: true)
+        onlyRejected.rejectSuggestion(for: "S2")
+        XCTAssertFalse(onlyRejected.isEmpty, "the table is kept for its rejection")
+
+        // Sync carries names only.
+        let wire = UserDataSyncHistorySpeakersV1(
+            recordID: UUID(),
+            updatedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            transcriptRevision: revision,
+            table: names
+        )
+        let json = String(decoding: try JSONEncoder().encode(wire), as: UTF8.self)
+        XCTAssertFalse(json.contains(profileID.uuidString))
+        XCTAssertFalse(json.contains("rejected"))
+    }
+
     // MARK: - Text edits
 
     func testEditingAParagraphReplacesItsSegmentsAndKeepsTimesAndSpeaker() {
@@ -520,5 +566,74 @@ final class SpeakerTimedWordsTests: XCTestCase {
         XCTAssertEqual(timed[0].start, 0, accuracy: 0.01)
         XCTAssertEqual(timed[2].start, 10, accuracy: 0.01)
         XCTAssertGreaterThan(timed[3].start, 10)
+    }
+
+    private func timing(_ words: [TranscriptionWord], duration: TimeInterval) -> TranscriptionResult {
+        TranscriptionResult(
+            text: words.map(\.text).joined(),
+            detectedLanguage: "ja",
+            duration: duration,
+            processingTime: 0.1,
+            engineUsed: "test",
+            segments: [],
+            words: words
+        )
+    }
+
+    /// Issue #1558: a timing pass must time the saved sentences of text
+    /// without spaces between words instead of replacing them.
+    func testSentencesWithoutSpacesKeepTheSavedTextAndTakeTheTimesOfTheirWords() {
+        let text = "おはようございます。今日は会議を始めましょう。"
+        // The pass hears the last word differently.
+        let words = [
+            TranscriptionWord(text: "おはよう", start: 0.2, end: 0.6),
+            TranscriptionWord(text: "ございます", start: 0.6, end: 1.2),
+            TranscriptionWord(text: "今日", start: 1.6, end: 1.9),
+            TranscriptionWord(text: "は", start: 1.9, end: 2.0),
+            TranscriptionWord(text: "会議", start: 2.0, end: 2.4),
+            TranscriptionWord(text: "を", start: 2.4, end: 2.5),
+            TranscriptionWord(text: "始めよう", start: 2.5, end: 3.0),
+        ]
+
+        let sentences = SpeakerTranscriptPresentation.timedSentences(
+            of: text,
+            duration: 3.5,
+            timing: timing(words, duration: 3.5)
+        )
+
+        XCTAssertEqual(sentences.map(\.text), ["おはようございます。", "今日は会議を始めましょう。"])
+        XCTAssertEqual(sentences.map(\.start), [0.2, 1.6])
+        XCTAssertEqual(sentences.map(\.end), [1.6, 3.5])
+        XCTAssertEqual(sentences.map(\.utf16Location), [0, 10])
+    }
+
+    func testASentenceWithoutATimedWordIsPlacedBetweenItsNeighbours() {
+        let text = "一つ目。二つ目。三つ目。"
+        let words = [
+            TranscriptionWord(text: "一つ目", start: 1, end: 2),
+            TranscriptionWord(text: "三つ目", start: 7, end: 8),
+        ]
+
+        let sentences = SpeakerTranscriptPresentation.timedSentences(
+            of: text,
+            duration: 9,
+            timing: timing(words, duration: 9)
+        )
+
+        XCTAssertEqual(sentences.map(\.text), ["一つ目。", "二つ目。", "三つ目。"])
+        XCTAssertEqual(sentences.map(\.start), [1, 4, 7])
+        XCTAssertEqual(sentences.last?.end, 9)
+    }
+
+    func testASingleWordIsOneSentenceFromItsTime() {
+        let sentences = SpeakerTranscriptPresentation.timedSentences(
+            of: "Hello.",
+            duration: 2,
+            timing: timing([TranscriptionWord(text: "hello", start: 0.4, end: 0.9)], duration: 2)
+        )
+
+        XCTAssertEqual(sentences, [
+            TimedTextEntry(text: "Hello.", start: 0.4, end: 2, utf16Location: 0, utf16Length: 6),
+        ])
     }
 }
