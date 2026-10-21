@@ -208,16 +208,25 @@ final class GigaAMPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                 throw PluginTranscriptionError.apiError("GigaAM cannot translate. It only transcribes Russian.")
             }
             let progress = GigaAMTranscriptProgress()
-            let result = try await PluginAudioChunking.transcribe(
-                audio, maximumChunkDuration: GigaAMRuntime.maximumChunkDuration
-            ) { chunk in
-                try Task.checkCancellation()
-                let text = progress.continuing(try runtime.transcribe(chunk.samples))
-                try Task.checkCancellation()
-                guard onProgress(progress.append(text)) else { throw CancellationError() }
-                return PluginTranscriptionResult(text: text, detectedLanguage: "ru")
+            do {
+                let result = try await PluginAudioChunking.transcribe(
+                    audio, maximumChunkDuration: GigaAMRuntime.maximumChunkDuration
+                ) { chunk in
+                    try Task.checkCancellation()
+                    let text = progress.continuing(try runtime.transcribe(chunk.samples))
+                    try Task.checkCancellation()
+                    guard onProgress(progress.append(text)) else { throw CancellationError() }
+                    return PluginTranscriptionResult(text: text, detectedLanguage: "ru")
+                }
+                return PluginTranscriptionResult(text: result.text, detectedLanguage: "ru", segments: result.segments)
+            } catch let error as CancellationError {
+                throw error
+            } catch let error as PluginTranscriptionError {
+                throw error
+            } catch {
+                // ONNX Runtime and model errors are unknown to the host; report them as engine errors.
+                throw PluginTranscriptionError.apiError("GigaAM transcription failed: \(error.localizedDescription)")
             }
-            return PluginTranscriptionResult(text: result.text, detectedLanguage: "ru", segments: result.segments)
         }
     }
 
