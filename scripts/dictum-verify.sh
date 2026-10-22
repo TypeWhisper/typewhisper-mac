@@ -42,6 +42,12 @@ build() {
     return 1
   }
   sign_app
+  if [[ "${DICTUM_VERIFY_APPSTORE:-0}" == 1 ]]; then
+    "$repo_root/scripts/appstore/build-dev.sh" --check >"$receipts/appstore-build.log" 2>&1 || {
+      tail -60 "$receipts/appstore-build.log" >&2
+      return 1
+    }
+  fi
   printf '%s\n' "$app"
 }
 
@@ -82,6 +88,22 @@ quit_app() {
   pids="$(running_pids)"
   [[ -n "$pids" ]] || return 0
   while IFS= read -r pid; do
+    printf '请求 dictum Dev 正常退出，PID %s。\n' "$pid"
+    /usr/bin/osascript -l JavaScript -e \
+      "ObjC.import('AppKit'); \$.NSRunningApplication.runningApplicationWithProcessIdentifier($pid).terminate" \
+      >/dev/null || printf '警告：PID %s 的正常退出请求未成功。\n' "$pid" >&2
+  done <<< "$pids"
+  for ((attempt=0; attempt<40; attempt++)); do
+    if [[ -z "$(running_pids)" ]]; then
+      printf 'dictum Dev 已正常退出。\n'
+      return 0
+    fi
+    sleep 0.25
+  done
+  pids="$(running_pids)"
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    printf '警告：PID %s 在 10 秒内未正常退出，发送 SIGTERM。\n' "$pid" >&2
     kill -TERM "$pid" 2>/dev/null || true
   done <<< "$pids"
   for ((attempt=0; attempt<40; attempt++)); do

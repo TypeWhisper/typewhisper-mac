@@ -27,6 +27,15 @@ def main():
     except (OSError, ValueError, KeyError) as error:
         errors.append(f"无法读取 Xcode 测试结果。{error}")
     sdk_log = (receipts / "sdk-test.log").read_text()
+    swift_testing_counts = re.findall(r"[✔✘] Test run with (\d+) tests? (?:in \d+ suites? )?(passed|failed)", sdk_log)
+    if re.search(r"[✔✘] Test run with", sdk_log) and not swift_testing_counts:
+        errors.append("SDK 的 Swift Testing 汇总格式尚未解析。")
+    if re.search(r"[✔✘] Test (?!run with )", sdk_log):
+        errors.append("SDK 包含尚未解析的 Swift Testing 用例结果。")
+    if any(int(total) > 0 or result == "failed" for total, result in swift_testing_counts):
+        errors.append("SDK 包含尚未解析的 Swift Testing 结果，必须添加结果解析后才能通过。")
+    if re.search(r"✘ Test\b", sdk_log) and not swift_testing_counts:
+        errors.append("SDK 的 Swift Testing 失败或结果不完整。")
     sdk_failures = set(re.findall(r"Test Case '-\[([\w.]+) (\w+)\]' failed", sdk_log))
     failures.update(f"sdk:{suite.rsplit('.', 1)[-1]}/{test}()" for suite, test in sdk_failures)
     counts = re.findall(r"Test Suite 'All tests' (?:passed|failed)[^\n]*\n\s*Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?(\d+) failures? \((\d+) unexpected\)", sdk_log)
