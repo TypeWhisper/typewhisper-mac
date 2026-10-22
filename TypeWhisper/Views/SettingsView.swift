@@ -52,7 +52,8 @@ struct SettingsView: View {
         case "hotkeys": return .hotkeys
         case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
-        case "recorder", "recorder-queue", "recorder-folders", "recorder-folder-unavailable": return .recorder
+        case "recorder", "recorder-queue", "recorder-folders", "recorder-folder-unavailable", "recorder-meetings":
+            return .recorder
         case "history": return .history
         case "statistics": return .statistics
         case "dictionary", "dictionary-term-packs", "dictionary-local-term-packs", "dictionary-local-term-pack-error",
