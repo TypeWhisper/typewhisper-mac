@@ -609,13 +609,15 @@ final class HistoryService: ObservableObject {
     }
 
     /// The record a Recorder recording was saved as with speaker detection.
-    func speakerRecord(forRecorderRecordingID recordingID: UUID) -> TranscriptionRecord? {
+    /// Throws when the lookup fails, so a failed fetch is not mistaken for a
+    /// recording without a record.
+    func speakerRecord(forRecorderRecordingID recordingID: UUID) throws -> TranscriptionRecord? {
         var descriptor = FetchDescriptor<TranscriptionRecord>(
             predicate: #Predicate { $0.recorderRecordingID == recordingID },
             sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
         )
         descriptor.fetchLimit = 1
-        return (try? modelContext.fetch(descriptor))?.first
+        return try modelContext.fetch(descriptor).first
     }
 
     /// Records that have speaker names, newest first.
