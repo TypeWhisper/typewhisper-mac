@@ -365,8 +365,15 @@ final class ServiceContainer: ObservableObject {
         speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
             // Engines such as Qwen3 return text without timestamps; the
             // selected engine would then return none a second time.
-            if let result = try await parakeetTimingPass(url, language), !result.segments.isEmpty {
-                return result
+            do {
+                if let result = try await parakeetTimingPass(url, language), !result.segments.isEmpty {
+                    return result
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
+                    .info("Timing pass with Parakeet failed: \(error.localizedDescription, privacy: .public)")
             }
             let samples = try await audioFileService.loadAudioSamples(from: url)
             return try await modelManagerService.transcribe(
