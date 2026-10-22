@@ -160,6 +160,20 @@ struct AudioRecorderView: View {
                 }
             }
 
+            // Transcripts of stopped recordings, made one at a time in the background
+            if !viewModel.pendingTranscriptions.isEmpty {
+                Section(String(localized: "recorder.transcriptionQueue")) {
+                    ForEach(viewModel.pendingTranscriptions) { pending in
+                        PendingTranscriptionRow(pending: pending)
+                    }
+                    if viewModel.isLivePreviewWaiting {
+                        Text(String(localized: "recorder.livePreviewWaitsForQueue"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             // Audio Sources
             Section(String(localized: "recorder.sources")) {
                 Toggle(String(localized: "recorder.mic"), isOn: $viewModel.micEnabled)
@@ -510,6 +524,53 @@ private struct LevelMeterRow: View {
     }
 }
 
+// MARK: - Pending Transcription Row
+
+private struct PendingTranscriptionRow: View {
+    let pending: AudioRecorderViewModel.PendingTranscription
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                switch pending.status {
+                case .transcribing:
+                    ProgressView()
+                        .controlSize(.small)
+                case .waiting:
+                    Image(systemName: "clock")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 18)
+            .accessibilityHidden(true)
+
+            Text(pending.fileName)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+
+            Text(recorderTranscriptionStatusTitle(pending.status, hasTranscript: false))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The status shown for a recording whose transcript is not saved yet.
+private func recorderTranscriptionStatusTitle(
+    _ status: AudioRecorderViewModel.PendingTranscription.Status,
+    hasTranscript: Bool
+) -> String {
+    switch status {
+    case .transcribing:
+        hasTranscript ? String(localized: "recorder.retranscribing") : String(localized: "recorder.transcribing")
+    case .waiting:
+        String(localized: "recorder.transcriptionWaiting")
+    }
+}
+
 // MARK: - Recording Row
 
 private struct RecordingRow: View {
@@ -517,6 +578,11 @@ private struct RecordingRow: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
     @State private var showTranscript = false
     @State private var showRetranscriptionConfirmation = false
+
+    /// The transcript is being made, or waits in the queue.
+    private var transcriptionStatus: AudioRecorderViewModel.PendingTranscription.Status? {
+        viewModel.transcriptionStatus(for: item)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -592,24 +658,30 @@ private struct RecordingRow: View {
                         .accessibilityIdentifier("recorder.recording.copyTranscript")
                     }
 
-                    if viewModel.isRetranscribing(item) {
+                    if let transcriptionStatus {
+                        let statusTitle = recorderTranscriptionStatusTitle(
+                            transcriptionStatus,
+                            hasTranscript: item.transcript != nil
+                        )
                         HStack(spacing: 5) {
-                            ProgressView()
-                                .controlSize(.small)
+                            if transcriptionStatus == .waiting {
+                                Image(systemName: "clock")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
                             if item.transcript == nil {
-                                Text(String(localized: "recorder.transcribing"))
+                                Text(statusTitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .help(item.transcript == nil
-                            ? String(localized: "recorder.transcribing")
-                            : String(localized: "recorder.retranscribing"))
+                        .help(statusTitle)
                         .accessibilityElement(children: .ignore)
                         .accessibilityAddTraits(.isStaticText)
-                        .accessibilityLabel(item.transcript == nil
-                            ? String(localized: "recorder.transcribing")
-                            : String(localized: "recorder.retranscribing"))
+                        .accessibilityLabel(statusTitle)
                     } else if item.transcript == nil {
                         Button {
                             requestTranscription()
@@ -661,7 +733,8 @@ private struct RecordingRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.delete"))
-                    .disabled(viewModel.isRetranscribing(item))
+                    // The recording keeps its files until its transcript is done.
+                    .disabled(transcriptionStatus != nil)
                     .accessibilityLabel(localizedAppText(
                         "Delete \(item.fileName)",
                         de: "\(item.fileName) löschen",
@@ -723,7 +796,7 @@ private struct RecordingRow: View {
             Button(String(localized: "recorder.delete"), role: .destructive) {
                 viewModel.deleteRecording(item)
             }
-            .disabled(viewModel.isRetranscribing(item))
+            .disabled(transcriptionStatus != nil)
         }
         .confirmationDialog(
             String(localized: "recorder.retranscribeConfirmation.title"),
