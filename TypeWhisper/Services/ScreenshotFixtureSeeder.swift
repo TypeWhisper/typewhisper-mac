@@ -30,6 +30,7 @@ extension ServiceContainer {
         if ["indicator-settings", "indicator"].contains(AppConstants.screenshotState) {
             dictationViewModel.prepareScreenshotIndicatorFixture()
         }
+        seedScreenshotRecorderFolders(state: AppConstants.screenshotState)
 
         seedScreenshotHistory(content.history, languageCode: language.rawValue)
         usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
@@ -81,6 +82,70 @@ extension ServiceContainer {
 
         statisticsViewModel.refresh()
         homeViewModel.refresh()
+    }
+
+    /// Every screenshot run starts with the default Recorder folder, because runs share their
+    /// preferences. In "recorder-folders", new recordings go to `~/Recordings`, and the default
+    /// folder holds an earlier recording and stays listed. "recorder-folder-unavailable" removes
+    /// `~/Recordings` again, as when its disk is disconnected.
+    private func seedScreenshotRecorderFolders(state: String?) {
+        for key in [
+            UserDefaultsKeys.recorderFolderBookmark,
+            UserDefaultsKeys.recorderFolderPath,
+            UserDefaultsKeys.recorderEarlierFolders,
+        ] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        // The Recorder listed its recordings at launch, before the folders were reset or seeded.
+        defer { audioRecorderViewModel.loadRecordings() }
+
+        let chosenFolderIsGone = state == "recorder-folder-unavailable"
+        // The fixture writes into the home folder, so only into a screenshot run's own home.
+        guard state == "recorder-folders" || chosenFolderIsGone,
+              ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"] != nil else { return }
+        let fileManager = FileManager.default
+        let chosenFolder = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Recordings", isDirectory: true)
+        let referenceDate = AppConstants.screenshotFixtureReferenceDate
+        do {
+            try writeScreenshotRecording(
+                baseName: CalendarMeetingRecordingFilename.preferredBaseName(
+                    title: "Team Sync",
+                    date: referenceDate.addingTimeInterval(-6 * 86_400)
+                ),
+                in: recorderFolderStore.defaultDirectory,
+                seconds: 42,
+                createdAt: referenceDate.addingTimeInterval(-6 * 86_400)
+            )
+            try fileManager.createDirectory(at: chosenFolder, withIntermediateDirectories: true)
+            try writeScreenshotRecording(
+                baseName: CalendarMeetingRecordingFilename.preferredBaseName(title: "", date: referenceDate),
+                in: chosenFolder,
+                seconds: 95,
+                createdAt: referenceDate
+            )
+            try recorderFolderStore.chooseFolder(chosenFolder)
+            if chosenFolderIsGone {
+                try fileManager.removeItem(at: chosenFolder)
+                recorderFolderStore.refreshAvailability()
+            }
+        } catch {
+            fputs("Could not seed the Recorder folder screenshot fixture: \(error)\n", stderr)
+        }
+    }
+
+    private func writeScreenshotRecording(baseName: String, in folder: URL, seconds: Int, createdAt: Date) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(baseName).appendingPathExtension("wav")
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(seconds * 16_000)) else {
+            return
+        }
+        buffer.frameLength = buffer.frameCapacity
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            try file.write(from: buffer)
+        }
+        try FileManager.default.setAttributes([.creationDate: createdAt], ofItemAtPath: url.path)
     }
 
     private func seedScreenshotPluginSettings(language: ScreenshotFixtureLanguage) {

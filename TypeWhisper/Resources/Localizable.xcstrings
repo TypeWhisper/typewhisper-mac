@@ -30139,6 +30139,342 @@
         }
       }
     },
+    "recorder.folder.section" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmeordner"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordings Folder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音フォルダ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音文件夹"
+          }
+        }
+      }
+    },
+    "recorder.folder.saveTo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Aufnahmen speichern in"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save new recordings to"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい録音の保存先"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新录音保存到"
+          }
+        }
+      }
+    },
+    "recorder.folder.useDefault" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard verwenden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Default"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトを使用"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认"
+          }
+        }
+      }
+    },
+    "recorder.folder.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein neuer Ordner gilt für neue Aufnahmen. Vorhandene Aufnahmen bleiben, wo sie sind, und erscheinen weiter in der Liste unten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A new folder applies to new recordings. Existing recordings stay where they are and remain in the list below."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいフォルダは新しい録音に適用されます。既存の録音は移動されず、下のリストに引き続き表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新文件夹仅用于新录音。现有录音保留在原位置，并继续显示在下方列表中。"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frühere Ordner"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier folders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前のフォルダ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前的文件夹"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmen in diesen Ordnern werden weiter angezeigt. Entfernst du hier einen Ordner, blendet TypeWhisper nur seine Aufnahmen aus; die Dateien bleiben erhalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordings in these folders are still listed. Removing a folder here only hides its recordings in TypeWhisper; the files stay."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのフォルダの録音は引き続き表示されます。ここでフォルダを削除しても、TypeWhisperで録音が非表示になるだけで、ファイルは残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些文件夹中的录音仍会显示。在此移除文件夹只会在 TypeWhisper 中隐藏其录音，文件仍会保留。"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier.remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ aus der Liste entfernen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove “%@” from the list"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」をリストから削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从列表中移除“%@”"
+          }
+        }
+      }
+    },
+    "recorder.folder.unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ ist nicht verfügbar. Neue Aufnahmen werden im Standardordner gespeichert, bis der Ordner wieder verfügbar ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” isn't available. New recordings are saved to the default folder until it's back."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を使用できません。使用できるようになるまで、新しい録音はデフォルトのフォルダに保存されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”不可用。在其恢复可用之前，新录音将保存到默认文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.saveFailed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Aufnahme konnte nicht in „%@“ gespeichert werden und wurde stattdessen im Standardordner gespeichert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A recording couldn't be saved to “%@” and was saved to the default folder instead."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を「%@」に保存できなかったため、代わりにデフォルトのフォルダに保存しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将录音保存到“%@”，已改为保存到默认文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.panelMessage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle den Ordner für neue Aufnahmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the folder for new recordings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい録音を保存するフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择用于保存新录音的文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.error.notWritable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper kann keine Aufnahmen in „%@“ speichern. Wähle einen Ordner, in den du schreiben kannst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper can't save recordings to “%@”. Choose a folder you can write to."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperは「%@」に録音を保存できません。書き込み可能なフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 无法将录音保存到“%@”。请选择一个可写入的文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.error.watchFolder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ ist der überwachte Ordner. Die Ordnerüberwachung würde neue Aufnahmen ein zweites Mal transkribieren und kann sie löschen. Wähle einen anderen Ordner."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is the Watch Folder. It would transcribe new recordings a second time and can delete them. Choose another folder."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」はウォッチフォルダです。新しい録音が二重に文字起こしされ、削除される可能性があります。別のフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是监控文件夹。新录音会被再次转录，并可能被删除。请选择其他文件夹。"
+          }
+        }
+      }
+    },
     "recorder.format" : {
       "localizations" : {
         "de" : {
