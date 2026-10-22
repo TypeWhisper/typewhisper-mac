@@ -2495,6 +2495,394 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.state, .idle)
     }
 
+    // MARK: - Background final transcription (#1080)
+
+    /// Back-to-back meetings: the next recording starts while the transcript of the
+    /// one before is made. Transcripts run one at a time, in the order the recordings
+    /// stopped, and each reports to its own API session exactly once.
+    func testNextRecordingStartsWhileEarlierTranscriptsArePending() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        let announcements = RecorderAnnouncementLog()
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: marker,
+            accessibilityAnnouncementService: announcements.service
+        )
+        var readyTexts: [String] = []
+        var stoppedEvents = 0
+        EventBus.shared.emissionObserverForTesting = { event in
+            switch event {
+            case .recorderTranscriptReady(let payload): readyTexts.append(payload.text)
+            case .recordingStopped: stoppedEvents += 1
+            default: break
+            }
+        }
+
+        let first = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        XCTAssertEqual(viewModel.state, .idle)
+        XCTAssertTrue(viewModel.canToggleRecording)
+        XCTAssertEqual(viewModel.apiRecorderSession(id: first)?.status, .finalizing)
+
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.apiRecorderSession(id: second)?.status, .recording)
+        XCTAssertEqual(viewModel.apiRecorderSession(id: first)?.status, .finalizing)
+        XCTAssertEqual(try viewModel.apiStopRecording(), second)
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+        XCTAssertEqual(viewModel.pendingTranscriptions.map(\.status), [.transcribing, .waiting])
+        XCTAssertTrue(viewModel.isTranscribing)
+        let waitingCount = await gate.waitingCount
+        XCTAssertEqual(waitingCount, 1, "The second transcript waits for the first")
+
+        // Both recordings are listed right away, each with its place in the queue.
+        try await waitForRecordingsToLoad(viewModel, count: 2)
+        let firstItem = try XCTUnwrap(recording(of: first, in: viewModel))
+        let secondItem = try XCTUnwrap(recording(of: second, in: viewModel))
+        XCTAssertEqual(viewModel.transcriptionStatus(for: firstItem), .transcribing)
+        XCTAssertEqual(viewModel.transcriptionStatus(for: secondItem), .waiting)
+
+        await gate.finishNext(.text("first meeting"))
+        let firstSession = try await waitForRecorderSession(viewModel, id: first, status: .completed)
+        XCTAssertEqual(firstSession.text, "first meeting")
+        XCTAssertEqual(viewModel.apiRecorderSession(id: second)?.status, .finalizing)
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        XCTAssertEqual(viewModel.pendingTranscriptions.map(\.status), [.transcribing])
+
+        await gate.finishNext(.text("second meeting"))
+        let secondSession = try await waitForRecorderSession(viewModel, id: second, status: .completed)
+        XCTAssertEqual(secondSession.text, "second meeting")
+        XCTAssertTrue(viewModel.pendingTranscriptions.isEmpty)
+        XCTAssertFalse(viewModel.isTranscribing)
+
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.1, 0.2])
+        XCTAssertEqual(readyTexts, ["first meeting", "second meeting"])
+        XCTAssertEqual(stoppedEvents, 2)
+        for session in [firstSession, secondSession] {
+            let audioURL = URL(fileURLWithPath: try XCTUnwrap(session.outputFile))
+            let transcriptURL = audioURL.deletingPathExtension().appendingPathExtension("txt")
+            XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), session.text)
+        }
+        // Started, stopped, started, stopped, then one "transcript saved" per recording.
+        let messages = announcements.messages
+        XCTAssertEqual(messages.count, 6, "\(messages)")
+        if messages.count == 6 {
+            XCTAssertEqual(messages[0], messages[2])
+            XCTAssertEqual(messages[1], messages[3])
+            XCTAssertEqual(messages[4], messages[5])
+            XCTAssertNotEqual(messages[4], messages[1])
+        }
+    }
+
+    /// A failed transcript fails only its own recording and API session.
+    func testFailedTranscriptDoesNotAffectTheNextRecording() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        let viewModel = makeQueueViewModel(defaults: try makeDefaults(), modelManager: modelManager, marker: marker)
+
+        let first = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+
+        await gate.finishNext(.failure("HTTP 500: provider unavailable"))
+        let failedSession = try await waitForRecorderSession(viewModel, id: first, status: .failed)
+        XCTAssertTrue(failedSession.error?.contains("HTTP 500") == true)
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        XCTAssertEqual(viewModel.apiRecorderSession(id: second)?.status, .finalizing)
+
+        await gate.finishNext(.text("second meeting"))
+        let secondSession = try await waitForRecorderSession(viewModel, id: second, status: .completed)
+        XCTAssertEqual(secondSession.text, "second meeting")
+        XCTAssertNil(secondSession.error)
+
+        let firstURL = URL(fileURLWithPath: try XCTUnwrap(failedSession.outputFile))
+        let secondURL = URL(fileURLWithPath: try XCTUnwrap(secondSession.outputFile))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: failureSidecarURL(for: firstURL).path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: failureSidecarURL(for: secondURL).path))
+        try await waitForRecordingsToLoad(viewModel, count: 2) {
+            $0.transcript != nil || $0.transcriptionFailure != nil
+        }
+        XCTAssertNotNil(try XCTUnwrap(recording(of: first, in: viewModel)).transcriptionFailure)
+        XCTAssertEqual(try XCTUnwrap(recording(of: second, in: viewModel)).transcript, "second meeting")
+    }
+
+    /// Quitting with transcripts pending keeps the audio and lists the recordings as
+    /// not transcribed, with the reason. A result that arrives afterwards changes nothing.
+    func testQuittingWithPendingTranscriptsKeepsTheRecordingsWithoutTranscripts() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        let viewModel = makeQueueViewModel(defaults: try makeDefaults(), modelManager: modelManager, marker: marker)
+
+        let first = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+        let audioURLs = try [first, second].map {
+            URL(fileURLWithPath: try XCTUnwrap(viewModel.apiRecorderSession(id: $0)?.outputFile))
+        }
+
+        viewModel.markPendingTranscriptionsInterrupted()
+
+        XCTAssertTrue(viewModel.pendingTranscriptions.isEmpty)
+        XCTAssertFalse(viewModel.isTranscribing)
+        let interrupted = String(localized: "recorder.transcriptionInterruptedError")
+        for audioURL in audioURLs {
+            XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
+            let transcriptURL = audioURL.deletingPathExtension().appendingPathExtension("txt")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: transcriptURL.path))
+            let failure = try JSONDecoder().decode(
+                AudioRecorderViewModel.RecordingTranscriptionFailure.self,
+                from: Data(contentsOf: failureSidecarURL(for: audioURL))
+            )
+            XCTAssertEqual(failure.phase, .finalTranscription)
+            XCTAssertEqual(failure.providerError, interrupted)
+        }
+
+        // The first transcript's result arrives after quitting. A later recording's
+        // transcript starts only after that, and finishes after it.
+        var readyTexts: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .recorderTranscriptReady(let payload) = event { readyTexts.append(payload.text) }
+        }
+        await gate.finishNext(.text("late transcript"))
+        marker.withLock { $0 = 0.3 }
+        let third = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the third transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("third meeting"))
+        _ = try await waitForRecorderSession(viewModel, id: third, status: .completed)
+
+        XCTAssertEqual(readyTexts, ["third meeting"])
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.1, 0.3], "The second transcript must not start after quitting")
+        let firstTranscriptURL = audioURLs[0].deletingPathExtension().appendingPathExtension("txt")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstTranscriptURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: failureSidecarURL(for: audioURLs[0]).path))
+    }
+
+    /// While a queued transcript uses the engine, the next recording's live preview
+    /// waits. The older transcript leaves the newer recording's preview alone.
+    func testLivePreviewWaitsForAQueuedTranscriptOnTheSameEngine() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        var previewStarts = 0
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: marker,
+            livePreviewStartObserver: { previewStarts += 1 }
+        )
+        viewModel.livePreviewEnabled = true
+        var finalPreviews: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .partialTranscriptionUpdate(let payload) = event, payload.isFinal {
+                finalPreviews.append(payload.text)
+            }
+        }
+
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        XCTAssertEqual(previewStarts, 1)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+
+        marker.withLock { $0 = 0.2 }
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        XCTAssertEqual(previewStarts, 1, "The preview must wait for the engine of the queued transcript")
+        XCTAssertTrue(viewModel.isLivePreviewWaiting)
+        viewModel.partialText = "second meeting so far"
+
+        await gate.finishNext(.text("first meeting"))
+        try await waitUntil("the preview started") { previewStarts == 2 }
+        XCTAssertFalse(viewModel.isLivePreviewWaiting)
+        XCTAssertEqual(viewModel.partialText, "second meeting so far")
+        XCTAssertTrue(finalPreviews.isEmpty, "The first transcript must not end the second recording's preview")
+
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("second meeting"))
+        try await waitUntil("the second transcript is saved") { viewModel.pendingTranscriptions.isEmpty }
+        XCTAssertEqual(viewModel.partialText, "second meeting")
+        XCTAssertEqual(finalPreviews, ["second meeting"])
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.1, 0.2])
+    }
+
+    /// A preview on another engine starts right away; the transcripts still run one at a time.
+    func testLivePreviewOnAnotherEngineStartsWhileATranscriptIsQueued() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate, providerIds: ["groq", "assemblyai"])
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        var previewStarts = 0
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: marker,
+            livePreviewStartObserver: { previewStarts += 1 }
+        )
+
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+
+        viewModel.selectedEngine = "assemblyai"
+        viewModel.livePreviewEnabled = true
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        XCTAssertEqual(previewStarts, 1)
+        XCTAssertFalse(viewModel.isLivePreviewWaiting)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+        let waitingCount = await gate.waitingCount
+        XCTAssertEqual(waitingCount, 1)
+
+        await gate.finishNext(.text("first meeting"))
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("second meeting"))
+        let secondSession = try await waitForRecorderSession(viewModel, id: second, status: .completed)
+        XCTAssertEqual(secondSession.text, "second meeting")
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.1, 0.2])
+    }
+
+    /// A queued recording keeps its files and is transcribed once, with the speaker
+    /// detection chosen when it stopped: it can be neither transcribed again nor
+    /// deleted before its transcript is done.
+    func testQueuedRecordingCanNeitherBeTranscribedAgainNorDeleted() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: OSAllocatedUnfairLock(initialState: Float(0.1))
+        )
+        viewModel.detectSpeakers = true
+        var speakerInputs: [SpeakerRecordingInput] = []
+        viewModel.speakerRecordIntake = { input in
+            speakerInputs.append(input)
+            return UUID()
+        }
+
+        let session = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the transcript started") { await gate.waitingCount == 1 }
+        viewModel.detectSpeakers = false
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let item = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(viewModel.transcriptionStatus(for: item), .transcribing)
+        XCTAssertFalse(viewModel.canTranscribeRecording(item))
+
+        viewModel.transcribeRecording(item)
+        XCTAssertNil(viewModel.retranscribingRecordingURL)
+        viewModel.deleteRecording(item)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: item.url.path))
+        XCTAssertEqual(viewModel.recordings.count, 1)
+
+        await gate.finishNext(.text("meeting notes"))
+        let completed = try await waitForRecorderSession(viewModel, id: session, status: .completed)
+        XCTAssertEqual(completed.text, "meeting notes")
+        XCTAssertEqual(speakerInputs.count, 1)
+        XCTAssertNotNil(speakerInputs.first?.recorderRecordingID)
+        XCTAssertNil(viewModel.transcriptionStatus(for: item))
+        XCTAssertTrue(viewModel.canTranscribeRecording(item))
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers.count, 1)
+    }
+
+    /// Back-to-back calendar meetings: the next meeting is recorded while the first is
+    /// transcribed, and each transcript keeps its own meeting details.
+    func testBackToBackCalendarMeetingsKeepTheirOwnMeetingDetails() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: OSAllocatedUnfairLock(initialState: Float(0.1))
+        )
+        let planning = makeCalendarMeetingTranscriptMetadata(eventIdentifier: "planning", title: "Planning")
+        let review = makeCalendarMeetingTranscriptMetadata(eventIdentifier: "review", title: "Review")
+
+        let planningHandle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "Planning",
+            transcriptMetadata: planning
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: planningHandle)
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        let reviewHandle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "Review",
+            transcriptMetadata: review
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: reviewHandle)
+        try await waitUntil("the second meeting is queued") { viewModel.pendingTranscriptions.count == 2 }
+
+        await gate.finishNext(.text("planning notes"))
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("review notes"))
+        try await waitUntil("both transcripts are saved") { viewModel.pendingTranscriptions.isEmpty }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        for (handle, metadata, text) in [
+            (planningHandle, planning, "planning notes"),
+            (reviewHandle, review, "review notes")
+        ] {
+            let documentURL = handle.outputURL.deletingPathExtension().appendingPathExtension("transcript.json")
+            let document = try decoder.decode(RecordingTranscriptDocument.self, from: Data(contentsOf: documentURL))
+            XCTAssertEqual(document.calendarEvent, metadata)
+            XCTAssertEqual(document.text, text)
+        }
+    }
+
+    func testRecorderTranscriptionQueueCopyIsLocalized() throws {
+        for key in [
+            "recorder.transcriptionQueue",
+            "recorder.transcriptionWaiting",
+            "recorder.livePreviewWaitsForQueue",
+            "recorder.transcriptionInterruptedError"
+        ] {
+            for language in ["de", "en", "ja", "zh-Hans"] {
+                XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: language).isEmpty)
+            }
+        }
+    }
+
     func testRecorderFinalizationStreamsMixedAudioAcrossChunkBoundaries() async throws {
         let directory = makeTemporaryDirectory()
         let micURL = directory.appendingPathComponent("mic.wav")
@@ -2705,6 +3093,83 @@ final class AudioRecorderViewModelTests: XCTestCase {
         }
         recorderService.currentBufferOverride = { samples }
         return recorderService
+    }
+
+    /// A Recorder whose recordings hold `marker` in every sample, so the engine can
+    /// tell them apart.
+    private func makeQueueViewModel(
+        defaults: UserDefaults,
+        modelManager: ModelManagerService,
+        marker: OSAllocatedUnfairLock<Float>,
+        livePreviewStartObserver: (() -> Void)? = nil,
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+    ) -> AudioRecorderViewModel {
+        let recorderService = makeRecorderService(recordingsDirectory: makeTemporaryDirectory())
+        recorderService.currentBufferOverride = {
+            Array(repeating: marker.withLock { $0 }, count: Int(AudioRecorderService.transcriptionSampleRate))
+        }
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: recorderService,
+            livePreviewStartObserver: livePreviewStartObserver,
+            accessibilityAnnouncementService: accessibilityAnnouncementService
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+        return viewModel
+    }
+
+    /// Engines whose transcriptions wait for `gate`.
+    private func setupGatedPluginManager(gate: RecorderTranscriptionGate, providerIds: [String] = ["groq"]) {
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+        // A test that stops early must not leave transcriptions waiting.
+        addTeardownBlock {
+            await gate.finishAll(.failure("The test ended"))
+        }
+
+        let appSupportDirectory = makeTemporaryDirectory()
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = providerIds.map { providerId in
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.gated.\(providerId)",
+                    name: providerId,
+                    version: "1.0.0",
+                    principalClass: "RecorderGatedTranscriptionPlugin"
+                ),
+                instance: RecorderGatedTranscriptionPlugin(providerId: providerId, gate: gate),
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        }
+        PluginManager.shared = pluginManager
+    }
+
+    private func recording(
+        of sessionID: UUID,
+        in viewModel: AudioRecorderViewModel
+    ) -> AudioRecorderViewModel.RecordingItem? {
+        guard let outputFile = viewModel.apiRecorderSession(id: sessionID)?.outputFile else { return nil }
+        let fileName = URL(fileURLWithPath: outputFile).lastPathComponent
+        return viewModel.recordings.first { $0.fileName == fileName }
+    }
+
+    private func waitUntil(
+        _ description: String,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        _ condition: () async -> Bool
+    ) async throws {
+        for _ in 0..<500 {
+            if await condition() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Timed out waiting until \(description)", file: file, line: line)
     }
 
     private func failureSidecarURL(for audioURL: URL) -> URL {
@@ -3465,5 +3930,102 @@ private struct FixedSpeechRegionDetector: SpeechRegionDetecting {
 private struct FailingSpeechRegionDetector: SpeechRegionDetecting {
     func speechRegions(in samples: [Float]) async throws -> [ClosedRange<TimeInterval>] {
         throw SpeechDetectionError.unsupportedFormat
+    }
+}
+
+/// Holds each Recorder transcription until the test finishes it, so a test decides
+/// when and how each queued transcript ends.
+private actor RecorderTranscriptionGate {
+    enum Outcome: Sendable {
+        case text(String)
+        case failure(String)
+    }
+
+    private var waiting: [CheckedContinuation<Outcome, Never>] = []
+    /// The first audio sample of each transcription, in the order they started.
+    private(set) var startedMarkers: [Float] = []
+
+    var waitingCount: Int { waiting.count }
+
+    func transcribe(marker: Float) async -> Outcome {
+        startedMarkers.append(marker)
+        return await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func finishNext(_ outcome: Outcome) {
+        guard !waiting.isEmpty else { return }
+        waiting.removeFirst().resume(returning: outcome)
+    }
+
+    func finishAll(_ outcome: Outcome) {
+        let all = waiting
+        waiting.removeAll()
+        all.forEach { $0.resume(returning: outcome) }
+    }
+}
+
+private final class RecorderGatedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.recorder-gated"
+    static let pluginName = "Recorder Gated Mock"
+
+    let providerId: String
+    var providerDisplayName: String { providerId }
+    let transcriptionModels = [PluginModelInfo(id: "gated-model", displayName: "Gated Model")]
+    var selectedModelId: String? = "gated-model"
+    var isConfigured: Bool { true }
+    var supportsTranslation: Bool { true }
+    private let gate: RecorderTranscriptionGate?
+
+    required override init() {
+        providerId = "gated"
+        gate = nil
+        super.init()
+    }
+
+    init(providerId: String, gate: RecorderTranscriptionGate) {
+        self.providerId = providerId
+        self.gate = gate
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func selectModel(_ modelId: String) {
+        selectedModelId = modelId
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard let gate else { return PluginTranscriptionResult(text: "") }
+        switch await gate.transcribe(marker: audio.samples.first ?? 0) {
+        case .text(let text):
+            return PluginTranscriptionResult(text: text)
+        case .failure(let message):
+            throw PluginTranscriptionError.apiError(message)
+        }
+    }
+}
+
+/// VoiceOver announcements, far enough apart that none counts as a repeat.
+@MainActor
+private final class RecorderAnnouncementLog {
+    let service = AccessibilityAnnouncementService()
+    private(set) var messages: [String] = []
+    private var clock = ContinuousClock.now
+
+    init() {
+        service.isVoiceOverEnabled = { true }
+        service.now = { [unowned self] in
+            self.clock = self.clock.advanced(by: .seconds(5))
+            return self.clock
+        }
+        service.post = { [unowned self] message, _ in
+            self.messages.append(message)
+        }
     }
 }

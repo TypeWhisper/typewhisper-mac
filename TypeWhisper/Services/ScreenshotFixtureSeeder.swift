@@ -30,6 +30,9 @@ extension ServiceContainer {
         if ["indicator-settings", "indicator"].contains(AppConstants.screenshotState) {
             dictationViewModel.prepareScreenshotIndicatorFixture()
         }
+        if AppConstants.screenshotState == "recorder-queue" {
+            audioRecorderViewModel.prepareScreenshotQueueFixture()
+        }
 
         seedScreenshotHistory(content.history, languageCode: language.rawValue)
         usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())

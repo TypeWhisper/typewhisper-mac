@@ -1129,6 +1129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WhatsNewCoordinator.shared?.acknowledgePresentation()
         DictationViewModel._shared?.flushPendingPostInsertionPersistence()
         ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
+        ServiceContainer.shared.audioRecorderViewModel.markPendingTranscriptionsInterrupted()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
         ServiceContainer.shared.snippetService.saveDeferredUsageCounts()
         ServiceContainer.shared.dictionaryService.saveDeferredUsageCounts()

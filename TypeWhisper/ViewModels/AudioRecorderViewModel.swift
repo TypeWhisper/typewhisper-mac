@@ -185,7 +185,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private struct FinalTranscriptionRequest {
         let outputURL: URL
-        let buffer: [Float]
+        var buffer: [Float]
         let languageSelection: LanguageSelection
         let task: TranscriptionTask
         let providerId: String?
@@ -199,6 +199,41 @@ final class AudioRecorderViewModel: ObservableObject {
         let calendarEvent: CalendarMeetingTranscriptMetadata?
         /// When the microphone carried the user's own speech, for speaker detection.
         var ownSpeech: [ClosedRange<TimeInterval>] = []
+        /// The live preview when the recording stopped.
+        var livePreviewText = ""
+        /// Whether a speaker record follows, decided when the request is made.
+        var detectsSpeakers = false
+    }
+
+    /// A stopped recording's final transcription. The queue runs one at a time, in
+    /// the order the recordings stopped, while the Recorder records the next one.
+    /// The job owns its request, so a newer recording cannot change it.
+    private struct FinalTranscriptionJob {
+        let id = UUID()
+        let request: FinalTranscriptionRequest
+        let apiSessionID: UUID?
+        /// The preview belongs to this recording until the next one starts.
+        let recordingGeneration: Int
+        let recordingDuration: TimeInterval
+        let livePreviewEnabled: Bool
+
+        /// A live session's result is the transcript already; other jobs run the engine.
+        func usesEngine(_ providerId: String) -> Bool {
+            request.liveSessionResult == nil && request.providerId == providerId
+        }
+    }
+
+    /// A stopped recording whose transcript is not saved yet.
+    struct PendingTranscription: Identifiable, Equatable, Sendable {
+        enum Status: Equatable, Sendable {
+            case transcribing, waiting
+        }
+
+        let id: UUID
+        /// With symbolic links resolved, to find the recording in the list.
+        let url: URL
+        let status: Status
+        var fileName: String { url.lastPathComponent }
     }
 
     struct RecordingTranscriptionFailure: Codable, Equatable, Sendable {
@@ -344,8 +379,13 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var systemAudioWarningMessage: String?
     @Published var partialText: String = ""
+    /// The live preview runs, or a stopped recording's transcript is not saved yet.
     @Published var isTranscribing: Bool = false
     @Published private(set) var retranscribingRecordingURL: URL?
+    /// Stopped recordings waiting for their transcripts, in the order they run.
+    @Published private(set) var pendingTranscriptions: [PendingTranscription] = []
+    /// The recording's live preview waits for a queued transcript on its engine.
+    @Published private(set) var isLivePreviewWaiting = false
 
     var activeEngineName: String? { resolvedEngine?.providerDisplayName }
     var activeModelName: String? {
@@ -460,6 +500,23 @@ final class AudioRecorderViewModel: ObservableObject {
     private var activeCalendarMeetingTranscriptMetadata: CalendarMeetingTranscriptMetadata?
     private var activeRecorderAPISessionID: UUID?
     private var recorderAPISessions: [UUID: RecorderAPISessionSnapshot] = [:]
+    private var finalTranscriptionJobs: [FinalTranscriptionJob] = []
+    private var finalTranscriptionTask: Task<Void, Never>?
+    /// Advances with every recording, so a transcript finished later leaves the
+    /// preview of a newer recording alone.
+    private var recordingGeneration = 0
+    /// The recording whose live preview waits for a queued transcription on its engine.
+    private var deferredLivePreviewGeneration: Int? {
+        didSet {
+            let waiting = deferredLivePreviewGeneration != nil
+            if isLivePreviewWaiting != waiting {
+                isLivePreviewWaiting = waiting
+            }
+        }
+    }
+    private var isLivePreviewStreaming = false {
+        didSet { publishTranscriptionActivity() }
+    }
     private var transientTranscriptionFailures: [String: RecordingTranscriptionFailure] = [:]
     private var recordingsLoadTask: Task<Void, Never>?
     private var recordingsLoadGeneration = 0
@@ -568,6 +625,9 @@ final class AudioRecorderViewModel: ObservableObject {
 
         streamingHandler.onPartialTextUpdate = { [weak self] text in
             guard let self else { return }
+            // An update delivered after its preview stopped belongs to a stopped
+            // recording; the next one can already be running.
+            guard self.isLivePreviewStreaming else { return }
             self.partialText = text
             EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                 text: text,
@@ -575,7 +635,7 @@ final class AudioRecorderViewModel: ObservableObject {
             )))
         }
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
-            self?.isTranscribing = streaming
+            self?.isLivePreviewStreaming = streaming
         }
 
         isInitialized = true
@@ -774,6 +834,8 @@ final class AudioRecorderViewModel: ObservableObject {
         errorMessage = nil
         systemAudioWarningMessage = nil
         partialText = ""
+        // The preview is this recording's now, also while an earlier transcript is pending.
+        recordingGeneration += 1
         activeCalendarMeetingTranscriptMetadata = transcriptMetadata
         reconcileSelectionWithAvailablePlugins()
         recordingEngine = currentRecordingEngine
@@ -833,7 +895,7 @@ final class AudioRecorderViewModel: ObservableObject {
         if transcriptionEnabled && livePreviewEnabled {
             startStreamingTranscription()
         } else {
-            isTranscribing = false
+            isLivePreviewStreaming = false
         }
 
         return url
@@ -841,16 +903,22 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func stopRecording(apiSessionID: UUID?) {
         activeCalendarMeetingHandle = nil
+        // The stopped recording's transcript reports to its API session from here
+        // on; a recording started next is not part of that session.
+        activeRecorderAPISessionID = nil
+        deferredLivePreviewGeneration = nil
         let calendarEvent = activeCalendarMeetingTranscriptMetadata
         activeCalendarMeetingTranscriptMetadata = nil
         let recordingDuration = duration
         let shouldTranscribe = transcriptionEnabled
+        let livePreviewEnabled = livePreviewEnabled
         let startedEngine = recordingEngine
         recordingEngine = nil
+        let recordingGeneration = recordingGeneration
 
         // Flip out of `.recording` immediately so the recording timer/widget disappears
         // the instant Stop is pressed, instead of staying up while audio finalization
-        // and transcription run (which can take a while for long recordings).
+        // runs (which can take a while for long recordings).
         state = .finalizing
         accessibilityAnnouncementService?.announce(shouldTranscribe
             ? localizedAppText(
@@ -870,6 +938,8 @@ final class AudioRecorderViewModel: ObservableObject {
             let stoppedRecording = await recorderService.stopCapture(
                 includeTranscriptionSamples: shouldTranscribe
             )
+            // The live session and the audio file finish before the next recording can
+            // start: it would reuse the live preview, and its file name must not collide.
             async let liveSessionFinishTask = streamingHandler.finish(
                 finalSamples: stoppedRecording.transcriptionSamples
             )
@@ -892,7 +962,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 }
             }
 
-            let finalTranscriptionRequest: FinalTranscriptionRequest?
+            var finalTranscriptionJob: FinalTranscriptionJob?
             if shouldTranscribe, let url {
                 reconcileSelectionWithAvailablePlugins()
                 let startedEngineIsLoaded = startedEngine.map(isLoaded) ?? false
@@ -906,83 +976,60 @@ final class AudioRecorderViewModel: ObservableObject {
                 let providerId = engine.providerId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
-                let finalSamples = if liveSessionResult == nil {
-                    await finalizedRecordingSamples(
-                        from: url,
-                        fallback: stoppedRecording.transcriptionSamples
-                    )
-                } else {
-                    stoppedRecording.transcriptionSamples
-                }
-                finalTranscriptionRequest = FinalTranscriptionRequest(
-                    outputURL: url,
-                    buffer: finalSamples,
-                    languageSelection: languageSelection,
-                    task: selectedTask,
-                    providerId: providerId,
-                    modelOverrideId: engine.modelId,
-                    prompt: dictionaryPrompt,
-                    dictionaryTermHints: dictionaryTermHints,
-                    liveSessionResult: liveSessionResult,
-                    liveSessionFailed: liveSessionFailed || !keepsLiveSession,
-                    calendarEvent: calendarEvent,
-                    ownSpeech: stoppedRecording.ownSpeech
+                finalTranscriptionJob = FinalTranscriptionJob(
+                    request: FinalTranscriptionRequest(
+                        outputURL: url,
+                        // The job reads the finalized file, unless the live session's result is used.
+                        buffer: stoppedRecording.transcriptionSamples,
+                        languageSelection: languageSelection,
+                        task: selectedTask,
+                        providerId: providerId,
+                        modelOverrideId: engine.modelId,
+                        prompt: dictionaryPrompt,
+                        dictionaryTermHints: dictionaryTermHints,
+                        liveSessionResult: liveSessionResult,
+                        liveSessionFailed: liveSessionFailed || !keepsLiveSession,
+                        calendarEvent: calendarEvent,
+                        ownSpeech: stoppedRecording.ownSpeech,
+                        livePreviewText: partialText,
+                        detectsSpeakers: wantsSpeakerRecord(calendarEvent: calendarEvent)
+                    ),
+                    apiSessionID: apiSessionID,
+                    recordingGeneration: recordingGeneration,
+                    recordingDuration: recordingDuration,
+                    livePreviewEnabled: livePreviewEnabled
                 )
                 if let apiSessionID {
                     markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
                 }
-            } else {
-                finalTranscriptionRequest = nil
-                state = .idle
-                isTranscribing = false
             }
 
+            // Announced before the Recorder is free, so a recording started next
+            // follows this one's stop.
             EventBus.shared.emit(.recordingStopped(RecordingStoppedPayload(durationSeconds: recordingDuration)))
-
-            let finalTranscriptionOutcome: FinalTranscriptionOutcome
-            if let request = finalTranscriptionRequest {
-                finalTranscriptionOutcome = await runFinalTranscription(request)
-                state = .idle
-                if case .transcriptSaved = finalTranscriptionOutcome {
-                    accessibilityAnnouncementService?.announce(localizedAppText(
-                        "Recorder transcript saved",
-                        de: "Recorder-Transkript gespeichert",
-                        ja: "レコーダーの文字起こしを保存しました",
-                        zh: "录音器转录已保存"
-                    ))
-                }
-            } else {
-                finalTranscriptionOutcome = .skipped
+            if let finalTranscriptionJob {
+                // The transcript is made in the background; the next recording can start now.
+                enqueueFinalTranscription(finalTranscriptionJob)
             }
-
-            // Emit final transcript to LiveTranscriptPlugin. A failed live session's preview
-            // stopped early, so it is only final once a saved transcript replaced it.
-            let partialTextIsFinal = if case .transcriptSaved = finalTranscriptionOutcome {
-                true
-            } else {
-                !(finalTranscriptionRequest?.liveSessionFailed ?? liveSessionFailed)
+            state = .idle
+            isLivePreviewStreaming = false
+            if url != nil {
+                // A queued recording is listed right away, with its place in the queue.
+                loadRecordings()
             }
-            if livePreviewEnabled && partialTextIsFinal && !partialText.isEmpty {
+            guard finalTranscriptionJob == nil else { return }
+
+            // Without a transcript to wait for, the preview is final now. A failed live
+            // session's preview stopped early, so it is not.
+            if livePreviewEnabled && !liveSessionFailed && !partialText.isEmpty {
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                     text: partialText, isFinal: true, elapsedSeconds: recordingDuration
                 )))
             }
 
-            if url != nil {
-                loadRecordings()
-            }
-
             if let apiSessionID {
                 if let url {
-                    if let failure = finalTranscriptionOutcome.failure {
-                        failRecorderAPISession(
-                            id: apiSessionID,
-                            outputURL: url,
-                            error: recorderTranscriptionFailureAPISummary(failure)
-                        )
-                    } else {
-                        completeRecorderAPISession(id: apiSessionID, outputURL: url)
-                    }
+                    completeRecorderAPISession(id: apiSessionID, outputURL: url, text: partialText)
                 } else {
                     failRecorderAPISession(id: apiSessionID, error: "Failed to finalize recording")
                 }
@@ -1117,8 +1164,8 @@ final class AudioRecorderViewModel: ObservableObject {
         ))
     }
 
-    private func completeRecorderAPISession(id: UUID, outputURL: URL) {
-        let text = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func completeRecorderAPISession(id: UUID, outputURL: URL, text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         storeRecorderAPISession(RecorderAPISessionSnapshot(
             id: id,
             status: .completed,
@@ -1146,7 +1193,8 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func deleteRecording(_ item: RecordingItem) {
-        guard !isRetranscribing(item) else { return }
+        // A recording keeps its files until its transcript is done.
+        guard transcriptionStatus(for: item) == nil else { return }
         defer { recorderTranscriptGeneration &+= 1 }
 
         let sidecarURLs = [
@@ -1257,7 +1305,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
                 liveSessionResult: nil,
                 liveSessionFailed: false,
-                calendarEvent: item.calendarEvent
+                calendarEvent: item.calendarEvent,
+                detectsSpeakers: self.wantsSpeakerRecord(calendarEvent: item.calendarEvent)
             )
 
             _ = await self.runRetranscription(request)
@@ -1268,9 +1317,18 @@ final class AudioRecorderViewModel: ObservableObject {
         retranscribingRecordingURL?.standardizedFileURL == item.url.standardizedFileURL
     }
 
+    /// Whether the recording's transcript is being made or waits for its turn.
+    func transcriptionStatus(for item: RecordingItem) -> PendingTranscription.Status? {
+        if isRetranscribing(item) { return .transcribing }
+        guard !pendingTranscriptions.isEmpty else { return nil }
+        let path = item.url.resolvingSymlinksInPath().path
+        return pendingTranscriptions.first { $0.url.path == path }?.status
+    }
+
     func canTranscribeRecording(_ item: RecordingItem) -> Bool {
         guard !isHistoryRetranscribing else { return false }
-        guard state == .idle, retranscribingRecordingURL == nil else { return false }
+        // Queued transcripts run first, on the same engines.
+        guard state == .idle, retranscribingRecordingURL == nil, finalTranscriptionJobs.isEmpty else { return false }
         guard FileManager.default.fileExists(atPath: item.url.path) else { return false }
         guard let engine = resolvedEngine else { return false }
         return modelManager.canPrepareForTranscription(engine)
@@ -1410,6 +1468,13 @@ final class AudioRecorderViewModel: ObservableObject {
             logger.info("No transcription engine available, skipping live transcription")
             return
         }
+        // An engine runs one Recorder transcription at a time: a queued transcript
+        // goes first, then the preview starts and catches up with the recording.
+        guard !finalTranscriptionJobs.contains(where: { $0.usesEngine(providerId) }) else {
+            logger.info("Live preview waits for a queued transcription on providerId=\(providerId, privacy: .public)")
+            deferredLivePreviewGeneration = recordingGeneration
+            return
+        }
 
         livePreviewStartObserver?()
         let task = (selectedTask == .translate && !plugin.supportsTranslation) ? .transcribe : selectedTask
@@ -1426,26 +1491,148 @@ final class AudioRecorderViewModel: ObservableObject {
         )
     }
 
-    private func runFinalTranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
-        isTranscribing = true
-        defer { isTranscribing = false }
+    private func startDeferredLivePreviewIfPossible() {
+        guard let generation = deferredLivePreviewGeneration else { return }
+        // Waits again if another queued transcript needs the engine.
+        deferredLivePreviewGeneration = nil
+        guard generation == recordingGeneration, state == .recording else { return }
+        startStreamingTranscription()
+    }
 
+    // MARK: - Final Transcription Queue
+
+    private func enqueueFinalTranscription(_ job: FinalTranscriptionJob) {
+        finalTranscriptionJobs.append(job)
+        runNextFinalTranscription()
+    }
+
+    /// Transcribes the stopped recordings one at a time, in the order they stopped.
+    private func runNextFinalTranscription() {
+        defer { publishTranscriptionActivity() }
+        guard finalTranscriptionTask == nil, let job = finalTranscriptionJobs.first else { return }
+        finalTranscriptionTask = Task { [weak self] in
+            guard let self else { return }
+            var request = job.request
+            if request.liveSessionResult == nil {
+                request.buffer = await self.finalizedRecordingSamples(
+                    from: request.outputURL,
+                    fallback: request.buffer
+                )
+            }
+            let result = await self.runFinalTranscription(request)
+            self.finishFinalTranscription(job, outcome: result.outcome, previewText: result.previewText)
+        }
+    }
+
+    private func finishFinalTranscription(
+        _ job: FinalTranscriptionJob,
+        outcome: FinalTranscriptionOutcome,
+        previewText: String
+    ) {
+        // A job given up when the app quit has nothing left to report.
+        guard finalTranscriptionJobs.first?.id == job.id else { return }
+        finalTranscriptionJobs.removeFirst()
+        finalTranscriptionTask = nil
+
+        if case .transcriptSaved = outcome {
+            accessibilityAnnouncementService?.announce(localizedAppText(
+                "Recorder transcript saved",
+                de: "Recorder-Transkript gespeichert",
+                ja: "レコーダーの文字起こしを保存しました",
+                zh: "录音器转录已保存"
+            ))
+        }
+
+        // The preview and LiveTranscriptPlugin's panel belong to the newest recording.
+        if job.recordingGeneration == recordingGeneration {
+            partialText = previewText
+            // A failed live session's preview stopped early, so it is only final once a
+            // saved transcript replaced it.
+            let previewIsFinal = if case .transcriptSaved = outcome { true } else { !job.request.liveSessionFailed }
+            if job.livePreviewEnabled && previewIsFinal && !previewText.isEmpty {
+                EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
+                    text: previewText, isFinal: true, elapsedSeconds: job.recordingDuration
+                )))
+            }
+        }
+
+        loadRecordings()
+
+        if let apiSessionID = job.apiSessionID {
+            if let failure = outcome.failure {
+                failRecorderAPISession(
+                    id: apiSessionID,
+                    outputURL: job.request.outputURL,
+                    error: recorderTranscriptionFailureAPISummary(failure)
+                )
+            } else {
+                completeRecorderAPISession(id: apiSessionID, outputURL: job.request.outputURL, text: previewText)
+            }
+        }
+
+        runNextFinalTranscription()
+        startDeferredLivePreviewIfPossible()
+    }
+
+    /// Called when the app quits. A recording whose transcript is not saved yet keeps
+    /// its audio and is listed as not transcribed, with the reason, so it can be
+    /// transcribed after the next launch. A crash leaves it without a transcript too.
+    func markPendingTranscriptionsInterrupted() {
+        let jobs = finalTranscriptionJobs
+        guard !jobs.isEmpty else { return }
+        finalTranscriptionJobs.removeAll()
+        finalTranscriptionTask?.cancel()
+        finalTranscriptionTask = nil
+        // A job can be past its transcript, adding the speaker record.
+        for job in jobs where !FileManager.default.fileExists(atPath: transcriptURL(for: job.request.outputURL).path) {
+            let failure = makeTranscriptionFailure(
+                phase: .finalTranscription,
+                providerError: String(localized: "recorder.transcriptionInterruptedError"),
+                request: job.request
+            )
+            saveTranscriptionFailure(failure, for: job.request.outputURL)
+        }
+        publishTranscriptionActivity()
+    }
+
+    private func publishTranscriptionActivity() {
+        let pending = finalTranscriptionJobs.enumerated().map { index, job in
+            PendingTranscription(
+                id: job.id,
+                url: job.request.outputURL.resolvingSymlinksInPath(),
+                status: index == 0 && finalTranscriptionTask != nil ? .transcribing : .waiting
+            )
+        }
+        if pendingTranscriptions != pending {
+            pendingTranscriptions = pending
+        }
+        let transcribing = isLivePreviewStreaming || !finalTranscriptionJobs.isEmpty
+        if isTranscribing != transcribing {
+            isTranscribing = transcribing
+        }
+    }
+
+    /// `previewText` is what the recording's preview shows afterwards: the saved
+    /// transcript, or the preview from when the recording stopped.
+    private func runFinalTranscription(
+        _ request: FinalTranscriptionRequest
+    ) async -> (outcome: FinalTranscriptionOutcome, previewText: String) {
         // A failed live session's preview stopped at the failure, so it never stands in
         // for the transcript.
+        let preview = request.livePreviewText
         let previewCanBeTranscript = !request.liveSessionFailed
         let buffer = request.buffer
         guard buffer.count > 8000 else { // At least 0.5s of audio
             // Use streaming result as final if buffer too short
-            if previewCanBeTranscript, !partialText.isEmpty {
-                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
+            if previewCanBeTranscript, !preview.isEmpty {
+                return (saveTranscriptOutcome(preview, for: request.outputURL, request: request), preview)
             } else if let liveSessionResult = request.liveSessionResult {
                 let text = liveSessionResult.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !text.isEmpty {
-                    partialText = text
-                    return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+                    return (saveTranscriptOutcome(text, for: request.outputURL, request: request), text)
                 }
             }
-            return .skipped
+            return (.skipped, preview)
         }
 
         // Fall back to transcribe if engine doesn't support translation
@@ -1459,13 +1646,12 @@ final class AudioRecorderViewModel: ObservableObject {
             }
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
-                partialText = text
                 // The transcript is saved first; adding the speaker record can take seconds.
                 let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
                 await addSpeakerRecordIfWanted(result, request: request, recordingID: outcome.savedRecordingID)
-                return outcome
-            } else if previewCanBeTranscript, !partialText.isEmpty {
-                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
+                return (outcome, text)
+            } else if previewCanBeTranscript, !preview.isEmpty {
+                return (saveTranscriptOutcome(preview, for: request.outputURL, request: request), preview)
             } else {
                 let failure = makeTranscriptionFailure(
                     phase: .emptyResult,
@@ -1474,20 +1660,19 @@ final class AudioRecorderViewModel: ObservableObject {
                 )
                 let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
                 errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
-                return .failed(recordedFailure)
+                return (.failed(recordedFailure), preview)
             }
         } catch is CancellationError {
-            return .skipped
+            return (.skipped, preview)
         } catch is RecordingHasNoSpeech {
             // A preview of a recording without speech is text the engine made up.
-            partialText = ""
-            return recordNoSpeech(for: request)
+            return (recordNoSpeech(for: request), "")
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // A WhisperKit error can mean that entire audio chunks are missing.
             // Its live preview must not turn that failure into a completed recording.
-            if request.providerId != "whisper", previewCanBeTranscript, !partialText.isEmpty {
-                return saveTranscriptOutcome(partialText, for: request.outputURL, request: request)
+            if request.providerId != "whisper", previewCanBeTranscript, !preview.isEmpty {
+                return (saveTranscriptOutcome(preview, for: request.outputURL, request: request), preview)
             }
             let failure = makeTranscriptionFailure(
                 phase: .finalTranscription,
@@ -1496,7 +1681,7 @@ final class AudioRecorderViewModel: ObservableObject {
             )
             let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
             errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
-            return .failed(recordedFailure)
+            return (.failed(recordedFailure), preview)
         }
     }
 
@@ -1546,15 +1731,18 @@ final class AudioRecorderViewModel: ObservableObject {
 
     /// Calendar-meeting recordings detect speakers unless that was turned off;
     /// other recordings follow the Recorder's switch. The intake checks Premium.
+    private func wantsSpeakerRecord(calendarEvent: CalendarMeetingTranscriptMetadata?) -> Bool {
+        calendarEvent != nil
+            ? defaults.object(forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) as? Bool ?? true
+            : detectSpeakers
+    }
+
     private func addSpeakerRecordIfWanted(
         _ result: TranscriptionResult,
         request: FinalTranscriptionRequest,
         recordingID: UUID?
     ) async {
-        let wanted = request.calendarEvent != nil
-            ? defaults.object(forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) as? Bool ?? true
-            : detectSpeakers
-        guard wanted, let speakerRecordIntake else { return }
+        guard request.detectsSpeakers, let speakerRecordIntake else { return }
         _ = await speakerRecordIntake(SpeakerRecordingInput(
             result: result,
             samples: request.buffer,
@@ -2113,3 +2301,52 @@ final class AudioRecorderViewModel: ObservableObject {
         )
     }
 }
+
+#if DEBUG
+extension AudioRecorderViewModel {
+    /// Screenshot fixture: a meeting is recorded while the two meetings before it
+    /// wait for their transcripts.
+    func prepareScreenshotQueueFixture() {
+        guard AppConstants.isScreenshotAutomation else { return }
+        let directory = recorderService.recordingsDirectory
+        let now = AppConstants.screenshotFixtureReferenceDate
+        func recording(_ name: String, minutesAgo: Double, duration: TimeInterval, transcript: String? = nil) -> RecordingItem {
+            RecordingItem(
+                url: directory.appendingPathComponent(name),
+                date: now.addingTimeInterval(-minutesAgo * 60),
+                duration: duration,
+                fileSize: Int64(duration * 32_000),
+                transcript: transcript,
+                transcriptionFailure: nil
+            )
+        }
+        let designReview = recording("Design Review.wav", minutesAgo: 13, duration: 1_846)
+        let customerCall = recording("Customer Call.wav", minutesAgo: 62, duration: 2_874)
+        let standup = recording(
+            "Team Standup.wav", minutesAgo: 150, duration: 912,
+            transcript: "Quick round: the release branch is ready, QA starts tomorrow."
+        )
+
+        // The fixture list replaces the folder's contents.
+        recordingsLoadTask?.cancel()
+        recordingsLoadGeneration += 1
+        hasRequestedInitialRecordingsLoad = true
+        recordings = [designReview, customerCall, standup]
+        pendingTranscriptions = [
+            PendingTranscription(id: UUID(), url: customerCall.url.resolvingSymlinksInPath(), status: .transcribing),
+            PendingTranscription(id: UUID(), url: designReview.url.resolvingSymlinksInPath(), status: .waiting)
+        ]
+        isTranscribing = true
+        systemAudioEnabled = true
+        // After the recorder service's first values, which would reset these.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            state = .recording
+            duration = 754
+            micLevel = 0.3
+            systemLevel = 0.45
+            deferredLivePreviewGeneration = recordingGeneration
+        }
+    }
+}
+#endif
