@@ -507,10 +507,24 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         model.rename("S1", to: "Bob", undoManager: nil)
         XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), SpeakerOwnName.defaultName, "Other speakers don't name the user")
 
-        model.rename("S2", to: " Yuri Vos ", undoManager: nil)
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+        undoManager.beginUndoGrouping()
+        model.rename("S2", to: " Yuri Vos ", undoManager: undoManager)
+        undoManager.endUndoGrouping()
         XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), "Yuri Vos")
         XCTAssertTrue(SpeakerOwnName.isOwnName("yuri vos", defaults: defaults))
 
+        undoManager.undo()
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.speakerOwnName), "Undo also restores the earlier name")
+        undoManager.redo()
+        XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), "Yuri Vos")
+
+        model.rename("S2", to: SpeakerOwnName.defaultName, undoManager: nil)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.speakerOwnName))
+
+        // "Me" again resets the name even where this recording already says "Me".
+        SpeakerOwnName.store("Yuri Vos", defaults: defaults)
         model.rename("S2", to: SpeakerOwnName.defaultName, undoManager: nil)
         XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.speakerOwnName))
     }

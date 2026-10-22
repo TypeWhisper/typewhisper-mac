@@ -565,7 +565,7 @@ private struct SpeakerChip: View {
             // Screenshots of the user's own speaker open its details.
             guard AppConstants.isScreenshotAutomation,
                   ProcessInfo.processInfo.arguments.contains("--screenshot-own-speaker-details"),
-                  model.isOwnSpeaker(speakerID) else { return }
+                  model.isMicrophoneSpeaker(speakerID) else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { showsDetails = true }
         }
         .popover(isPresented: $showsDetails, arrowEdge: .bottom) {

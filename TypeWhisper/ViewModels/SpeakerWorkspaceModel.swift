@@ -348,10 +348,28 @@ final class SpeakerWorkspaceModel: ObservableObject {
             return
         }
         table.setName(name, for: speakerID, profileID: keepsVoice ? table.profileID(for: speakerID) : nil)
-        guard table != names else { return }
-        apply(transcript, names: table, actionName: String(localized: "speakers.rename.help"), undoManager: undoManager)
-        if speakerID == microphoneSpeakerID {
-            SpeakerOwnName.remember(name, defaults: defaults)
+        let isMicrophone = speakerID == microphoneSpeakerID
+        guard table != names else {
+            // "Me" again resets the user's name even where this recording still says "Me".
+            if isMicrophone, SpeakerOwnName.storedValue(for: name) == nil {
+                setOwnName(nil, undoManager: undoManager)
+            }
+            return
+        }
+        guard apply(transcript, names: table, actionName: String(localized: "speakers.rename.help"), undoManager: undoManager)
+        else { return }
+        if isMicrophone {
+            setOwnName(SpeakerOwnName.storedValue(for: name), undoManager: undoManager)
+        }
+    }
+
+    /// Stores the user's name for later recordings; undo restores the one before.
+    private func setOwnName(_ value: String?, undoManager: UndoManager?) {
+        let previous = defaults.string(forKey: UserDefaultsKeys.speakerOwnName)
+        guard previous != value else { return }
+        SpeakerOwnName.store(value, defaults: defaults)
+        undoManager?.registerUndo(withTarget: self) { model in
+            model.setOwnName(previous, undoManager: undoManager)
         }
     }
 
@@ -444,6 +462,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
 
     /// - Parameter savedVoices: The voices stored for `transcript` before, when
     ///   undo or redo brings it back; moving them along again would lose some.
+    @discardableResult
     private func apply(
         _ transcript: SpeakerTranscript,
         names: SpeakerNameTable?,
@@ -451,7 +470,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         updatesText: Bool = false,
         actionName: String,
         undoManager: UndoManager?
-    ) {
+    ) -> Bool {
         let previous = (transcript: self.transcript, names: historyService.record(withID: recordID)?.speakerNames)
         guard historyService.updateSpeakerTranscript(
             transcript,
@@ -460,7 +479,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
             updatesText: updatesText
         ) else {
             reload()
-            return
+            return false
         }
         // Read after the update, which may first stamp them with the previous transcript.
         let previousVoices = voices?.storedVoices(ofRecordID: recordID)
@@ -468,7 +487,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         if let old = previous.transcript, let new = self.transcript, old != new {
             voices?.transcriptCorrected(recordID: recordID, from: old, to: new, restoring: savedVoices)
         }
-        guard let undoManager, let previousTranscript = previous.transcript else { return }
+        guard let undoManager, let previousTranscript = previous.transcript else { return true }
         undoManager.registerUndo(withTarget: self) { model in
             model.apply(
                 previousTranscript,
@@ -480,6 +499,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
             )
         }
         undoManager.setActionName(actionName)
+        return true
     }
 
     // MARK: - Copy and export
@@ -521,13 +541,17 @@ enum SpeakerOwnName {
         return stored.isEmpty ? defaultName : stored
     }
 
-    /// Keeps a new name for the user; an empty name or "Me" goes back to "Me".
-    static func remember(_ name: String, defaults: UserDefaults = .standard) {
+    /// The value to store for a new name; nil for an empty name or "Me", which go back to "Me".
+    static func storedValue(for name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || matches(trimmed, defaultName) {
-            defaults.removeObject(forKey: UserDefaultsKeys.speakerOwnName)
+        return trimmed.isEmpty || matches(trimmed, defaultName) ? nil : trimmed
+    }
+
+    static func store(_ value: String?, defaults: UserDefaults = .standard) {
+        if let value {
+            defaults.set(value, forKey: UserDefaultsKeys.speakerOwnName)
         } else {
-            defaults.set(trimmed, forKey: UserDefaultsKeys.speakerOwnName)
+            defaults.removeObject(forKey: UserDefaultsKeys.speakerOwnName)
         }
     }
 
