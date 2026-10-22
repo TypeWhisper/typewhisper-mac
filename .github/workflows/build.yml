@@ -77,9 +77,7 @@ jobs:
           echo "plugin_sdk=$plugin_sdk" | tee -a "$GITHUB_OUTPUT"
 
   release-build:
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses xcode-27.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'xcode-27' }}
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -189,9 +187,7 @@ jobs:
           retention-days: 14
 
   app-tests:
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses xcode-27.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'xcode-27' }}
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -272,9 +268,7 @@ jobs:
   plugin-sdk-tests:
     needs: changes
     if: needs.changes.outputs.plugin_sdk == 'true'
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses xcode-27.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'xcode-27' }}
+    runs-on: xcode-27
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -296,9 +290,7 @@ jobs:
   # A Debug arm64 build keeps pull requests fast; the nightly TestFlight workflow
   # builds the universal Release binary and audits it. See docs/appstore/README.md.
   appstore:
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses xcode-27.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'xcode-27' }}
+    runs-on: xcode-27
     timeout-minutes: 60
     env:
       APPSTORE_DERIVED_DATA: build/appstore
