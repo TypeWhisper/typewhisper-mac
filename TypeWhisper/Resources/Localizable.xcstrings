@@ -3033,13 +3033,19 @@
     "history.llmUsage.tokens" : {
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tokens"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tokens"
           }
         },
-        "de" : {
+        "es" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tokens"
@@ -3062,16 +3068,22 @@
     "history.llmUsage.input" : {
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eingabe %@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ input"
           }
         },
-        "de" : {
+        "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eingabe %@"
+            "value" : "%@ de entrada"
           }
         },
         "ja" : {
@@ -3091,16 +3103,22 @@
     "history.llmUsage.output" : {
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgabe %@"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ output"
           }
         },
-        "de" : {
+        "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ausgabe %@"
+            "value" : "%@ de salida"
           }
         },
         "ja" : {
@@ -3120,16 +3138,22 @@
     "history.llmUsage.requests" : {
       "extractionState" : "manual",
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Anfragen"
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ requests"
           }
         },
-        "de" : {
+        "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ Anfragen"
+            "value" : "%@ solicitudes"
           }
         },
         "ja" : {
@@ -15060,6 +15084,12 @@
             "value" : "%@ wird für lokales Diktieren aktiviert"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activando %@ para el dictado local"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18218,6 +18248,12 @@
             "value" : "Unterstützt %@."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Admite %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18238,6 +18274,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erkennt %lld europäische Sprachen. Für eine andere Sprache wähle sie oben aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconoce %lld idiomas europeos. Para otro idioma, elígelo arriba."
           }
         },
         "ja" : {
@@ -18262,6 +18304,12 @@
             "value" : "Erkennt die gesprochene Sprache automatisch."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detecta automáticamente el idioma hablado."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18282,6 +18330,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Läuft offline ohne API-Key."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funciona sin conexión y sin clave de API."
           }
         },
         "ja" : {
@@ -18306,6 +18360,12 @@
             "value" : "Zum Herunterladen brauchst du eine Internetverbindung."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conéctate a internet para descargarlo."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18326,6 +18386,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Offline"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin conexión"
           }
         },
         "ja" : {
@@ -18350,6 +18416,12 @@
             "value" : "%1$@ unterstützt %2$@ nicht."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ no admite %2$@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18370,6 +18442,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Keine lokale Engine für %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay un motor local para %@"
           }
         },
         "ja" : {
@@ -18394,6 +18472,12 @@
             "value" : "Keine lokale Engine für diesen Mac"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No hay un motor local para este Mac"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18414,6 +18498,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen diese Sprache nicht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los motores locales que funcionan en este Mac no admiten este idioma."
           }
         },
         "ja" : {
@@ -18438,6 +18528,12 @@
             "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen nicht alle diese Sprachen."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los motores locales que funcionan en este Mac no admiten todos estos idiomas."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18458,6 +18554,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Parakeet, WhisperKit und Qwen3 brauchen Apple Silicon. Apple Speech braucht macOS 26."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet, WhisperKit y Qwen3 necesitan Apple Silicon. Apple Speech necesita macOS 26."
           }
         },
         "ja" : {
@@ -22164,6 +22266,12 @@
             "value" : "Standard-Engine (%@)"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Motor predeterminado (%@)"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -22184,6 +22292,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Standard-Engine (keine verfügbar)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Motor predeterminado (ninguno disponible)"
           }
         },
         "ja" : {
@@ -22208,6 +22322,12 @@
             "value" : "Standard-Engine ändern"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cambiar motor predeterminado"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -22228,6 +22348,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Öffnet in den Einstellungen die Seite Diktat."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abre la página Dictado en Ajustes."
           }
         },
         "ja" : {
@@ -22252,6 +22378,12 @@
             "value" : "Deine Standard-Engine %@ ist gerade nicht verfügbar."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu motor predeterminado, %@, no está disponible en este momento."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -22274,6 +22406,12 @@
             "value" : "Deine Standard-Engine ist gerade nicht verfügbar."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu motor predeterminado no está disponible en este momento."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -22290,16 +22428,22 @@
     },
     "Your default engine, %@, is not available right now. Dictation uses %@ until it is available again." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine %1$@ ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %2$@."
+          }
+        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your default engine, %1$@, is not available right now. Dictation uses %2$@ until it is available again."
           }
         },
-        "de" : {
+        "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Deine Standard-Engine %1$@ ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %2$@."
+            "value" : "Tu motor predeterminado, %1$@, no está disponible en este momento. El dictado usa %2$@ hasta que vuelva a estar disponible."
           }
         },
         "ja" : {
@@ -22322,6 +22466,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine Standard-Engine ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %@."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu motor predeterminado no está disponible en este momento. El dictado usa %@ hasta que vuelva a estar disponible."
           }
         },
         "ja" : {
@@ -25844,6 +25994,12 @@
             "value" : "Umschaltmodus"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modo Alternar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -25865,6 +26021,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme nach Stille beenden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detener la grabación tras un silencio"
           }
         },
         "ja" : {
@@ -25890,6 +26052,12 @@
             "value" : "Dauer der Stille"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duración del silencio"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -25910,6 +26078,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sekunden"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "segundos"
           }
         },
         "ja" : {
@@ -25934,6 +26108,12 @@
             "value" : "Sekunden, von 1 bis 10"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segundos, de 1 a 10"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -25954,6 +26134,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beendet ein Diktat im Umschaltmodus, sobald du für die gewählte Dauer still bist, und transkribiert und fügt es wie gewohnt ein. Vor dem Stoppen zählt der Indikator herunter; sprich weiter, um die Aufnahme fortzusetzen. Bevor du zu sprechen beginnst, stoppt die Aufnahme nie. Push-to-Talk und das Gedrückthalten des Hybrid-Tastenkürzels sind nicht betroffen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termina un dictado en modo Alternar cuando guardas silencio durante el tiempo elegido y luego lo transcribe e inserta como siempre. El indicador hace una cuenta regresiva antes de detenerse; sigue hablando para continuar la grabación. Nunca se detiene antes de que empieces a hablar. Presionar para hablar y mantener presionado el atajo Híbrido no se ven afectados."
           }
         },
         "ja" : {
@@ -28569,6 +28755,12 @@
             "value" : "Installiert und wählt %@ aus."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Instala y selecciona %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28591,6 +28783,12 @@
             "value" : "Aktiviert %@."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Activa %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28611,6 +28809,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Wählt %@ aus."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona %@."
           }
         },
         "ja" : {
@@ -29940,6 +30144,12 @@
             "value" : "Leichte integrierte Option ohne großes lokales Modell."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opción integrada y ligera, sin un modelo local grande."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -29960,6 +30170,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unterstützt %@ auf diesem Mac nicht."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No admite %@ en este Mac."
           }
         },
         "ja" : {
@@ -32617,6 +32833,12 @@
             "value" : "Noch keine Apps ausgeschlossen."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay apps excluidas."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33753,6 +33975,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Noch keine Websites ausgeschlossen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aún no hay sitios web excluidos."
           }
         },
         "ja" : {
@@ -35245,6 +35473,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ ist für lokales Diktieren bereit"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ está listo para el dictado local"
           }
         },
         "ja" : {
@@ -39286,6 +39520,12 @@
             "value" : "Recordings Folder"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carpeta de grabaciones"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39312,6 +39552,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Save new recordings to"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar las grabaciones nuevas en"
           }
         },
         "ja" : {
@@ -39342,6 +39588,12 @@
             "value" : "Use Default"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Usar la predeterminada"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39368,6 +39620,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A new folder applies to new recordings. Existing recordings stay where they are and remain in the list below."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Una carpeta nueva se aplica a las grabaciones nuevas. Las grabaciones existentes se quedan donde están y siguen apareciendo en la lista de abajo."
           }
         },
         "ja" : {
@@ -39398,6 +39656,12 @@
             "value" : "Earlier folders"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Carpetas anteriores"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39424,6 +39688,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Recordings in these folders are still listed. Removing a folder here only hides its recordings in TypeWhisper; the files stay."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las grabaciones de estas carpetas se siguen mostrando. Quitar una carpeta aquí solo oculta sus grabaciones en TypeWhisper; los archivos se conservan."
           }
         },
         "ja" : {
@@ -39454,6 +39724,12 @@
             "value" : "Remove “%@” from the list"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar “%@” de la lista"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39480,6 +39756,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” isn't available. New recordings are saved to the default folder until it's back."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” no está disponible. Las grabaciones nuevas se guardan en la carpeta predeterminada hasta que vuelva a estar disponible."
           }
         },
         "ja" : {
@@ -39510,6 +39792,12 @@
             "value" : "A recording couldn't be saved to “%@” and was saved to the default folder instead."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar una grabación en “%@”, así que se guardó en la carpeta predeterminada."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39536,6 +39824,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Choose the folder for new recordings."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elige la carpeta para las grabaciones nuevas."
           }
         },
         "ja" : {
@@ -39566,6 +39860,12 @@
             "value" : "TypeWhisper can't save recordings to “%@”. Choose a folder you can write to."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper no puede guardar grabaciones en “%@”. Elige una carpeta en la que puedas escribir."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -39592,6 +39892,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” is the Watch Folder. It would transcribe new recordings a second time and can delete them. Choose another folder."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” es la carpeta vigilada. Transcribiría las grabaciones nuevas una segunda vez y podría eliminarlas. Elige otra carpeta."
           }
         },
         "ja" : {
@@ -40939,6 +41245,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aufnahme nach Stille beendet, wird transkribiert"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grabación detenida tras un silencio, transcribiendo"
           }
         },
         "ja" : {
@@ -42761,6 +43073,12 @@
             "value" : "Apps ausschließen"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Excluir apps"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -42783,6 +43101,12 @@
             "value" : "Websites ausschließen"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Excluir sitios web"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -42803,6 +43127,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "In ausgeschlossenen Apps und Websites läuft dieser Workflow nicht. Andere passende Workflows laufen dort weiterhin."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Este flujo de trabajo no se ejecuta en las apps y sitios web excluidos. Otros flujos de trabajo que coincidan sí se ejecutan."
           }
         },
         "ja" : {
@@ -44950,6 +45280,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gilt auch fürs Diktieren. Du kannst sie später auf der Seite „Diktat“ ändern."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "También se usa para el dictado. Puedes cambiarlo más tarde en la página Dictado."
           }
         },
         "ja" : {
@@ -52927,6 +53263,12 @@
             "value" : "Ausgeschlossene Website"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitio web excluido"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -52947,6 +53289,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Auszuschließende Website"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sitio web que excluir"
           }
         },
         "ja" : {
@@ -62795,6 +63143,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Stoppt in %@. Sprich weiter, um fortzufahren."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se detiene en %@. Sigue hablando para continuar."
           }
         },
         "ja" : {

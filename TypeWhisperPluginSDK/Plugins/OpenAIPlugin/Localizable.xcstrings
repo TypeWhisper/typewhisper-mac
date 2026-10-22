@@ -1289,24 +1289,30 @@
         }
       }
     },
-    "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gilt, wenn ein Workflow den Denkaufwand auf „Anbieterstandard“ lässt. Höhere Stufen sind langsamer und verbrauchen mehr Ausgabe-Tokens."
+    "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt, wenn ein Workflow den Denkaufwand auf „Anbieterstandard“ lässt. Höhere Stufen sind langsamer und verbrauchen mehr Ausgabe-Tokens."
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークフローで思考負荷が「プロバイダーのデフォルト」のままの場合に適用されます。レベルが高いほど遅くなり、出力トークンも多く消費します。"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplica cuando un flujo de trabajo deja el esfuerzo en Predeterminado del proveedor. Los niveles más altos son más lentos y usan más tokens de salida."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローで思考負荷が「プロバイダーのデフォルト」のままの場合に適用されます。レベルが高いほど遅くなり、出力トークンも多く消費します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
           }
         }
       }

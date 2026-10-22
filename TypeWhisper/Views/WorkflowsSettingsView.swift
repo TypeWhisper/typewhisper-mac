@@ -3459,7 +3459,8 @@ struct WorkflowDraft {
             let exclusionSentence = exclusions.isEmpty ? "" : localizedAppText(
                 " \(exclusions).",
                 de: " \(exclusions).",
-                ja: " \(exclusions)。"
+                ja: " \(exclusions)。",
+                es: " \(exclusions)."
             )
             return localizedAppText(
                 "\(resolvedName) runs always as \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
@@ -4050,7 +4051,8 @@ private func workflowExclusionSummary(for trigger: WorkflowTrigger?) -> String {
         "Excluded: \(list)",
         de: "Ausgeschlossen: \(list)",
         ja: "除外: \(list)",
-        zh: "排除：\(list)"
+        zh: "排除：\(list)",
+        es: "Excluidos: \(list)"
     )
 }
 
@@ -4105,7 +4107,8 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         let exclusionSentence = triggerDetail.isEmpty ? "" : localizedAppText(
             ". \(triggerDetail)",
             de: ". \(triggerDetail)",
-            ja: "。\(triggerDetail)"
+            ja: "。\(triggerDetail)",
+            es: ". \(triggerDetail)"
         )
         return localizedAppText(
             "\(summary) runs always\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
