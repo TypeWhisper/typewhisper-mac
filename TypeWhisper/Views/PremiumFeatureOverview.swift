@@ -385,7 +385,17 @@ enum PairedDevicesPremiumCopy {
     }
 
     static func pairedCount(_ count: Int) -> String {
-        localizedAppText(
+        // Spanish inflects the participle: "1 vinculado", "2 vinculados".
+        if count == 1 {
+            return localizedAppText(
+                "1 paired",
+                de: "1 gekoppelt",
+                ja: "1 台ペアリング済み",
+                zh: "已配对 1 台",
+                es: "1 vinculado"
+            )
+        }
+        return localizedAppText(
             "\(count) paired",
             de: "\(count) gekoppelt",
             ja: "\(count) 台ペアリング済み",
