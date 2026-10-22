@@ -17360,24 +17360,52 @@
         }
       }
     },
-    "Dictation uses %@ until it is available again." : {
+    "Your default engine, %@, is not available right now. Dictation uses %@ until it is available again." : {
       "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your default engine, %1$@, is not available right now. Dictation uses %2$@ until it is available again."
+          }
+        },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bis sie wieder verfügbar ist, nutzt das Diktat %@."
+            "value" : "Deine Standard-Engine %1$@ ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %2$@."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "利用できるようになるまで、ディクテーションには%@を使用します。"
+            "value" : "デフォルトエンジンの%1$@は現在利用できません。利用できるようになるまで、ディクテーションには%2$@を使用します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在其恢复可用之前，听写将使用 %@。"
+            "value" : "你的默认引擎 %1$@ 当前不可用。在其恢复可用之前，听写将使用 %2$@。"
+          }
+        }
+      }
+    },
+    "Your default engine is not available right now. Dictation uses %@ until it is available again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンは現在利用できません。利用できるようになるまで、ディクテーションには%@を使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎当前不可用。在其恢复可用之前，听写将使用 %@。"
           }
         }
       }

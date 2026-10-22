@@ -3383,13 +3383,19 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             savedEngineName: nil,
             fallbackEngineName: "Mock Compatible"
         )
+        let unnamedWithoutFallback = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "",
+            fallbackEngineName: nil
+        )
 
         XCTAssertTrue(notice.contains("Mock Switchable"))
         XCTAssertTrue(notice.contains("Mock Compatible"))
-        XCTAssertTrue(notice.hasPrefix(withoutFallback))
+        XCTAssertTrue(withoutFallback.contains("Mock Switchable"))
         XCTAssertFalse(withoutFallback.contains("Mock Compatible"))
         XCTAssertFalse(unnamed.contains("Mock Switchable"))
         XCTAssertTrue(unnamed.contains("Mock Compatible"))
+        XCTAssertFalse(unnamedWithoutFallback.isEmpty)
+        XCTAssertEqual(Set([notice, withoutFallback, unnamed, unnamedWithoutFallback]).count, 4)
     }
 
     func testUpdatingTheSelectedPluginKeepsTheSavedEngine() throws {

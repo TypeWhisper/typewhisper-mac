@@ -283,11 +283,16 @@ enum DefaultEngineChoice {
     /// Shown on the Dictation page while the saved default engine is unavailable;
     /// names the engine dictation uses until it is back, if there is one.
     static func unavailableSavedEngineNotice(savedEngineName: String?, fallbackEngineName: String?) -> String {
-        let unavailable = nonEmpty(savedEngineName).map {
-            String(localized: "Your default engine, \($0), is not available right now.")
-        } ?? String(localized: "Your default engine is not available right now.")
-        guard let fallbackEngineName = nonEmpty(fallbackEngineName) else { return unavailable }
-        return "\(unavailable) \(String(localized: "Dictation uses \(fallbackEngineName) until it is available again."))"
+        switch (nonEmpty(savedEngineName), nonEmpty(fallbackEngineName)) {
+        case let (saved?, fallback?):
+            String(localized: "Your default engine, \(saved), is not available right now. Dictation uses \(fallback) until it is available again.")
+        case let (nil, fallback?):
+            String(localized: "Your default engine is not available right now. Dictation uses \(fallback) until it is available again.")
+        case let (saved?, nil):
+            String(localized: "Your default engine, \(saved), is not available right now.")
+        case (nil, nil):
+            String(localized: "Your default engine is not available right now.")
+        }
     }
 
     private static func nonEmpty(_ name: String?) -> String? {
