@@ -65,37 +65,6 @@ final class AppFormatterServiceTests: XCTestCase {
         ))
     }
 
-    func testSelectedUpdateChannelUsesStoredOverride() {
-        let defaults = UserDefaults(suiteName: #function)!
-        defaults.removePersistentDomain(forName: #function)
-        defaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
-        defer {
-            defaults.removePersistentDomain(forName: #function)
-        }
-
-        let channel = AppConstants.selectedUpdateChannel(
-            defaults: defaults,
-            infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue]
-        )
-
-        XCTAssertEqual(channel, .daily)
-    }
-
-    func testSelectedUpdateChannelIgnoresInvalidStoredOverride() {
-        let defaults = UserDefaults(suiteName: #function)!
-        defaults.removePersistentDomain(forName: #function)
-        defaults.set("beta", forKey: UserDefaultsKeys.updateChannel)
-        defer {
-            defaults.removePersistentDomain(forName: #function)
-        }
-
-        let channel = AppConstants.selectedUpdateChannel(
-            defaults: defaults,
-            infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue]
-        )
-
-        XCTAssertEqual(channel, .stable)
-    }
 
     @MainActor
     func testMarkdownFormattingNormalizesBullets() {

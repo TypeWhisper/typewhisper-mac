@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, appearance, dictation, hotkeys, recorder, speakers
-    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, about
+    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, advanced, about
     case plugin(pluginId: String, itemId: String)
     case installedPlugin(pluginId: String)
 }
@@ -17,7 +17,6 @@ private struct SettingsDestination: Identifiable, Hashable {
     var iconURL: URL?
     var darkIconURL: URL?
     var isDimmed = false
-    var hasUpdate = false
 
     var id: SettingsTab { tab }
 }
@@ -31,7 +30,6 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var dictationRecovery = DictationRecoveryViewModel.shared
-    @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -58,8 +56,7 @@ struct SettingsView: View {
         case "dictionary", "dictionary-term-packs": return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
-        // "plugins" moves on to the first installed plugin once the plugins are loaded.
-        case "plugins", "integrations-available", "integrations-local": return .integrations
+        case "plugins": return .dictation
         case "advanced": return .advanced
         case "about": return .about
         default: return .home
@@ -102,12 +99,6 @@ struct SettingsView: View {
                 systemImage: "point.3.connected.trianglepath.dotted",
                 badge: nil
             ),
-            SettingsDestination(
-                tab: .integrations,
-                title: localizedAppText("Discover plugins", de: "Plugins entdecken"),
-                systemImage: "puzzlepiece.extension",
-                badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
-            ),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
@@ -132,24 +123,16 @@ struct SettingsView: View {
                 return lhs.manifest.name.localizedCompare(rhs.manifest.name) == .orderedAscending
             }
             .map { plugin in
-                let registryPlugin = registryService.registry.first { $0.id == plugin.id }
                 return SettingsDestination(
                     tab: .installedPlugin(pluginId: plugin.id),
                     title: plugin.manifest.name,
-                    systemImage: registryPlugin?.iconSystemName
-                        ?? plugin.manifest.iconSystemName
+                    systemImage: plugin.manifest.iconSystemName
                         ?? "puzzlepiece.extension",
                     badge: nil,
-                    iconURL: validatedHTTPSURL(registryPlugin?.iconURL)
-                        ?? validatedHTTPSURL(plugin.manifest.iconURL)
+                    iconURL: validatedHTTPSURL(plugin.manifest.iconURL)
                         ?? plugin.iconResourceURL,
-                    darkIconURL: validatedHTTPSURL(registryPlugin?.iconDarkURL)
-                        ?? validatedHTTPSURL(plugin.manifest.iconDarkURL),
-                    isDimmed: !plugin.isEnabled,
-                    hasUpdate: {
-                        if case .updateAvailable = registryService.installInfo(for: plugin.id) { return true }
-                        return false
-                    }()
+                    darkIconURL: validatedHTTPSURL(plugin.manifest.iconDarkURL),
+                    isDimmed: !plugin.isEnabled
                 )
             }
 
@@ -217,7 +200,7 @@ struct SettingsView: View {
         .onChange(of: pluginManager.loadedPlugins.map(\.id)) { _, pluginIds in
             // An uninstalled plugin takes its sidebar entry with it.
             if case .installedPlugin(let pluginId) = selectedTab, !pluginIds.contains(pluginId) {
-                selectedTab = .integrations
+                selectedTab = .dictation
             }
             selectScreenshotPluginPageIfNeeded()
         }
@@ -230,7 +213,7 @@ struct SettingsView: View {
     private func selectScreenshotPluginPageIfNeeded() {
         guard AppConstants.isScreenshotAutomation,
               AppConstants.screenshotState == "plugins",
-              selectedTab == .integrations,
+              selectedTab == .dictation,
               let plugin = pluginManager.loadedPlugins
                 .filter({ $0.isEnabled && $0.supportsSettingsWindow })
                 .min(by: { $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending }) else {
@@ -300,8 +283,6 @@ struct SettingsView: View {
             WorkflowsSettingsView()
         case .prompts:
             WorkflowsSettingsView()
-        case .integrations:
-            PluginSettingsView()
         case .advanced:
             AdvancedSettingsView()
         case .about:
@@ -665,7 +646,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         }
     }
 
-    let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
+    let integrationDestinations = pluginDestinations
 
     let systemDestinations = [
         settingsDestination(destinations, .advanced),
@@ -772,14 +753,6 @@ private struct SettingsSidebarRow: View {
 
             Spacer(minLength: 8)
 
-            if destination.hasUpdate {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
-                    .help(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
-                    // Read as the row's value instead.
-                    .accessibilityHidden(true)
-            }
-
             if let badge = destination.badge {
                 SettingsSidebarBadge(count: badge)
                     .accessibilityHidden(true)
@@ -806,9 +779,6 @@ private struct SettingsSidebarRow: View {
         var parts: [String] = []
         if destination.isDimmed {
             parts.append(localizedAppText("Disabled", de: "Deaktiviert", ja: "無効", zh: "已停用"))
-        }
-        if destination.hasUpdate {
-            parts.append(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります", zh: "有可用更新"))
         }
         if let badge = destination.badge {
             parts.append(localizedAppText(

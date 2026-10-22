@@ -1943,7 +1943,6 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         guard HistoryRetranscriptionActivity.recordID == nil else {
             hotkeyService.cancelDictation()
             showNotchFeedback(message: HistoryRetranscriptionError.busy.localizedDescription, icon: "hourglass", duration: 2)
@@ -5346,9 +5345,7 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    /// Settings page where the user can fix a transcription setup error, or nil for transient failures.
-    /// With the provider known, engine setup errors open that engine's own settings page, which is
-    /// what the message points to; Discover plugins stays the target when the engine is not installed.
+    /// 配置错误打开对应引擎的设置；引擎不可用时打开听写设置。
     static func settingsTab(forTranscriptionError error: Error, providerId: String? = nil) -> SettingsTab? {
         if let failure = error as? AutomaticRecoveryFallbackFailure {
             return settingsTab(forTranscriptionError: failure.primaryError, providerId: providerId)
@@ -5385,7 +5382,7 @@ final class DictationViewModel: ObservableObject {
     private static func engineSettingsTab(providerId: String?) -> SettingsTab {
         guard let providerId,
               let plugin = PluginManager.shared?.installedTranscriptionPlugin(for: providerId) else {
-            return .integrations
+            return .dictation
         }
         return .installedPlugin(pluginId: plugin.id)
     }

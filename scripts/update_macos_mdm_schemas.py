@@ -19,12 +19,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEPLOYMENT = ROOT / "deployment" / "macos"
-DOCUMENTATION_URL = "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-PROFILE_MANIFEST_VERSION = 1
-PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 10, 20)
+DOCUMENTATION_URL = "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+PROFILE_MANIFEST_VERSION = 2
+PROFILE_MANIFEST_MODIFIED = datetime.datetime(2026, 10, 23)
 EDITIONS = {
-    "com.typewhisper.mac": "TypeWhisper",
-    "com.typewhisper.typewhisper-app": "TypeWhisper (App Store)",
+    "com.schneidervvv.dictum": "dictum",
+    "com.typewhisper.typewhisper-app": "dictum (App Store)",
 }
 RECOMMENDED_TITLE = "Recommended settings (users can change)"
 RECOMMENDED_DESCRIPTION = "Defaults that apply until the user makes a choice."
@@ -38,18 +38,11 @@ DESCRIPTIONS = {
     "AllowedPlugins": ("Allowed plugins", "Plugin IDs that may be installed, loaded and enabled. An empty list allows none."),
     "AllowCloudTranscription": ("Allow cloud transcription", "Off keeps audio on the Mac: only plugins whose locality is local transcribe."),
     "AllowCloudTextProcessing": ("Allow cloud text processing", "Off keeps transcripts, prompts, dictionary terms and context on the Mac."),
-    "AllowPluginDownloads": ("Allow plugin downloads", "Off refuses installing and updating plugins. Installed plugins keep running."),
     "AllowModelDownloads": ("Allow model downloads", "Off refuses model downloads. Installed models keep working."),
-    "UpdateMode": ("Update mode", "Who installs app updates."),
-    "UpdateChannel": ("Update channel", "The release channel for app updates."),
-    "AllowedUpdateChannels": ("Allowed update channels", "Entries stable, daily, release-candidate. An empty list or none alone turns app updates off; do not combine none with a channel."),
-    "LaunchAtLogin": ("Launch at login", "Registers or removes TypeWhisper's login item and locks the setting."),
+    "LaunchAtLogin": ("Launch at login", "Registers or removes dictum's login item and locks the setting."),
     "SkipOnboardingWhenReady": ("Skip setup when ready", "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready."),
-    "SuppressOptionalPrompts": ("Hide optional prompts", "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button."),
 }
 ENUMERATION_TITLES = {
-    "UpdateMode": ["External (deployment updates the app)", "Check only", "User-initiated"],
-    "UpdateChannel": ["Stable", "Daily", "Release Candidate"],
 }
 JSON_TYPES = {"boolean": "boolean", "enumeration": "integer", "list": "array", "text": "string"}
 
@@ -79,7 +72,7 @@ def keys_for(domain, keys):
     return [
         (name, kind, recommendable, maximum)
         for name, (kind, recommendable, maximum) in keys.items()
-        if domain == "com.typewhisper.mac" or name not in APP_STORE_IGNORED
+        if domain == "com.schneidervvv.dictum" or name not in APP_STORE_IGNORED
     ]
 
 
@@ -89,9 +82,6 @@ def jamf_property(name, kind, maximum, order):
     if kind == "enumeration":
         configured["enum"] = list(range(maximum + 1))
         configured["options"] = {"enum_titles": ENUMERATION_TITLES[name]}
-    elif name == "AllowedUpdateChannels":
-        configured["items"] = {"type": "string", "title": "Channel", "enum": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}
-        configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
     elif kind == "list":
         configured["items"] = {"title": "ID", **TEXT_CONSTRAINTS}
         configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
@@ -146,8 +136,6 @@ def manifest_setting(name, kind, maximum):
     if kind == "enumeration":
         setting["pfm_range_list"] = list(range(maximum + 1))
         setting["pfm_range_list_titles"] = ENUMERATION_TITLES[name]
-    elif name == "AllowedUpdateChannels":
-        setting["pfm_subkeys"] = [{"pfm_name": "Channel", "pfm_type": "string", "pfm_range_list": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}]
     elif kind == "list":
         setting["pfm_subkeys"] = [{"pfm_name": "ID", "pfm_type": "string"}]
     return setting
@@ -171,7 +159,7 @@ def profile_manifest(domain, keys):
         "pfm_subkeys": [manifest_setting(name, kind, maximum) for name, kind, recommendable, maximum in entries if recommendable],
     })
     payload_keys = [
-        payload_key("PayloadDescription", "string", "Payload Description", "Managed settings for TypeWhisper", required=False),
+        payload_key("PayloadDescription", "string", "Payload Description", "Managed settings for dictum", required=False),
         payload_key("PayloadDisplayName", "string", "Payload Display Name", EDITIONS[domain]),
         payload_key("PayloadIdentifier", "string", "Payload Identifier", domain),
         payload_key("PayloadType", "string", "Payload Type", domain),
@@ -180,7 +168,7 @@ def profile_manifest(domain, keys):
         payload_key("PayloadOrganization", "string", "Payload Organization", required=False),
     ]
     return {
-        "pfm_app_url": "https://www.typewhisper.com",
+        "pfm_app_url": "https://github.com/schneidervvv/dictum",
         "pfm_description": f"Managed settings for {EDITIONS[domain]}.",
         "pfm_documentation_url": DOCUMENTATION_URL,
         "pfm_domain": domain,

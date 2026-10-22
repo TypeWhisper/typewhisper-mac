@@ -62,8 +62,7 @@ struct AdvancedSettingsView: View {
             Form {
                 if ManagedSettingsSection.isVisible(managedPolicyService.current) {
                     ManagedSettingsSection(
-                        policyService: managedPolicyService,
-                        updateCoordinator: ServiceContainer.shared.managedUpdateCoordinator
+                        policyService: managedPolicyService
                     )
                 }
 
@@ -904,7 +903,6 @@ struct AdvancedSettingsView: View {
             profileService: container.profileService,
             promptActionService: container.promptActionService,
             pluginManager: container.pluginManager,
-            pluginRegistryService: container.pluginRegistryService,
             historyService: container.historyService,
             usageStatisticsService: container.usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { enabled in
@@ -957,13 +955,12 @@ struct AdvancedSettingsView: View {
             category: String(localized: "Profiles")
         )
         lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
-        lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
-        if result.pluginsRegistryFetchFailed {
-            lines.append(localizedAppText(
-                "Could not reach the plugin marketplace — some plugins may have been skipped due to a network error, not because they're unavailable.",
-                de: "Der Plugin-Marktplatz konnte nicht erreicht werden – einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
-            ))
-        }
+        lines.append(String(format: localizedAppText(
+            "Plugins: %d configured, %d unavailable",
+            de: "Plugins: %d konfiguriert, %d nicht verfügbar",
+            ja: "プラグイン: %d件を設定、%d件は利用不可",
+            zh: "插件：已配置 %d 个，%d 个不可用"
+        ), result.pluginsConfigured, result.pluginsSkipped))
         lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))
         if result.historySkippedByRetention > 0 {
             lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
@@ -983,9 +980,6 @@ struct AdvancedSettingsView: View {
                 ja: "履歴: %d件をスキップ（登録済み）",
                 zh: "历史记录：已跳过 %d 条（已存在）"
             ), result.historySkippedAsDuplicate))
-        }
-        if result.updateChannelApplied {
-            lines.append(String(localized: "Update channel applied"))
         }
         if result.preferencesApplied > 0 {
             lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))

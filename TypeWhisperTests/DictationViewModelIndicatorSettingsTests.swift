@@ -1044,7 +1044,7 @@ final class MenuBarGroupingTests: XCTestCase {
 
         XCTAssertEqual(
             MenuBarStatusFormatting.errorStatusText(
-                "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins."
+                "No transcription engine selected. Choose one under Settings > Dictation."
             ),
             "No transcription engine selected."
         )

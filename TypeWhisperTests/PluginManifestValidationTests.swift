@@ -5,6 +5,35 @@ import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class PluginManifestValidationTests: XCTestCase {
+    @MainActor
+    func testBundledPluginsLoadWithIndependentHostVersion() throws {
+        XCTAssertEqual(AppConstants.appVersion, "0.1.0")
+        XCTAssertEqual(AppConstants.buildVersion, "1")
+        XCTAssertEqual(AppConstants.pluginHostVersion, "1.8.0")
+        XCTAssertEqual(PluginVersion.compare(AppConstants.appVersion, AppConstants.pluginHostVersion), .orderedAscending)
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let manager = PluginManager(appSupportDirectory: directory)
+        defer {
+            for plugin in manager.loadedPlugins {
+                manager.unloadPlugin(plugin.id, keepsSavedEngine: true)
+            }
+        }
+        let bundledURL = try XCTUnwrap(Bundle.main.builtInPlugInsURL)
+        let bundles = try FileManager.default.contentsOfDirectory(at: bundledURL, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "bundle" }
+        XCTAssertFalse(bundles.isEmpty)
+        manager.scanAndLoadPlugins()
+        for bundle in bundles {
+            let manifest = try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: bundle.appendingPathComponent("Contents/Resources/manifest.json")))
+            let minimum = try XCTUnwrap(manifest.minHostVersion, manifest.id)
+            XCTAssertNotEqual(PluginVersion.compare(minimum, AppConstants.pluginHostVersion), .orderedDescending, manifest.id)
+            if manifest.id != "com.typewhisper.improve", manifest.isCompatibleWithCurrentEnvironment {
+                XCTAssertNotNil(manager.loadedPlugins.first { $0.id == manifest.id && $0.isBundled }, manifest.id)
+            }
+        }
+    }
+
     func testAllPluginManifestsDecodeAndDeclareCompatibility() throws {
         let manifestURLs = try FileManager.default.contentsOfDirectory(
             at: TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins"),
@@ -27,6 +56,7 @@ final class PluginManifestValidationTests: XCTestCase {
             XCTAssertFalse(manifest.name.isEmpty, manifestURL.lastPathComponent)
             XCTAssertFalse(manifest.principalClass.isEmpty, manifestURL.lastPathComponent)
             let minHostVersion = try XCTUnwrap(manifest.minHostVersion, manifestURL.lastPathComponent)
+            XCTAssertNotEqual(PluginVersion.compare(minHostVersion, AppConstants.pluginHostVersion), .orderedDescending, manifest.id)
             let minHostRange = NSRange(location: 0, length: minHostVersion.utf16.count)
             XCTAssertEqual(
                 hostVersionPattern.firstMatch(in: minHostVersion, range: minHostRange)?.range,
@@ -34,7 +64,7 @@ final class PluginManifestValidationTests: XCTestCase {
                 "\(manifestURL.lastPathComponent) must declare a stable three-component host version"
             )
             XCTAssertNotEqual(
-                PluginRegistryService.compareVersions(minHostVersion, "1.7.0"),
+                PluginVersion.compare(minHostVersion, "1.7.0"),
                 .orderedAscending,
                 "\(manifestURL.lastPathComponent) must require TypeWhisper 1.7.0 or newer"
             )
@@ -2732,7 +2762,7 @@ final class PluginManagerLoadOrderTests: XCTestCase {
         )
     }
 
-    func testScanAndLoadPluginsRegistersDisabledBundleWithoutLoadingRuntime() throws {
+    func testLaunchScanIgnoresUserPluginBundles() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -2757,10 +2787,8 @@ final class PluginManagerLoadOrderTests: XCTestCase {
 
         manager.scanAndLoadPlugins()
 
-        let plugin = try XCTUnwrap(manager.loadedPlugins.first { $0.manifest.id == "com.typewhisper.disabled-llm" })
-        XCTAssertFalse(plugin.isEnabled)
-        XCTAssertFalse(plugin.bundle.isLoaded)
-        XCTAssertEqual(plugin.manifest.category, "llm")
+        XCTAssertNil(manager.loadedPlugins.first { $0.manifest.id == "com.typewhisper.disabled-llm" })
+        XCTAssertTrue(manager.loadedPlugins.allSatisfy(\.isBundled))
     }
 
     private func makePluginBundle(
@@ -3046,7 +3074,6 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
 
         let notice = PluginManager.externalBundleNotice(
             loadedPlugin: bundledPlugin,
-            registryPlugin: nil,
             incompatibleExternalBundle: IncompatibleExternalBundle(
                 pluginId: "com.typewhisper.mock.sdk-missing",
                 pluginName: "Legacy External",
@@ -3062,77 +3089,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertEqual(notice, .bundledFallbackActive(version: "1.2.2"))
     }
 
-    func testExternalBundleNoticeEscalatesToBoundaryUpgradeWhenMarketplaceReplacementExists() {
-        let notice = PluginManager.externalBundleNotice(
-            loadedPlugin: nil,
-            registryPlugin: RegistryPlugin(
-                id: "com.typewhisper.mock.sdk-missing",
-                source: .official,
-                name: "Marketplace Replacement",
-                version: "1.3.1",
-                minHostVersion: "1.6.0",
-                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-                minOSVersion: nil,
-                supportedArchitectures: nil,
-                author: "TypeWhisper",
-                description: "Replacement",
-                category: "utility",
-                categories: ["utility"],
-                size: 1,
-                downloadURL: "https://example.com/replacement.zip",
-                iconSystemName: nil,
-                requiresAPIKey: nil,
-                hosting: nil,
-                descriptions: nil,
-                downloadCount: nil
-            ),
-            incompatibleExternalBundle: IncompatibleExternalBundle(
-                pluginId: "com.typewhisper.mock.sdk-missing",
-                pluginName: "Legacy External",
-                version: "1.2.2",
-                bundleURL: URL(fileURLWithPath: "/tmp/TypeWhisper/Plugins/Legacy.bundle"),
-                reason: .sdkCompatibility(
-                    expected: PluginSDKCompatibility.currentVersion,
-                    actual: nil
-                )
-            )
-        )
 
-        XCTAssertEqual(
-            notice,
-            .boundaryUpgradeRequired(installedVersion: "1.2.2", availableVersion: "1.3.1")
-        )
-    }
-
-    func testRegistryPluginRejectsArm64OnlyEntryOnIntel() {
-        let plugin = RegistryPlugin(
-            id: "com.typewhisper.mock.arm64-only",
-            source: .official,
-            name: "ARM64 Only",
-            version: "1.0.0",
-            minHostVersion: "1.6.0",
-            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-            minOSVersion: "14.0",
-            supportedArchitectures: ["arm64"],
-            author: "TypeWhisper",
-            description: "Test plugin",
-            category: "transcription",
-            categories: ["transcription"],
-            size: 1,
-            downloadURL: "https://example.com/plugin.zip",
-            iconSystemName: nil,
-            requiresAPIKey: nil,
-            hosting: nil,
-            descriptions: nil,
-            downloadCount: nil
-        )
-
-        RuntimeArchitecture.overrideCurrent = "x86_64"
-        XCTAssertFalse(plugin.isCompatibleWithCurrentEnvironment)
-
-        RuntimeArchitecture.overrideCurrent = "arm64"
-        XCTAssertTrue(plugin.isCompatibleWithCurrentEnvironment)
-    }
 
     func testModelManagerFallsBackWhenStoredProviderIsUnavailable() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -3414,178 +3371,6 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
     }
 }
 
-@MainActor
-final class PluginRegistryDestinationTests: XCTestCase {
-    func testFreshInstallTargetsPluginsDirectory() {
-        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
-
-        let destination = PluginRegistryService.resolveInstallDestinationURL(
-            currentURL: nil,
-            builtInPluginsURL: nil,
-            pluginsDirectory: pluginsDirectory,
-            incomingBundleName: "ParakeetPlugin.bundle"
-        )
-
-        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
-    }
-
-    func testExistingBundleInsidePluginsDirectoryKeepsItsPath() {
-        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
-        let existingURL = pluginsDirectory.appendingPathComponent("CustomParakeet.bundle")
-
-        let destination = PluginRegistryService.resolveInstallDestinationURL(
-            currentURL: existingURL,
-            builtInPluginsURL: nil,
-            pluginsDirectory: pluginsDirectory,
-            incomingBundleName: "ParakeetPlugin.bundle"
-        )
-
-        XCTAssertEqual(destination, existingURL)
-    }
-
-    func testTemporaryLoadedBundleIsRehomedIntoPluginsDirectory() {
-        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
-        let temporaryURL = URL(fileURLWithPath: "/tmp/typewhisper-install/extracted/ParakeetPlugin.bundle", isDirectory: true)
-
-        let destination = PluginRegistryService.resolveInstallDestinationURL(
-            currentURL: temporaryURL,
-            builtInPluginsURL: nil,
-            pluginsDirectory: pluginsDirectory,
-            incomingBundleName: "ParakeetPlugin.bundle"
-        )
-
-        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
-    }
-
-    func testBuiltInBundleIsRehomedIntoPluginsDirectory() {
-        let pluginsDirectory = URL(fileURLWithPath: "/tmp/TypeWhisper-Dev/Plugins", isDirectory: true)
-        let builtInPluginsURL = URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns", isDirectory: true)
-        let builtInURL = builtInPluginsURL.appendingPathComponent("ParakeetPlugin.bundle")
-
-        let destination = PluginRegistryService.resolveInstallDestinationURL(
-            currentURL: builtInURL,
-            builtInPluginsURL: builtInPluginsURL,
-            pluginsDirectory: pluginsDirectory,
-            incomingBundleName: "ParakeetPlugin.bundle"
-        )
-
-        XCTAssertEqual(destination, pluginsDirectory.appendingPathComponent("ParakeetPlugin.bundle"))
-    }
-
-    func testReplacementEligibilitySupportsBundledAndInstalledPluginsWithActionableNotice() {
-        let registryPlugin = makeRegistryPlugin(id: "com.typewhisper.qwen3")
-        let boundaryNotice = ExternalBundleNotice.boundaryUpgradeRequired(
-            installedVersion: "1.1.0",
-            availableVersion: "1.1.1"
-        )
-
-        XCTAssertTrue(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .installed(version: "1.1.1"),
-                installState: nil,
-                externalNotice: boundaryNotice
-            )
-        )
-        XCTAssertTrue(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .bundled,
-                installState: nil,
-                externalNotice: boundaryNotice
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .installed(version: "1.1.1"),
-                installState: nil,
-                externalNotice: nil
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .installed(version: "1.1.1"),
-                installState: nil,
-                externalNotice: .legacyBundlePresent(version: "1.1.0")
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: nil,
-                installInfo: .installed(version: "1.1.1"),
-                installState: nil,
-                externalNotice: boundaryNotice
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .updateAvailable(installed: "1.1.0", available: "1.1.1"),
-                installState: nil,
-                externalNotice: boundaryNotice
-            )
-        )
-        XCTAssertFalse(
-            PluginRegistryService.canReplaceIncompatibleExternalBundle(
-                registryPlugin: registryPlugin,
-                installInfo: .installed(version: "1.1.1"),
-                installState: .extracting,
-                externalNotice: boundaryNotice
-            )
-        )
-    }
-
-    func testRepairInstallKeepsManagedBundlePathAndPluginDataDirectory() throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginRepairDestination")
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        let pluginsDirectory = appSupportDirectory.appendingPathComponent("Plugins", isDirectory: true)
-        let pluginDataDirectory = appSupportDirectory
-            .appendingPathComponent("PluginData", isDirectory: true)
-            .appendingPathComponent("com.typewhisper.qwen3", isDirectory: true)
-        try FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
-        let sentinelURL = pluginDataDirectory.appendingPathComponent("model-cache-sentinel")
-        try Data("keep model cache".utf8).write(to: sentinelURL)
-
-        let existingURL = pluginsDirectory.appendingPathComponent("Qwen3Plugin.bundle", isDirectory: true)
-        let destination = PluginRegistryService.resolveInstallDestinationURL(
-            currentURL: existingURL,
-            builtInPluginsURL: nil,
-            pluginsDirectory: pluginsDirectory,
-            incomingBundleName: "Qwen3Plugin.bundle"
-        )
-
-        XCTAssertEqual(destination, existingURL)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinelURL.path))
-    }
-
-    private func makeRegistryPlugin(id: String) -> RegistryPlugin {
-        RegistryPlugin(
-            id: id,
-            source: .official,
-            name: "Qwen3 ASR",
-            version: "1.1.1",
-            minHostVersion: "1.6.0",
-            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-            minOSVersion: "14.0",
-            supportedArchitectures: ["arm64"],
-            author: "TypeWhisper",
-            description: "Local model plugin",
-            category: "transcription",
-            categories: ["transcription"],
-            size: 1,
-            downloadURL: "https://example.com/Qwen3Plugin.zip",
-            iconSystemName: "cpu",
-            requiresAPIKey: false,
-            hosting: .local,
-            descriptions: nil,
-            downloadCount: nil
-        )
-    }
-}
 
 final class PluginDiagnosticsSupportTests: XCTestCase {
     func testPluginSourceClassifiesBundledManagedAndExternalPaths() async throws {
@@ -3779,316 +3564,3 @@ private actor DeepgramOutboundTestEvents {
 
 /// Records what the launch-scan fakes observed. The fakes are created through
 /// `TypeWhisperPlugin.init()`, so they report through static state.
-@MainActor
-private enum LaunchScanJournal {
-    static var activations: [String] = []
-    static var registryAtActivation: [String: [String]] = [:]
-    static var passiveRestoreRequests: [String] = []
-    static var registrySnapshot: @MainActor () -> [String] = { [] }
-
-    static func reset() {
-        activations = []
-        registryAtActivation = [:]
-        passiveRestoreRequests = []
-        registrySnapshot = { [] }
-    }
-
-    static func recordActivation(_ id: String) {
-        activations.append(id)
-        registryAtActivation[id] = registrySnapshot()
-    }
-}
-
-/// A local-model engine reduced to the launch behaviour under test: it requests a
-/// passive restore from activation exactly like the shipped local-model plugins.
-private class LaunchScanEngine: TranscriptionEnginePlugin, PassiveModelRestoreProviding, @unchecked Sendable {
-    class var pluginId: String { "test.launch-scan.engine" }
-    class var pluginName: String { "Launch Scan Engine" }
-    class var engineId: String { "launch-scan-engine" }
-
-    private var host: (any HostServices)?
-
-    required init() {}
-
-    func activate(host: any HostServices) {
-        self.host = host
-        let id = providerId
-        MainActor.assumeIsolated { LaunchScanJournal.recordActivation(id) }
-        if host.shouldRestoreLoadedModelsPassively {
-            requestPassiveModelRestore()
-        }
-    }
-
-    func deactivate() { host = nil }
-
-    func requestPassiveModelRestore() {
-        guard host?.shouldRestoreLoadedModelsPassively == true else { return }
-        let id = providerId
-        MainActor.assumeIsolated { LaunchScanJournal.passiveRestoreRequests.append(id) }
-    }
-
-    var providerId: String { type(of: self).engineId }
-    var providerDisplayName: String { providerId }
-    var isConfigured: Bool { false }
-    var transcriptionModels: [PluginModelInfo] { [] }
-    var selectedModelId: String? { nil }
-    func selectModel(_ modelId: String) {}
-    var supportsTranslation: Bool { false }
-
-    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        PluginTranscriptionResult(text: "")
-    }
-}
-
-private final class LaunchScanAlphaEngine: LaunchScanEngine, @unchecked Sendable {
-    override class var pluginId: String { "test.launch-scan.alpha" }
-    override class var engineId: String { "launch-scan-alpha" }
-}
-
-private final class LaunchScanBetaEngine: LaunchScanEngine, @unchecked Sendable {
-    override class var pluginId: String { "test.launch-scan.beta" }
-    override class var engineId: String { "launch-scan-beta" }
-}
-
-private final class LaunchScanUtilityPlugin: TypeWhisperPlugin, @unchecked Sendable {
-    static let pluginId = "test.launch-scan.utility"
-    static let pluginName = "Launch Scan Utility"
-
-    init() {}
-
-    func activate(host: any HostServices) {
-        MainActor.assumeIsolated { LaunchScanJournal.recordActivation("utility") }
-    }
-
-    func deactivate() {}
-}
-
-@MainActor
-final class PluginManagerLaunchScanTests: XCTestCase {
-    private enum FakeLoadError: Error {
-        case unknownPrincipalClass(String)
-    }
-
-    private static let pluginIds = [
-        "test.launch-scan.alpha",
-        "test.launch-scan.beta",
-        "test.launch-scan.utility",
-        "test.launch-scan.disabled",
-        "test.launch-scan.legacy",
-    ]
-
-    private var appSupportDirectory: URL!
-    private var savedDefaults: [String: Any?] = [:]
-    private var savedAppSupportOverride: URL?
-    private var savedManager: PluginManager?
-    private var savedBus: EventBus?
-    private var cancellables = Set<AnyCancellable>()
-
-    override func setUp() async throws {
-        try await super.setUp()
-        appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        savedAppSupportOverride = AppConstants.testAppSupportDirectoryOverride
-        // Activation creates plugin data directories; keep them out of real app data.
-        AppConstants.testAppSupportDirectoryOverride = appSupportDirectory
-        savedManager = PluginManager.shared
-        savedBus = EventBus.shared
-        EventBus.shared = EventBus()
-
-        let keys = [UserDefaultsKeys.selectedEngine, UserDefaultsKeys.modelAutoUnloadSeconds]
-            + Self.pluginIds.map { "plugin.\($0).enabled" }
-        for key in keys {
-            savedDefaults[key] = UserDefaults.standard.object(forKey: key)
-        }
-        LaunchScanJournal.reset()
-    }
-
-    override func tearDown() async throws {
-        cancellables.removeAll()
-        LaunchScanJournal.reset()
-        for (key, value) in savedDefaults {
-            if let value {
-                UserDefaults.standard.set(value, forKey: key)
-            } else {
-                UserDefaults.standard.removeObject(forKey: key)
-            }
-        }
-        PluginManager.shared = savedManager
-        EventBus.shared = savedBus
-        AppConstants.testAppSupportDirectoryOverride = savedAppSupportOverride
-        TestSupport.remove(appSupportDirectory)
-        try await super.tearDown()
-    }
-
-    func testLaunchScanPublishesOneRegistryChangeAfterTheRegistryIsComplete() throws {
-        let manager = try makeManagerWithLaunchBundles(selectedEngine: nil)
-        var registryAtEachNotification: [[String]] = []
-        manager.objectWillChange
-            .sink { [unowned manager] _ in
-                registryAtEachNotification.append(Self.scanIds(in: manager))
-            }
-            .store(in: &cancellables)
-        let revisionBeforeScan = manager.registryRevision
-
-        manager.scanAndLoadPlugins()
-
-        // One registry mutation per bundle used to publish separately, each queueing a
-        // reconcile pass in every observing service. The scan now publishes once,
-        // after every bundle is registered.
-        XCTAssertEqual(registryAtEachNotification.count, 1)
-        XCTAssertEqual(manager.registryRevision, revisionBeforeScan + 1)
-        XCTAssertEqual(registryAtEachNotification.first, [
-            "test.launch-scan.alpha",
-            "test.launch-scan.beta",
-            "test.launch-scan.utility",
-            "test.launch-scan.disabled",
-        ])
-        XCTAssertNotNil(manager.incompatibleExternalBundle(for: "test.launch-scan.legacy"))
-    }
-
-    func testLaunchScanKeepsLoadOrderAndUpdatesRegistryInPlaceDuringActivation() throws {
-        let manager = try makeManagerWithLaunchBundles(selectedEngine: nil)
-        LaunchScanJournal.registrySnapshot = { [unowned manager] in Self.scanIds(in: manager) }
-
-        manager.scanAndLoadPlugins()
-
-        XCTAssertEqual(LaunchScanJournal.activations, ["launch-scan-alpha", "launch-scan-beta", "utility"])
-        // Coalescing defers only the notification. Each plugin is already registered
-        // when it activates, exactly as before.
-        XCTAssertEqual(LaunchScanJournal.registryAtActivation["launch-scan-alpha"], ["test.launch-scan.alpha"])
-        XCTAssertEqual(
-            LaunchScanJournal.registryAtActivation["launch-scan-beta"],
-            ["test.launch-scan.alpha", "test.launch-scan.beta"]
-        )
-        XCTAssertEqual(
-            LaunchScanJournal.registryAtActivation["utility"],
-            ["test.launch-scan.alpha", "test.launch-scan.beta", "test.launch-scan.utility"]
-        )
-
-        let disabled = try XCTUnwrap(manager.loadedPlugins.first { $0.id == "test.launch-scan.disabled" })
-        XCTAssertFalse(disabled.isEnabled)
-        XCTAssertFalse(disabled.isRuntimeLoaded)
-        XCTAssertEqual(
-            manager.transcriptionEngines.map(\.providerId).filter { $0.hasPrefix("launch-scan-") },
-            ["launch-scan-alpha", "launch-scan-beta"]
-        )
-    }
-
-    func testCoalescedLaunchScanOnlyRestoresTheSelectedEngineAndKeepsTheSelection() async throws {
-        let manager = try makeManagerWithLaunchBundles(selectedEngine: "launch-scan-beta")
-        PluginManager.shared = manager
-        let modelManager = ModelManagerService()
-        modelManager.observePluginManager()
-
-        // Shaped like the production observers: one main-queue pass per notification.
-        var observerPasses = 0
-        manager.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { _ in observerPasses += 1 }
-            .store(in: &cancellables)
-
-        manager.scanAndLoadPlugins()
-        modelManager.restoreProviderSelection()
-        await drainMainQueue()
-        await drainMainQueue()
-
-        XCTAssertEqual(observerPasses, 1)
-        XCTAssertEqual(modelManager.selectedProviderId, "launch-scan-beta")
-        // Activation and the post-scan reconciliation may each ask the selected
-        // engine for a passive restore (plugins coalesce these); the coalesced
-        // notification must not add another. The unselected engine never restores,
-        // so no model is loaded or downloaded on its behalf.
-        XCTAssertEqual(LaunchScanJournal.passiveRestoreRequests, ["launch-scan-beta", "launch-scan-beta"])
-        XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "launch-scan-beta")
-    }
-
-    func testRegistryChangesOutsideABatchStillPublishImmediately() throws {
-        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
-        var notifications = 0
-        manager.objectWillChange
-            .sink { _ in notifications += 1 }
-            .store(in: &cancellables)
-
-        manager.loadedPlugins = []
-        XCTAssertEqual(notifications, 1)
-
-        manager.coalescingRegistryChangeNotifications {
-            manager.loadedPlugins = []
-            manager.coalescingRegistryChangeNotifications {
-                manager.loadedPlugins = []
-            }
-            XCTAssertEqual(notifications, 1, "nested batches publish only when the outermost ends")
-        }
-        XCTAssertEqual(notifications, 2)
-
-        XCTAssertThrowsError(try manager.coalescingRegistryChangeNotifications {
-            manager.loadedPlugins = []
-            throw FakeLoadError.unknownPrincipalClass("thrown")
-        })
-        XCTAssertEqual(notifications, 3, "a throwing batch still publishes its changes")
-
-        manager.coalescingRegistryChangeNotifications {}
-        XCTAssertEqual(notifications, 3, "a batch without changes publishes nothing")
-
-        manager.loadedPlugins = []
-        XCTAssertEqual(notifications, 4, "publication resumes after a batch")
-    }
-
-    // MARK: - Helpers
-
-    private static func scanIds(in manager: PluginManager) -> [String] {
-        manager.loadedPlugins.map(\.id).filter { $0.hasPrefix("test.launch-scan.") }
-    }
-
-    private func makeManagerWithLaunchBundles(selectedEngine: String?) throws -> PluginManager {
-        let defaults = UserDefaults.standard
-        defaults.set(selectedEngine, forKey: UserDefaultsKeys.selectedEngine)
-        // "Never" is the only auto-unload policy under which passive restore runs.
-        defaults.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
-
-        let classes: [String: TypeWhisperPlugin.Type] = [
-            "LaunchScanAlphaEngine": LaunchScanAlphaEngine.self,
-            "LaunchScanBetaEngine": LaunchScanBetaEngine.self,
-            "LaunchScanUtilityPlugin": LaunchScanUtilityPlugin.self,
-        ]
-        let manager = PluginManager(
-            appSupportDirectory: appSupportDirectory,
-            runtimeLoader: PluginRuntimeLoader { _, manifest in
-                guard let pluginClass = classes[manifest.principalClass] else {
-                    // Keeps built-in bundles of the test host out of the scan.
-                    throw FakeLoadError.unknownPrincipalClass(manifest.principalClass)
-                }
-                return pluginClass
-            }
-        )
-
-        let bundles: [(bundle: String, id: String, principalClass: String, enabled: Bool, sdk: String?)] = [
-            ("UtilityPlugin.bundle", "test.launch-scan.utility", "LaunchScanUtilityPlugin", true, PluginSDKCompatibility.currentVersion),
-            ("DisabledPlugin.bundle", "test.launch-scan.disabled", "MissingPluginClass", false, PluginSDKCompatibility.currentVersion),
-            ("BetaEngine.bundle", "test.launch-scan.beta", "LaunchScanBetaEngine", true, PluginSDKCompatibility.currentVersion),
-            ("LegacyPlugin.bundle", "test.launch-scan.legacy", "LaunchScanAlphaEngine", true, nil),
-            ("AlphaEngine.bundle", "test.launch-scan.alpha", "LaunchScanAlphaEngine", true, PluginSDKCompatibility.currentVersion),
-        ]
-        for entry in bundles {
-            let resourcesURL = manager.pluginsDirectory
-                .appendingPathComponent(entry.bundle, isDirectory: true)
-                .appendingPathComponent("Contents/Resources", isDirectory: true)
-            try FileManager.default.createDirectory(at: resourcesURL, withIntermediateDirectories: true)
-            let manifest = PluginManifest(
-                id: entry.id,
-                name: entry.id,
-                version: "1.0.0",
-                sdkCompatibilityVersion: entry.sdk,
-                principalClass: entry.principalClass
-            )
-            try JSONEncoder().encode(manifest).write(to: resourcesURL.appendingPathComponent("manifest.json"))
-            defaults.set(entry.enabled, forKey: "plugin.\(entry.id).enabled")
-        }
-        return manager
-    }
-
-    private func drainMainQueue() async {
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
-        }
-    }
-}

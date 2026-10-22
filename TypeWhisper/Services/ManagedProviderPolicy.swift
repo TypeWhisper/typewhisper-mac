@@ -26,7 +26,6 @@ struct ManagedProviderPolicy: Equatable, Sendable {
     var allowedTranscriptionProviders: [String]?
     var allowedLlmProviders: [String]?
     var allowedPlugins: [String]?
-    var allowsPluginDownloads = true
     var allowsModelDownloads = true
     /// Keys whose value is invalid or unreadable; the capabilities they govern stay refused.
     var blockedKeys: Set<String> = []
@@ -39,7 +38,6 @@ struct ManagedProviderPolicy: Equatable, Sendable {
         allowedTranscriptionProviders: [String]? = nil,
         allowedLlmProviders: [String]? = nil,
         allowedPlugins: [String]? = nil,
-        allowsPluginDownloads: Bool = true,
         allowsModelDownloads: Bool = true,
         blockedKeys: Set<String> = []
     ) {
@@ -48,7 +46,6 @@ struct ManagedProviderPolicy: Equatable, Sendable {
         self.allowedTranscriptionProviders = allowedTranscriptionProviders
         self.allowedLlmProviders = allowedLlmProviders
         self.allowedPlugins = allowedPlugins
-        self.allowsPluginDownloads = allowsPluginDownloads
         self.allowsModelDownloads = allowsModelDownloads
         self.blockedKeys = blockedKeys
     }
@@ -59,7 +56,6 @@ struct ManagedProviderPolicy: Equatable, Sendable {
         }
         allowsCloudTranscription = allows(ManagedPolicyKeys.allowCloudTranscription)
         allowsCloudTextProcessing = allows(ManagedPolicyKeys.allowCloudTextProcessing)
-        allowsPluginDownloads = allows(ManagedPolicyKeys.allowPluginDownloads)
         allowsModelDownloads = allows(ManagedPolicyKeys.allowModelDownloads)
         allowedTranscriptionProviders = snapshot.enforced(ManagedPolicyKeys.allowedTranscriptionProviders)?.listItems
         allowedLlmProviders = snapshot.enforced(ManagedPolicyKeys.allowedLlmProviders)?.listItems
@@ -70,7 +66,7 @@ struct ManagedProviderPolicy: Equatable, Sendable {
     private static let governedKeys = [
         ManagedPolicyKeys.allowCloudTranscription, ManagedPolicyKeys.allowCloudTextProcessing,
         ManagedPolicyKeys.allowedTranscriptionProviders, ManagedPolicyKeys.allowedLlmProviders,
-        ManagedPolicyKeys.allowedPlugins, ManagedPolicyKeys.allowPluginDownloads, ManagedPolicyKeys.allowModelDownloads,
+        ManagedPolicyKeys.allowedPlugins, ManagedPolicyKeys.allowModelDownloads,
     ]
 
     var isRestricting: Bool {
@@ -154,13 +150,6 @@ struct ManagedProviderPolicy: Equatable, Sendable {
     /// Whether dictionary terms may be sent as prompt text with audio for this locality.
     func allowsPromptText(toTranscriptionLocality locality: PluginLocality?) -> Bool {
         cloudRefusal(.text, locality: locality) == nil
-    }
-
-    var pluginDownloadRefusal: String? {
-        if blockedKeys.contains(ManagedPolicyKeys.allowPluginDownloads) {
-            return Self.blockedMessage
-        }
-        return allowsPluginDownloads ? nil : String(localized: "Your organization does not allow plugin downloads.")
     }
 
     var modelDownloadRefusal: String? {

@@ -6,7 +6,6 @@ struct SetupWizardView: View {
 
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var pluginManager = PluginManager.shared
-    @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var promptProcessingService: PromptProcessingService
 
@@ -82,10 +81,6 @@ struct SetupWizardView: View {
             if !didAnnounceInitialStep {
                 didAnnounceInitialStep = true
                 announceCurrentStep()
-            }
-
-            if registryService.fetchState == .idle {
-                await registryService.fetchRegistry()
             }
         }
         .task(id: currentStep) {
@@ -392,7 +387,7 @@ struct SetupWizardView: View {
                 .scaleEffect(isLogoHovering && !reduceMotion ? 1.05 : 1.0)
                 .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isLogoHovering)
                 .onHover { isLogoHovering = $0 }
-                // Decorative: the step title already says "Welcome to TypeWhisper".
+                // 标题已包含“欢迎使用 dictum”，图标无需重复朗读。
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 14) {
@@ -920,15 +915,10 @@ struct SetupWizardView: View {
         let engine = loadedPlugin?.instance as? any TranscriptionEnginePlugin
         let isReady = engine?.isConfigured ?? false
         let isSelected = engine?.providerId == modelManager.selectedProviderId
-        let registryPlugin = registryService.registry.first { $0.id == manifestId }
-        let installState = registryService.installStates[manifestId]
         let availability = SetupWizardRecommendationAvailability.resolve(
             manifestId: manifestId,
             isInstalled: isInstalled,
-            isReady: isReady,
-            registryPlugin: registryPlugin,
-            installState: installState,
-            fetchState: registryService.fetchState
+            isReady: isReady
         )
         let isInteractive = recommendationCardIsInteractive(
             manifestId: manifestId,
@@ -967,7 +957,6 @@ struct SetupWizardView: View {
                 recommendationStatus(
                     manifestId: manifestId,
                     availability: availability,
-                    registryPlugin: registryPlugin,
                     isSelected: isSelected
                 )
             }
@@ -977,7 +966,7 @@ struct SetupWizardView: View {
             // A plain button keeps the card's look but makes it reachable with
             // Tab and pressable with Space and VoiceOver.
             Button {
-                Task { await handleRecommendationCardAction(manifestId: manifestId, registryPlugin: registryPlugin) }
+                Task { await handleRecommendationCardAction(manifestId: manifestId) }
             } label: {
                 card
                     .contentShape(Rectangle())
@@ -1007,13 +996,10 @@ struct SetupWizardView: View {
     private func recommendationStatus(
         manifestId: String,
         availability: SetupWizardRecommendationAvailability,
-        registryPlugin: RegistryPlugin?,
         isSelected: Bool
     ) -> some View {
         if manifestId == SetupWizardParakeetRecommendation.manifestId, isActivatingParakeet {
-            if case .downloading(let progress) = registryService.installStates[manifestId] {
-                setupProgressIndicator(progress)
-            } else if let parakeetModelProgress {
+            if let parakeetModelProgress {
                 setupProgressIndicator(parakeetModelProgress)
             } else {
                 ProgressView()
@@ -1036,25 +1022,6 @@ struct SetupWizardView: View {
                 } else {
                     RecommendationSettingsButton(manifestId: manifestId)
                 }
-            case .installState(let installState):
-                switch installState {
-                case .downloading(let progress):
-                    setupProgressIndicator(progress)
-                case .extracting:
-                    ProgressView()
-                        .controlSize(.small)
-                        .accessibilityLabel(localizedAppText("Installing", de: "Wird installiert", ja: "インストール中", zh: "正在安装"))
-                case .restartRequired:
-                    statusPill(localizedAppText("Restart", de: "Neustart"), systemImage: "arrow.clockwise.circle.fill", color: .orange)
-                case .error:
-                    statusPill(localizedAppText("Retry later", de: "Später erneut"), systemImage: "exclamationmark.triangle.fill", color: .orange)
-                }
-            case .installAvailable:
-                statusPill(localizedAppText("Install", de: "Installieren"), systemImage: "arrow.down.circle.fill", color: .blue)
-            case .loading:
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityLabel(localizedAppText("Loading", de: "Wird geladen", ja: "読み込み中", zh: "正在加载"))
             case .unavailable(let reason):
                 statusPill(reason.title, systemImage: "exclamationmark.triangle.fill", color: .orange)
                     .help(reason.message)
@@ -1090,7 +1057,7 @@ struct SetupWizardView: View {
         }
 
         switch availability {
-        case .ready, .setupRequired, .installAvailable:
+        case .ready, .setupRequired:
             return true
         default:
             return false
@@ -1106,8 +1073,6 @@ struct SetupWizardView: View {
         }
 
         switch availability {
-        case .installAvailable:
-            return localizedAppText("Installs and selects Parakeet.", de: "Installiert und wählt Parakeet aus.")
         case .setupRequired:
             return localizedAppText("Activates Parakeet.", de: "Aktiviert Parakeet.")
         default:
@@ -1116,13 +1081,13 @@ struct SetupWizardView: View {
     }
 
     @MainActor
-    private func handleRecommendationCardAction(manifestId: String, registryPlugin: RegistryPlugin?) async {
+    private func handleRecommendationCardAction(manifestId: String) async {
         guard manifestId == SetupWizardParakeetRecommendation.manifestId else { return }
-        await activateParakeetForSetup(registryPlugin: registryPlugin)
+        await activateParakeetForSetup()
     }
 
     @MainActor
-    private func activateParakeetForSetup(registryPlugin: RegistryPlugin? = nil) async {
+    private func activateParakeetForSetup() async {
         guard !isActivatingParakeet else { return }
 
         manuallySelectedSetupProviderId = SetupWizardParakeetRecommendation.providerId
@@ -1133,11 +1098,6 @@ struct SetupWizardView: View {
         }
 
         if parakeetEngine == nil {
-            if let registryPlugin,
-               pluginManager.loadedPlugins.first(where: { $0.manifest.id == registryPlugin.id }) == nil {
-                await registryService.downloadAndInstall(registryPlugin)
-            }
-
             if let loaded = pluginManager.loadedPlugins.first(where: { $0.manifest.id == SetupWizardParakeetRecommendation.manifestId }),
                !loaded.isEnabled {
                 pluginManager.setPluginEnabled(SetupWizardParakeetRecommendation.manifestId, enabled: true)
@@ -2037,13 +1997,13 @@ enum SetupWizardAppleSpeechFallback {
 
 enum SetupWizardRecommendationUnavailableReason: Equatable {
     case appleSiliconOnly
-    case marketplaceUnavailable
+    case engineUnavailable
 
     var title: String {
         switch self {
         case .appleSiliconOnly:
             localizedAppText("Apple Silicon only", de: "Nur Apple Silicon")
-        case .marketplaceUnavailable:
+        case .engineUnavailable:
             localizedAppText("Unavailable", de: "Nicht verfügbar")
         }
     }
@@ -2055,10 +2015,12 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
                 "Use Groq or OpenAI with a cloud Whisper model on Intel.",
                 de: "Nutze auf Intel Groq oder OpenAI mit einem Cloud-Whisper-Modell."
             )
-        case .marketplaceUnavailable:
+        case .engineUnavailable:
             localizedAppText(
-                "No compatible download is available for this Mac.",
-                de: "Für diesen Mac ist kein kompatibler Download verfügbar."
+                "This engine is unavailable on this Mac.",
+                de: "Diese Engine ist auf diesem Mac nicht verfügbar.",
+                ja: "このMacではこのエンジンを利用できません。",
+                zh: "此 Mac 无法使用该引擎。"
             )
         }
     }
@@ -2174,18 +2136,12 @@ struct SetupWizardTrialSignal {
 enum SetupWizardRecommendationAvailability: Equatable {
     case ready
     case setupRequired
-    case installState(PluginRegistryService.InstallState)
-    case installAvailable
-    case loading
     case unavailable(SetupWizardRecommendationUnavailableReason)
 
     static func resolve(
         manifestId: String,
         isInstalled: Bool,
         isReady: Bool,
-        registryPlugin: RegistryPlugin?,
-        installState: PluginRegistryService.InstallState?,
-        fetchState: PluginRegistryService.FetchState,
         architecture: String = RuntimeArchitecture.current
     ) -> SetupWizardRecommendationAvailability {
         if manifestId == SetupWizardParakeetRecommendation.manifestId, architecture != "arm64" {
@@ -2200,20 +2156,7 @@ enum SetupWizardRecommendationAvailability: Equatable {
             return .setupRequired
         }
 
-        if let installState {
-            return .installState(installState)
-        }
-
-        if registryPlugin != nil {
-            return .installAvailable
-        }
-
-        switch fetchState {
-        case .idle, .loading:
-            return .loading
-        case .loaded, .error(_):
-            return .unavailable(.marketplaceUnavailable)
-        }
+        return .unavailable(.engineUnavailable)
     }
 }
 

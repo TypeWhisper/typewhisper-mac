@@ -370,8 +370,6 @@ private struct DiagnosticsReport: Encodable {
         let source: DiagnosticPluginSourceInfo
         let currentSettingsActivity: DiagnosticPluginActivityInfo?
         let runtimeMemory: PluginRuntimeMemoryInfo?
-        let registryVersion: String?
-        let registrySource: String?
         let externalBundleNotice: String?
     }
 
@@ -381,14 +379,11 @@ private struct DiagnosticsReport: Encodable {
         let version: String
         let reason: String
         let source: DiagnosticPluginSourceInfo
-        let registryVersion: String?
-        let registrySource: String?
         let externalBundleNotice: String?
     }
 
     struct SettingsSnapshot: Encodable {
         let bundledReleaseChannel: String
-        let selectedUpdateChannel: String
         let selectedLanguage: String?
         let selectedTask: String?
         let translationEnabled: Bool
@@ -525,10 +520,8 @@ final class ErrorLogService: ObservableObject {
             }
             let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
             let runtimeMemory = (loadedPlugin.instance as? any PluginRuntimeMemoryDiagnosticsReporting)?.runtimeMemorySnapshot
-            let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
             let externalNotice = pluginManager.externalBundleNotice(
-                for: loadedPlugin.manifest.id,
-                registryPlugin: registryEntry
+                for: loadedPlugin.manifest.id
             )
             let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
                 bundle: loadedPlugin.bundle,
@@ -556,15 +549,12 @@ final class ErrorLogService: ObservableObject {
                 source: pluginSource,
                 currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
                 runtimeMemory: runtimeMemory.map(DiagnosticsReport.PluginRuntimeMemoryInfo.init),
-                registryVersion: registryEntry?.version,
-                registrySource: registryEntry?.source.rawValue,
                 externalBundleNotice: externalNotice?.diagnosticsValue
             ))
         }
 
         var skippedExternalBundleDiagnostics: [DiagnosticsReport.SkippedExternalBundleInfo] = []
         for bundle in pluginManager.incompatibleExternalBundles.values.sorted(by: { $0.pluginName < $1.pluginName }) {
-            let registryEntry = container.pluginRegistryService.registry.first(where: { $0.id == bundle.pluginId })
             let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
                 bundle: Bundle(url: bundle.bundleURL),
                 sourceURL: bundle.bundleURL,
@@ -577,11 +567,8 @@ final class ErrorLogService: ObservableObject {
                 version: bundle.version,
                 reason: bundle.reason.diagnosticsValue,
                 source: pluginSource,
-                registryVersion: registryEntry?.version,
-                registrySource: registryEntry?.source.rawValue,
                 externalBundleNotice: PluginManager.externalBundleNotice(
                     loadedPlugin: pluginManager.loadedPlugins.first(where: { $0.manifest.id == bundle.pluginId }),
-                    registryPlugin: registryEntry,
                     incompatibleExternalBundle: bundle
                 )?.diagnosticsValue
             ))
@@ -659,7 +646,6 @@ final class ErrorLogService: ObservableObject {
             ),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
-                selectedUpdateChannel: container.managedUpdateCoordinator.effectiveChannel.value.rawValue,
                 selectedLanguage: defaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: defaults.string(forKey: UserDefaultsKeys.selectedTask),
                 translationEnabled: defaults.bool(forKey: UserDefaultsKeys.translationEnabled),

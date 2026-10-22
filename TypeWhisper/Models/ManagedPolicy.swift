@@ -63,16 +63,9 @@ enum ManagedPolicyKeys {
     static let allowedPlugins = "AllowedPlugins"
     static let allowCloudTranscription = "AllowCloudTranscription"
     static let allowCloudTextProcessing = "AllowCloudTextProcessing"
-    static let allowPluginDownloads = "AllowPluginDownloads"
     static let allowModelDownloads = "AllowModelDownloads"
-    /// 0 = External, 1 = CheckOnly, 2 = UserInitiated.
-    static let updateMode = "UpdateMode"
-    /// 0 = Stable, 1 = Daily, 2 = ReleaseCandidate.
-    static let updateChannel = "UpdateChannel"
-    static let allowedUpdateChannels = "AllowedUpdateChannels"
     static let launchAtLogin = "LaunchAtLogin"
     static let skipOnboardingWhenReady = "SkipOnboardingWhenReady"
-    static let suppressOptionalPrompts = "SuppressOptionalPrompts"
 
     /// Every supported key in documentation order.
     static let all: [ManagedPolicyDefinition] = [
@@ -85,14 +78,9 @@ enum ManagedPolicyKeys {
         .init(name: allowedPlugins, kind: .list),
         .init(name: allowCloudTranscription, kind: .boolean),
         .init(name: allowCloudTextProcessing, kind: .boolean),
-        .init(name: allowPluginDownloads, kind: .boolean),
         .init(name: allowModelDownloads, kind: .boolean),
-        .init(name: updateMode, kind: .enumeration, enumerationMaximum: 2),
-        .init(name: updateChannel, kind: .enumeration, allowsRecommendation: true, enumerationMaximum: 2),
-        .init(name: allowedUpdateChannels, kind: .list),
         .init(name: launchAtLogin, kind: .boolean, allowsRecommendation: true),
         .init(name: skipOnboardingWhenReady, kind: .boolean),
-        .init(name: suppressOptionalPrompts, kind: .boolean, allowsRecommendation: true),
     ]
 
     private static let byName = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })

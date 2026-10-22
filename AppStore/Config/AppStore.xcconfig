@@ -27,7 +27,7 @@ ICLOUD_CONTAINER_ID[config=Debug] = iCloud.com.typewhisper.sync.dev
 TYPEWHISPER_APPSTORE_ENTITLEMENTS = AppStore/Resources/TypeWhisperAppStore.entitlements
 TYPEWHISPER_RELEASE_CHANNEL = stable
 TYPEWHISPER_RELEASE_TAG =
-MARKETING_VERSION = 1.8.0
+MARKETING_VERSION = 0.1.0
 CURRENT_PROJECT_VERSION = 1
 
 // Paste dictated text with a synthetic Cmd+V (PostEvent access, listed under

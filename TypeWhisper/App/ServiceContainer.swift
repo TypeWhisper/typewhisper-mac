@@ -53,7 +53,6 @@ final class ServiceContainer: ObservableObject {
 
     // Services
     let managedPolicyService: ManagedPolicyService
-    let managedUpdateCoordinator: ManagedUpdateCoordinator
     let launchAtLoginController: LaunchAtLoginPolicyController
     let modelManagerService: ModelManagerService
     let audioFileService: AudioFileService
@@ -81,7 +80,6 @@ final class ServiceContainer: ObservableObject {
     let promptActionService: PromptActionService
     let promptProcessingService: PromptProcessingService
     let pluginManager: PluginManager
-    let pluginRegistryService: PluginRegistryService
     let termPackRegistryService: TermPackRegistryService
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
@@ -132,7 +130,6 @@ final class ServiceContainer: ObservableObject {
             snapshotStore: .shared
         )
         managedPolicyService.refresh()
-        managedUpdateCoordinator = ManagedUpdateCoordinator(policyService: managedPolicyService)
         launchAtLoginController = LaunchAtLoginPolicyController(snapshot: managedPolicyService.current)
 
         // Services
@@ -188,7 +185,6 @@ final class ServiceContainer: ObservableObject {
         )
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
-        pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
         widgetDataService = WidgetDataService(
             historyService: historyService,
@@ -207,7 +203,6 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
-        pluginRegistryService.accessibilityAnnouncementService = accessibilityAnnouncementService
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         cloudFolderSyncController = CloudFolderSyncController(
@@ -385,7 +380,6 @@ final class ServiceContainer: ObservableObject {
             profileService: profileService,
             promptActionService: promptActionService,
             pluginManager: pluginManager,
-            pluginRegistryService: pluginRegistryService,
             historyService: historyService,
             usageStatisticsService: usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { [dictationViewModel] enabled in
@@ -484,7 +478,6 @@ final class ServiceContainer: ObservableObject {
         // Plugin system
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
-        PluginRegistryService.shared = pluginRegistryService
         TermPackRegistryService.shared = termPackRegistryService
 
         modelManagerService.observePluginManager()
@@ -567,7 +560,6 @@ final class ServiceContainer: ObservableObject {
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
 
-        pluginRegistryService.checkForUpdatesInBackground()
 
         // Start memory service
         memoryService.startListening()

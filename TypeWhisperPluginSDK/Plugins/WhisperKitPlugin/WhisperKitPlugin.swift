@@ -753,8 +753,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             repairSpaceReservation?.release()
         }
         do {
-            // Migrate old models if they exist
-            migrateOldModels(for: modelDef)
             let modelPath = resolvedModelPath(for: modelDef)
 
             let modelFolder: URL
@@ -1277,45 +1275,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             .appendingPathComponent("download")
             .appendingPathComponent(modelDef.id)
         try? FileManager.default.removeItem(at: cache)
-    }
-
-    /// 仅迁移 dictum 自己的旧模型目录，保留上游应用的数据。
-    private func migrateOldModels(for modelDef: WhisperModelDef) {
-        let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-
-        let destination = resolvedModelPath(for: modelDef)
-        if isUsableDownloadedModel(at: destination) {
-            return
-        }
-        removeIncompleteModelIfNeeded(at: destination)
-
-        // Check both production and dev paths
-        for dirName in ["dictum", "dictum-Dev"] {
-            let legacyRoots = [
-                appSupport
-                    .appendingPathComponent(dirName)
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("argmaxinc")
-                    .appendingPathComponent("whisperkit-coreml"),
-                appSupport
-                    .appendingPathComponent(dirName)
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("argmaxinc")
-                    .appendingPathComponent("whisperkit-coreml"),
-            ]
-
-            for legacyRoot in legacyRoots {
-                let oldPath = legacyRoot.appendingPathComponent(modelDef.id)
-                guard isUsableDownloadedModel(at: oldPath) else { continue }
-                try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? fm.moveItem(at: oldPath, to: destination)
-                if fm.fileExists(atPath: destination.path) {
-                    return
-                }
-            }
-        }
     }
 
     // MARK: - Settings View

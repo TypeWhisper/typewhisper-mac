@@ -747,14 +747,14 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     #if DEBUG
-    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+    func prepareScreenshotFixture(isConfigured: Bool) {
         scheduledSyncTask?.cancel()
         scheduledSyncTask = nil
         stopICloudObservation()
         selectedFolderURL = nil
-        mode = hasPremiumAccess ? .automaticICloud : .off
-        provider = hasPremiumAccess ? .iCloudDrive : .custom
-        lastSyncDate = hasPremiumAccess ? AppConstants.screenshotFixtureReferenceDate : nil
+        mode = isConfigured ? .automaticICloud : .off
+        provider = isConfigured ? .iCloudDrive : .custom
+        lastSyncDate = isConfigured ? AppConstants.screenshotFixtureReferenceDate : nil
         pendingChanges = 0
         if AppConstants.screenshotState == "history" {
             deviceCount = 2
@@ -778,7 +778,7 @@ final class CloudFolderSyncController: ObservableObject {
                 ),
             ]
         } else {
-            deviceCount = hasPremiumAccess ? 2 : 0
+            deviceCount = isConfigured ? 2 : 0
             devices = []
         }
         isSyncing = false

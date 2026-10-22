@@ -2,10 +2,7 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
-/// Exports/imports a single JSON backup of user configuration (workflows,
-/// dictionary, snippets, profiles, prompt actions, hotkeys, installed
-/// community plugins, transcription history, the update channel, and a
-/// handful of General-tab preferences) so it can be migrated to another Mac.
+/// 将用户配置、内置插件启用状态和文字历史保存为可导入的 JSON 文件。
 ///
 /// History is exported as text/metadata only — saved audio recordings
 /// (`TranscriptionRecord.audioFileName`) are never included, since they can
@@ -114,10 +111,7 @@ enum SettingsBackupExporter {
         let autoEnterEnabled: Bool
     }
 
-    /// A non-bundled (community/manually-installed) plugin. Reinstall always
-    /// fetches whichever version is currently latest-compatible in the
-    /// registry — there is no supported way to pin the exact backed-up
-    /// `version`, so it's kept for informational/diagnostic purposes only.
+    /// 版本仅供查看；导入时恢复随应用内置插件的启用状态。
     struct PluginDTO: Codable {
         let id: String
         let name: String
@@ -270,9 +264,6 @@ enum SettingsBackupExporter {
         let hotkeys: [String: [UnifiedHotkey]]
         let plugins: [PluginDTO]
         let history: [HistoryEntryDTO]
-        /// Raw `ReleaseChannel` value (see `AppConstants.ReleaseChannel`), if the
-        /// user has explicitly picked one (`UserDefaultsKeys.updateChannel`).
-        let updateChannel: String?
         let preferences: PreferencesDTO
     }
 
@@ -294,13 +285,8 @@ enum SettingsBackupExporter {
         var profilesSkipped = 0
         var hotkeysApplied = 0
         var hotkeysSkipped = 0
-        var pluginsInstalled = 0
+        var pluginsConfigured = 0
         var pluginsSkipped = 0
-        /// True if `PluginRegistryService.fetchRegistry()` failed (e.g. no
-        /// network). When true, `pluginsSkipped` may include plugins that
-        /// simply couldn't be looked up rather than ones genuinely missing
-        /// from the marketplace.
-        var pluginsRegistryFetchFailed = false
         var historyImported = 0
         /// Entries older than the destination Mac's current history
         /// retention window, excluded so they wouldn't just be silently
@@ -312,7 +298,6 @@ enum SettingsBackupExporter {
         /// Entries not imported because this Mac's history could not be read
         /// to check for duplicates.
         var historySkippedUnreadableDestination = 0
-        var updateChannelApplied = false
         var preferencesApplied = 0
     }
 
@@ -390,11 +375,18 @@ enum SettingsBackupExporter {
                     zh: "全局键盘快捷键。除非开启“替换现有项目”，导入时仅填充空白位置。"
                 )
             case .plugins: return localizedAppText(
-                    "Installed community plugins. Reinstalling requires network access and fetches the latest marketplace version.",
-                    de: "Installierte Community-Plugins. Die Neuinstallation erfordert eine Internetverbindung und lädt die aktuelle Marketplace-Version."
+                    "Enabled state of bundled plugins.",
+                    de: "Aktivierungsstatus der integrierten Plugins.",
+                    ja: "内蔵プラグインの有効状態。",
+                    zh: "内置插件的启用状态。"
                 )
             case .history: return String(localized: "Transcription history text and metadata. Saved audio is never included.")
-            case .preferences: return String(localized: "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs, plus the selected update channel.")
+            case .preferences: return localizedAppText(
+                "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs.",
+                de: "Übertragbare Einstellungen aus Allgemein, Diktat, Diktatwiederherstellung, Dateitranskription und Recorder.",
+                ja: "一般、音声入力、録音復旧、ファイル文字起こし、レコーダーの移行可能な設定。",
+                zh: "通用、听写、听写恢复、文件转录和录音机页面中可迁移的设置。"
+            )
             }
         }
 
@@ -408,7 +400,7 @@ enum SettingsBackupExporter {
             case .hotkeys: return backup.hotkeys.values.reduce(0) { $0 + $1.count }
             case .plugins: return backup.plugins.count
             case .history: return backup.history.count
-            case .preferences: return backup.preferences.nonNilCount + (backup.updateChannel != nil ? 1 : 0)
+            case .preferences: return backup.preferences.nonNilCount
             }
         }
     }
@@ -456,7 +448,6 @@ enum SettingsBackupExporter {
             hotkeys: categories.contains(.hotkeys) ? backup.hotkeys : [:],
             plugins: plugins,
             history: categories.contains(.history) ? backup.history : [],
-            updateChannel: categories.contains(.preferences) ? backup.updateChannel : nil,
             preferences: categories.contains(.preferences) ? backup.preferences : .empty
         )
     }
@@ -511,12 +502,7 @@ enum SettingsBackupExporter {
             hotkeys[key] = decoded
         }
 
-        // Bundled first-party plugins always ship with the app and don't need
-        // reinstalling. Everything else (community-installed or manually
-        // installed from file) is recorded; manual-install plugins simply
-        // won't be found in the registry on import and are reported as skipped.
         let plugins = pluginManager.loadedPlugins
-            .filter { !$0.isBundled }
             .map { plugin in
                 PluginDTO(
                     id: plugin.id,
@@ -554,7 +540,6 @@ enum SettingsBackupExporter {
             hotkeys: hotkeys,
             plugins: plugins,
             history: history,
-            updateChannel: userDefaults.string(forKey: UserDefaultsKeys.updateChannel),
             preferences: PreferencesDTO(
                 selectedLanguage: userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: userDefaults.string(forKey: UserDefaultsKeys.selectedTask),
@@ -635,7 +620,6 @@ enum SettingsBackupExporter {
         profileService: ProfileService,
         promptActionService: PromptActionService,
         pluginManager: PluginManager,
-        pluginRegistryService: PluginRegistryService,
         historyService: HistoryService,
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
@@ -888,27 +872,13 @@ enum SettingsBackupExporter {
             hotkeysDidChange?()
         }
 
-        if !backup.plugins.isEmpty {
-            let fetched = await pluginRegistryService.fetchRegistry()
-            result.pluginsRegistryFetchFailed = !fetched
-            for plugin in backup.plugins {
-                let alreadyInstalled = pluginManager.loadedPlugins.contains { $0.id == plugin.id }
-                guard !alreadyInstalled else {
-                    result.pluginsSkipped += 1
-                    continue
-                }
-                guard let registryPlugin = pluginRegistryService.registry.first(where: { $0.id == plugin.id }) else {
-                    result.pluginsSkipped += 1
-                    continue
-                }
-                let installed = await pluginRegistryService.downloadAndInstall(registryPlugin)
-                guard installed else {
-                    result.pluginsSkipped += 1
-                    continue
-                }
-                pluginManager.setPluginEnabled(plugin.id, enabled: plugin.wasEnabled)
-                result.pluginsInstalled += 1
+        for plugin in backup.plugins {
+            guard pluginManager.loadedPlugins.contains(where: { $0.id == plugin.id }) else {
+                result.pluginsSkipped += 1
+                continue
             }
+            pluginManager.setPluginEnabled(plugin.id, enabled: plugin.wasEnabled)
+            result.pluginsConfigured += 1
         }
 
         // If the destination Mac has history retention enabled, importing
@@ -988,12 +958,6 @@ enum SettingsBackupExporter {
                 )
             }
         }
-        if let updateChannel = backup.updateChannel,
-           AppConstants.ReleaseChannel(rawValue: updateChannel) != nil {
-            userDefaults.set(updateChannel, forKey: UserDefaultsKeys.updateChannel)
-            result.updateChannelApplied = true
-        }
-
         let preferences = backup.preferences
         func apply<Value>(_ value: Value?, forKey key: String) {
             guard let value else { return }
@@ -1359,7 +1323,6 @@ final class SettingsBackupAutomationService {
     private let profileService: ProfileService
     private let promptActionService: PromptActionService
     private let pluginManager: PluginManager
-    private let pluginRegistryService: PluginRegistryService
     private let historyService: HistoryService
     private let usageStatisticsService: UsageStatisticsService
     private let userDefaults: UserDefaults
@@ -1377,7 +1340,6 @@ final class SettingsBackupAutomationService {
         profileService: ProfileService,
         promptActionService: PromptActionService,
         pluginManager: PluginManager,
-        pluginRegistryService: PluginRegistryService,
         historyService: HistoryService,
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
@@ -1394,7 +1356,6 @@ final class SettingsBackupAutomationService {
         self.profileService = profileService
         self.promptActionService = promptActionService
         self.pluginManager = pluginManager
-        self.pluginRegistryService = pluginRegistryService
         self.historyService = historyService
         self.usageStatisticsService = usageStatisticsService
         self.userDefaults = userDefaults
@@ -1434,7 +1395,6 @@ final class SettingsBackupAutomationService {
             profileService: profileService,
             promptActionService: promptActionService,
             pluginManager: pluginManager,
-            pluginRegistryService: pluginRegistryService,
             historyService: historyService,
             usageStatisticsService: usageStatisticsService,
             userDefaults: userDefaults,

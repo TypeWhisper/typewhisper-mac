@@ -1943,182 +1943,6 @@
         }
       }
     },
-    "New in dictum" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Neu in dictum"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dictumの新機能"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "dictum 新功能"
-          }
-        }
-      }
-    },
-    "A few improvements for your everyday dictation." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verbesserungen für dein tägliches Diktieren."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "毎日の音声入力をより快適に。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "让日常语音输入更便捷。"
-          }
-        }
-      }
-    },
-    "Give your vocabulary a boost" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mehr Präzision für deinen Wortschatz"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "専門用語の認識を向上"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提升专用词汇识别效果"
-          }
-        }
-      }
-    },
-    "Add a term in Dictionary to enable Vocabulary Boosting for Parakeet. Term packs now use precise matching to keep everyday words intact." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Füge im Wörterbuch einen Begriff hinzu, um Vocabulary Boosting für Parakeet zu aktivieren. Begriffspakete nutzen jetzt präzise Zuordnung, damit alltägliche Wörter unverändert bleiben."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "辞書に用語を追加すると、ParakeetのVocabulary Boostingを有効にできます。用語パックは精密な照合を使い、一般的な単語の誤変換を防ぎます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在词典中添加词条，即可为 Parakeet 启用 Vocabulary Boosting。术语包现采用精确匹配，避免误改日常用词。"
-          }
-        }
-      }
-    },
-    "More control over meeting recordings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mehr Kontrolle über Meeting-Aufnahmen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "会議の録音をさらに細かく設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更灵活地控制会议录音"
-          }
-        }
-      }
-    },
-    "Using automatic recording with Premium? Calendars can now ask before recording events without other attendees." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Du nutzt automatische Aufnahmen mit Premium? Unter Kalender kannst du jetzt festlegen, dass vor Terminen ohne weitere Teilnehmer nachgefragt wird."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Premiumの自動録音をお使いですか？「カレンダー」で、他の参加者がいない予定を録音する前に確認するよう設定できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在使用 Premium 自动录音？现在可在“日历”中设置：录制没有其他参与者的日程前先询问。"
-          }
-        }
-      }
-    },
-    "Bring settings back without duplicates" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einstellungen ohne Duplikate importieren"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定を重複なしで復元"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导入设置，不再重复"
-          }
-        }
-      }
-    },
-    "Importing a backup skips unchanged items. Choose Replace existing items when you want to update matching workflows, profiles and prompt actions." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beim Import einer Sicherung werden unveränderte Einträge übersprungen. Wähle „Vorhandene Einträge ersetzen“, um gleichnamige Workflows, Profile und Prompt-Aktionen zu aktualisieren."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "バックアップの読み込みでは、変更のない項目をスキップします。同名のワークフロー、プロファイル、プロンプトアクションを更新するには「既存の項目を置き換える」を選びます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导入备份时会跳过未更改的项目。选择“替换现有项目”，即可更新同名的工作流、配置文件和提示词操作。"
-          }
-        }
-      }
-    },
     "Skip" : {
       "localizations" : {
         "de" : {
@@ -18103,22 +17927,6 @@
         }
       }
     },
-    "Discover plugins" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "プラグインを見つける"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发现插件"
-          }
-        }
-      }
-    },
     "Display" : {
       "localizations" : {
         "de" : {
@@ -19557,50 +19365,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导出…"
-          }
-        }
-      }
-    },
-    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), and the update channel to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, and general preferences are not included." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen) und den Update-Kanal in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz und allgemeine Einstellungen sind nicht enthalten."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将工作流、词典条目、快捷短语、配置文件、提示词操作、快捷键绑定、已安装的社区插件、转录历史记录（仅文本，不含已保存的音频）和更新频道导出到一个文件，可在另一台 Mac 上导入。重新安装插件时会获取市场中的最新版本，并且需要网络连接。服务提供商 API 密钥、许可证和通用偏好设置不会导出。"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ワークフロー、辞書、スニペット、プロファイル、プロンプトアクション、ホットキー、インストール済みのコミュニティ製プラグイン、文字起こし履歴（テキストのみ・保存音声は含まない）、更新チャンネルを1つのファイルに書き出し、他のMacに取り込めます。プラグインはマーケットプレイスの最新版が再インストールされるため、ネットワーク接続が必要です。プロバイダーのAPIキー、ライセンス、一般設定は含まれません。"
-          }
-        }
-      }
-    },
-    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将工作流、词典条目、快捷短语、配置文件、提示词操作、快捷键绑定、已安装的社区插件、转录历史记录（仅文本，不含已保存的音频）、更新频道，以及“通用”“听写”“听写恢复”“文件转录”和“录音”页面中的偏好设置导出到一个文件，可在另一台 Mac 上导入。重新安装插件时会获取市场中的最新版本，并且需要网络连接。服务提供商 API 密钥、许可证、登录时启动、所选引擎和模型，以及其他设备专用设置不会导出。"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ワークフロー、辞書、スニペット、プロファイル、プロンプトアクション、ホットキー、インストール済みのコミュニティ製プラグイン、文字起こし履歴（テキストのみ・保存音声は含まない）、更新チャンネルと、一般・音声入力・音声入力の復元・ファイル文字起こし・レコーダーの各設定を1つのファイルに書き出し、他のMacに取り込めます。プラグインはマーケットプレイスの最新版が再インストールされるため、ネットワーク接続が必要です。プロバイダーのAPIキー、ライセンス、ログイン時の起動、選択したエンジンやモデルなど、Macごとに異なる設定は含まれません。"
           }
         }
       }
@@ -23674,56 +23438,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Markdown (.md)"
-          }
-        }
-      }
-    },
-    "Marketplace" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marketplace"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マーケットプレイス"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "市场"
-          }
-        }
-      }
-    },
-    "Marketplace replacement %@ is available, but replacing external bundle %@ requires confirmation." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Marketplace-Version %1$@ ist verfügbar, das Ersetzen des externen Bundles %2$@ muss aber bestätigt werden."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Marketplace replacement %1$@ is available, but replacing external bundle %2$@ requires confirmation."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Marketplaceの置き換え %@ が利用可能ですが、外部バンドル %@ を置き換えるには確認が必要です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "市场中已有替代版本 %1$@，但替换外部插件包 %2$@ 前需要确认。"
           }
         }
       }
@@ -31899,28 +31613,6 @@
         }
       }
     },
-    "Replace %@ with the Marketplace version" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@をマーケットプレイス版に置き換える"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ durch die Marketplace-Version ersetzen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将 %@ 替换为市场版本"
-          }
-        }
-      }
-    },
     "Replace Legacy Plugin Bundle" : {
       "localizations" : {
         "de" : {
@@ -31939,28 +31631,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "替换旧插件包"
-          }
-        }
-      }
-    },
-    "Replace with Marketplace Version" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "マーケットプレイス版に置き換える"
-          }
-        },
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Durch Marketplace-Version ersetzen"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "替换为市场版本"
           }
         }
       }
@@ -47698,28 +47368,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "错误仍会短暂显示，以便你处理。"
-          }
-        }
-      }
-    },
-    "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Transkriptions-Engine ausgewählt. Wähle eine unter Einstellungen > Diktat oder installiere eine unter Plugins entdecken."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文字起こしエンジンが選択されていません。設定 > ディクテーションで選択するか、プラグインを見つけるからインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未选择转录引擎。请在设置 > 听写中选择一个，或在发现插件中安装一个。"
           }
         }
       }

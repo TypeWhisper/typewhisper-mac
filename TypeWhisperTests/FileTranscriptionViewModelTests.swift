@@ -1604,7 +1604,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
         XCTAssertFalse(
             TranscriptionEngineError.noEngineSelected.localizedDescription.contains("Integrations"),
-            "The sidebar has no Integrations page; errors must name Discover plugins instead."
+            "引擎配置错误应指向听写设置或对应供应商页面。"
         )
     }
 
@@ -1616,13 +1616,13 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             DictationViewModel.settingsTab(
                 forTranscriptionError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil)
             ),
-            .integrations
+            .dictation
         )
-        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .integrations)
-        // An engine that is not installed still leads to Discover plugins.
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .dictation)
+        // 引擎不可用时打开听写设置。
         XCTAssertEqual(
             DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
-            .integrations
+            .dictation
         )
         // The same holds before the plugin system has been set up at all.
         let previousPluginManager = PluginManager.shared
@@ -1630,7 +1630,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         PluginManager.shared = nil
         XCTAssertEqual(
             DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
-            .integrations
+            .dictation
         )
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
@@ -1642,7 +1642,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                     fallbackDescription: "offline"
                 )
             ),
-            .integrations
+            .dictation
         )
     }
 

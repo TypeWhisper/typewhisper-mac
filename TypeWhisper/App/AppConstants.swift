@@ -105,17 +105,6 @@ enum AppConstants {
         case releaseCandidate = "release-candidate"
         case daily
 
-        var sparkleChannels: Set<String> {
-            switch self {
-            case .stable:
-                return []
-            case .releaseCandidate:
-                return ["release-candidate"]
-            case .daily:
-                return ["release-candidate", "daily"]
-            }
-        }
-
         var selectionDisplayName: String {
             switch self {
             case .stable:
@@ -136,16 +125,6 @@ enum AppConstants {
             }
         }
 
-        var updateDescription: String {
-            switch self {
-            case .stable:
-                return String(localized: "Stable gets production releases only.")
-            case .releaseCandidate:
-                return String(localized: "Release Candidate includes stable and preview builds.")
-            case .daily:
-                return String(localized: "Daily includes stable, release candidate, and daily builds.")
-            }
-        }
     }
 
     struct PreviewRelease: Equatable {
@@ -249,6 +228,7 @@ enum AppConstants {
     }()
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    static let pluginHostVersion = "1.8.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
     private static let githubReleaseTagsURL = URL(
         string: "https://github.com/schneidervvv/dictum/releases/tag"
@@ -287,28 +267,9 @@ enum AppConstants {
         bundledPreviewRelease()
     }
 
-    static func selectedUpdateChannel(
-        defaults: UserDefaults = .standard,
-        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
-    ) -> ReleaseChannel {
-        guard let rawValue = defaults.string(forKey: UserDefaultsKeys.updateChannel),
-              let channel = ReleaseChannel(rawValue: rawValue) else {
-            return bundledReleaseChannel(infoDictionary: infoDictionary)
-        }
-        return channel
-    }
-
     static var releaseChannel: ReleaseChannel {
         bundledReleaseChannel()
     }
-
-    static let defaultReleaseChannel: ReleaseChannel = {
-        guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
-              let channel = ReleaseChannel(rawValue: rawValue) else {
-            return .stable
-        }
-        return channel
-    }()
 
     static let isRunningTests: Bool = {
         if isScreenshotAutomation {

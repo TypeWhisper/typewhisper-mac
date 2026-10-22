@@ -37,9 +37,8 @@ output goes to that checkout's `build/` folder.
 # Build, sign with your Apple Development identity and launch the sandboxed app
 scripts/appstore/build-dev.sh --run
 
-# Same with fresh privacy permissions, in German, with Parakeet installed
-scripts/appstore/build-dev.sh --run --reset-permissions --language de \
-  --install-plugin com.typewhisper.parakeet
+# 以德语运行并重新请求系统权限
+scripts/appstore/build-dev.sh --run --reset-permissions --language de
 
 # Relaunch the last build without building
 scripts/appstore/build-dev.sh --relaunch
@@ -62,8 +61,7 @@ container and keychain items. Release builds are **TypeWhisper**
 `build-dev.sh` signs without a provisioning profile and therefore uses
 `TypeWhisperAppStore-Local.entitlements`: iCloud, Sign in with Apple and real
 purchases need a TestFlight build. Every worktree builds the same bundle ID, so
-launching quits any running App Store Dev build first. `--language` and
-`--install-plugin` apply to that launch only.
+launching quits any running App Store Dev build first. `--language` applies to that launch only.
 
 Run the unit tests in Xcode or with `xcodebuild ... test` on the generated
 `TypeWhisperAppStore.xcodeproj`. After changing the plugin set in
@@ -150,12 +148,9 @@ into those languages.
 
 ## Plugins
 
-The marketplace lists the bundled plugins from
-`AppStore/Resources/AppStorePluginCatalog.json`. Installing a plugin marks it as
-installed and loads the bundled copy; plugins that are not installed are never
-loaded. Apple Speech is installed on first launch, as in the direct app.
-Speaker Detection belongs to the Premium speaker feature: it is always loaded,
-is managed on the Speakers page and is not listed in the marketplace.
+应用启动时加载随应用内置的插件，用户可以在各插件的设置页面启用或停用它们。
+`AppStore/Resources/AppStorePluginCatalog.json` 供构建审计核对打包内容。
+说话人检测在说话人页面中管理。
 
 | Status | Plugins |
 |---|---|

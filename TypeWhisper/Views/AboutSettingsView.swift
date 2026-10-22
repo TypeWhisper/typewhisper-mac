@@ -25,12 +25,6 @@ struct AboutSettingsView: View {
                         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
                         Text("Version \(version) (\(build))")
                             .foregroundStyle(.secondary)
-                        if let coordinator = WhatsNewCoordinator.shared {
-                            Button("New in dictum") {
-                                NotificationCenter.default.post(name: .whatsNewRequested, object: nil)
-                            }
-                            .disabled(coordinator.operationInProgress)
-                        }
                         Text(String(localized: "Fast, private speech-to-text for your Mac. Transcribe with local or cloud engines, process text with AI prompts, and insert directly into any app."))
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)

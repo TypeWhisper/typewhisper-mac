@@ -262,13 +262,7 @@ private struct MyWorkflowsPage: View {
                 }
 
                 HStack(alignment: .center, spacing: 12) {
-                    if providers.isEmpty {
-                        Button(localizedAppText("Open Integrations", de: "Integrationen öffnen")) {
-                            SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    } else if !fallbackAddOptions.isEmpty {
+                    if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
                             .disabled(promptProcessingService.isFallbackListLocked)
                             .managedLockAccessibilityHint(
@@ -279,13 +273,6 @@ private struct MyWorkflowsPage: View {
 
                     Spacer(minLength: 0)
 
-                    if !providers.isEmpty {
-                        Button(localizedAppText("Manage in Integrations", de: "In Integrationen verwalten")) {
-                            SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                        }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                    }
                 }
             }
         }
@@ -1927,18 +1914,15 @@ private struct WorkflowEditorPage: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(
                         localizedAppText(
-                            "Install an LLM provider in Integrations before using workflow overrides.",
-                            de: "Installiere zuerst einen LLM-Provider in Integrationen, bevor du Workflow-Overrides nutzt."
+                            "Enable a language model provider in its settings page before using workflow overrides.",
+                            de: "Aktiviere einen Sprachmodellanbieter auf seiner Einstellungsseite, bevor du Workflow-Overrides nutzt.",
+                            ja: "ワークフローで上書きする前に、設定ページで言語モデルプロバイダーを有効にしてください。",
+                            zh: "请在供应商设置页面启用语言模型供应商，然后设置工作流覆盖选项。"
                         )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    Button(localizedAppText("Open Integrations", de: "Integrationen öffnen")) {
-                        SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                    }
-                    .buttonStyle(.link)
-                    .font(.caption)
                 }
             } else {
                 Picker(

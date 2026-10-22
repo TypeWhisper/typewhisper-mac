@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 import Foundation
+import os
 import TypeWhisperPluginSDK
 
 extension UserDefaults {
@@ -18,7 +19,6 @@ extension UserDefaults {
 extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
-    static let whatsNewRequested = Notification.Name("whatsNewRequested")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -255,7 +255,6 @@ final class FinderTranscriptionService: NSObject {
 
     @discardableResult
     func handle(_ pasteboard: NSPasteboard) -> String? {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         let urls = Self.fileURLs(from: pasteboard)
         guard !urls.isEmpty else {
             return "No supported audio or video files were selected."
@@ -525,14 +524,10 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         guard !AppConstants.isRunningTests else { return }
 
         LaunchSignposts.beginLaunch()
-        WhatsNewCoordinator.shared = WhatsNewCoordinator()
 
         // Trigger ServiceContainer initialization
         let serviceContainer = LaunchSignposts.signposter.withIntervalSignpost("Launch.serviceContainer") {
             ServiceContainer.shared
-        }
-        serviceContainer.hotkeyService.onHotkeyAction = {
-            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         }
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
@@ -576,7 +571,6 @@ final class ManagedAppWindowOpener {
     var openWindow: OpenWindowAction?
 
     func open(id: String) {
-        WhatsNewCoordinator.shared?.handleWindowRequest()
         open(id: id, remainingAttempts: 10)
     }
 
@@ -669,8 +663,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
-    private var whatsNewWindowController: WhatsNewWindowController?
-    private var startupActivitySubscriptions = Set<AnyCancellable>()
     private let finderTranscriptionService = FinderTranscriptionService()
 
     private var showMenuBarIconPreference: Bool {
@@ -716,11 +708,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !AppConstants.isRunningTests else {
             return
         }
-
-        observeStartupActivity()
-        NotificationCenter.default.publisher(for: .whatsNewRequested)
-            .sink { [weak self] _ in self?.presentWhatsNewManually() }
-            .store(in: &startupActivitySubscriptions)
 
         if AppConstants.isScreenshotAutomation {
             NSApp.setActivationPolicy(.regular)
@@ -783,14 +770,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        let isNormalLaunch = Self.isNormalLaunch(notification)
-        if !isNormalLaunch {
-            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
-        }
-        // Allow launch URLs and Services to arrive first; recheck all priorities
-        // at presentation time, not when scheduling the window.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.presentInitialWindow(isNormalLaunch: isNormalLaunch)
+            self?.presentInitialWindow()
         }
 
         // Observe appearance preference changes
@@ -891,17 +872,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard !AppConstants.isRunningTests else { return }
-        WhatsNewCoordinator.shared?.acknowledgePresentation()
         DictationViewModel._shared?.flushPendingPostInsertionPersistence()
         ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
         ServiceContainer.shared.snippetService.saveDeferredUsageCounts()
         ServiceContainer.shared.dictionaryService.saveDeferredUsageCounts()
         ServiceContainer.shared.calendarMeetingAutomationController.shutdown()
+        Logger(subsystem: AppConstants.loggerSubsystem, category: "AppLifecycle")
+            .notice("applicationWillTerminate completed")
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        WhatsNewCoordinator.shared?.handleWindowRequest()
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
             return true
         }
@@ -916,7 +897,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         for url in urls {
             handleIncomingURL(url)
         }
@@ -926,84 +906,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ManagedAppWindowOpener.shared.open(id: "settings")
     }
 
-    static func isNormalLaunch(_ notification: Notification) -> Bool {
-        notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
-            && notification.userInfo?[NSApplication.launchUserNotificationUserInfoKey] == nil
-    }
-
-    private func observeStartupActivity() {
-        let container = ServiceContainer.shared
-        guard let whatsNew = WhatsNewCoordinator.shared else { return }
-        let activities = [
-            container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
-            container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
-            container.audioRecorderViewModel.$retranscribingRecordingURL.map { $0 != nil }.eraseToAnyPublisher(),
-            container.fileTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
-            container.speakerTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
-            container.dictionaryTrainingService.activityPublisher,
-            HistoryRetranscriptionActivity.recordIDPublisher.map { $0 != nil }.eraseToAnyPublisher()
-        ]
-        whatsNew.observeActivity(activities)
-    }
-
-    var operationInProgress: Bool {
-        let container = ServiceContainer.shared
-        return container.dictationViewModel.state != .idle
-            || container.hotkeyService.isDictationStartPending
-            || container.audioRecorderViewModel.state != .idle
-            || container.audioRecorderViewModel.retranscribingRecordingURL != nil
-            || container.fileTranscriptionViewModel.batchState == .processing
-            || container.speakerTranscriptionViewModel.batchState == .processing
-            || container.dictionaryTrainingService.activeSampleID != nil
-            || HistoryRetranscriptionActivity.recordID != nil
-            || Self.hasBlockingModalPresentation
-    }
-
-    static var hasBlockingModalPresentation: Bool {
-        NSApp.modalWindow != nil
-            || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
-    }
-
-    private func presentWhatsNewManually() {
-        guard let whatsNew = WhatsNewCoordinator.shared,
-              whatsNew.beginManualPresentation() else { return }
-        // Use the same activity state as the About button. A sheet attached to
-        // another window only blocks automatic presentation, not this explicit request.
-        showWhatsNew(coordinator: whatsNew)
-    }
-
-    private func showWhatsNew(coordinator: WhatsNewCoordinator) {
-        if whatsNewWindowController == nil {
-            whatsNewWindowController = WhatsNewWindowController(coordinator: coordinator)
-        }
-        whatsNewWindowController?.showWindow(nil)
-        // An unfocused overview still counts as an open window for Dock policy.
-        applyActivationPolicy()
-    }
-
-    private func presentInitialWindow(isNormalLaunch: Bool) {
-        guard let whatsNew = WhatsNewCoordinator.shared else { return }
-        let suppressesOptionalPrompts = ManagedLaunchGate.suppressesOptionalPrompts
-        if suppressesOptionalPrompts {
-            // The highlights stay available from Settings > About.
-            whatsNew.suppressForCurrentLaunch()
-        }
-        let presentation = whatsNew.presentationForLaunch(
-            isNormalLaunch: isNormalLaunch,
-            setupWizardRequired: ManagedLaunchGate.isSetupWizardRequired,
-            operationInProgress: operationInProgress
-        )
-
+    private func presentInitialWindow() {
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-            switch presentation {
-            case .setup:
-                NSApp.setActivationPolicy(.regular)
-                openSetupWindow()
-            case .whatsNew:
-                showWhatsNew(coordinator: whatsNew)
-            case .none:
-                break
-            }
+            guard ManagedLaunchGate.isSetupWizardRequired else { return }
+            NSApp.setActivationPolicy(.regular)
+            openSetupWindow()
         }
     }
 
@@ -1159,8 +1066,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if identifier.contains("settings")
                 || identifier.contains("setup")
                 || identifier.contains("history")
-                || identifier.contains("errors")
-                || identifier == "whats-new" {
+                || identifier.contains("errors") {
                 return true
             }
         }
@@ -1191,9 +1097,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window = notification.object as? NSWindow else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isManagedWindow(window), window.isVisible else { return }
-            // The overview participates in Dock policy without activating the app
-            // over the user's current work when it is shown automatically.
-            self.applyActivationPolicy(activate: window.identifier?.rawValue != "whats-new")
+            self.applyActivationPolicy(activate: true)
         }
     }
 

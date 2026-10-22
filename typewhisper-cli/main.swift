@@ -313,5 +313,5 @@ func printUsage() {
 }
 
 func printVersion() {
-    print("typewhisper 0.9.2")
+    print("dictum 0.1.0 (1)")
 }

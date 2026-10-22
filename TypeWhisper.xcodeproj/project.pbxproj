@@ -66,8 +66,6 @@
 		0B58B3B8ACBA76118C3B54C2 /* ModelManagerRestoreAfterAutoUnloadTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3B9EC248517FD4849BEF54D /* ModelManagerRestoreAfterAutoUnloadTests.swift */; };
 		C42900000000000000000003 /* LiveTranscriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000216 /* LiveTranscriptPlugin.swift */; };
 		204C804898EAE1127B62EC98 /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = E808D246301E36546EEB811F /* TestSupport.swift */; };
-		A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */; };
-		A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */; };
 		A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001308 /* ManagedPolicyTests.swift */; };
 		A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */; };
 		A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */; };
@@ -115,8 +113,6 @@
 		A1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
-		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
-		A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000002 /* WhatsNewCoordinator.swift */; };
 		A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001302 /* ManagedPolicy.swift */; };
 		A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */; };
 		A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001306 /* ManagedPolicyService.swift */; };
@@ -126,7 +122,6 @@
 		A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001312 /* ManagedSettingsIntegration.swift */; };
 		A1C0DE000000000000001313 /* ManagedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001314 /* ManagedSettingsView.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
-		A11800000000000000000003 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000004 /* WhatsNewView.swift */; };
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
 		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
@@ -155,7 +150,6 @@
 		2F4D6A8B0C1E3F5A7B9D2C4E /* DictationViewModelIndicatorSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */; };
 		A17C69E6B6A43880D94B24FF /* DictationQuickSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */; };
 		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
-		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
 		545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000003 /* SetupWizardTrialSignalTests.swift */; };
 		AA00000000000000000367 /* AccessibilityPermissionPaneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */; };
@@ -390,7 +384,7 @@
 		AA00000000000000000156 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000011 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000157 /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000012 /* MLXAudioSTT */; };
 		AA00000000000000000158 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000013 /* MLXAudioCore */; };
-		AA00000000000000000160 /* PluginRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000152 /* PluginRegistryService.swift */; };
+		AA00000000000000000160 /* PluginVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000152 /* PluginVersion.swift */; };
 		AA00000000000000000161 /* WhisperKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000154 /* WhisperKitPlugin.swift */; };
 		AA00000000000000000162 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000155 /* manifest.json */; };
 		AA00000000000000000163 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000014 /* TypeWhisperPluginSDK */; };
@@ -670,6 +664,57 @@
 		818D0DF1B1C225681D429646 /* HistoryRetranscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */; };
 		1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */; };
 		18BC79E19C68403992E7786A /* WatchFolderServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC62D284F14D4F42AD78E35C /* WatchFolderServiceTests.swift */; };
+		D1C700000000000000000100 /* AssemblyAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000203 /* AssemblyAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000101 /* AuthenticatedCLIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000018 /* AuthenticatedCLIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000102 /* CanaryPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 9A5C56DC96AE4CD595EEF826 /* CanaryPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000103 /* CartesiaPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = CART00000000000000000012 /* CartesiaPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000104 /* CerebrasPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000257 /* CerebrasPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000105 /* ClaudePlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000262 /* ClaudePlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000106 /* CloudflareASRPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000227 /* CloudflareASRPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000107 /* CohereLocalPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000010 /* CohereLocalPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000108 /* CoherePlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000285 /* CoherePlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000109 /* DeepgramPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000199 /* DeepgramPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010A /* ElevenLabsPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000266 /* ElevenLabsPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010B /* FileJobScriptPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = F48400000000000000000012 /* FileJobScriptPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010C /* FileMemoryPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000231 /* FileMemoryPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010D /* FillerWordsPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000012 /* FillerWordsPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010E /* FireworksPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000254 /* FireworksPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000010F /* GeminiPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000143 /* GeminiPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000110 /* GigaAMPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 6A6A0000000000000000000E /* GigaAMPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000111 /* GladiaPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000270 /* GladiaPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000112 /* GoogleCloudSTTPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000113 /* GranitePlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000224 /* GranitePlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000114 /* GroqPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000134 /* GroqPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000115 /* LinearPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000146 /* LinearPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000116 /* LiveTranscriptPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000219 /* LiveTranscriptPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000117 /* LocalLLMPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000290 /* LocalLLMPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000118 /* MCPClientPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BC1000000000000000000017 /* MCPClientPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000119 /* MemPalacePlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 4D45504C4143450000000008 /* MemPalacePlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011A /* MetaPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 4D4554410000000000000013 /* MetaPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011B /* MicrosoftAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 4D4149000000000000000013 /* MicrosoftAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011C /* MistralAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 4D49535452414C0000000005 /* MistralAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011D /* ObsidianPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000211 /* ObsidianPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011E /* OpenAICompatiblePlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000175 /* OpenAICompatiblePlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000011F /* OpenAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000135 /* OpenAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000120 /* OpenAIVectorMemoryPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000234 /* OpenAIVectorMemoryPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000121 /* OpenRouterPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000277 /* OpenRouterPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000122 /* ParakeetPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000156 /* ParakeetPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000123 /* Qwen3Plugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000149 /* Qwen3Plugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000124 /* R2T2Plugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 5C3300000000000000000012 /* R2T2Plugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000125 /* Reson8Plugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = RESS00000000000000004 /* Reson8Plugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000126 /* SaluteSpeechPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000127 /* ScriptPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000215 /* ScriptPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000128 /* SmallestAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 5A1100000000000000000013 /* SmallestAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000129 /* SonioxPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000281 /* SonioxPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012A /* SpeechmaticsPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000294 /* SpeechmaticsPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012B /* SupertonicPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = D20100000000000000000006 /* SupertonicPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012C /* SystemTTSPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = B10000000000000000000003 /* SystemTTSPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012D /* VercelAIGatewayPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 564552434500000000000013 /* VercelAIGatewayPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012E /* VoxtralPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000190 /* VoxtralPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C70000000000000000012F /* WebhookPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000133 /* WebhookPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000130 /* WebLinkPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = AB1200000000000000000015 /* WebLinkPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000131 /* WhisperKitPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000153 /* WhisperKitPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D1C700000000000000000132 /* XAIPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0213 /* XAIPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -721,6 +766,363 @@
 			proxyType = 1;
 			remoteGlobalIDString = 2AA46E212BF789FBBD2FE020;
 			remoteInfo = SpeakerDiarizationPlugin;
+		};
+		D1C700000000000000000200 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000017;
+			remoteInfo = AssemblyAIPlugin;
+		};
+		D1C700000000000000000201 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AC1100000000000000000030;
+			remoteInfo = AuthenticatedCLIPlugin;
+		};
+		D1C700000000000000000202 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D87EFD213FEC41A1ACFAC052;
+			remoteInfo = CanaryPlugin;
+		};
+		D1C700000000000000000203 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CART00000000000000000040;
+			remoteInfo = CartesiaPlugin;
+		};
+		D1C700000000000000000204 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000026;
+			remoteInfo = CerebrasPlugin;
+		};
+		D1C700000000000000000205 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000027;
+			remoteInfo = ClaudePlugin;
+		};
+		D1C700000000000000000206 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000022;
+			remoteInfo = CloudflareASRPlugin;
+		};
+		D1C700000000000000000207 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C0E300000000000000000030;
+			remoteInfo = CohereLocalPlugin;
+		};
+		D1C700000000000000000208 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000032;
+			remoteInfo = CoherePlugin;
+		};
+		D1C700000000000000000209 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000016;
+			remoteInfo = DeepgramPlugin;
+		};
+		D1C70000000000000000020A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000028;
+			remoteInfo = ElevenLabsPlugin;
+		};
+		D1C70000000000000000020B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F48400000000000000000030;
+			remoteInfo = FileJobScriptPlugin;
+		};
+		D1C70000000000000000020C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000023;
+			remoteInfo = FileMemoryPlugin;
+		};
+		D1C70000000000000000020D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F18A00000000000000000030;
+			remoteInfo = FillerWordsPlugin;
+		};
+		D1C70000000000000000020E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000025;
+			remoteInfo = FireworksPlugin;
+		};
+		D1C70000000000000000020F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000006;
+			remoteInfo = GeminiPlugin;
+		};
+		D1C700000000000000000210 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6A6A00000000000000000010;
+			remoteInfo = GigaAMPlugin;
+		};
+		D1C700000000000000000211 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000029;
+			remoteInfo = GladiaPlugin;
+		};
+		D1C700000000000000000212 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F3E17BDD5CED7E75F4153E95;
+			remoteInfo = GoogleCloudSTTPlugin;
+		};
+		D1C700000000000000000213 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000021;
+			remoteInfo = GranitePlugin;
+		};
+		D1C700000000000000000214 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000004;
+			remoteInfo = GroqPlugin;
+		};
+		D1C700000000000000000215 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000007;
+			remoteInfo = LinearPlugin;
+		};
+		D1C700000000000000000216 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000020;
+			remoteInfo = LiveTranscriptPlugin;
+		};
+		D1C700000000000000000217 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000033;
+			remoteInfo = LocalLLMPlugin;
+		};
+		D1C700000000000000000218 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BC1000000000000000000030;
+			remoteInfo = MCPClientPlugin;
+		};
+		D1C700000000000000000219 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D45504C4143450000000015;
+			remoteInfo = MemPalacePlugin;
+		};
+		D1C70000000000000000021A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D4554410000000000000030;
+			remoteInfo = MetaPlugin;
+		};
+		D1C70000000000000000021B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D4149000000000000000030;
+			remoteInfo = MicrosoftAIPlugin;
+		};
+		D1C70000000000000000021C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4D49535452414C0000000007;
+			remoteInfo = MistralAIPlugin;
+		};
+		D1C70000000000000000021D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000018;
+			remoteInfo = ObsidianPlugin;
+		};
+		D1C70000000000000000021E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000013;
+			remoteInfo = OpenAICompatiblePlugin;
+		};
+		D1C70000000000000000021F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000005;
+			remoteInfo = OpenAIPlugin;
+		};
+		D1C700000000000000000220 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000024;
+			remoteInfo = OpenAIVectorMemoryPlugin;
+		};
+		D1C700000000000000000221 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000030;
+			remoteInfo = OpenRouterPlugin;
+		};
+		D1C700000000000000000222 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000011;
+			remoteInfo = ParakeetPlugin;
+		};
+		D1C700000000000000000223 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000009;
+			remoteInfo = Qwen3Plugin;
+		};
+		D1C700000000000000000224 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5C3300000000000000000040;
+			remoteInfo = R2T2Plugin;
+		};
+		D1C700000000000000000225 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = RESN00000000000000001;
+			remoteInfo = Reson8Plugin;
+		};
+		D1C700000000000000000226 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5B2200000000000000000040;
+			remoteInfo = SaluteSpeechPlugin;
+		};
+		D1C700000000000000000227 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000019;
+			remoteInfo = ScriptPlugin;
+		};
+		D1C700000000000000000228 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A1100000000000000000040;
+			remoteInfo = SmallestAIPlugin;
+		};
+		D1C700000000000000000229 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000031;
+			remoteInfo = SonioxPlugin;
+		};
+		D1C70000000000000000022A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000034;
+			remoteInfo = SpeechmaticsPlugin;
+		};
+		D1C70000000000000000022B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D20300000000000000000001;
+			remoteInfo = SupertonicPlugin;
+		};
+		D1C70000000000000000022C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D10000000000000000000001;
+			remoteInfo = SystemTTSPlugin;
+		};
+		D1C70000000000000000022D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 564552434500000000000030;
+			remoteInfo = VercelAIGatewayPlugin;
+		};
+		D1C70000000000000000022E /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000015;
+			remoteInfo = VoxtralPlugin;
+		};
+		D1C70000000000000000022F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000003;
+			remoteInfo = WebhookPlugin;
+		};
+		D1C700000000000000000230 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AB1200000000000000000030;
+			remoteInfo = WebLinkPlugin;
+		};
+		D1C700000000000000000231 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD00000000000000000010;
+			remoteInfo = WhisperKitPlugin;
+		};
+		D1C700000000000000000232 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9A584149706C7567496E0230;
+			remoteInfo = XAIPlugin;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -778,6 +1180,57 @@
 			files = (
 				5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */,
 				6CB202A0A4799036AF9067A7 /* SpeakerDiarizationPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000100 /* AssemblyAIPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000101 /* AuthenticatedCLIPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000102 /* CanaryPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000103 /* CartesiaPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000104 /* CerebrasPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000105 /* ClaudePlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000106 /* CloudflareASRPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000107 /* CohereLocalPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000108 /* CoherePlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000109 /* DeepgramPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010A /* ElevenLabsPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010B /* FileJobScriptPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010C /* FileMemoryPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010D /* FillerWordsPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010E /* FireworksPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000010F /* GeminiPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000110 /* GigaAMPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000111 /* GladiaPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000112 /* GoogleCloudSTTPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000113 /* GranitePlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000114 /* GroqPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000115 /* LinearPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000116 /* LiveTranscriptPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000117 /* LocalLLMPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000118 /* MCPClientPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000119 /* MemPalacePlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011A /* MetaPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011B /* MicrosoftAIPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011C /* MistralAIPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011D /* ObsidianPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011E /* OpenAICompatiblePlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000011F /* OpenAIPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000120 /* OpenAIVectorMemoryPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000121 /* OpenRouterPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000122 /* ParakeetPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000123 /* Qwen3Plugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000124 /* R2T2Plugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000125 /* Reson8Plugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000126 /* SaluteSpeechPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000127 /* ScriptPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000128 /* SmallestAIPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000129 /* SonioxPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012A /* SpeechmaticsPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012B /* SupertonicPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012C /* SystemTTSPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012D /* VercelAIGatewayPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012E /* VoxtralPlugin.bundle in Embed Built-In Plugins */,
+				D1C70000000000000000012F /* WebhookPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000130 /* WebLinkPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000131 /* WhisperKitPlugin.bundle in Embed Built-In Plugins */,
+				D1C700000000000000000132 /* XAIPlugin.bundle in Embed Built-In Plugins */,
 			);
 			name = "Embed Built-In Plugins";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -863,8 +1316,6 @@
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
-		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
-		A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
 		B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowSegmentedPostProcessingTests.swift; sourceTree = "<group>"; };
@@ -910,8 +1361,6 @@
 		C85600000000000000000002 /* CoreAudioHALCallbackContext.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CoreAudioHALCallbackContext.h; sourceTree = "<group>"; };
 		C85600000000000000000003 /* CoreAudioHALCallbackContext.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = CoreAudioHALCallbackContext.c; sourceTree = "<group>"; };
 		BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "TypeWhisper-Bridging-Header.h"; sourceTree = "<group>"; };
-		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
-		A11800000000000000000002 /* WhatsNewCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewCoordinator.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001302 /* ManagedPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicy.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001304 /* ManagedPolicyValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyValidator.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001306 /* ManagedPolicyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedPolicyService.swift; sourceTree = "<group>"; };
@@ -925,7 +1374,6 @@
 		A1C0DE000000000000001314 /* ManagedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsView.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001316 /* ManagedSettingsPoliciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsPoliciesTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
-		A11800000000000000000004 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
@@ -1085,7 +1533,7 @@
 		BB00000000000000000149 /* Qwen3Plugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Qwen3Plugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000150 /* Qwen3Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3Plugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000151 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
-		BB00000000000000000152 /* PluginRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginRegistryService.swift; sourceTree = "<group>"; };
+		BB00000000000000000152 /* PluginVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PluginVersion.swift; sourceTree = "<group>"; };
 		BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Qwen3ContextBiasFormatter.swift; sourceTree = "<group>"; };
 		BB00000000000000000153 /* WhisperKitPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhisperKitPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000154 /* WhisperKitPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitPlugin.swift; sourceTree = "<group>"; };
@@ -1310,7 +1758,6 @@
 		836B1A400007048E1736246F /* DictationQuickSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationQuickSelectionTests.swift; sourceTree = "<group>"; };
 		2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IndicatorTranscriptPreviewSizingTests.swift; sourceTree = "<group>"; };
 		6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelSpacePolicyTests.swift; sourceTree = "<group>"; };
-		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
 		545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardRecommendationAvailabilityTests.swift; sourceTree = "<group>"; };
 		545000000000000000000003 /* SetupWizardTrialSignalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardTrialSignalTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccessibilityPermissionPaneTests.swift; sourceTree = "<group>"; };
@@ -2051,8 +2498,6 @@
 				BB00000000000000000002 /* ServiceContainer.swift */,
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
-				BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */,
-				A11800000000000000000002 /* WhatsNewCoordinator.swift */,
 				BB00000000000000000354 /* SettingsNavigationCoordinator.swift */,
 			);
 			path = App;
@@ -2163,7 +2608,7 @@
 				BB00000000000000000115 /* PromptProcessingService.swift */,
 				BB00000000000000000123 /* EventBus.swift */,
 				BB00000000000000000124 /* PluginManager.swift */,
-				BB00000000000000000152 /* PluginRegistryService.swift */,
+				BB00000000000000000152 /* PluginVersion.swift */,
 				F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */,
 				BB00000000000000000125 /* HostServicesImpl.swift */,
 				BB00000000000000000126 /* PostProcessingPipeline.swift */,
@@ -2317,7 +2762,6 @@
 				BB00000000000000000364 /* VisualShortcutKeyboardView.swift */,
 				BB00000000000000000249 /* HotkeySettingsView.swift */,
 				BB00000000000000000250 /* AboutSettingsView.swift */,
-				A11800000000000000000004 /* WhatsNewView.swift */,
 				A1C0DE000000000000001314 /* ManagedSettingsView.swift */,
 			);
 			path = Views;
@@ -3199,8 +3643,6 @@
 				B91F00000000000000000006 /* PromptPaletteControllerTests.swift */,
 				B91F00000000000000000004 /* RecentTranscriptionStoreTests.swift */,
 				C50700000000000000000002 /* MemoryServiceTests.swift */,
-				A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */,
-				A11800000000000000000006 /* WhatsNewCoordinatorTests.swift */,
 				A1C0DE000000000000001308 /* ManagedPolicyTests.swift */,
 				A1C0DE000000000000001324 /* ManagedSelectionPolicyTests.swift */,
 				A1C0DE000000000000001320 /* ManagedProviderPolicyTests.swift */,
@@ -3208,7 +3650,6 @@
 				BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */,
 				7A1018FIX0000000000A002 /* PassiveRestoreSelectedEngineTests.swift */,
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
-				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
 				545000000000000000000003 /* SetupWizardTrialSignalTests.swift */,
 				BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */,
@@ -3314,6 +3755,57 @@
 			);
 			dependencies = (
 				GG00000000000000000001 /* PBXTargetDependency */,
+				D1C700000000000000000300 /* PBXTargetDependency */,
+				D1C700000000000000000301 /* PBXTargetDependency */,
+				D1C700000000000000000302 /* PBXTargetDependency */,
+				D1C700000000000000000303 /* PBXTargetDependency */,
+				D1C700000000000000000304 /* PBXTargetDependency */,
+				D1C700000000000000000305 /* PBXTargetDependency */,
+				D1C700000000000000000306 /* PBXTargetDependency */,
+				D1C700000000000000000307 /* PBXTargetDependency */,
+				D1C700000000000000000308 /* PBXTargetDependency */,
+				D1C700000000000000000309 /* PBXTargetDependency */,
+				D1C70000000000000000030A /* PBXTargetDependency */,
+				D1C70000000000000000030B /* PBXTargetDependency */,
+				D1C70000000000000000030C /* PBXTargetDependency */,
+				D1C70000000000000000030D /* PBXTargetDependency */,
+				D1C70000000000000000030E /* PBXTargetDependency */,
+				D1C70000000000000000030F /* PBXTargetDependency */,
+				D1C700000000000000000310 /* PBXTargetDependency */,
+				D1C700000000000000000311 /* PBXTargetDependency */,
+				D1C700000000000000000312 /* PBXTargetDependency */,
+				D1C700000000000000000313 /* PBXTargetDependency */,
+				D1C700000000000000000314 /* PBXTargetDependency */,
+				D1C700000000000000000315 /* PBXTargetDependency */,
+				D1C700000000000000000316 /* PBXTargetDependency */,
+				D1C700000000000000000317 /* PBXTargetDependency */,
+				D1C700000000000000000318 /* PBXTargetDependency */,
+				D1C700000000000000000319 /* PBXTargetDependency */,
+				D1C70000000000000000031A /* PBXTargetDependency */,
+				D1C70000000000000000031B /* PBXTargetDependency */,
+				D1C70000000000000000031C /* PBXTargetDependency */,
+				D1C70000000000000000031D /* PBXTargetDependency */,
+				D1C70000000000000000031E /* PBXTargetDependency */,
+				D1C70000000000000000031F /* PBXTargetDependency */,
+				D1C700000000000000000320 /* PBXTargetDependency */,
+				D1C700000000000000000321 /* PBXTargetDependency */,
+				D1C700000000000000000322 /* PBXTargetDependency */,
+				D1C700000000000000000323 /* PBXTargetDependency */,
+				D1C700000000000000000324 /* PBXTargetDependency */,
+				D1C700000000000000000325 /* PBXTargetDependency */,
+				D1C700000000000000000326 /* PBXTargetDependency */,
+				D1C700000000000000000327 /* PBXTargetDependency */,
+				D1C700000000000000000328 /* PBXTargetDependency */,
+				D1C700000000000000000329 /* PBXTargetDependency */,
+				D1C70000000000000000032A /* PBXTargetDependency */,
+				D1C70000000000000000032B /* PBXTargetDependency */,
+				D1C70000000000000000032C /* PBXTargetDependency */,
+				D1C70000000000000000032D /* PBXTargetDependency */,
+				D1C70000000000000000032E /* PBXTargetDependency */,
+				D1C70000000000000000032F /* PBXTargetDependency */,
+				D1C700000000000000000330 /* PBXTargetDependency */,
+				D1C700000000000000000331 /* PBXTargetDependency */,
+				D1C700000000000000000332 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
 				E1A000000000000000000060 /* PBXTargetDependency */,
 				5E7A00000000000000000004 /* PBXTargetDependency */,
@@ -5217,8 +5709,6 @@
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */,
 				A91F00000000000000000004 /* RecentTranscriptionStoreTests.swift in Sources */,
-				A1F000000000000000000102 /* PostUpdatePromptCoordinatorTests.swift in Sources */,
-				A11800000000000000000005 /* WhatsNewCoordinatorTests.swift in Sources */,
 				A1C0DE000000000000001307 /* ManagedPolicyTests.swift in Sources */,
 				A1C0DE000000000000001323 /* ManagedSelectionPolicyTests.swift in Sources */,
 				A1C0DE000000000000001319 /* ManagedProviderPolicyTests.swift in Sources */,
@@ -5242,7 +5732,6 @@
 				7A1018FIX0000000000A001 /* PassiveRestoreSelectedEngineTests.swift in Sources */,
 				103600000000000000000001 /* MLXPluginModelStorageTests.swift in Sources */,
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
-				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,
 				545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */,
 				AA00000000000000000367 /* AccessibilityPermissionPaneTests.swift in Sources */,
@@ -5475,7 +5964,7 @@
 				AA00000000000000000217 /* IndicatorPreviewView.swift in Sources */,
 					AA00000000000000000123 /* EventBus.swift in Sources */,
 					AA00000000000000000124 /* PluginManager.swift in Sources */,
-					AA00000000000000000160 /* PluginRegistryService.swift in Sources */,
+					AA00000000000000000160 /* PluginVersion.swift in Sources */,
 					F16000000000000000000001 /* ScreenshotFixtureSeeder.swift in Sources */,
 					AA00000000000000000125 /* HostServicesImpl.swift in Sources */,
 					AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */,
@@ -5523,8 +6012,6 @@
 				AA00000000000000000364 /* VisualShortcutKeyboardView.swift in Sources */,
 				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
 				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
-				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
-				A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */,
 				A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */,
 				A1C0DE000000000000001303 /* ManagedPolicyValidator.swift in Sources */,
 				A1C0DE000000000000001305 /* ManagedPolicyService.swift in Sources */,
@@ -5534,7 +6021,6 @@
 				A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */,
 				A1C0DE000000000000001313 /* ManagedSettingsView.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
-				A11800000000000000000003 /* WhatsNewView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6041,6 +6527,261 @@
 			target = 2AA46E212BF789FBBD2FE020 /* SpeakerDiarizationPlugin */;
 			targetProxy = BD8BF8C00922115276D97966 /* PBXContainerItemProxy */;
 		};
+		D1C700000000000000000300 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000017 /* AssemblyAIPlugin */;
+			targetProxy = D1C700000000000000000200 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000301 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AC1100000000000000000030 /* AuthenticatedCLIPlugin */;
+			targetProxy = D1C700000000000000000201 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000302 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D87EFD213FEC41A1ACFAC052 /* CanaryPlugin */;
+			targetProxy = D1C700000000000000000202 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000303 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CART00000000000000000040 /* CartesiaPlugin */;
+			targetProxy = D1C700000000000000000203 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000304 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000026 /* CerebrasPlugin */;
+			targetProxy = D1C700000000000000000204 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000305 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000027 /* ClaudePlugin */;
+			targetProxy = D1C700000000000000000205 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000306 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000022 /* CloudflareASRPlugin */;
+			targetProxy = D1C700000000000000000206 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000307 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C0E300000000000000000030 /* CohereLocalPlugin */;
+			targetProxy = D1C700000000000000000207 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000308 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000032 /* CoherePlugin */;
+			targetProxy = D1C700000000000000000208 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000309 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000016 /* DeepgramPlugin */;
+			targetProxy = D1C700000000000000000209 /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000028 /* ElevenLabsPlugin */;
+			targetProxy = D1C70000000000000000020A /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F48400000000000000000030 /* FileJobScriptPlugin */;
+			targetProxy = D1C70000000000000000020B /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000023 /* FileMemoryPlugin */;
+			targetProxy = D1C70000000000000000020C /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F18A00000000000000000030 /* FillerWordsPlugin */;
+			targetProxy = D1C70000000000000000020D /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000025 /* FireworksPlugin */;
+			targetProxy = D1C70000000000000000020E /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000030F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000006 /* GeminiPlugin */;
+			targetProxy = D1C70000000000000000020F /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000310 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6A6A00000000000000000010 /* GigaAMPlugin */;
+			targetProxy = D1C700000000000000000210 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000311 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000029 /* GladiaPlugin */;
+			targetProxy = D1C700000000000000000211 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000312 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */;
+			targetProxy = D1C700000000000000000212 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000313 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000021 /* GranitePlugin */;
+			targetProxy = D1C700000000000000000213 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000314 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000004 /* GroqPlugin */;
+			targetProxy = D1C700000000000000000214 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000315 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000007 /* LinearPlugin */;
+			targetProxy = D1C700000000000000000215 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000316 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000020 /* LiveTranscriptPlugin */;
+			targetProxy = D1C700000000000000000216 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000317 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000033 /* LocalLLMPlugin */;
+			targetProxy = D1C700000000000000000217 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000318 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BC1000000000000000000030 /* MCPClientPlugin */;
+			targetProxy = D1C700000000000000000218 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000319 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D45504C4143450000000015 /* MemPalacePlugin */;
+			targetProxy = D1C700000000000000000219 /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D4554410000000000000030 /* MetaPlugin */;
+			targetProxy = D1C70000000000000000021A /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D4149000000000000000030 /* MicrosoftAIPlugin */;
+			targetProxy = D1C70000000000000000021B /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4D49535452414C0000000007 /* MistralAIPlugin */;
+			targetProxy = D1C70000000000000000021C /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000018 /* ObsidianPlugin */;
+			targetProxy = D1C70000000000000000021D /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000013 /* OpenAICompatiblePlugin */;
+			targetProxy = D1C70000000000000000021E /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000031F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000005 /* OpenAIPlugin */;
+			targetProxy = D1C70000000000000000021F /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000320 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000024 /* OpenAIVectorMemoryPlugin */;
+			targetProxy = D1C700000000000000000220 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000321 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000030 /* OpenRouterPlugin */;
+			targetProxy = D1C700000000000000000221 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000322 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000011 /* ParakeetPlugin */;
+			targetProxy = D1C700000000000000000222 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000323 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000009 /* Qwen3Plugin */;
+			targetProxy = D1C700000000000000000223 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000324 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5C3300000000000000000040 /* R2T2Plugin */;
+			targetProxy = D1C700000000000000000224 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000325 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = RESN00000000000000001 /* Reson8Plugin */;
+			targetProxy = D1C700000000000000000225 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000326 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5B2200000000000000000040 /* SaluteSpeechPlugin */;
+			targetProxy = D1C700000000000000000226 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000327 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000019 /* ScriptPlugin */;
+			targetProxy = D1C700000000000000000227 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000328 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A1100000000000000000040 /* SmallestAIPlugin */;
+			targetProxy = D1C700000000000000000228 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000329 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000031 /* SonioxPlugin */;
+			targetProxy = D1C700000000000000000229 /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000034 /* SpeechmaticsPlugin */;
+			targetProxy = D1C70000000000000000022A /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D20300000000000000000001 /* SupertonicPlugin */;
+			targetProxy = D1C70000000000000000022B /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D10000000000000000000001 /* SystemTTSPlugin */;
+			targetProxy = D1C70000000000000000022C /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 564552434500000000000030 /* VercelAIGatewayPlugin */;
+			targetProxy = D1C70000000000000000022D /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000015 /* VoxtralPlugin */;
+			targetProxy = D1C70000000000000000022E /* PBXContainerItemProxy */;
+		};
+		D1C70000000000000000032F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000003 /* WebhookPlugin */;
+			targetProxy = D1C70000000000000000022F /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000330 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AB1200000000000000000030 /* WebLinkPlugin */;
+			targetProxy = D1C700000000000000000230 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000331 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DD00000000000000000010 /* WhisperKitPlugin */;
+			targetProxy = D1C700000000000000000231 /* PBXContainerItemProxy */;
+		};
+		D1C700000000000000000332 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9A584149706C7567496E0230 /* XAIPlugin */;
+			targetProxy = D1C700000000000000000232 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -6049,7 +6790,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -6057,7 +6798,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum.dev;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				SKIP_INSTALL = YES;
@@ -6072,7 +6813,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -6080,7 +6821,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_ICLOUD_HELPER_PROFILE_SPECIFIER)";
@@ -6273,7 +7014,7 @@
 				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_MAIN_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -6288,7 +7029,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev;
 				PRODUCT_MODULE_NAME = TypeWhisper;
 				PRODUCT_NAME = "dictum Dev";
@@ -6308,7 +7049,7 @@
 				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_MAIN_ENTITLEMENTS)";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -6323,7 +7064,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum;
 				PRODUCT_MODULE_NAME = TypeWhisper;
 				PRODUCT_NAME = dictum;
@@ -6342,7 +7083,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.8.0;
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -6355,7 +7097,8 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.8.0;
+				CURRENT_PROJECT_VERSION = 1;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -7062,7 +7805,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = TypeWhisperTranscribeAction/TypeWhisperTranscribeAction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -7074,7 +7817,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7089,7 +7832,7 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = TypeWhisperTranscribeAction/TypeWhisperTranscribeAction.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -7101,7 +7844,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7116,7 +7859,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TypeWhisperWidgetExtension/TypeWhisperWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -7129,7 +7872,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -7144,7 +7887,7 @@
 				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
 				CODE_SIGN_ENTITLEMENTS = TypeWhisperWidgetExtension/TypeWhisperWidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -7157,7 +7900,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.8.0;
+				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

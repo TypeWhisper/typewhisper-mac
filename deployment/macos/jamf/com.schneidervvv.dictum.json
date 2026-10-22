@@ -1,7 +1,7 @@
 {
-  "title": "TypeWhisper (com.typewhisper.mac)",
-  "description": "Managed settings for TypeWhisper. Only configure the keys you manage.",
-  "__preferencedomain": "com.typewhisper.mac",
+  "title": "dictum (com.schneidervvv.dictum)",
+  "description": "Managed settings for dictum. Only configure the keys you manage.",
+  "__preferencedomain": "com.schneidervvv.dictum",
   "properties": {
     "TranscriptionProviderId": {
       "title": "Transcription provider",
@@ -10,7 +10,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -34,7 +34,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -58,7 +58,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -82,7 +82,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -106,7 +106,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -135,7 +135,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -164,7 +164,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -193,7 +193,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -214,28 +214,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "boolean"
-        }
-      ]
-    },
-    "AllowPluginDownloads": {
-      "title": "Allow plugin downloads",
-      "description": "Off refuses installing and updating plugins. Installed plugins keep running.",
-      "property_order": 50,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -252,11 +231,11 @@
     "AllowModelDownloads": {
       "title": "Allow model downloads",
       "description": "Off refuses model downloads. Installed models keep working.",
-      "property_order": 55,
+      "property_order": 50,
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -270,112 +249,14 @@
         }
       ]
     },
-    "UpdateMode": {
-      "title": "Update mode",
-      "description": "Who installs app updates.",
-      "property_order": 60,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "integer",
-          "enum": [
-            0,
-            1,
-            2
-          ],
-          "options": {
-            "enum_titles": [
-              "External (deployment updates the app)",
-              "Check only",
-              "User-initiated"
-            ]
-          }
-        }
-      ]
-    },
-    "UpdateChannel": {
-      "title": "Update channel",
-      "description": "The release channel for app updates.",
-      "property_order": 65,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "integer",
-          "enum": [
-            0,
-            1,
-            2
-          ],
-          "options": {
-            "enum_titles": [
-              "Stable",
-              "Daily",
-              "Release Candidate"
-            ]
-          }
-        }
-      ]
-    },
-    "AllowedUpdateChannels": {
-      "title": "Allowed update channels",
-      "description": "Entries stable, daily, release-candidate. An empty list or none alone turns app updates off; do not combine none with a channel.",
-      "property_order": 70,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "array",
-          "items": {
-            "type": "string",
-            "title": "Channel",
-            "enum": [
-              "stable",
-              "daily",
-              "release-candidate",
-              "none"
-            ]
-          },
-          "maxItems": 256
-        }
-      ]
-    },
     "LaunchAtLogin": {
       "title": "Launch at login",
-      "description": "Registers or removes TypeWhisper's login item and locks the setting.",
-      "property_order": 75,
+      "description": "Registers or removes dictum's login item and locks the setting.",
+      "property_order": 55,
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -392,32 +273,11 @@
     "SkipOnboardingWhenReady": {
       "title": "Skip setup when ready",
       "description": "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready.",
-      "property_order": 80,
+      "property_order": 60,
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "boolean"
-        }
-      ]
-    },
-    "SuppressOptionalPrompts": {
-      "title": "Hide optional prompts",
-      "description": "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button.",
-      "property_order": 85,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -434,7 +294,7 @@
     "Recommended": {
       "title": "Recommended settings (users can change)",
       "description": "Defaults that apply until the user makes a choice.",
-      "property_order": 90,
+      "property_order": 65,
       "anyOf": [
         {
           "type": "null",
@@ -451,7 +311,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -475,7 +335,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -499,7 +359,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -523,7 +383,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -540,68 +400,14 @@
                 }
               ]
             },
-            "UpdateChannel": {
-              "title": "Update channel",
-              "description": "The release channel for app updates.",
+            "LaunchAtLogin": {
+              "title": "Launch at login",
+              "description": "Registers or removes dictum's login item and locks the setting.",
               "property_order": 25,
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-                }
-              ],
-              "anyOf": [
-                {
-                  "type": "null",
-                  "title": "Not Configured"
-                },
-                {
-                  "title": "Configured",
-                  "type": "integer",
-                  "enum": [
-                    0,
-                    1,
-                    2
-                  ],
-                  "options": {
-                    "enum_titles": [
-                      "Stable",
-                      "Daily",
-                      "Release Candidate"
-                    ]
-                  }
-                }
-              ]
-            },
-            "LaunchAtLogin": {
-              "title": "Launch at login",
-              "description": "Registers or removes TypeWhisper's login item and locks the setting.",
-              "property_order": 30,
-              "links": [
-                {
-                  "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-                }
-              ],
-              "anyOf": [
-                {
-                  "type": "null",
-                  "title": "Not Configured"
-                },
-                {
-                  "title": "Configured",
-                  "type": "boolean"
-                }
-              ]
-            },
-            "SuppressOptionalPrompts": {
-              "title": "Hide optional prompts",
-              "description": "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button.",
-              "property_order": 35,
-              "links": [
-                {
-                  "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [

@@ -68,7 +68,6 @@ enum UserDefaultsKeys {
     static let apiServerPort = "apiServerPort"
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
     static let browserExtensionConnected = "browserExtensionConnected"
-    static let updateChannel = "updateChannel"
 
     // MARK: - Remote Link
     static let remoteLinkEnabled = "remoteLinkEnabled"
@@ -156,7 +155,6 @@ enum UserDefaultsKeys {
     static let spokenFeedbackProviderId = "spokenFeedbackProviderId"
 
     // MARK: - Plugin Registry
-    static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
     static let improveTypeWhisperCaptureEnabled = "plugin.com.typewhisper.improve.collectCorrections"
 
     // MARK: - Recorder
@@ -208,7 +206,6 @@ enum UserDefaultsKeys {
 
     // MARK: - Release presentation
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
-    static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
 
     // MARK: - Managed settings
     /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once

@@ -6,20 +6,18 @@
 	<array>
 		<dict>
 			<key>PayloadDisplayName</key>
-			<string>TypeWhisper managed settings (com.typewhisper.mac)</string>
+			<string>dictum managed settings (com.schneidervvv.dictum)</string>
 			<key>PayloadIdentifier</key>
-			<string>com.typewhisper.mdm.recommended.com.typewhisper.mac</string>
+			<string>com.schneidervvv.dictum.mdm.recommended.com.schneidervvv.dictum</string>
 			<key>PayloadType</key>
-			<string>com.typewhisper.mac</string>
+			<string>com.schneidervvv.dictum</string>
 			<key>PayloadUUID</key>
-			<string>3285150E-3D9C-5331-9BD3-CD3FC8D5F105</string>
+			<string>AC2076FE-F4D5-5E84-85C7-37CEEE41134A</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>Recommended</key>
 			<dict>
 				<key>LaunchAtLogin</key>
-				<true/>
-				<key>SuppressOptionalPrompts</key>
 				<true/>
 				<key>TranscriptionModelId</key>
 				<string>parakeet-tdt-0.6b-v3</string>
@@ -29,20 +27,18 @@
 		</dict>
 		<dict>
 			<key>PayloadDisplayName</key>
-			<string>TypeWhisper managed settings (com.typewhisper.typewhisper-app)</string>
+			<string>dictum managed settings (com.typewhisper.typewhisper-app)</string>
 			<key>PayloadIdentifier</key>
-			<string>com.typewhisper.mdm.recommended.com.typewhisper.typewhisper-app</string>
+			<string>com.schneidervvv.dictum.mdm.recommended.com.typewhisper.typewhisper-app</string>
 			<key>PayloadType</key>
 			<string>com.typewhisper.typewhisper-app</string>
 			<key>PayloadUUID</key>
-			<string>B6BE8D97-C05E-5D53-A1D7-B81856D95A36</string>
+			<string>595A601D-EA01-5312-8501-6BD347787ACF</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>Recommended</key>
 			<dict>
 				<key>LaunchAtLogin</key>
-				<true/>
-				<key>SuppressOptionalPrompts</key>
 				<true/>
 				<key>TranscriptionModelId</key>
 				<string>parakeet-tdt-0.6b-v3</string>
@@ -52,17 +48,17 @@
 		</dict>
 	</array>
 	<key>PayloadDescription</key>
-	<string>Managed settings for TypeWhisper. See docs/mdm/managed-settings.md.</string>
+	<string>Managed settings for dictum. See docs/mdm/managed-settings.md.</string>
 	<key>PayloadDisplayName</key>
-	<string>TypeWhisper Recommended Defaults</string>
+	<string>dictum 建议设置</string>
 	<key>PayloadIdentifier</key>
-	<string>com.typewhisper.mdm.recommended</string>
+	<string>com.schneidervvv.dictum.mdm.recommended</string>
 	<key>PayloadScope</key>
 	<string>System</string>
 	<key>PayloadType</key>
 	<string>Configuration</string>
 	<key>PayloadUUID</key>
-	<string>8B00C0F8-8F9B-5F65-814F-9A2A4FA64B5C</string>
+	<string>93A4FF17-FD7E-5257-8291-9B4F1EBDC4B3</string>
 	<key>PayloadVersion</key>
 	<integer>1</integer>
 </dict>

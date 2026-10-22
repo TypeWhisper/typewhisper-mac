@@ -91,7 +91,6 @@ enum PremiumCorrectionExamples {
         }
         return [("teh", "the"), ("recieve", "receive")]
     }
-
 }
 
 enum PairedDevicesPremiumCopy {

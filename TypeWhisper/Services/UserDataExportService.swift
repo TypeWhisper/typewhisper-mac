@@ -111,7 +111,7 @@ enum UserDataExportService {
 
     static let stagingDirectoryName = "DataExport-"
 
-    /// 旧版本写入的凭据也应排除在可移植归档之外。
+    /// 管理员或 defaults 命令写入的凭据也应排除在可移植归档之外。
     static let excludedPreferenceKeys: Set<String> = ["ManagedLicenseKey"]
 
     static let appSupportFolderName = "Application Support"

@@ -30,7 +30,7 @@ final class CLISupportTests: XCTestCase {
             "Exported settings to /tmp/settings.json"
         )
 
-        let importJSON = Data(#"{"workflowsImported":2,"dictionaryImported":1,"dictionarySkipped":3,"snippetsImported":0,"snippetsSkipped":0,"promptActionsImported":0,"profilesImported":0,"hotkeysApplied":1,"hotkeysSkipped":0,"pluginsInstalled":0,"pluginsSkipped":0,"pluginsRegistryFetchFailed":false,"historyImported":0,"historySkippedByRetention":0,"updateChannelApplied":false,"preferencesApplied":4}"#.utf8)
+        let importJSON = Data(#"{"workflowsImported":2,"dictionaryImported":1,"dictionarySkipped":3,"snippetsImported":0,"snippetsSkipped":0,"promptActionsImported":0,"profilesImported":0,"hotkeysApplied":1,"hotkeysSkipped":0,"pluginsConfigured":0,"pluginsSkipped":0,"historyImported":0,"historySkippedByRetention":0,"preferencesApplied":4}"#.utf8)
         let importSummary = OutputFormatter.formatSettingsImport(importJSON, json: false)
         XCTAssertTrue(importSummary.contains("Workflows: 2 imported"))
         XCTAssertTrue(importSummary.contains("Dictionary: 1 imported, 3 skipped"))
