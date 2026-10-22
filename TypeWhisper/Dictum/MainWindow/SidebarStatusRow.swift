@@ -23,6 +23,7 @@ struct SidebarStatusRow: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("dictum.sidebar.status")
         .task {
+            logger.notice("Sidebar speech status=\(String(describing: status), privacy: .public)")
             while !Task.isCancelled {
                 let current = SidebarStatus.current()
                 if status != current {
