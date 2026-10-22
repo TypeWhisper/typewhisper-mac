@@ -698,3 +698,67 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         )
     }
 }
+
+// MARK: - Recorder automation
+
+extension SpeakerTranscriptCoordinator {
+    /// Adds the speakers History holds for a Recorder recording to its completion.
+    /// - Parameter waitsForDetection: Waits for a detection run that is queued or
+    ///   running for the recording first.
+    func addingSpeakers(
+        to payload: RecorderTranscriptReadyPayload,
+        waitsForDetection: Bool
+    ) async -> RecorderTranscriptReadyPayload {
+        func record() -> TranscriptionRecord? {
+            do {
+                return try historyService.speakerRecord(forRecorderRecordingID: payload.recordingID)
+            } catch {
+                speakerLogger.error("Failed to look up the speaker record of a recording: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
+        if waitsForDetection, let recordID = record()?.id {
+            // A run that is started again meanwhile is waited for as well.
+            var waitedFor: Task<Void, Never>?
+            while let task = tasks[recordID], task != waitedFor {
+                waitedFor = task
+                await task.value
+            }
+        }
+        return RecorderSpeakerSnapshot.adding(record(), to: payload)
+    }
+}
+
+/// The speaker fields of a Recorder completion, in the shape `GET /v1/history` uses.
+@MainActor
+enum RecorderSpeakerSnapshot {
+    static func adding(
+        _ record: TranscriptionRecord?,
+        to payload: RecorderTranscriptReadyPayload
+    ) -> RecorderTranscriptReadyPayload {
+        var payload = payload
+        guard let record, !record.isDeleted, let state = record.speakerTranscriptState else { return payload }
+        payload.speakerState = state.rawValue
+        guard let transcript = record.speakerTranscript else { return payload }
+        let names = record.speakerNames
+        let me = SpeakerWorkspaceModel.microphoneSpeaker(
+            of: SpeakerTranscriptPresentation.turns(of: transcript),
+            ownSpeech: record.speakerOwnSpeech
+        )
+        payload.speakers = transcript.speakerIDs.map { speakerID in
+            // A name only suggested by a voice profile is a guess, never the speaker's name.
+            let entry = names?.entries.first { $0.speakerID == speakerID }
+            let isSuggestion = entry?.isSuggestion == true
+            return RecorderSpeaker(
+                id: speakerID,
+                name: (isSuggestion ? nil : entry?.displayName) ?? SpeakerTranscriptBuilder.outputLabel(for: speakerID),
+                suggestedName: isSuggestion ? entry?.displayName : nil,
+                isMe: speakerID == me
+            )
+        }
+        payload.speakerSegments = transcript.segments.map {
+            RecorderSpeakerSegment(start: $0.start, end: $0.end, speaker: $0.speakerID, text: $0.text)
+        }
+        return payload
+    }
+}

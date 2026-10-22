@@ -403,6 +403,9 @@ final class ServiceContainer: ObservableObject {
         audioRecorderViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)
         }
+        audioRecorderViewModel.addingRecorderSpeakers = { [speakerCoordinator] payload, waits in
+            await speakerCoordinator.addingSpeakers(to: payload, waitsForDetection: waits)
+        }
         calendarMeetingCountdownModel = CalendarMeetingCountdownModel(
             hotkeyService: hotkeyService,
             onButtonAction: {
