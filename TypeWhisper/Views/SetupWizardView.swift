@@ -834,12 +834,15 @@ struct SetupWizardView: View {
     // MARK: - Engine & AI
 
     private var engineAIStep: some View {
-        VStack(spacing: 10) {
+        // Once per update: the cards below share it instead of rebuilding the input.
+        let recommendation = SetupWizardEngineRecommendation.recommend(for: engineRecommendationInput)
+
+        return VStack(spacing: 10) {
             spokenLanguageRow
 
             localReadinessCard
 
-            switch engineRecommendation {
+            switch recommendation {
             case .engine(let choice) where choice.engine != .appleSpeech:
                 recommendationCard(for: choice)
             case .limitation(let limitation):
@@ -848,7 +851,7 @@ struct SetupWizardView: View {
                 EmptyView()
             }
 
-            appleSpeechCard
+            appleSpeechCard(recommendation: recommendation)
 
             appleIntelligenceCard
 
@@ -948,10 +951,8 @@ struct SetupWizardView: View {
 
     // MARK: Recommendation
 
-    private var engineRecommendation: SetupWizardEngineRecommendation {
-        SetupWizardEngineRecommendation.recommend(for: engineRecommendationInput)
-    }
-
+    /// Checks on disk which models each engine has downloaded, so the step builds it
+    /// once per update and passes the recommendation on.
     private var engineRecommendationInput: SetupWizardEngineRecommendationInput {
         _ = pluginManager.readinessRevision
         var engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [:]
@@ -1362,9 +1363,9 @@ struct SetupWizardView: View {
     }
 
     @ViewBuilder
-    private var appleSpeechCard: some View {
+    private func appleSpeechCard(recommendation: SetupWizardEngineRecommendation) -> some View {
         let isSelected = modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId
-        let isRecommended = engineRecommendation.choice?.engine == .appleSpeech
+        let isRecommended = recommendation.choice?.engine == .appleSpeech
         let card = setupCard(isSelected: isSelected) {
             HStack(spacing: 14) {
                 Image(systemName: "waveform.badge.mic")
@@ -1388,7 +1389,7 @@ struct SetupWizardView: View {
                             .clipShape(Capsule())
                     }
 
-                    Text(appleSpeechDescription)
+                    Text(appleSpeechDescription(for: recommendation))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1417,7 +1418,7 @@ struct SetupWizardView: View {
         }
     }
 
-    private var appleSpeechDescription: String {
+    private func appleSpeechDescription(for recommendation: SetupWizardEngineRecommendation) -> String {
         if isPreparingAppleSpeechFallback {
             return localizedAppText(
                 "Preparing the built-in speech engine for the first dictation test.",
@@ -1425,7 +1426,6 @@ struct SetupWizardView: View {
             )
         }
 
-        let recommendation = engineRecommendation
         let lightweight = String(localized: "Lightweight built-in option with no large local model.")
         if let appleSpeechEngine, case .specific(let codes) = spokenLanguages {
             let unsupported = SetupWizardEngineRecommendation.unsupportedLanguages(
