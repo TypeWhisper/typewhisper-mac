@@ -6,7 +6,7 @@
 
 ## 已交付
 
-* 2026-10-22 完成阶段 0 的 dictum 品牌、免费功能入口和上游在线服务清理，提供统一验证脚本、稳定本地签名、独占启动与停止命令；Xcode 测试 3299 通过、10 失败、3 跳过，SDK 测试 1209 通过、1 失败、16 跳过，失败项均已存在于基线。构建、签名一致性、应用启动和运行锁已在本机验证，使用方式见 [README](../README.md)。
+* 2026-10-22 完成阶段 0 的 dictum 品牌、免费功能入口和上游在线服务清理，提供统一验证脚本、稳定本地签名、独占启动与停止命令；Xcode 测试 3299 通过、10 失败、3 跳过，SDK 测试 1209 通过、1 失败、16 跳过，失败项均已存在于基线。GPL Debug 构建、AppStore 无签名编译、签名一致性、应用启动和运行锁已在本机验证，使用方式见 [README](../README.md)。
 * 2026-10-22 fork TypeWhisper 为 [schneidervvv/dictum](https://github.com/schneidervvv/dictum)，关闭仓库的 GitHub Actions；新建 Notion 数据库 [dictum产品路线图](https://app.notion.com/p/00ef0a36adde4420b66feba052f66a00)。
 * 2026-10-22 完成 Typeless 功能调研（[TYPELESS RESEARCH](TYPELESS_RESEARCH.md)）和 V0.1.0 阶段计划（[ROADMAP](ROADMAP.md)）。
 

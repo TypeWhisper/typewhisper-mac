@@ -532,11 +532,6 @@ final class ServiceContainer: ObservableObject {
                 self?.applyManagedPolicy(current, previous: previous)
             }
 
-        #if APPSTORE
-        // Listen for App Store transactions as early as possible.
-        appStorePremiumService.start()
-        #endif
-
         calendarMeetingAutomationController.initialize()
         historyService.failInterruptedSpeakerTranscripts()
         speakerVoiceProfileService.removeEmbeddingsOfDeletedRecordings()
