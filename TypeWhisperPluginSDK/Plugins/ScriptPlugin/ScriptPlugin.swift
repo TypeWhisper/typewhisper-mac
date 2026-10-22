@@ -508,7 +508,7 @@ private struct ScriptRow: View {
                         .lineLimit(1)
                 }
                 if !script.profileFilter.isEmpty {
-                    Text("Rules: \(script.profileFilter.joined(separator: ", "))")
+                    Text("Rules: \(script.profileFilter.joined(separator: ", "))", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -637,9 +637,9 @@ private struct ScriptEditView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Rules") {
+                Section(String(localized: "Rules", bundle: bundle)) {
                     if availableProfiles.isEmpty {
-                        Text("No rules configured.")
+                        Text("No rules configured.", bundle: bundle)
                             .foregroundStyle(.secondary)
                             .font(.caption)
                     } else {
@@ -659,7 +659,7 @@ private struct ScriptEditView: View {
 
                     Text(script.profileFilter.isEmpty
                          ? String(localized: "Active for all transcriptions.", bundle: bundle)
-                         : "Only active for selected rules.")
+                         : String(localized: "Only active for selected rules.", bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
