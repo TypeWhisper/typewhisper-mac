@@ -21,6 +21,27 @@ struct TermPackEntryOverride: Codable, Equatable {
     let ctcMinSimilarity: Float?
 }
 
+/// A local pack import that would replace an imported pack with the same ID.
+struct LocalTermPackReplacement: Identifiable, Equatable {
+    let existingName: String
+    let file: LocalTermPackFile
+
+    var id: String { file.id }
+}
+
+/// Why a local pack cannot be turned on: a built-in or registry pack uses its ID.
+enum LocalTermPackConflict: Equatable {
+    case builtIn
+    case community
+
+    func error(forID id: String) -> LocalTermPackError {
+        switch self {
+        case .builtIn: .builtInID(id)
+        case .community: .communityID(id)
+        }
+    }
+}
+
 private func dictionaryReplacementDisplayText(_ replacement: String) -> String {
     replacement.isEmpty ? "\"\"" : replacement
 }
@@ -216,6 +237,11 @@ class DictionaryViewModel: ObservableObject {
     /// Pack ID → entry key → settings the user changed before deactivating that pack.
     private var inactivePackEntryOverrides: [String: [String: TermPackEntryOverride]] = [:]
 
+    // Local Term Packs
+    @Published private(set) var localTermPackImportError: String?
+    @Published private(set) var pendingLocalTermPackReplacement: LocalTermPackReplacement?
+    @Published private(set) var pendingLocalTermPackRemoval: TermPack?
+
     // Engine setting suggestion for Terms
     @Published private(set) var termsSettingSuggestionProviderId: String?
     @Published private(set) var termsSettingActivations: [String: DictionaryTermsSettingActivation] = [:]
@@ -230,6 +256,7 @@ class DictionaryViewModel: ObservableObject {
     private let dictionaryService: DictionaryService
     private let licenseService: LicenseService?
     private let termPackRegistryService: TermPackRegistryService?
+    private let localTermPackStore: LocalTermPackStore?
     private let defaults: UserDefaults
     private let selectedTranscriptionEngine: @MainActor () -> (any TranscriptionEnginePlugin)?
     private let transcriptionEngineLookup: @MainActor (String) -> (any TranscriptionEnginePlugin)?
@@ -310,15 +337,24 @@ class DictionaryViewModel: ObservableObject {
         TermPack.allPacks.filter { !$0.requiresCommercialLicense || hasCommercialLicense }
     }
     var visibleCommunityPacks: [TermPack] {
-        (termPackRegistryService ?? TermPackRegistryService.shared)?
-            .communityPacks
-            .filter(canUsePack) ?? []
+        registryCommunityPacks.filter(canUsePack)
+    }
+    /// Imported local packs; empty when this view model has no local pack store.
+    var visibleLocalPacks: [TermPack] {
+        localTermPackStore?.packs ?? []
+    }
+    var supportsLocalTermPacks: Bool { localTermPackStore != nil }
+
+    /// Every loaded registry pack, including commercial packs this license cannot use.
+    private var registryCommunityPacks: [TermPack] {
+        (termPackRegistryService ?? TermPackRegistryService.shared)?.communityPacks ?? []
     }
 
     init(
         dictionaryService: DictionaryService,
         licenseService: LicenseService? = nil,
         termPackRegistryService: TermPackRegistryService? = nil,
+        localTermPackStore: LocalTermPackStore? = nil,
         defaults: UserDefaults = .standard,
         selectedTranscriptionEngine: @escaping @MainActor () -> (any TranscriptionEnginePlugin)? = { nil },
         transcriptionEngineLookup: @escaping @MainActor (String) -> (any TranscriptionEnginePlugin)? = {
@@ -328,6 +364,7 @@ class DictionaryViewModel: ObservableObject {
         self.dictionaryService = dictionaryService
         self.licenseService = licenseService
         self.termPackRegistryService = termPackRegistryService
+        self.localTermPackStore = localTermPackStore
         self.defaults = defaults
         self.selectedTranscriptionEngine = selectedTranscriptionEngine
         self.transcriptionEngineLookup = transcriptionEngineLookup
@@ -376,6 +413,14 @@ class DictionaryViewModel: ObservableObject {
                 }
                 .store(in: &cancellables)
         }
+
+        localTermPackStore?.$packs
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Editor Actions
@@ -843,7 +888,16 @@ class DictionaryViewModel: ObservableObject {
     // MARK: - Term Packs
 
     func isPackActivated(_ pack: TermPack) -> Bool {
-        activatedPackStates[pack.id] != nil
+        activatedState(for: pack) != nil
+    }
+
+    /// The activation state of this pack. A local pack and a registry pack may end up with the
+    /// same ID (a community pack published after the import); their states never stand in for
+    /// each other. Built-in and community packs keep matching by ID alone.
+    private func activatedState(for pack: TermPack) -> ActivatedTermPackState? {
+        guard let state = activatedPackStates[pack.id] else { return nil }
+        let stateIsLocal = state.source == TermPack.Source.local.rawValue
+        return stateIsLocal == (pack.source == .local) ? state : nil
     }
 
     func togglePack(_ pack: TermPack) {
@@ -867,6 +921,11 @@ class DictionaryViewModel: ObservableObject {
             error = String(localized: "This industry term pack requires an active commercial license.")
             return
         }
+        // Built-in and registry packs keep their IDs; a local pack never takes one over.
+        if let conflict = localPackConflict(for: pack) {
+            error = conflict.error(forID: pack.id).localizedDescription
+            return
+        }
 
         var nextStates = activatedPackStates
         nextStates[pack.id] = makeActivatedState(for: pack)
@@ -874,6 +933,7 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func deactivatePack(_ pack: TermPack) {
+        guard isPackActivated(pack) else { return }
         var nextStates = activatedPackStates
         nextStates.removeValue(forKey: pack.id)
         reconcileActivatedPacks(from: activatedPackStates, to: nextStates)
@@ -887,7 +947,7 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func hasUpdate(for pack: TermPack) -> Bool {
-        guard let state = activatedPackStates[pack.id],
+        guard let state = activatedState(for: pack),
               let installedVersion = state.installedVersion,
               let packVersion = pack.version else { return false }
         return TermPackRegistryService.compareVersions(packVersion, installedVersion) == .orderedDescending
@@ -916,14 +976,16 @@ class DictionaryViewModel: ObservableObject {
             return
         }
 
-        let industryPackIDs = Set(IndustryPreset.allCases.compactMap(\.termPackID))
         let allowedStates = activatedPackStates.filter { packID, state in
-            state.requiresCommercialLicense != true && !industryPackIDs.contains(packID)
+            state.requiresCommercialLicense != true && !Self.industryPackIDs.contains(packID)
         }
 
         guard allowedStates.count != activatedPackStates.count else { return }
         reconcileActivatedPacks(from: activatedPackStates, to: allowedStates)
     }
+
+    /// Registry IDs of the commercial industry packs, known even before the registry loads.
+    private static let industryPackIDs = Set(IndustryPreset.allCases.compactMap(\.termPackID))
 
     /// Resolves a pack by ID from built-in + community packs
     func resolvePack(id: String) -> TermPack? {
@@ -933,6 +995,171 @@ class DictionaryViewModel: ObservableObject {
         return (termPackRegistryService ?? TermPackRegistryService.shared)?
             .communityPacks
             .first(where: { $0.id == id })
+    }
+
+    // MARK: - Local Term Packs
+
+    /// The built-in or registry pack that owns this local pack's ID, if any.
+    func localPackConflict(for pack: TermPack) -> LocalTermPackConflict? {
+        guard pack.source == .local else { return nil }
+        return reservedPackConflict(forID: pack.id)
+    }
+
+    func importLocalTermPackFromFile() {
+        guard supportsLocalTermPacks else { return }
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = String(localized: "Select a term pack JSON file to import.")
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importLocalTermPack(from: url)
+    }
+
+    func importLocalTermPack(from url: URL) {
+        do {
+            importLocalTermPack(data: try Self.readLocalTermPackFile(at: url))
+        } catch {
+            localTermPackImportError = Self.localTermPackImportMessage(for: error)
+        }
+    }
+
+    /// Validates the file and adds it as a local pack. A pack with the same ID is only replaced
+    /// after `confirmLocalTermPackReplacement()`. The import leaves a new pack off.
+    func importLocalTermPack(data: Data) {
+        guard let localTermPackStore else { return }
+        do {
+            let file = try LocalTermPackFile.decode(data)
+            try checkLocalTermPackID(file.id)
+            if let existing = localTermPackStore.pack(withID: file.id) {
+                pendingLocalTermPackReplacement = LocalTermPackReplacement(existingName: existing.name, file: file)
+                return
+            }
+            try saveImportedLocalTermPack(file)
+        } catch {
+            localTermPackImportError = Self.localTermPackImportMessage(for: error)
+        }
+    }
+
+    func confirmLocalTermPackReplacement() {
+        guard let replacement = pendingLocalTermPackReplacement else { return }
+        pendingLocalTermPackReplacement = nil
+        do {
+            // The registry may have loaded a pack with this ID while the question was open.
+            try checkLocalTermPackID(replacement.file.id)
+            try saveImportedLocalTermPack(replacement.file)
+        } catch {
+            localTermPackImportError = Self.localTermPackImportMessage(for: error)
+        }
+    }
+
+    func cancelLocalTermPackReplacement() {
+        pendingLocalTermPackReplacement = nil
+    }
+
+    func clearLocalTermPackImportError() {
+        localTermPackImportError = nil
+    }
+
+    func exportLocalTermPackToFile(_ pack: TermPack) {
+        guard let data = exportedLocalTermPackData(id: pack.id) else { return }
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.json]
+        panel.nameFieldStringValue = "\(pack.id).json"
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            self.error = String(localized: "The term pack could not be exported. \(error.localizedDescription)")
+        }
+    }
+
+    /// The pack file as stored, in the registry format, ready to import on another Mac.
+    func exportedLocalTermPackData(id: String) -> Data? {
+        try? localTermPackStore?.file(withID: id)?.encodedData()
+    }
+
+    func requestLocalTermPackRemoval(_ pack: TermPack) {
+        guard pack.source == .local, localTermPackStore?.pack(withID: pack.id) != nil else { return }
+        pendingLocalTermPackRemoval = pack
+    }
+
+    func cancelLocalTermPackRemoval() {
+        pendingLocalTermPackRemoval = nil
+    }
+
+    /// Deletes the pack file and removes the entries the pack added to the dictionary.
+    func confirmLocalTermPackRemoval() {
+        guard let pack = pendingLocalTermPackRemoval, let localTermPackStore else { return }
+        pendingLocalTermPackRemoval = nil
+
+        do {
+            try localTermPackStore.remove(id: pack.id)
+        } catch {
+            self.error = String(localized: "The term pack could not be removed. \(error.localizedDescription)")
+            return
+        }
+        deactivatePack(pack)
+        // Forget per-entry settings, unless a registry pack with the same ID may own them.
+        if reservedPackConflict(forID: pack.id) == nil,
+           inactivePackEntryOverrides.removeValue(forKey: pack.id) != nil {
+            saveInactivePackEntryOverrides()
+        }
+    }
+
+    private func saveImportedLocalTermPack(_ file: LocalTermPackFile) throws {
+        guard let localTermPackStore else { return }
+        try localTermPackStore.save(file)
+
+        // The file defines the pack: when it is on, its entries follow the imported file.
+        let pack = file.termPack
+        if isPackActivated(pack) {
+            updatePack(pack)
+            importMessage = String(localized: "“\(pack.name)” was imported, and its dictionary entries were updated.")
+        } else {
+            importMessage = String(localized: "“\(pack.name)” was added to Local Packs. Turn it on to add its entries to the dictionary.")
+        }
+    }
+
+    private func checkLocalTermPackID(_ id: String) throws {
+        if let conflict = reservedPackConflict(forID: id) {
+            throw conflict.error(forID: id)
+        }
+    }
+
+    /// Built-in and registry packs own their IDs. Registry IDs are known from the loaded
+    /// registry, the industry presets and packs that are on while the registry is offline.
+    private func reservedPackConflict(forID id: String) -> LocalTermPackConflict? {
+        if TermPack.builtInIDs.contains(id) { return .builtIn }
+        if Self.industryPackIDs.contains(id) || registryCommunityPacks.contains(where: { $0.id == id }) {
+            return .community
+        }
+        if let state = activatedPackStates[id], state.source != TermPack.Source.local.rawValue {
+            return state.source == TermPack.Source.builtIn.rawValue ? .builtIn : .community
+        }
+        return nil
+    }
+
+    private static func readLocalTermPackFile(at url: URL) throws -> Data {
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+           size > LocalTermPackFile.maximumFileSize {
+            throw LocalTermPackError.fileTooLarge
+        }
+        do {
+            return try Data(contentsOf: url)
+        } catch {
+            throw LocalTermPackError.unreadableFile
+        }
+    }
+
+    private static func localTermPackImportMessage(for error: any Error) -> String {
+        if let packError = error as? LocalTermPackError {
+            return packError.localizedDescription
+        }
+        return String(localized: "The term pack could not be saved. \(error.localizedDescription)")
     }
 
     // MARK: - Reconciliation
@@ -976,10 +1203,12 @@ class DictionaryViewModel: ObservableObject {
             }
         }
 
-        // Built-in packs first, then community packs by ID
+        // Built-in packs first, then community and local packs, each by ID
         let sortedStates = nextStates.values.sorted { a, b in
-            if a.source != b.source {
-                return a.source == "builtIn"
+            let aRank = Self.reconcileRank(ofSource: a.source)
+            let bRank = Self.reconcileRank(ofSource: b.source)
+            if aRank != bRank {
+                return aRank < bRank
             }
             return a.packID < b.packID
         }
@@ -1087,6 +1316,16 @@ class DictionaryViewModel: ObservableObject {
     /// Pack terms start at Precise boosting: packs carry many terms that sit close to everyday words,
     /// so the size-dependent Auto threshold lets them replace ordinary speech.
     private static let packTermCtcMinSimilarity = Float(preciseCtcMinSimilarity)
+
+    /// The pack that comes first claims an entry several active packs share.
+    private static func reconcileRank(ofSource source: String) -> Int {
+        switch TermPack.Source(rawValue: source) {
+        case .builtIn: 0
+        case .community: 1
+        case .local: 2
+        case nil: 3
+        }
+    }
 
     private static func termKey(_ term: String) -> String {
         "term:\(term.lowercased())"

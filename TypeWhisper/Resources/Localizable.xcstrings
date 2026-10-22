@@ -16005,6 +16005,160 @@
         }
       }
     },
+    "Local Packs" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lokale Pakete"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルパック"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地包"
+          }
+        }
+      }
+    },
+    "Your own packs from a JSON file in the community pack format. They stay on this Mac and are not reviewed, synced or updated by TypeWhisper; import an edited file to change a pack. Community packs come from the reviewed TypeWhisper registry." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine eigenen Pakete aus einer JSON-Datei im Format der Community-Pakete. Sie bleiben auf diesem Mac und werden von TypeWhisper nicht geprüft, synchronisiert oder aktualisiert; um ein Paket zu ändern, importierst du die bearbeitete Datei erneut. Community-Pakete stammen aus dem geprüften TypeWhisper-Verzeichnis."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "コミュニティパックと同じ形式のJSONファイルから読み込んだ独自のパックです。このMacにのみ保存され、TypeWhisperによる審査、同期、更新は行われません。パックを変更するには、編集したファイルをもう一度読み込んでください。コミュニティパックは、審査済みのTypeWhisperレジストリから提供されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "来自社区包格式 JSON 文件的自有术语包。它们只保留在这台 Mac 上，TypeWhisper 不会审核、同步或更新它们；要更改某个包，请重新导入编辑后的文件。社区包来自经过审核的 TypeWhisper 官方目录。"
+          }
+        }
+      }
+    },
+    "No local packs imported yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine lokalen Pakete importiert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "まだローカルパックは読み込まれていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未导入本地包。"
+          }
+        }
+      }
+    },
+    "Import Term Pack..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriff-Paket importieren..."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パックを読み込み..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入术语包…"
+          }
+        }
+      }
+    },
+    "Select a term pack JSON file to import." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriff-Paket-JSON-Datei zum Importieren auswählen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "読み込む用語パックのJSONファイルを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要导入的术语包 JSON 文件。"
+          }
+        }
+      }
+    },
+    "More actions for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Aktionen für %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@のその他の操作"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 的更多操作"
+          }
+        }
+      }
+    },
+    "Remove..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen..."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "削除..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "移除…"
+          }
+        }
+      }
+    },
     "Compare" : {
       "localizations" : {
         "de" : {
@@ -21136,6 +21290,226 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入完成"
+          }
+        }
+      }
+    },
+    "Could Not Import Term Pack" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriff-Paket konnte nicht importiert werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パックを読み込めませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法导入术语包"
+          }
+        }
+      }
+    },
+    "“%@” was imported, and its dictionary entries were updated." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ wurde importiert, und seine Wörterbuch-Einträge wurden aktualisiert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を読み込み、辞書のエントリを更新しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导入“%@”，并更新了其词典条目。"
+          }
+        }
+      }
+    },
+    "“%@” was added to Local Packs. Turn it on to add its entries to the dictionary." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ wurde zu den lokalen Paketen hinzugefügt. Schalte es ein, um seine Einträge zum Wörterbuch hinzuzufügen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」をローカルパックに追加しました。オンにすると、そのエントリが辞書に追加されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已将“%@”添加到本地包。开启后即可将其条目添加到词典。"
+          }
+        }
+      }
+    },
+    "Replace “%@”?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ ersetzen?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を置き換えますか？"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要替换“%@”吗？"
+          }
+        }
+      }
+    },
+    "A local pack with the id “%@” is already imported. The file replaces its name, terms and corrections. If the pack is on, its dictionary entries are updated." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein lokales Paket mit der ID „%@“ ist bereits importiert. Die Datei ersetzt seinen Namen, seine Begriffe und Korrekturen. Ist das Paket eingeschaltet, werden seine Wörterbuch-Einträge aktualisiert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID「%@」のローカルパックはすでに読み込まれています。このファイルで名前、用語、修正が置き換えられます。パックがオンの場合は、辞書のエントリも更新されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID 为“%@”的本地包已导入。该文件将替换其名称、词条和修正。如果该包已开启，其词典条目也会更新。"
+          }
+        }
+      }
+    },
+    "Remove “%@”?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ entfernen?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を削除しますか？"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要移除“%@”吗？"
+          }
+        }
+      }
+    },
+    "The pack is deleted from this Mac, and the entries it added are removed from the dictionary. You can import the file again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Paket wird von diesem Mac gelöscht, und die Einträge, die es hinzugefügt hat, werden aus dem Wörterbuch entfernt. Du kannst die Datei später erneut importieren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "パックはこのMacから削除され、パックが追加したエントリも辞書から削除されます。ファイルは後でもう一度読み込めます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该包将从这台 Mac 上删除，其添加的条目也会从词典中移除。你可以稍后重新导入该文件。"
+          }
+        }
+      }
+    },
+    "The term pack could not be saved. %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Begriff-Paket konnte nicht gespeichert werden. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パックを保存できませんでした。%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法保存术语包。%@"
+          }
+        }
+      }
+    },
+    "The term pack could not be exported. %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Begriff-Paket konnte nicht exportiert werden. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パックを書き出せませんでした。%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法导出术语包。%@"
+          }
+        }
+      }
+    },
+    "The term pack could not be removed. %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Begriff-Paket konnte nicht entfernt werden. %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パックを削除できませんでした。%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移除术语包。%@"
           }
         }
       }
@@ -36031,6 +36405,358 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "该文件不是有效的词典 JSON 文件。"
+          }
+        }
+      }
+    },
+    "The file could not be read." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei konnte nicht gelesen werden."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルを読み込めませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取该文件。"
+          }
+        }
+      }
+    },
+    "The file is larger than 2 MB, which is too large for a term pack." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei ist größer als 2 MB und damit zu groß für ein Begriff-Paket."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイルが2 MBを超えているため、用語パックとしては大きすぎます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件大于 2 MB，作为术语包过大。"
+          }
+        }
+      }
+    },
+    "The file is not valid JSON." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei enthält kein gültiges JSON."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルは有効なJSONではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件不是有效的 JSON。"
+          }
+        }
+      }
+    },
+    "The file contains a list instead of a term pack. To import a dictionary export, use Import... in the Dictionary actions menu." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei enthält eine Liste statt eines Begriff-Pakets. Einen Wörterbuch-Export importierst du mit „Importieren...“ im Aktionsmenü des Wörterbuchs."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルには用語パックではなくリストが含まれています。辞書の書き出しファイルを読み込むには、辞書のアクションメニューにある「読み込み...」を使用してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件包含的是列表，而不是术语包。要导入词典导出文件，请使用词典操作菜单中的“导入…”。"
+          }
+        }
+      }
+    },
+    "The file is not a term pack. A term pack is a JSON object with an id, a name, metadata and terms or corrections." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Datei ist kein Begriff-Paket. Ein Begriff-Paket ist ein JSON-Objekt mit einer ID, einem Namen, Metadaten und Begriffen oder Korrekturen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このファイルは用語パックではありません。用語パックは、ID、名前、メタデータ、および用語または修正を含むJSONオブジェクトです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "该文件不是术语包。术语包是包含 ID、名称、元数据以及词条或修正的 JSON 对象。"
+          }
+        }
+      }
+    },
+    "The required field “%@” is missing or empty." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Pflichtfeld „%@“ fehlt oder ist leer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必須フィールド「%@」がないか、空です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "必填字段“%@”缺失或为空。"
+          }
+        }
+      }
+    },
+    "The field “%@” has the wrong format." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Feld „%@“ hat das falsche Format."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フィールド「%@」の形式が正しくありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字段“%@”的格式不正确。"
+          }
+        }
+      }
+    },
+    "The id “%@” is not valid. Use lowercase letters, numbers and hyphens, for example “my-team-terms”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die ID „%@“ ist ungültig. Verwende Kleinbuchstaben, Ziffern und Bindestriche, zum Beispiel „my-team-terms“."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID「%@」は無効です。小文字の英字、数字、ハイフンを使用してください（例:「my-team-terms」）。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID“%@”无效。请使用小写字母、数字和连字符，例如“my-team-terms”。"
+          }
+        }
+      }
+    },
+    "The version “%@” is not valid. Use numbers separated by dots, for example “1.0.0”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Version „%@“ ist ungültig. Verwende durch Punkte getrennte Zahlen, zum Beispiel „1.0.0“."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョン「%@」は無効です。ドットで区切った数字を使用してください（例:「1.0.0」）。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本“%@”无效。请使用以点分隔的数字，例如“1.0.0”。"
+          }
+        }
+      }
+    },
+    "Term %lld is empty or not text." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriff %lld ist leer oder kein Text."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語%lldが空か、テキストではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 个词条为空或不是文本。"
+          }
+        }
+      }
+    },
+    "The term “%@” appears more than once." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Begriff „%@“ kommt mehrfach vor."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語「%@」が複数回含まれています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "词条“%@”出现了多次。"
+          }
+        }
+      }
+    },
+    "Correction %lld needs an original and a replacement text." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Korrektur %lld braucht einen Original- und einen Ersatztext."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正%lldには、元のテキストと置換テキストが必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第 %lld 个修正需要原文和替换文本。"
+          }
+        }
+      }
+    },
+    "There is more than one correction for “%@”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für „%@“ gibt es mehr als eine Korrektur."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」に対する修正が複数あります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”有多个修正。"
+          }
+        }
+      }
+    },
+    "The term pack “%@” has no terms or corrections." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Begriff-Paket „%@“ enthält keine Begriffe oder Korrekturen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用語パック「%@」には用語も修正も含まれていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "术语包“%@”不包含任何词条或修正。"
+          }
+        }
+      }
+    },
+    "The id “%@” belongs to a built-in term pack. Change the id in the file and import it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die ID „%@“ gehört zu einem integrierten Begriff-Paket. Ändere die ID in der Datei und importiere sie erneut."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID「%@」は内蔵の用語パックで使用されています。ファイル内のIDを変更して、もう一度読み込んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID“%@”属于内置术语包。请在文件中更改 ID 后重新导入。"
+          }
+        }
+      }
+    },
+    "The id “%@” belongs to a community term pack. Change the id in the file and import it again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die ID „%@“ gehört zu einem Community-Begriff-Paket. Ändere die ID in der Datei und importiere sie erneut."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID「%@」はコミュニティの用語パックで使用されています。ファイル内のIDを変更して、もう一度読み込んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ID“%@”属于社区术语包。请在文件中更改 ID 后重新导入。"
           }
         }
       }

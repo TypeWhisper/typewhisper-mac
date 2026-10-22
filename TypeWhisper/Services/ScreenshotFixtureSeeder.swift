@@ -63,7 +63,8 @@ extension ServiceContainer {
 
         seedScreenshotPluginRegistry()
         seedScreenshotTermPacks()
-        DictionaryViewModel.shared.filterTab = AppConstants.screenshotState == "dictionary-term-packs"
+        seedScreenshotLocalTermPacks()
+        DictionaryViewModel.shared.filterTab = Self.termPackScreenshotStates.contains(AppConstants.screenshotState ?? "")
             ? .termPacks
             : .all
         pluginManager.setRuleNamesProvider { [weak self] in
@@ -527,6 +528,65 @@ extension ServiceContainer {
             ),
         ]
         termPackRegistryService.fetchState = .loaded
+    }
+
+    private static let localTermPackScreenshotStates: Set<String> = [
+        "dictionary-local-term-packs",
+        "dictionary-local-term-pack-error",
+        "dictionary-local-term-pack-replace",
+    ]
+
+    private static let termPackScreenshotStates = localTermPackScreenshotStates.union(["dictionary-term-packs"])
+
+    /// An imported local pack that is turned on. The error state adds a rejected import, the
+    /// replace state an import of an edited file with the same id.
+    private func seedScreenshotLocalTermPacks() {
+        guard let state = AppConstants.screenshotState,
+              Self.localTermPackScreenshotStates.contains(state) else { return }
+
+        let file = LocalTermPackFile(
+            id: "acme-team-terms",
+            name: "Acme Team Terms",
+            description: "Product names and internal tools of the Acme team.",
+            icon: "person.3",
+            version: "1.0.0",
+            author: "Acme Docs Team",
+            terms: ["Acme Cloud", "Roadrunner", "QuickShip", "Coyote API"],
+            corrections: [TermPackCorrection(original: "quick ship", replacement: "QuickShip", caseSensitive: false)],
+            names: ["de": "Acme-Teambegriffe", "ja": "Acme チーム用語", "zh": "Acme 团队词汇"],
+            descriptions: [
+                "de": "Produktnamen und interne Tools des Acme-Teams.",
+                "ja": "Acme チームの製品名と社内ツールです。",
+                "zh": "Acme 团队的产品名称和内部工具。",
+            ]
+        )
+        try? localTermPackStore.save(file)
+        DictionaryViewModel.shared.activatePack(file.termPack)
+
+        switch state {
+        case "dictionary-local-term-pack-error":
+            // A real import of a file that reuses a built-in pack's ID.
+            let rejected = #"{"id": "web-dev", "name": "My Web Terms", "description": "Web words", "icon": "globe", "version": "1.0.0", "author": "Acme Docs Team", "terms": ["Remix"]}"#
+            DictionaryViewModel.shared.importLocalTermPack(data: Data(rejected.utf8))
+        case "dictionary-local-term-pack-replace":
+            let edited = LocalTermPackFile(
+                id: file.id,
+                name: file.name,
+                description: file.description,
+                icon: file.icon,
+                version: "1.1.0",
+                author: file.author,
+                terms: file.terms + ["Anvil"],
+                corrections: file.corrections,
+                names: file.names,
+                descriptions: file.descriptions
+            )
+            if let data = try? edited.encodedData() {
+                DictionaryViewModel.shared.importLocalTermPack(data: data)
+            }
+        default:
+            break
+        }
     }
 }
 

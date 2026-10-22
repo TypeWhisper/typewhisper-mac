@@ -55,7 +55,9 @@ struct SettingsView: View {
         case "recorder": return .recorder
         case "history": return .history
         case "statistics": return .statistics
-        case "dictionary", "dictionary-term-packs": return .dictionary
+        case "dictionary", "dictionary-term-packs", "dictionary-local-term-packs", "dictionary-local-term-pack-error",
+             "dictionary-local-term-pack-replace":
+            return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
         case "premium": return .premium
