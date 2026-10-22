@@ -1064,11 +1064,12 @@ final class MenuBarGroupingTests: XCTestCase {
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
+            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
+             .correctLastDictation]
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
-            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
+            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription, .correctLastDictation]
         )
     }
 }

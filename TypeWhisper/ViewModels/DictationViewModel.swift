@@ -285,6 +285,16 @@ final class DictationViewModel: ObservableObject {
                 completion: completion
             )
         }
+
+        func with(text: String) -> UndeliveredTranscript {
+            UndeliveredTranscript(
+                text: text,
+                rawTranscript: rawTranscript,
+                outputFormat: outputFormat,
+                reason: reason,
+                completion: completion
+            )
+        }
     }
 
     /// Long enough to focus another text field before clicking Insert. Hovering pauses it.
@@ -413,6 +423,7 @@ final class DictationViewModel: ObservableObject {
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
     var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
+    var correctLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .correctLastDictation) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -531,6 +542,35 @@ final class DictationViewModel: ObservableObject {
                 self?.reflectRawTranscriptRestore(id: id, rawText: rawText)
             }
         )
+    }()
+
+    private let lastDictationCorrectionPresenter: any LastDictationCorrectionPresenting
+    /// Correct Last Dictation (issue #1020): edits the latest dictation inside TypeWhisper,
+    /// learns from the edit and copies the result. The text in the target app stays as inserted.
+    private(set) lazy var lastDictationCorrectionHandler: LastDictationCorrectionHandler = {
+        let learningService = targetAppCorrectionLearningService
+        let handler = LastDictationCorrectionHandler(
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
+            presenter: lastDictationCorrectionPresenter,
+            learningAvailability: { [weak self] in
+                self?.lastDictationCorrectionLearningAvailability ?? .notOffered
+            },
+            learnCorrection: { originalText, correctedText in
+                learningService.learnFromConfirmedCorrection(
+                    originalText: originalText,
+                    correctedText: correctedText
+                )
+            },
+            pasteboardProvider: { [weak self] in
+                self?.pasteboardProvider() ?? .general
+            },
+            accessibilityAnnouncementService: accessibilityAnnouncementService
+        )
+        handler.onCorrectionApplied = { [weak self] id, correctedText in
+            self?.reflectCorrectedLastDictation(id: id, correctedText: correctedText)
+        }
+        return handler
     }()
 
     private var cancellables = Set<AnyCancellable>()
@@ -704,7 +744,8 @@ final class DictationViewModel: ObservableObject {
         recoveryFallbackRunner: RecoveryFallbackRunner? = nil,
         recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider? = nil,
         primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil,
-        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil
+        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil,
+        lastDictationCorrectionPresenter: (any LastDictationCorrectionPresenting)? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -811,6 +852,8 @@ final class DictationViewModel: ObservableObject {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore
         )
+        self.lastDictationCorrectionPresenter = lastDictationCorrectionPresenter
+            ?? LastDictationCorrectionPanelController()
         self.settingsHandler = DictationSettingsHandler(
             hotkeyService: hotkeyService,
             audioRecordingService: audioRecordingService,
@@ -1333,7 +1376,8 @@ final class DictationViewModel: ObservableObject {
         let transcriptionID: UUID
         let timestamp: Date
         let rawText: String
-        let finalText: String
+        /// Changed by Correct Last Dictation when the dictation is corrected before it was persisted.
+        var finalText: String
         let appName: String?
         let appBundleIdentifier: String?
         var appURL: String?
@@ -2326,6 +2370,8 @@ final class DictationViewModel: ObservableObject {
         lastDictationError = nil
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
+        // The editor has the keyboard focus, so the new dictation would be inserted into it.
+        lastDictationCorrectionHandler.cancel()
         modelManager.cancelAutoUnloadTimer()
         state = .recording
         partialText = ""
@@ -2757,8 +2803,26 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var shouldTrackTargetAppCorrectionLearning: Bool {
-        (licenseService?.hasCommercialLicense ?? false) &&
-            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        correctionLearningAvailability == .available
+    }
+
+    /// Learning from corrections needs a Commercial license and the setting turned on. The same
+    /// gate applies to edits after insertion and to Correct Last Dictation.
+    private var correctionLearningAvailability: CorrectionLearningAvailability {
+        guard licenseService?.hasCommercialLicense ?? false else { return .requiresLicense }
+        return UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+            ? .available
+            : .turnedOff
+    }
+
+    /// The App Store edition does not offer learning from corrections (see
+    /// `PremiumFeatureID.editionFeatures`), so Correct Last Dictation only corrects and copies there.
+    private var lastDictationCorrectionLearningAvailability: CorrectionLearningAvailability {
+        #if APPSTORE
+        .notOffered
+        #else
+        correctionLearningAvailability
+        #endif
     }
 
     private var effectiveNumberNormalizationOverride: Bool? {
@@ -5053,7 +5117,24 @@ final class DictationViewModel: ObservableObject {
         pasteboard.setString(text, forType: .string)
     }
 
+    /// True when Correct Last Dictation has a dictation to open.
+    var canCorrectLastDictation: Bool {
+        lastDictationCorrectionHandler.latestTarget() != nil
+    }
+
+    /// Opens the Correct Last Dictation editor, or closes it when it is already open.
+    func triggerCorrectLastDictation() {
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
+        // A running workflow or Insert also shows the inserting state, and its paste would land
+        // in the editor, which takes the keyboard focus.
+        let isPasting = isProcessingStandaloneWorkflow || isInsertingUndeliveredTranscript
+        lastDictationCorrectionHandler.toggle(currentState: isPasting ? .processing : state)
+    }
+
     func pasteLastTranscription() {
+        // The editor would otherwise receive the paste meant for the focused app.
+        lastDictationCorrectionHandler.cancel()
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
         // The undelivered-transcript feedback keeps the state busy, so insert its transcript here.
@@ -5137,15 +5218,38 @@ final class DictationViewModel: ObservableObject {
         if let record = historyService.record(withID: id) {
             historyService.updateRecord(record, finalText: rawText)
         }
-        if let session = dictationSessions[id], session.status == .completed,
-           var transcription = session.transcription {
-            transcription.text = rawText
-            transcription.wordsCount = rawText.split(whereSeparator: \.isWhitespace).count
-            storeDictationSession(DictationSessionSnapshot(
-                id: session.id, status: session.status, transcription: transcription, error: session.error
-            ))
-        }
+        updateCompletedDictationSessionText(id: id, text: rawText)
         lastTranscribedText = rawText
+    }
+
+    /// Keeps this session's copies of a dictation in step with a correction from Correct Last
+    /// Dictation. The handler has updated History and the recent transcriptions already; the
+    /// text in the target app stays as it was inserted.
+    private func reflectCorrectedLastDictation(id: UUID, correctedText: String) {
+        // Not persisted yet: the history record is written with the corrected text.
+        if let index = pendingPostInsertionDictationIndex(id: id) {
+            pendingPostInsertionDictations[index].finalText = correctedText
+        }
+        updateCompletedDictationSessionText(id: id, text: correctedText)
+        // A pending Insert offer for this dictation inserts the corrected text.
+        if case .insertUndeliveredTranscript(let transcript)? = actionFeedbackAction,
+           transcript.completion.id == id {
+            actionFeedbackAction = .insertUndeliveredTranscript(transcript.with(text: correctedText))
+        }
+        // Read Back follows the corrected text, unless a newer dictation has finished since.
+        if recentTranscriptionStore.sessionEntries.first?.id == id {
+            lastTranscribedText = correctedText
+        }
+    }
+
+    private func updateCompletedDictationSessionText(id: UUID, text: String) {
+        guard let session = dictationSessions[id], session.status == .completed,
+              var transcription = session.transcription else { return }
+        transcription.text = text
+        transcription.wordsCount = text.split(whereSeparator: \.isWhitespace).count
+        storeDictationSession(DictationSessionSnapshot(
+            id: session.id, status: session.status, transcription: transcription, error: session.error
+        ))
     }
 
     var canRecoverLastRecording: Bool {
@@ -5164,11 +5268,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerWorkflowPalette() {
+        lastDictationCorrectionHandler.cancel()
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
     }
 
     func processWorkflowHotkeyText(workflowId: UUID) {
+        lastDictationCorrectionHandler.cancel()
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.hide()
         guard let workflow = workflowService.workflow(id: workflowId) else { return }
@@ -5180,6 +5286,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerRecentTranscriptionsPalette() {
+        lastDictationCorrectionHandler.cancel()
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }

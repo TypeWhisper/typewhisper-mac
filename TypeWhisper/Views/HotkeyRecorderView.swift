@@ -242,6 +242,7 @@ struct HotkeyRecorderView: View {
         case .recorderToggle: return String(localized: "recorder.shortcut.title")
         case .undoLastDictation: return localizedAppText("Undo Last Dictation", de: "Letztes Diktat rückgängig")
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
+        case .correctLastDictation: return String(localized: "Correct Last Dictation")
         }
     }
 
