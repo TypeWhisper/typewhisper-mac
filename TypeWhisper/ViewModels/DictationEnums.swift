@@ -29,6 +29,11 @@ extension NotchIndicatorContent {
     static func showsModel(style: IndicatorStyle, left: NotchIndicatorContent, right: NotchIndicatorContent) -> Bool {
         right == .model || (style != .minimal && left == .model)
     }
+
+    /// The content a side actually shows. The Recorder has no model menu, so Model shows nothing there.
+    func shown(isRecorder: Bool) -> NotchIndicatorContent {
+        isRecorder && self == .model ? .none : self
+    }
 }
 
 enum NotchIndicatorDisplay: String, CaseIterable {

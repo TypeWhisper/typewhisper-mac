@@ -50,8 +50,8 @@ struct NotchIndicatorView: View {
             return NotchIndicatorLayout.recordingClosedWidth(
                 hasNotch: geometry.hasNotch,
                 notchWidth: geometry.notchWidth,
-                leftContent: viewModel.notchIndicatorLeftContent,
-                rightContent: viewModel.notchIndicatorRightContent,
+                leftContent: viewModel.notchIndicatorLeftContent.shown(isRecorder: presentation.isRecorder),
+                rightContent: viewModel.notchIndicatorRightContent.shown(isRecorder: presentation.isRecorder),
                 recordingDuration: presentation.recordingDuration,
                 activeRuleName: presentation.activeRuleName,
                 modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)
@@ -70,7 +70,7 @@ struct NotchIndicatorView: View {
         }
 
         let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
-            viewModel.notchIndicatorLeftContent,
+            viewModel.notchIndicatorLeftContent.shown(isRecorder: presentation.isRecorder),
             recordingDuration: presentation.recordingDuration,
             activeRuleName: presentation.activeRuleName,
             modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)

@@ -132,4 +132,10 @@ final class NotchIndicatorLayoutTests: XCTestCase {
         }
         XCTAssertGreaterThan(closed(.model), closed(.none))
     }
+
+    func testRecorderShowsNoModelContent() {
+        XCTAssertEqual(NotchIndicatorContent.model.shown(isRecorder: true), NotchIndicatorContent.none)
+        XCTAssertEqual(NotchIndicatorContent.model.shown(isRecorder: false), NotchIndicatorContent.model)
+        XCTAssertEqual(NotchIndicatorContent.timer.shown(isRecorder: true), NotchIndicatorContent.timer)
+    }
 }
