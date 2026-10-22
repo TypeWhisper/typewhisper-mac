@@ -107,6 +107,8 @@ struct MetaResponsesClient: Sendable {
 
         switch httpResponse.statusCode {
         case 200:
+            // Reported before parsing: a reply without text still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
             return try Self.parseResponse(data)
         case 401:
             throw PluginChatError.invalidApiKey

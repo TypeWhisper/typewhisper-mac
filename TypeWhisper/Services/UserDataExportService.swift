@@ -9,8 +9,9 @@ import UniformTypeIdentifiers
 ///
 /// Deliberately not listed: `~/Library/Application Support/FluidAudio`
 /// (Parakeet models shared with other apps), recorder output in
-/// `~/Documents/TypeWhisper Recordings` (user files), a user-chosen cloud sync
-/// folder, and the iCloud Drive package (both reach other devices).
+/// `~/Documents/TypeWhisper Recordings` or the Recorder folder the user chose
+/// (user files), a user-chosen cloud sync folder, and the iCloud Drive package
+/// (both reach other devices).
 struct UserDataLocations: Sendable {
     /// Prefix for every file and folder this app variant creates in the
     /// per-user temporary directory: API uploads, recorder tracks, import

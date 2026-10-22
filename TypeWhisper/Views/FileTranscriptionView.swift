@@ -5,6 +5,8 @@ import TypeWhisperPluginSDK
 struct FileTranscriptionView: View {
     @ObservedObject private var viewModel = FileTranscriptionViewModel.shared
     @ObservedObject private var watchFolder = WatchFolderViewModel.shared
+    // Names the default engine in the pickers and follows its changes.
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
 
     @State private var isDragTargeted = false
     @State private var showFilePicker = false
@@ -103,7 +105,7 @@ struct FileTranscriptionView: View {
 
                 Section(localizedAppText("Watch Folder Transcription", de: "Ordner-Transkription")) {
                     Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.engineChoice) {
-                        Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
+                        Text(defaultEngineTitle).tag(nil as String?)
                         Divider()
                         ForEach(watchFolder.availableEngines, id: \.providerId) { engine in
                             HStack {
@@ -114,6 +116,10 @@ struct FileTranscriptionView: View {
                                 }
                             }.tag(engine.providerId as String?)
                         }
+                    }
+
+                    if watchFolder.engineChoice == nil {
+                        DefaultEngineSettingsLink()
                     }
 
                     if let engine = watchFolder.resolvedEngine {
@@ -644,7 +650,7 @@ struct FileTranscriptionView: View {
     private var fileTranscriptionSettings: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                Text(String(localized: "Default Engine")).tag(nil as String?)
+                Text(defaultEngineTitle).tag(nil as String?)
                 Divider()
                 ForEach(viewModel.availableEngines, id: \.providerId) { engine in
                     enginePickerLabel(for: engine)
@@ -654,6 +660,10 @@ struct FileTranscriptionView: View {
             }
             .controlSize(.small)
             .disabled(viewModel.batchState == .processing)
+
+            if viewModel.engineChoice == nil {
+                DefaultEngineSettingsLink()
+            }
 
             if let engine = viewModel.resolvedEngine {
                 let models = engine.transcriptionModels
@@ -670,6 +680,10 @@ struct FileTranscriptionView: View {
                 }
             }
         }
+    }
+
+    private var defaultEngineTitle: String {
+        DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName)
     }
 
     private var fileTranscriptionLanguageOptions: [(code: String, name: String)] {

@@ -234,7 +234,8 @@ struct AudioRecorderView: View {
 
                 let engines = pluginManager.transcriptionEngines
                 Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                    Text(String(localized: "recorder.useDictationDefaultEngine")).tag(nil as String?)
+                    Text(DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName))
+                        .tag(nil as String?)
                     Divider()
                     ForEach(engines, id: \.providerId) { engine in
                         enginePickerLabel(for: engine)
@@ -243,6 +244,11 @@ struct AudioRecorderView: View {
                     }
                 }
                 .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if viewModel.engineChoice == nil {
+                    DefaultEngineSettingsLink()
+                        .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+                }
 
                 if let notice = transcriptionAuthNotice(for: engines) {
                     Label(notice, systemImage: "key")
@@ -307,7 +313,10 @@ struct AudioRecorderView: View {
 
                 if viewModel.livePreviewEnabled {
                     if let engine = viewModel.resolvedEngine,
-                       !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
+                       !modelManager.supportsLiveTranscriptionSession(
+                           engineOverrideId: engine.providerId,
+                           cloudModelOverride: viewModel.availableSelectedModel
+                       ) {
                         Label(
                             String(localized: "recorder.livePreviewLightweightHint"),
                             systemImage: "info.circle"
@@ -337,6 +346,13 @@ struct AudioRecorderView: View {
                 modelManager.restoreProviderSelection()
                 viewModel.reconcileSelectionWithAvailablePlugins()
             }
+
+            RecorderFolderSettingsSection(
+                store: ServiceContainer.shared.recorderFolderStore,
+                isLocked: isEditingLocked || viewModel.retranscribingRecordingURL != nil,
+                watchFolderPath: { ServiceContainer.shared.watchFolderViewModel.watchFolderPath },
+                onFoldersChanged: { viewModel.loadRecordings() }
+            )
 
             // Recordings list
             Section {

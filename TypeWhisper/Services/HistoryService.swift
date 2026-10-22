@@ -245,7 +245,8 @@ final class HistoryService: ObservableObject {
         engineUsed: String,
         modelUsed: String? = nil,
         audioSamples: [Float]? = nil,
-        pipelineSteps: [String]? = nil
+        pipelineSteps: [String]? = nil,
+        llmUsage: HistoryLLMUsage? = nil
     ) -> Bool {
         guard let texts = Self.validatedRecordTexts(
             rawText: rawText,
@@ -268,7 +269,8 @@ final class HistoryService: ObservableObject {
             engineUsed: engineUsed,
             modelUsed: modelUsed,
             audioFileName: audioSamples.flatMap { writeAudioFile($0, forRecordID: id) },
-            pipelineSteps: pipelineSteps
+            pipelineSteps: pipelineSteps,
+            llmUsage: llmUsage
         )
         return true
     }
@@ -292,6 +294,7 @@ final class HistoryService: ObservableObject {
         modelUsed: String? = nil,
         audioFileName: String?,
         pipelineSteps: [String]? = nil,
+        llmUsage: HistoryLLMUsage? = nil,
         capturedInClearGeneration: Int? = nil
     ) -> Bool {
         let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
@@ -322,7 +325,8 @@ final class HistoryService: ObservableObject {
             engineUsed: engineUsed,
             modelUsed: modelUsed,
             audioFileName: audioFileName,
-            pipelineSteps: pipelineSteps
+            pipelineSteps: pipelineSteps,
+            llmUsage: llmUsage
         )
         return true
     }
@@ -407,7 +411,8 @@ final class HistoryService: ObservableObject {
         engineUsed: String,
         modelUsed: String?,
         audioFileName: String?,
-        pipelineSteps: [String]?
+        pipelineSteps: [String]?,
+        llmUsage: HistoryLLMUsage?
     ) {
         let record = TranscriptionRecord(
             id: id,
@@ -424,6 +429,8 @@ final class HistoryService: ObservableObject {
             audioFileName: audioFileName
         )
         record.pipelineStepList = pipelineSteps ?? []
+        // Set before the first save so the first synchronized content carries it.
+        record.llmUsage = llmUsage
         record.originDeviceID = historySyncPreferences?.deviceID ?? ""
         record.originPlatformRaw = "macOS"
         record.source = .mac
@@ -1295,7 +1302,10 @@ final class HistoryService: ObservableObject {
                 modelDisplayName: record.modelUsed,
                 processingFailureCategory: record.processingFailureCategory,
                 processingFailureMessage: record.processingFailureMessage,
-                alignmentResetAt: record.transcriptionAlignmentResetAt
+                alignmentResetAt: record.transcriptionAlignmentResetAt,
+                // Also an explicitly empty usage, so a text made without an LLM
+                // replaces older usage on other devices.
+                llmUsage: HistoryLLMUsage.decode(record.llmUsageData)
             )
             let inbox = UserDataSyncHistoryInboxV1(
                 recordID: record.id,
@@ -1409,6 +1419,10 @@ final class HistoryService: ObservableObject {
                 record.processingStateRaw = content.processingState
                 record.processingFailureCategory = content.processingFailureCategory
                 record.processingFailureMessage = content.processingFailureMessage
+                // Clients that predate LLM usage send none; keep the usage this Mac knows.
+                if let usage = content.llmUsage, HistoryLLMUsage.decode(record.llmUsageData) != usage {
+                    record.llmUsageData = usage.encodedData()
+                }
                 record.contentUpdatedAt = content.updatedAt
                 if !previousContent.matchesContent(of: record) {
                     // A remote replacement has no known local version provenance.

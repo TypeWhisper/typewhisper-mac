@@ -3030,6 +3030,122 @@
         }
       }
     },
+    "history.llmUsage.tokens" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tokens"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tokens"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "トークン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token"
+          }
+        }
+      }
+    },
+    "history.llmUsage.input" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ input"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eingabe %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "入力 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入 %@"
+          }
+        }
+      }
+    },
+    "history.llmUsage.output" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ output"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgabe %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "出力 %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输出 %@"
+          }
+        }
+      }
+    },
+    "history.llmUsage.requests" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ requests"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ Anfragen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 件のリクエスト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 次请求"
+          }
+        }
+      }
+    },
     "history.retranscribe.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14936,46 +15052,24 @@
         }
       }
     },
-    "Activates Parakeet." : {
+    "Activating %@ for local dictation" : {
       "localizations" : {
-        "es" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Activa Parakeet."
+            "value" : "%@ wird für lokales Diktieren aktiviert"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetをアクティベートします。"
+            "value" : "ローカル音声入力用の%@をアクティベートしています"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启用 Parakeet。"
-          }
-        }
-      }
-    },
-    "Activating Parakeet for local dictation" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Activando Parakeet para el dictado local"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ローカル音声入力用のParakeetをアクティベートしています"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在启用 Parakeet 进行本地听写"
+            "value" : "正在启用 %@ 进行本地听写"
           }
         }
       }
@@ -18116,46 +18210,266 @@
         }
       }
     },
-    "Best local quality for daily dictation. Runs offline with no API key." : {
+    "Supports %@." : {
       "localizations" : {
-        "es" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La mejor calidad local para el dictado diario. Funciona sin conexión y sin clave de API."
+            "value" : "Unterstützt %@."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日常の音声入力に最適なローカル品質です。APIキーなしでオフラインで動作します。"
+            "value" : "%@に対応しています。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日常听写的最佳本地质量。离线运行，无需 API 密钥。"
+            "value" : "支持%@。"
           }
         }
       }
     },
-    "Best local quality, but requires Apple Silicon. Intel Macs can use Apple Speech for setup." : {
+    "Recognizes %lld European languages. For another language, choose it above." : {
       "localizations" : {
-        "es" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "La mejor calidad local, pero requiere Apple Silicon. Los Mac con Intel pueden usar Apple Speech para la configuración."
+            "value" : "Erkennt %lld europäische Sprachen. Für eine andere Sprache wähle sie oben aus."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ローカルで最高の品質を提供しますが、Apple Siliconが必要です。Intel MacではセットアップにApple Speechを使用できます。"
+            "value" : "ヨーロッパの%lld言語を認識します。ほかの言語は上で選択してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本地最佳质量，但需要 Apple Silicon。Intel Mac 可使用 Apple 语音进行设置。"
+            "value" : "可识别 %lld 种欧洲语言。如需其他语言，请在上方选择。"
+          }
+        }
+      }
+    },
+    "Detects the spoken language automatically." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkennt die gesprochene Sprache automatisch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話している言語を自動的に検出します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检测所说的语言。"
+          }
+        }
+      }
+    },
+    "Runs offline with no API key." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft offline ohne API-Key."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキーなしでオフラインで動作します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线运行，无需 API 密钥。"
+          }
+        }
+      }
+    },
+    "Connect to the internet to download it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Herunterladen brauchst du eine Internetverbindung."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロードするにはインターネットに接続してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请连接互联网以进行下载。"
+          }
+        }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフライン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线"
+          }
+        }
+      }
+    },
+    "%@ does not support %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ unterstützt %2$@ nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@は%2$@に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 不支持%2$@。"
+          }
+        }
+      }
+    },
+    "No local engine for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine lokale Engine für %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@に対応するローカルエンジンはありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有支持%@的本地引擎"
+          }
+        }
+      }
+    },
+    "No local engine for this Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine lokale Engine für diesen Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで使えるローカルエンジンはありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有适用于此 Mac 的本地引擎"
+          }
+        }
+      }
+    },
+    "The local engines that run on this Mac don't support this language." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen diese Sprache nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで動作するローカルエンジンは、この言語に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在此 Mac 上运行的本地引擎不支持这种语言。"
+          }
+        }
+      }
+    },
+    "The local engines that run on this Mac don't support all of these languages." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen nicht alle diese Sprachen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで動作するローカルエンジンは、これらすべての言語には対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在此 Mac 上运行的本地引擎并不支持所有这些语言。"
+          }
+        }
+      }
+    },
+    "Parakeet, WhisperKit and Qwen3 need Apple Silicon. Apple Speech needs macOS 26." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet, WhisperKit und Qwen3 brauchen Apple Silicon. Apple Speech braucht macOS 26."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet、WhisperKit、Qwen3にはApple Siliconが必要です。Apple SpeechにはmacOS 26が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet、WhisperKit 和 Qwen3 需要 Apple Silicon。Apple 语音识别需要 macOS 26。"
           }
         }
       }
@@ -21842,6 +22156,188 @@
         }
       }
     },
+    "Default Engine (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine (%@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジン（%@）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认引擎（%@）"
+          }
+        }
+      }
+    },
+    "Default Engine (none available)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine (keine verfügbar)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジン（利用可能なエンジンなし）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认引擎（无可用引擎）"
+          }
+        }
+      }
+    },
+    "Change Default Engine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine ändern"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンを変更"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改默认引擎"
+          }
+        }
+      }
+    },
+    "Opens the Dictation page in Settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet in den Einstellungen die Seite Diktat."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定のディクテーションページを開きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置中的听写页面。"
+          }
+        }
+      }
+    },
+    "Your default engine, %@, is not available right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine %@ ist gerade nicht verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンの%@は現在利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎 %@ 当前不可用。"
+          }
+        }
+      }
+    },
+    "Your default engine is not available right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine ist gerade nicht verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンは現在利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎当前不可用。"
+          }
+        }
+      }
+    },
+    "Your default engine, %@, is not available right now. Dictation uses %@ until it is available again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your default engine, %1$@, is not available right now. Dictation uses %2$@ until it is available again."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine %1$@ ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %2$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンの%1$@は現在利用できません。利用できるようになるまで、ディクテーションには%2$@を使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎 %1$@ 当前不可用。在其恢复可用之前，听写将使用 %2$@。"
+          }
+        }
+      }
+    },
+    "Your default engine is not available right now. Dictation uses %@ until it is available again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンは現在利用できません。利用できるようになるまで、ディクテーションには%@を使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎当前不可用。在其恢复可用之前，听写将使用 %@。"
+          }
+        }
+      }
+    },
     "Default LLM" : {
       "localizations" : {
         "es" : {
@@ -25339,6 +25835,141 @@
         }
       }
     },
+    "Toggle Mode" : {
+      "comment" : "Dictation settings section for dictations started with the Toggle shortcut or a short press of the Hybrid shortcut.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umschaltmodus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えモード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换模式"
+          }
+        }
+      }
+    },
+    "Stop recording after silence" : {
+      "comment" : "Dictation setting that ends a toggle-mode dictation after the user stops speaking.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme nach Stille beenden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音が続いたら録音を停止"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音后停止录音"
+          }
+        }
+      }
+    },
+    "Silence duration" : {
+      "comment" : "Label of the stepper for how long the silence before an automatic stop lasts.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauer der Stille"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音の長さ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音时长"
+          }
+        }
+      }
+    },
+    "seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
+          }
+        }
+      }
+    },
+    "Seconds, from 1 to 10" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden, von 1 bis 10"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒数（1〜10）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒数，1 到 10"
+          }
+        }
+      }
+    },
+    "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beendet ein Diktat im Umschaltmodus, sobald du für die gewählte Dauer still bist, und transkribiert und fügt es wie gewohnt ein. Vor dem Stoppen zählt der Indikator herunter; sprich weiter, um die Aufnahme fortzusetzen. Bevor du zu sprechen beginnst, stoppt die Aufnahme nie. Push-to-Talk und das Gedrückthalten des Hybrid-Tastenkürzels sind nicht betroffen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択した時間だけ無音が続くと、切り替えモードのディクテーションを終了し、通常どおり文字起こしして挿入します。停止前にインジケーターがカウントダウンします。録音を続けるには話し続けてください。話し始める前に停止することはありません。プッシュトゥトークとハイブリッドショートカットの長押しには影響しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音持续达到所选时长后，结束切换模式下的听写，并照常转录和插入。停止前指示器会倒计时，继续说话即可继续录音。在你开始说话之前绝不会停止。按住说话和按住混合模式快捷键不受影响。"
+          }
+        }
+      }
+    },
     "On Macs where the built-in microphone needs voice processing, it cannot stay active between dictations. This setting has no effect there; choose another microphone to use it." : {
       "localizations" : {
         "de" : {
@@ -27930,24 +28561,68 @@
         }
       }
     },
-    "Installs and selects Parakeet." : {
+    "Installs and selects %@." : {
       "localizations" : {
-        "es" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Instala y selecciona Parakeet."
+            "value" : "Installiert und wählt %@ aus."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetをインストールして選択します。"
+            "value" : "%@をインストールして選択します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装并选择 Parakeet。"
+            "value" : "安装并选择 %@。"
+          }
+        }
+      }
+    },
+    "Activates %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviert %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@をアクティベートします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用 %@。"
+          }
+        }
+      }
+    },
+    "Selects %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wählt %@ aus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を選択します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 %@。"
           }
         }
       }
@@ -29253,6 +29928,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "轻量级内置方案，无需下载大型本地模型。日常听写建议使用效果更好的 Parakeet。"
+          }
+        }
+      }
+    },
+    "Lightweight built-in option with no large local model." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leichte integrierte Option ohne großes lokales Modell."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大規模なローカルモデルを使用しない軽量な内蔵オプションです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轻量级内置方案，无需下载大型本地模型。"
+          }
+        }
+      }
+    },
+    "Does not support %@ on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützt %@ auf diesem Mac nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacでは%@に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此 Mac 上不支持%@。"
           }
         }
       }
@@ -31890,6 +32609,28 @@
         }
       }
     },
+    "No apps excluded yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Apps ausgeschlossen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したアプリはまだありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未排除应用。"
+          }
+        }
+      }
+    },
     "No available plugins match this search or filter." : {
       "localizations" : {
         "de" : {
@@ -33002,6 +33743,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "尚未添加网站。"
+          }
+        }
+      }
+    },
+    "No websites excluded yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Websites ausgeschlossen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したウェブサイトはまだありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未排除网站。"
           }
         }
       }
@@ -34476,24 +35239,24 @@
         }
       }
     },
-    "Parakeet is ready for local dictation" : {
+    "%@ is ready for local dictation" : {
       "localizations" : {
-        "es" : {
+        "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeet está listo para el dictado local"
+            "value" : "%@ ist für lokales Diktieren bereit"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetによるローカル音声入力の準備が完了しました"
+            "value" : "%@によるローカル音声入力の準備が完了しました"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeet 已可用于本地听写"
+            "value" : "%@ 已可用于本地听写"
           }
         }
       }
@@ -38509,6 +39272,342 @@
         }
       }
     },
+    "recorder.folder.section" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmeordner"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordings Folder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音フォルダ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音文件夹"
+          }
+        }
+      }
+    },
+    "recorder.folder.saveTo" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Aufnahmen speichern in"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save new recordings to"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい録音の保存先"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新录音保存到"
+          }
+        }
+      }
+    },
+    "recorder.folder.useDefault" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard verwenden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Default"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトを使用"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用默认"
+          }
+        }
+      }
+    },
+    "recorder.folder.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein neuer Ordner gilt für neue Aufnahmen. Vorhandene Aufnahmen bleiben, wo sie sind, und erscheinen weiter in der Liste unten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A new folder applies to new recordings. Existing recordings stay where they are and remain in the list below."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいフォルダは新しい録音に適用されます。既存の録音は移動されず、下のリストに引き続き表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新文件夹仅用于新录音。现有录音保留在原位置，并继续显示在下方列表中。"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frühere Ordner"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earlier folders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前のフォルダ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以前的文件夹"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier.description" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahmen in diesen Ordnern werden weiter angezeigt. Entfernst du hier einen Ordner, blendet TypeWhisper nur seine Aufnahmen aus; die Dateien bleiben erhalten."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recordings in these folders are still listed. Removing a folder here only hides its recordings in TypeWhisper; the files stay."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "これらのフォルダの録音は引き続き表示されます。ここでフォルダを削除しても、TypeWhisperで録音が非表示になるだけで、ファイルは残ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这些文件夹中的录音仍会显示。在此移除文件夹只会在 TypeWhisper 中隐藏其录音，文件仍会保留。"
+          }
+        }
+      }
+    },
+    "recorder.folder.earlier.remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ aus der Liste entfernen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove “%@” from the list"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」をリストから削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从列表中移除“%@”"
+          }
+        }
+      }
+    },
+    "recorder.folder.unavailable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ ist nicht verfügbar. Neue Aufnahmen werden im Standardordner gespeichert, bis der Ordner wieder verfügbar ist."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” isn't available. New recordings are saved to the default folder until it's back."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」を使用できません。使用できるようになるまで、新しい録音はデフォルトのフォルダに保存されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”不可用。在其恢复可用之前，新录音将保存到默认文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.saveFailed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine Aufnahme konnte nicht in „%@“ gespeichert werden und wurde stattdessen im Standardordner gespeichert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A recording couldn't be saved to “%@” and was saved to the default folder instead."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音を「%@」に保存できなかったため、代わりにデフォルトのフォルダに保存しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法将录音保存到“%@”，已改为保存到默认文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.panelMessage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle den Ordner für neue Aufnahmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the folder for new recordings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しい録音を保存するフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择用于保存新录音的文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.error.notWritable" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper kann keine Aufnahmen in „%@“ speichern. Wähle einen Ordner, in den du schreiben kannst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper can't save recordings to “%@”. Choose a folder you can write to."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisperは「%@」に録音を保存できません。書き込み可能なフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper 无法将录音保存到“%@”。请选择一个可写入的文件夹。"
+          }
+        }
+      }
+    },
+    "recorder.folder.error.watchFolder" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ ist der überwachte Ordner. Die Ordnerüberwachung würde neue Aufnahmen ein zweites Mal transkribieren und kann sie löschen. Wähle einen anderen Ordner."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” is the Watch Folder. It would transcribe new recordings a second time and can delete them. Choose another folder."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」はウォッチフォルダです。新しい録音が二重に文字起こしされ、削除される可能性があります。別のフォルダを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是监控文件夹。新录音会被再次转录，并可能被删除。请选择其他文件夹。"
+          }
+        }
+      }
+    },
     "recorder.format" : {
       "localizations" : {
         "de" : {
@@ -39667,40 +40766,6 @@
         }
       }
     },
-    "recorder.useDictationDefaultEngine" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diktat-Standard-Engine verwenden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use Dictation default engine"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Usar el motor predeterminado de Dictado"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dictationのデフォルトエンジンを使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用听写默认引擎"
-          }
-        }
-      }
-    },
     "Recording" : {
       "localizations" : {
         "de" : {
@@ -39863,6 +40928,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录音已开始"
+          }
+        }
+      }
+    },
+    "Recording stopped after silence, transcribing" : {
+      "comment" : "VoiceOver announcement when a toggle dictation stops on its own after silence.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme nach Stille beendet, wird transkribiert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音のため録音を停止しました。文字起こし中"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到静音，录音已停止，正在转录"
           }
         }
       }
@@ -41665,6 +42753,72 @@
         }
       }
     },
+    "Exclude apps" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps ausschließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを除外"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排除应用"
+          }
+        }
+      }
+    },
+    "Exclude websites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Websites ausschließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ウェブサイトを除外"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "排除网站"
+          }
+        }
+      }
+    },
+    "This workflow does not run in excluded apps and websites. Other matching workflows still do." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In ausgeschlossenen Apps und Websites läuft dieser Workflow nicht. Andere passende Workflows laufen dort weiterhin."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したアプリやウェブサイトでは、このワークフローは実行されません。一致する他のワークフローは引き続き実行されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此工作流不会在已排除的应用和网站中运行。其他匹配的工作流仍会运行。"
+          }
+        }
+      }
+    },
     "Sat" : {
       "localizations" : {
         "de" : {
@@ -42716,28 +43870,6 @@
         }
       }
     },
-    "Selects Parakeet." : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Selecciona Parakeet."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Parakeetを選択します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择 Parakeet。"
-          }
-        }
-      }
-    },
     "Selects this hotkey mode." : {
       "localizations" : {
         "es" : {
@@ -42994,34 +44126,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录音"
-          }
-        }
-      }
-    },
-    "Setup" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einrichtung"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Configuración"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置"
           }
         }
       }
@@ -43836,6 +44940,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "口语语言"
+          }
+        }
+      }
+    },
+    "Also used for dictation. You can change it later on the Dictation page." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt auch fürs Diktieren. Du kannst sie später auf der Seite „Diktat“ ändern."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力にも使われます。後から「ディクテーション」ページで変更できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也用于听写。之后可以在“听写”页面中更改。"
           }
         }
       }
@@ -50987,40 +52113,6 @@
         }
       }
     },
-    "watchFolder.engine.default" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standard (globale Auswahl)"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default (global selection)"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Predeterminado (selección global)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デフォルト（グローバル選択）"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认（全局选择）"
-          }
-        }
-      }
-    },
     "watchFolder.export.subtitleSegmentsRequired" : {
       "localizations" : {
         "de" : {
@@ -51823,6 +52915,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网站触发"
+          }
+        }
+      }
+    },
+    "Excluded website" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgeschlossene Website"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外したウェブサイト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已排除的网站"
+          }
+        }
+      }
+    },
+    "Website to exclude" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auszuschließende Website"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "除外するウェブサイト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要排除的网站"
           }
         }
       }
@@ -61648,6 +62784,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它没有已下载的模型。"
+          }
+        }
+      }
+    },
+    "Stopping in %@. Keep talking to continue." : {
+      "comment" : "Indicator countdown before a toggle dictation stops after silence. %@ is a localized duration such as “2 seconds”.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stoppt in %@. Sprich weiter, um fortzufahren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@後に停止します。続けるには話し続けてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@后停止。继续说话即可继续录音。"
           }
         }
       }

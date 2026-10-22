@@ -2262,6 +2262,371 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(match.competingWorkflowCount, 1)
         XCTAssertTrue(match.wonBySortOrder)
     }
+
+    // MARK: - Always trigger exclusions
+
+    func testMatchWorkflowSkipsAlwaysWorkflowInExcludedApp() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: ["com.apple.Terminal", "com.googlecode.iterm2"])
+        )
+
+        XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.apple.Terminal", url: nil))
+        XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.googlecode.iterm2", url: "https://example.com"))
+        let match = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+        XCTAssertEqual(match.workflow.name, "Always Cleanup")
+        XCTAssertEqual(match.kind, .globalFallback)
+        XCTAssertEqual(service.matchWorkflow(bundleIdentifier: nil, url: nil)?.workflow.name, "Always Cleanup")
+    }
+
+    func testMatchWorkflowSkipsAlwaysWorkflowOnExcludedWebsiteWithWebsiteTriggerDomainRules() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(websites: ["github.com"])
+        )
+
+        let excludedURLs = [
+            "https://github.com/TypeWhisper/typewhisper-mac",
+            "https://www.github.com/pulls",
+            "https://docs.github.com/en/actions",
+            "https://GitHub.com/settings",
+        ]
+        for url in excludedURLs {
+            XCTAssertNil(service.matchWorkflow(bundleIdentifier: "com.google.Chrome", url: url), url)
+        }
+
+        let includedURLs = [
+            "https://notgithub.com",
+            "https://github.com.example.org",
+            "https://example.com/github.com",
+        ]
+        for url in includedURLs {
+            XCTAssertEqual(
+                service.matchWorkflow(bundleIdentifier: "com.google.Chrome", url: url)?.workflow.name,
+                "Always Cleanup",
+                url
+            )
+        }
+        // Without a resolved URL a website exclusion cannot apply yet.
+        XCTAssertEqual(
+            service.matchWorkflow(bundleIdentifier: "com.google.Chrome", url: nil)?.workflow.name,
+            "Always Cleanup"
+        )
+    }
+
+    func testAlwaysWorkflowWithoutExclusionsMatchesEverywhere() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: [], websites: [])
+        )
+
+        XCTAssertEqual(
+            service.matchWorkflow(bundleIdentifier: "com.apple.Terminal", url: nil)?.kind,
+            .globalFallback
+        )
+        XCTAssertEqual(
+            service.matchWorkflow(bundleIdentifier: "com.google.Chrome", url: "https://github.com")?.kind,
+            .globalFallback
+        )
+    }
+
+    func testAlwaysWorkflowExclusionsKeepAppAndWebsiteWorkflowsFirst() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: ["com.apple.mail"], websites: ["github.com"]),
+            sortOrder: 0
+        )
+        _ = service.addWorkflow(
+            name: "Mail Cleanup",
+            template: .cleanedText,
+            trigger: .app("com.apple.mail"),
+            sortOrder: 1
+        )
+        _ = service.addWorkflow(
+            name: "GitHub Summary",
+            template: .summary,
+            trigger: .website("github.com"),
+            sortOrder: 2
+        )
+
+        let appMatch = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.mail", url: nil))
+        XCTAssertEqual(appMatch.workflow.name, "Mail Cleanup")
+        XCTAssertEqual(appMatch.kind, .app)
+
+        let websiteMatch = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://docs.github.com/en"
+        ))
+        XCTAssertEqual(websiteMatch.workflow.name, "GitHub Summary")
+        XCTAssertEqual(websiteMatch.kind, .website)
+
+        let bothExcludedMatch = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.apple.mail",
+            url: "https://github.com"
+        ))
+        XCTAssertEqual(bothExcludedMatch.workflow.name, "GitHub Summary")
+        XCTAssertEqual(bothExcludedMatch.kind, .website)
+
+        let fallbackMatch = try XCTUnwrap(service.matchWorkflow(
+            bundleIdentifier: "com.google.Chrome",
+            url: "https://example.com"
+        ))
+        XCTAssertEqual(fallbackMatch.workflow.name, "Always Cleanup")
+        XCTAssertEqual(fallbackMatch.kind, .globalFallback)
+    }
+
+    func testExcludedAlwaysWorkflowLeavesTheNextAlwaysWorkflow() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Top Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: ["com.apple.Terminal"]),
+            sortOrder: 0
+        )
+        _ = service.addWorkflow(
+            name: "Lower Always Dictation",
+            template: .dictation,
+            trigger: .global(),
+            sortOrder: 1
+        )
+
+        let excludedMatch = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.Terminal", url: nil))
+        XCTAssertEqual(excludedMatch.workflow.name, "Lower Always Dictation")
+        XCTAssertEqual(excludedMatch.kind, .globalFallback)
+        XCTAssertEqual(excludedMatch.competingWorkflowCount, 0)
+        XCTAssertFalse(excludedMatch.wonBySortOrder)
+
+        let match = try XCTUnwrap(service.matchWorkflow(bundleIdentifier: "com.apple.TextEdit", url: nil))
+        XCTAssertEqual(match.workflow.name, "Top Always Cleanup")
+        XCTAssertEqual(match.competingWorkflowCount, 1)
+        XCTAssertTrue(match.wonBySortOrder)
+    }
+
+    func testExclusionsOnlyApplyToAlwaysTriggers() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = service.addWorkflow(
+            name: "Mail Cleanup",
+            template: .cleanedText,
+            trigger: WorkflowTrigger(
+                kind: .app,
+                appBundleIdentifiers: ["com.apple.mail"],
+                excludedAppBundleIdentifiers: ["com.apple.mail"],
+                excludedWebsitePatterns: ["github.com"]
+            )
+        )
+
+        XCTAssertEqual(
+            service.matchWorkflow(bundleIdentifier: "com.apple.mail", url: "https://github.com")?.workflow.name,
+            "Mail Cleanup"
+        )
+    }
+
+    func testWorkflowServicePersistsAlwaysTriggerExclusions() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let trigger = WorkflowTrigger.global(
+            excludingApps: ["com.apple.Terminal", "com.1password.1password"],
+            websites: ["github.com", "bank.example"]
+        )
+        service.addWorkflow(name: "Always Cleanup", template: .cleanedText, trigger: trigger)
+
+        let reloaded = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let workflow = try XCTUnwrap(reloaded.workflows.first)
+
+        XCTAssertEqual(workflow.trigger, trigger)
+        XCTAssertEqual(workflow.triggerKindRaw, "global")
+        XCTAssertNil(reloaded.matchWorkflow(bundleIdentifier: "com.1password.1password", url: nil))
+        XCTAssertNil(reloaded.matchWorkflow(bundleIdentifier: "com.apple.Safari", url: "https://online.bank.example"))
+        XCTAssertEqual(reloaded.matchWorkflow(bundleIdentifier: "com.apple.Safari", url: nil)?.kind, .globalFallback)
+    }
+
+    func testStoredAlwaysTriggerWithoutExclusionsDecodesWithNone() throws {
+        // Triggers saved before exclusions existed.
+        let payload: [String: Any] = [
+            "kind": "global",
+            "appBundleIdentifiers": [],
+            "websitePatterns": [],
+            "hotkeys": [],
+            "hotkeyBehavior": "startDictation",
+        ]
+        let trigger = try JSONDecoder().decode(
+            WorkflowTrigger.self,
+            from: JSONSerialization.data(withJSONObject: payload)
+        )
+        XCTAssertEqual(trigger, .global())
+        XCTAssertTrue(trigger.excludedAppBundleIdentifiers.isEmpty)
+        XCTAssertTrue(trigger.excludedWebsitePatterns.isEmpty)
+
+        // Rows from before the JSON trigger column fall back to the kind column.
+        let legacyWorkflow = Workflow(name: "Legacy Always", template: .cleanedText, trigger: .global())
+        legacyWorkflow.triggerData = nil
+        XCTAssertEqual(legacyWorkflow.trigger, .global())
+    }
+
+    func testTriggerWithoutExclusionsEncodesTheSameKeysAsBefore() throws {
+        let plainKeys = try Self.encodedKeys(of: .global())
+        XCTAssertEqual(plainKeys, ["appBundleIdentifiers", "hotkeyBehavior", "hotkeys", "kind", "websitePatterns"])
+
+        let excludedKeys = try Self.encodedKeys(of: .global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"]))
+        XCTAssertEqual(excludedKeys, plainKeys.union(["excludedAppBundleIdentifiers", "excludedWebsitePatterns"]))
+
+        let trigger = WorkflowTrigger.global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        let decoded = try JSONDecoder().decode(WorkflowTrigger.self, from: JSONEncoder().encode(trigger))
+        XCTAssertEqual(decoded, trigger)
+    }
+
+    func testTriggerReportsWhenTheWebsiteCanChangeItsMatch() {
+        XCTAssertFalse(WorkflowTrigger.global().dependsOnWebsite)
+        XCTAssertFalse(WorkflowTrigger.global(excludingApps: ["com.apple.Terminal"]).dependsOnWebsite)
+        XCTAssertTrue(WorkflowTrigger.global(websites: ["github.com"]).dependsOnWebsite)
+        XCTAssertTrue(WorkflowTrigger.website("github.com").dependsOnWebsite)
+        XCTAssertFalse(WorkflowTrigger.app("com.apple.mail").dependsOnWebsite)
+        // Exclusions on other kinds never change a match.
+        XCTAssertFalse(WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.apple.mail"], excludedWebsitePatterns: ["github.com"]).dependsOnWebsite)
+
+        let alwaysTrigger = WorkflowTrigger.global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        XCTAssertTrue(alwaysTrigger.dependsOnWebsite(inApp: "com.google.Chrome"))
+        XCTAssertTrue(alwaysTrigger.dependsOnWebsite(inApp: nil))
+        // An excluded app skips the workflow whatever the website is.
+        XCTAssertFalse(alwaysTrigger.dependsOnWebsite(inApp: "com.apple.Terminal"))
+
+        let chromeWebsiteTrigger = WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.google.Chrome"], websitePatterns: ["github.com"])
+        XCTAssertTrue(chromeWebsiteTrigger.dependsOnWebsite(inApp: "com.google.Chrome"))
+        XCTAssertFalse(chromeWebsiteTrigger.dependsOnWebsite(inApp: "com.apple.Safari"))
+    }
+
+    func testAlwaysWorkflowPluginSnapshotDoesNotReportExclusionsAsTargets() {
+        let workflow = Workflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        )
+
+        let trigger = workflow.pluginWorkflowInfo.trigger
+
+        XCTAssertEqual(trigger.kind, .global)
+        XCTAssertTrue(trigger.appBundleIdentifiers.isEmpty)
+        XCTAssertTrue(trigger.websitePatterns.isEmpty)
+    }
+
+    func testWorkflowDraftRoundTripsAlwaysTriggerExclusions() throws {
+        let trigger = WorkflowTrigger.global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        let workflow = Workflow(name: "Always Cleanup", template: .cleanedText, trigger: trigger)
+
+        let draft = WorkflowDraft(workflow)
+
+        XCTAssertEqual(draft.triggerMode, .global)
+        XCTAssertTrue(draft.isAppExclusionEnabled)
+        XCTAssertTrue(draft.isWebsiteExclusionEnabled)
+        XCTAssertEqual(draft.excludedAppBundleIdentifiers, ["com.apple.Terminal"])
+        XCTAssertEqual(draft.excludedWebsitePatterns, ["github.com"])
+        XCTAssertEqual(draft.resolvedTrigger(), trigger)
+        XCTAssertFalse(draft.hasUnsavedChanges(comparedTo: WorkflowDraft(workflow)))
+
+        let plainDraft = WorkflowDraft(Workflow(name: "Always", template: .cleanedText, trigger: .global()))
+        XCTAssertFalse(plainDraft.isAppExclusionEnabled)
+        XCTAssertFalse(plainDraft.isWebsiteExclusionEnabled)
+        XCTAssertEqual(plainDraft.resolvedTrigger(), .global())
+    }
+
+    func testWorkflowDraftSavesExclusionsOnlyForAlwaysAndWhileTheirCheckboxIsOn() throws {
+        let workflow = Workflow(
+            name: "Always Cleanup",
+            template: .cleanedText,
+            trigger: .global(excludingApps: ["com.apple.Terminal"], websites: ["github.com"])
+        )
+
+        var appsOff = WorkflowDraft(workflow)
+        appsOff.isAppExclusionEnabled = false
+        XCTAssertEqual(appsOff.resolvedTrigger(), .global(websites: ["github.com"]))
+        XCTAssertTrue(appsOff.hasUnsavedChanges(comparedTo: WorkflowDraft(workflow)))
+
+        var automatic = WorkflowDraft(workflow)
+        automatic.triggerMode = .automatic
+        automatic.isAppTriggerEnabled = true
+        automatic.appBundleIdentifiers = ["com.apple.mail"]
+        let automaticTrigger = try XCTUnwrap(automatic.resolvedTrigger())
+        XCTAssertEqual(automaticTrigger.kind, .app)
+        XCTAssertTrue(automaticTrigger.excludedAppBundleIdentifiers.isEmpty)
+        XCTAssertTrue(automaticTrigger.excludedWebsitePatterns.isEmpty)
+
+        // Switching back before saving keeps the exclusions.
+        automatic.triggerMode = .global
+        XCTAssertEqual(automatic.resolvedTrigger(), workflow.trigger)
+
+        // Exclusions stored on another kind are not offered and are dropped on save.
+        let appWorkflow = Workflow(
+            name: "Mail Cleanup",
+            template: .cleanedText,
+            trigger: WorkflowTrigger(kind: .app, appBundleIdentifiers: ["com.apple.mail"], excludedWebsitePatterns: ["github.com"])
+        )
+        let appDraft = WorkflowDraft(appWorkflow)
+        XCTAssertFalse(appDraft.isWebsiteExclusionEnabled)
+        XCTAssertEqual(appDraft.resolvedTrigger(), .app("com.apple.mail"))
+    }
+
+    func testWorkflowDraftExclusionEditsAreUnsavedChanges() {
+        let workflow = Workflow(name: "Always Cleanup", template: .cleanedText, trigger: .global())
+        let savedDraft = WorkflowDraft(workflow)
+
+        var checkboxOnly = WorkflowDraft(workflow)
+        checkboxOnly.isWebsiteExclusionEnabled = true
+        XCTAssertFalse(checkboxOnly.hasUnsavedChanges(comparedTo: savedDraft))
+
+        var addedWebsite = checkboxOnly
+        addedWebsite.addExcludedWebsitePattern("github.com")
+        XCTAssertTrue(addedWebsite.hasUnsavedChanges(comparedTo: savedDraft))
+
+        var addedApp = WorkflowDraft(workflow)
+        addedApp.isAppExclusionEnabled = true
+        addedApp.excludedAppBundleIdentifiers = ["com.apple.Terminal"]
+        XCTAssertTrue(addedApp.hasUnsavedChanges(comparedTo: savedDraft))
+    }
+
+    func testWorkflowDraftNormalizesExcludedWebsitesLikeWebsiteTriggers() {
+        var draft = WorkflowDraft(template: .cleanedText)
+
+        draft.addExcludedWebsitePattern("https://www.GitHub.com/TypeWhisper/typewhisper-mac")
+        draft.addExcludedWebsitePattern("github.com")
+        draft.addExcludedWebsitePattern("docs.example.com/path")
+        draft.addExcludedWebsitePattern("   ")
+
+        XCTAssertEqual(draft.excludedWebsitePatterns, ["github.com", "docs.example.com"])
+        XCTAssertTrue(draft.websitePatterns.isEmpty)
+    }
+
+    private static func encodedKeys(of trigger: WorkflowTrigger) throws -> Set<String> {
+        let object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(trigger))
+        return Set(try XCTUnwrap(object as? [String: Any]).keys)
+    }
 }
 
 private func globalTrigger(

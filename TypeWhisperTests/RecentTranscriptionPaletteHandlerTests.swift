@@ -4,6 +4,10 @@ import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
 
+/// The handler tests wait for completion signals instead of fixed delays. This bound only
+/// has to be generous enough that a loaded machine cannot reach it.
+private let asyncWorkTimeout: TimeInterval = 5
+
 @MainActor
 final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
     func testTriggerSelectionOpensOnlyWhenIdle() throws {
@@ -133,11 +137,14 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
             appName: "Messages",
             appBundleIdentifier: "com.apple.MobileSMS"
         )
+        // The feedback follows the finished insertion, including a Return key if one were sent.
+        let insertionFinished = expectation(description: "insertion feedback shown")
+        handler.onShowNotchFeedback = { _, _, _, _, _ in insertionFinished.fulfill() }
 
         handler.triggerSelection(currentState: .idle)
         controller.select(id: id)
 
-        try await Task.sleep(for: .milliseconds(50))
+        await fulfillment(of: [insertionFinished], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(pasteCount, 1)
         XCTAssertEqual(returnCount, 0)
@@ -181,9 +188,11 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
             appName: "Messages",
             appBundleIdentifier: "com.apple.MobileSMS"
         )
+        let insertionFinished = expectation(description: "insertion feedback shown")
+        handler.onShowNotchFeedback = { _, _, _, _, _ in insertionFinished.fulfill() }
 
         handler.insertLatest(currentState: .idle)
-        try await Task.sleep(for: .milliseconds(50))
+        await fulfillment(of: [insertionFinished], timeout: asyncWorkTimeout)
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertEqual(pasteCount, 1)
@@ -263,7 +272,7 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
             }
 
             handler.insertLatest(currentState: .idle)
-            await fulfillment(of: [feedbackShown], timeout: 1.0)
+            await fulfillment(of: [feedbackShown], timeout: asyncWorkTimeout)
 
             XCTAssertEqual(pasteCount, 1, "\(field)")
             XCTAssertEqual(
@@ -289,11 +298,19 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         textInsertionService.pasteboardProvider = { pasteboard }
         textInsertionService.focusedTextElementOverride = { nil }
         textInsertionService.defaultPasteFallbackRestoreDelay = .milliseconds(80)
+        // Without a settle window, an insertion the handler failed to ignore would paste right
+        // away instead of after the restore, so the paste count below catches it.
+        textInsertionService.pendingPasteSettleWindow = .zero
 
         let pasteStarted = expectation(description: "synthetic paste started")
+        // A second paste has to fail the paste count, not crash the test process.
+        pasteStarted.assertForOverFulfill = false
         var pasteCount = 0
+        var pastedClipboard: String?
         textInsertionService.pasteSimulatorOverride = {
             pasteCount += 1
+            // Read at paste time: the restore may already have run when the test resumes.
+            pastedClipboard = pasteboard.string(forType: .string)
             pasteStarted.fulfill()
         }
 
@@ -317,11 +334,11 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         handler.insertLatest(currentState: .idle)
         handler.insertLatest(currentState: .idle)
 
-        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        await fulfillment(of: [pasteStarted], timeout: asyncWorkTimeout)
         XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
+        XCTAssertEqual(pastedClipboard, "Newest transcription")
 
-        try await Task.sleep(for: .milliseconds(150))
+        await textInsertionService.waitForPendingClipboardRestore()
         XCTAssertEqual(pasteCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "Original clipboard")
     }
@@ -339,11 +356,19 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         textInsertionService.pasteboardProvider = { pasteboard }
         textInsertionService.focusedTextElementOverride = { nil }
         textInsertionService.defaultPasteFallbackRestoreDelay = .milliseconds(80)
+        // Without a settle window, an insertion the handler failed to ignore would paste right
+        // away instead of after the restore, so the paste count below catches it.
+        textInsertionService.pendingPasteSettleWindow = .zero
 
         let pasteStarted = expectation(description: "synthetic paste started")
+        // A second paste has to fail the paste count, not crash the test process.
+        pasteStarted.assertForOverFulfill = false
         var pasteCount = 0
+        var pastedClipboard: String?
         textInsertionService.pasteSimulatorOverride = {
             pasteCount += 1
+            // Read at paste time: the restore may already have run when the test resumes.
+            pastedClipboard = pasteboard.string(forType: .string)
             pasteStarted.fulfill()
         }
 
@@ -370,11 +395,11 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         handler.insertLatest(currentState: .idle)
         controller.select(id: id)
 
-        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        await fulfillment(of: [pasteStarted], timeout: asyncWorkTimeout)
         XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
+        XCTAssertEqual(pastedClipboard, "Newest transcription")
 
-        try await Task.sleep(for: .milliseconds(150))
+        await textInsertionService.waitForPendingClipboardRestore()
         XCTAssertEqual(pasteCount, 1)
         XCTAssertEqual(pasteboard.string(forType: .string), "Original clipboard")
     }
@@ -512,13 +537,14 @@ final class PromptPaletteHandlerTests: XCTestCase {
             promptPaletteController: controller
         )
 
+        let workflowFinished = expectWorkflowProcessingToFinish(handler)
         handler.processWorkflowDirectly(
             workflow: workflow,
             currentState: .idle,
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [workflowFinished], timeout: asyncWorkTimeout)
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertEqual(insertedText, "Processed: Selected source")
@@ -565,13 +591,14 @@ final class PromptPaletteHandlerTests: XCTestCase {
             promptPaletteController: PromptPaletteControllerSpy()
         )
 
+        let workflowFinished = expectWorkflowProcessingToFinish(handler)
         handler.processWorkflowDirectly(
             workflow: workflow,
             currentState: .idle,
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [workflowFinished], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(insertedText, "Friendly email")
     }
@@ -644,7 +671,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             soundFeedbackEnabled: false
         )
 
-        await fulfillment(of: [pasteExpectation], timeout: 2.0)
+        await fulfillment(of: [pasteExpectation], timeout: asyncWorkTimeout)
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertNil(insertedText)
@@ -724,13 +751,15 @@ final class PromptPaletteHandlerTests: XCTestCase {
             XCTAssertTrue(plugin === actionPlugin)
         }
 
+        // Waiting for the end also keeps the task from using `PluginManager.shared` after the defer restores it.
+        let workflowFinished = expectWorkflowProcessingToFinish(handler)
         handler.processWorkflowDirectly(
             workflow: workflow,
             currentState: .idle,
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [workflowFinished], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(routedInput, "Processed: Selected source")
         XCTAssertEqual(routedOriginalText, "Selected source")
@@ -783,13 +812,14 @@ final class PromptPaletteHandlerTests: XCTestCase {
             promptPaletteController: PromptPaletteControllerSpy()
         )
 
+        let workflowFinished = expectWorkflowProcessingToFinish(handler)
         handler.processWorkflowDirectly(
             workflow: workflow,
             currentState: .idle,
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [workflowFinished], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(insertedText, "Processed: Clipboard source")
     }
@@ -839,11 +869,14 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         var feedbackMessage: String?
         var errorMessage: String?
+        // Missing text ends the request instead of processing it, so the error marks its end.
+        let errorShown = expectation(description: "missing text error shown")
         handler.onShowNotchFeedback = { message, _, _, _, _ in
             feedbackMessage = message
         }
         handler.onShowError = { message in
             errorMessage = message
+            errorShown.fulfill()
         }
 
         handler.processWorkflowDirectly(
@@ -852,7 +885,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [errorShown], timeout: asyncWorkTimeout)
 
         XCTAssertNil(processedText)
         XCTAssertEqual(feedbackMessage, "Please select or copy some text first.")
@@ -953,11 +986,16 @@ final class PromptPaletteHandlerTests: XCTestCase {
             promptPaletteController: controller
         )
 
+        // The feedback follows the finished insertion, including a Return key if one were sent.
+        let insertionFinished = expectation(description: "insertion feedback shown")
+        handler.onShowNotchFeedback = { _, _, _, _, _ in insertionFinished.fulfill() }
+
+        // Without workflows, the palette lists the recent transcriptions right away.
         handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
-        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(controller.isVisible)
         controller.selectRecent(id: recentID)
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [insertionFinished], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(pasteCount, 1)
         XCTAssertEqual(returnCount, 0)
@@ -1027,9 +1065,9 @@ final class PromptPaletteHandlerTests: XCTestCase {
             }
 
             handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
-            try await Task.sleep(for: .milliseconds(50))
+            XCTAssertTrue(controller.isVisible)
             controller.selectRecent(id: recentID)
-            await fulfillment(of: [feedbackShown], timeout: 1.0)
+            await fulfillment(of: [feedbackShown], timeout: asyncWorkTimeout)
 
             XCTAssertEqual(
                 feedback?.message,
@@ -1089,7 +1127,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Palette Cleanup"])
         controller.selectWorkflow(named: "Palette Cleanup")
 
-        await fulfillment(of: [insertionCompleted], timeout: 5.0)
+        await fulfillment(of: [insertionCompleted], timeout: asyncWorkTimeout)
 
         XCTAssertEqual(insertedText, "Processed: Selected source")
     }
@@ -1146,6 +1184,15 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Translate"])
         XCTAssertEqual(controller.lastSourceText, "Selected text")
         XCTAssertNil(shownError)
+    }
+
+    /// Fulfilled when the workflow task ends, after its insertion or action plugin has run.
+    private func expectWorkflowProcessingToFinish(_ handler: PromptPaletteHandler) -> XCTestExpectation {
+        let finished = expectation(description: "workflow processing finished")
+        handler.onWorkflowProcessingChanged = { isProcessing in
+            if !isProcessing { finished.fulfill() }
+        }
+        return finished
     }
 }
 
