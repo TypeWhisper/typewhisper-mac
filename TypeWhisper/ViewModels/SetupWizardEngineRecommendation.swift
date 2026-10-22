@@ -163,6 +163,16 @@ extension SetupWizardLocalEngine {
     static func engine(forProviderId providerId: String) -> SetupWizardLocalEngine? {
         allCases.first { $0.providerId == providerId }
     }
+
+    /// The engines this edition can set up, in the wizard's order. The App Store edition
+    /// does not include GigaAM (docs/appstore/README.md).
+    static var offered: [SetupWizardLocalEngine] {
+        #if APPSTORE
+        allCases.filter { $0 != .gigaAM }
+        #else
+        allCases
+        #endif
+    }
 }
 
 // MARK: - Inputs
@@ -263,7 +273,7 @@ extension SetupWizardEngineRecommendation {
         let memoryGB = memoryGB(of: input)
         var compatible: [SetupWizardEngineChoice] = []
 
-        for engine in SetupWizardLocalEngine.allCases {
+        for engine in SetupWizardLocalEngine.offered {
             let state = input.engines[engine] ?? SetupWizardEngineState()
             // The languages of the model the wizard would load. An installed engine
             // reports those of the model selected in it, which can be another one.
@@ -296,7 +306,7 @@ extension SetupWizardEngineRecommendation {
             return .engine(choice)
         }
 
-        let runnable = SetupWizardLocalEngine.allCases.filter {
+        let runnable = SetupWizardLocalEngine.offered.filter {
             runs($0, state: input.engines[$0] ?? SetupWizardEngineState(), input: input, memoryGB: memoryGB)
         }
         // Every runnable engine handles automatic detection, so only specific languages get here.
@@ -314,7 +324,7 @@ extension SetupWizardEngineRecommendation {
     /// nothing else is selected.
     static func readyEngine(for input: SetupWizardEngineRecommendationInput) -> SetupWizardLocalEngine? {
         let memoryGB = memoryGB(of: input)
-        return SetupWizardLocalEngine.allCases.first { engine in
+        return SetupWizardLocalEngine.offered.first { engine in
             let state = input.engines[engine] ?? SetupWizardEngineState()
             return state.isReady
                 && runs(engine, state: state, input: input, memoryGB: memoryGB)

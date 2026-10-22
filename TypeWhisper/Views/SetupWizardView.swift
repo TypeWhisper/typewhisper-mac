@@ -920,7 +920,7 @@ struct SetupWizardView: View {
     /// current selection, with the featured languages first.
     private var spokenLanguageOptions: (featured: [LocalizedAppLanguageOption], other: [LocalizedAppLanguageOption]) {
         var codes = Set(settings.availableLanguages.map(\.code))
-        for engine in SetupWizardLocalEngine.allCases {
+        for engine in SetupWizardLocalEngine.offered {
             codes.formUnion(engine.knownLanguages ?? [])
         }
         codes.formUnion(settings.languageSelection.selectedCodes)
@@ -956,7 +956,7 @@ struct SetupWizardView: View {
     private var engineRecommendationInput: SetupWizardEngineRecommendationInput {
         _ = pluginManager.readinessRevision
         var engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [:]
-        for kind in SetupWizardLocalEngine.allCases {
+        for kind in SetupWizardLocalEngine.offered {
             let engine = pluginManager.transcriptionEngine(for: kind.providerId)
             let languages = engine?.supportedLanguages ?? []
             engines[kind] = SetupWizardEngineState(
