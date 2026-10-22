@@ -313,5 +313,8 @@ func printUsage() {
 }
 
 func printVersion() {
-    print("dictum 0.1.0 (1)")
+    let info = Bundle.main.infoDictionary ?? [:]
+    let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
+    let build = info["CFBundleVersion"] as? String ?? "unknown"
+    print("dictum \(version) (\(build))")
 }
