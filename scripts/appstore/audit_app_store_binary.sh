@@ -267,19 +267,21 @@ done
 # the framework is embedded or linked, its executable must be the one binary
 # that exports the runtime.
 onnx_framework="$contents/Frameworks/TypeWhisperONNXRuntime.framework"
+onnx_executable=$(framework_executable "$onnx_framework")
 onnx_runtimes=()
 onnx_in_framework=0
 for binary in "${all_machos[@]}"; do
     exports=$(nm -gUj "$binary" 2>/dev/null)
     grep -qx '_OrtGetApiBase' <<<"$exports" || continue
     onnx_runtimes+=("$(relative "$binary")")
-    [[ "$binary" == "$onnx_framework/"* ]] && onnx_in_framework=1
+    # -ef compares the files, so the executable's version symlink matches too.
+    [[ -n "$onnx_executable" && "$binary" -ef "$onnx_executable" ]] && onnx_in_framework=1
 done
 if [[ -d "$onnx_framework" || "$onnx_framework_linked" -eq 1 ]]; then
-    if [[ -z "$(framework_executable "$onnx_framework")" ]]; then
+    if [[ -z "$onnx_executable" ]]; then
         fail "$(relative "$onnx_framework") is missing or has no Mach-O executable"
     elif [[ ${#onnx_runtimes[@]} -ne 1 || "$onnx_in_framework" -ne 1 ]]; then
-        fail "ONNX Runtime must be exported once, by $(relative "$onnx_framework"); found ${#onnx_runtimes[@]}: ${onnx_runtimes[*]:-none}"
+        fail "ONNX Runtime must be exported once, by the executable of $(relative "$onnx_framework"); found ${#onnx_runtimes[@]}: ${onnx_runtimes[*]:-none}"
     else
         pass "ONNX Runtime is exported once, by ${onnx_runtimes[0]}"
     fi
