@@ -62,8 +62,7 @@ the profile is installed:
 The surrounding profile is the same as in the
 [examples](../../deployment/macos/examples). The custom settings payload
 (`com.apple.ManagedClient.preferences`) with the values under `Forced` >
-`mcx_preference_settings`, as in the [license example](TypeWhisper-License.mobileconfig),
-works the same way. Device and user scope both work. macOS copies some keys of the
+`mcx_preference_settings` works the same way. Device and user scope both work. macOS copies some keys of the
 profile itself into the domain, such as `PayloadUUID` and `_manualProfile`;
 TypeWhisper ignores keys that start with `Payload` or `_`.
 
