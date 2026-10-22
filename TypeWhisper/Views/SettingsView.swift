@@ -46,16 +46,18 @@ struct SettingsView: View {
         switch AppConstants.screenshotState {
         case "general": return .general
         case "indicator-settings", "appearance": return .appearance
-        case "indicator": return .home
+        case "indicator", "indicator-model-menu": return .home
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
         case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
-        case "recorder", "recorder-folders", "recorder-folder-unavailable": return .recorder
+        case "recorder", "recorder-queue", "recorder-folders", "recorder-folder-unavailable": return .recorder
         case "history": return .history
         case "statistics": return .statistics
-        case "dictionary", "dictionary-term-packs": return .dictionary
+        case "dictionary", "dictionary-term-packs", "dictionary-local-term-packs", "dictionary-local-term-pack-error",
+             "dictionary-local-term-pack-replace":
+            return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
         case "premium": return .premium
@@ -271,7 +273,7 @@ struct SettingsView: View {
         switch tab {
         case .home:
             #if DEBUG
-            if AppConstants.screenshotState == "indicator" {
+            if ["indicator", "indicator-model-menu"].contains(AppConstants.screenshotState) {
                 ScreenshotIndicatorShowcaseView()
             } else {
                 HomeSettingsView()

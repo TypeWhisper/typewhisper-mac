@@ -310,6 +310,7 @@
 		AA00000000000000000075 /* TranslationHostWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000075 /* TranslationHostWindow.swift */; };
 		AA00000000000000000077 /* DictionaryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000077 /* DictionaryEntry.swift */; };
 		AA00000000000000000078 /* TermPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000078 /* TermPack.swift */; };
+		A8070000000000000000A002 /* LocalTermPackFile.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8070000000000000000A001 /* LocalTermPackFile.swift */; };
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
 		AA00000000000000000999 /* DictationUndoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000999 /* DictationUndoService.swift */; };
 		AA00000000000000001337 /* DictationLatencyTrace.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000001337 /* DictationLatencyTrace.swift */; };
@@ -471,6 +472,7 @@
 			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
 			AA000000000000000A1236F1 /* IndicatorPreviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000A1236F1 /* IndicatorPreviewSession.swift */; };
 			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
+			CAF00C911BDE9647738CC59E /* IndicatorModelMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */; };
 			4E5353420000000000000001 /* NativeSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5353460000000000000001 /* NativeSearchField.swift */; };
 			AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
 			AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
@@ -594,6 +596,7 @@
 		AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000246 /* AccessibilityAnnouncementService.swift */; };
 		AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000247 /* SpeechFeedbackService.swift */; };
 		B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */; };
+		A8070000000000000000A006 /* LocalTermPackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8070000000000000000A005 /* LocalTermPackTests.swift */; };
 		BA68B1E282D5D714132FEA24 /* PortDiscovery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000105 /* PortDiscovery.swift */; };
 		E2DA879FDEFA04FBD013E837 /* OutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000106 /* OutputFormatter.swift */; };
 		F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */; };
@@ -631,6 +634,7 @@
 		E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D819323529246BCB5504526 /* SettingsBackupExporter.swift */; };
 		FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
+		A8070000000000000000A004 /* LocalTermPackStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8070000000000000000A003 /* LocalTermPackStore.swift */; };
 		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
 		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
 		AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -1025,6 +1029,7 @@
 		BB00000000000000000075 /* TranslationHostWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationHostWindow.swift; sourceTree = "<group>"; };
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
+		A8070000000000000000A001 /* LocalTermPackFile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTermPackFile.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000999 /* DictationUndoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationUndoService.swift; sourceTree = "<group>"; };
 		BB00000000000000001337 /* DictationLatencyTrace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationLatencyTrace.swift; sourceTree = "<group>"; };
@@ -1181,6 +1186,7 @@
 			BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
 			BB000000000000000A1236F1 /* IndicatorPreviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorPreviewSession.swift; sourceTree = "<group>"; };
 			BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
+			853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorModelMenuController.swift; sourceTree = "<group>"; };
 			4E5353460000000000000001 /* NativeSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSearchField.swift; sourceTree = "<group>"; };
 			BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
 			BB00000000000000000309 /* MinimalIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorView.swift; sourceTree = "<group>"; };
@@ -1334,6 +1340,7 @@
 		4D980A5CFE1A4217A10C2103 /* WhisperKitPluginCompatibilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WhisperKitPluginCompatibilityTests.swift; sourceTree = "<group>"; };
 		F3B9EC248517FD4849BEF54D /* ModelManagerRestoreAfterAutoUnloadTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerRestoreAfterAutoUnloadTests.swift; sourceTree = "<group>"; };
 		D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryServiceTests.swift; sourceTree = "<group>"; };
+		A8070000000000000000A005 /* LocalTermPackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTermPackTests.swift; sourceTree = "<group>"; };
 		D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD00000000000000000098 /* typewhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "typewhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1401,6 +1408,7 @@
 		8D819323529246BCB5504526 /* SettingsBackupExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporter.swift; sourceTree = "<group>"; };
 		80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreSheets.swift; sourceTree = "<group>"; };
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
+		A8070000000000000000A003 /* LocalTermPackStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalTermPackStore.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
 		74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporterTests.swift; sourceTree = "<group>"; };
@@ -2124,6 +2132,7 @@
 				BB00000000000000000356 /* Workflow.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
 				BB00000000000000000078 /* TermPack.swift */,
+				A8070000000000000000A001 /* LocalTermPackFile.swift */,
 				BB00000000000000000080 /* Snippet.swift */,
 				BB00000000000000000110 /* PromptAction.swift */,
 				BB00000000000000000243 /* ErrorLogEntry.swift */,
@@ -2235,6 +2244,7 @@
 				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
 				BB00000000000000000247 /* SpeechFeedbackService.swift */,
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
+				A8070000000000000000A003 /* LocalTermPackStore.swift */,
 				BB00000000000000000286 /* LicenseService.swift */,
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
 				D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */,
@@ -2315,6 +2325,7 @@
 				BB00000000000000000309 /* MinimalIndicatorView.swift */,
 				6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */,
 				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+				853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */,
 				4E5353460000000000000001 /* NativeSearchField.swift */,
 				BB00000000000000000014 /* MenuBarView.swift */,
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
@@ -3233,6 +3244,7 @@
 					BB1023000000000000000002 /* DictationSilenceEndpointTests.swift */,
 					BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
+				A8070000000000000000A005 /* LocalTermPackTests.swift */,
 				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
@@ -5262,6 +5274,7 @@
 					AA1023000000000000000002 /* DictationSilenceEndpointTests.swift in Sources */,
 					AA00000000000000000365 /* VisualShortcutKeyboardTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
+				A8070000000000000000A006 /* LocalTermPackTests.swift in Sources */,
 				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
@@ -5453,6 +5466,7 @@
 				D47A00000000000000000001 /* UserDataExportService.swift in Sources */,
 				FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */,
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
+				A8070000000000000000A004 /* LocalTermPackStore.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
 				AA000000000000000A1236F2 /* AppearanceSettingsView.swift in Sources */,
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,
@@ -5498,6 +5512,7 @@
 				AA00000000000000000075 /* TranslationHostWindow.swift in Sources */,
 				AA00000000000000000077 /* DictionaryEntry.swift in Sources */,
 				AA00000000000000000078 /* TermPack.swift in Sources */,
+				A8070000000000000000A002 /* LocalTermPackFile.swift in Sources */,
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
 				AA00000000000000000999 /* DictationUndoService.swift in Sources */,
 				AA00000000000000001337 /* DictationLatencyTrace.swift in Sources */,
@@ -5560,6 +5575,7 @@
 					AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */,
 					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
+					CAF00C911BDE9647738CC59E /* IndicatorModelMenuController.swift in Sources */,
 					4E5353420000000000000001 /* NativeSearchField.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,

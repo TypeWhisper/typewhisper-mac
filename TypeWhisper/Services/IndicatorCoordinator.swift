@@ -161,6 +161,22 @@ struct IndicatorPresentationState: Equatable {
         }
     }
 
+    /// The panel takes the pointer while the pointer is on the indicator only when the
+    /// indicator offers a control there: Stop for the Recorder, and for a dictation the
+    /// Model content when one side shows it (#1351). Otherwise clicks pass through to the
+    /// app underneath.
+    func tracksPointer(showsModelContent: Bool) -> Bool {
+        guard state == .recording else { return false }
+        switch source {
+        case .recorder:
+            return true
+        case .dictation:
+            return showsModelContent
+        case .preview:
+            return false
+        }
+    }
+
     static func resolve(
         dictationState: DictationViewModel.State,
         recorderState: AudioRecorderViewModel.RecorderState,
@@ -232,6 +248,11 @@ struct IndicatorPresentationData {
 
     var isPreparingMicrophone: Bool {
         state == .recording && !isRecordingInputReady
+    }
+
+    /// A dictation recording offers the menu that picks the model for the next dictation.
+    var offersModelMenu: Bool {
+        source == .dictation && state == .recording
     }
 
     var recordingStatusLabel: String {

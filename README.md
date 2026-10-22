@@ -756,8 +756,10 @@ Session response:
 
 Recorder sessions move through `recording -> finalizing -> completed` or `failed`. If recorder transcription is disabled or produces no transcript, `text` is omitted and `output_file` still points to the finalized recording when available. Failed sessions include an `error` field.
 
+A stopped session is transcribed in the background, so a new session can start while earlier sessions are still `finalizing`. Transcripts are made one at a time, in the order the recordings stopped, and each session reports its own status.
+
 Conflict and lookup behavior:
-- Starting while the recorder is already recording or finalizing returns `409 Conflict`.
+- Starting while the recorder is already recording, or still saving the audio of the recording that just stopped, returns `409 Conflict`.
 - Stopping without an active API recorder session returns `409 Conflict`.
 - Polling with a missing or invalid `id` returns `400 Bad Request`.
 - Polling a valid but unknown session id returns `404 Not Found`.

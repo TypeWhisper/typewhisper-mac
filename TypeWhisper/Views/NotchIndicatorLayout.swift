@@ -258,6 +258,8 @@ enum NotchIndicatorLayout {
     static let leftContentSpacing: CGFloat = 6
     static let widthSafetyBuffer: CGFloat = 8
     static let profileChipMaxWidth: CGFloat = 150
+    static let modelChipMaxWidth: CGFloat = 170
+    static let modelChipChevronSpacing: CGFloat = 3
     static let notchedClosedHeight: CGFloat = 34
     static let fallbackClosedHeight: CGFloat = 32
     static let fallbackClosedWidth: CGFloat = 200
@@ -287,18 +289,21 @@ enum NotchIndicatorLayout {
         leftContent: NotchIndicatorContent,
         rightContent: NotchIndicatorContent,
         recordingDuration: TimeInterval,
-        activeRuleName: String?
+        activeRuleName: String?,
+        modelTitle: String = IndicatorModelMenu.contentTitle(modelName: nil)
     ) -> CGFloat {
         let baseWidth = closedWidth(hasNotch: hasNotch, notchWidth: notchWidth)
         let leftContentWidth = recordingContentWidth(
             leftContent,
             recordingDuration: recordingDuration,
-            activeRuleName: activeRuleName
+            activeRuleName: activeRuleName,
+            modelTitle: modelTitle
         )
         let rightContentWidth = recordingContentWidth(
             rightContent,
             recordingDuration: recordingDuration,
-            activeRuleName: activeRuleName
+            activeRuleName: activeRuleName,
+            modelTitle: modelTitle
         )
         let leftRequiredWidth = leadingInset + IndicatorSizing.notch.iconSize
             + (leftContentWidth > 0 ? leftContentSpacing + leftContentWidth : 0)
@@ -344,7 +349,8 @@ enum NotchIndicatorLayout {
     static func recordingContentWidth(
         _ content: NotchIndicatorContent,
         recordingDuration: TimeInterval,
-        activeRuleName: String?
+        activeRuleName: String?,
+        modelTitle: String = IndicatorModelMenu.contentTitle(modelName: nil)
     ) -> CGFloat {
         switch content {
         case .indicator:
@@ -355,9 +361,28 @@ enum NotchIndicatorLayout {
             return compactWaveformWidth
         case .profile:
             return profileChipWidth(for: activeRuleName)
+        case .model:
+            return modelChipWidth(for: modelTitle)
         case .none:
             return 0
         }
+    }
+
+    static func modelChipChevronWidth(for sizing: IndicatorSizing) -> CGFloat {
+        ceil(sizing.profileFontSize * 0.8)
+    }
+
+    /// Width of the Model content: name, chevron and padding, at most `modelChipMaxWidth`.
+    static func modelChipWidth(for title: String, sizing: IndicatorSizing = .notch) -> CGFloat {
+        let textWidth = measureTextWidth(
+            title,
+            font: NSFont.systemFont(ofSize: sizing.profileFontSize, weight: .medium)
+        )
+        let width = textWidth
+            + modelChipChevronSpacing
+            + modelChipChevronWidth(for: sizing)
+            + (2 * sizing.profilePaddingH)
+        return min(modelChipMaxWidth, width)
     }
 
     static func timerWidth(for recordingDuration: TimeInterval) -> CGFloat {

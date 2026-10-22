@@ -1,4 +1,5 @@
 import SwiftUI
+import TypeWhisperPluginSDK
 
 #if DEBUG
 struct ScreenshotIndicatorShowcaseView: View {
@@ -23,7 +24,76 @@ struct ScreenshotIndicatorShowcaseView: View {
                         localized: "Hello, this is a live preview of the streaming text..."
                     )
                 }
+                if AppConstants.screenshotState == "indicator-model-menu" {
+                    dictation.notchIndicatorRightContent = .model
+                    prepareModelMenuFixture()
+                    // Opens the menu once the showcase and its indicator are on screen.
+                    let timer = Timer(timeInterval: 1.5, repeats: false) { _ in
+                        MainActor.assumeIsolated {
+                            IndicatorModelMenuController.shared.showMenu()
+                        }
+                    }
+                    RunLoop.main.add(timer, forMode: .common)
+                }
             }
+    }
+
+    /// Engines in typical states: a downloaded local model in use, a cloud model chosen for
+    /// the next dictation, a model that needs a download and an engine without an API key.
+    private func prepareModelMenuFixture() {
+        let parakeet = DictationQuickSelectionEngine(
+            providerId: "parakeet",
+            displayName: "Parakeet",
+            isAuthAvailable: true,
+            isConfigured: true,
+            managesLocalModels: true,
+            selectedModelId: "parakeet-tdt-0.6b-v3",
+            restorableModelId: "parakeet-tdt-0.6b-v3",
+            models: [
+                PluginModelInfo(id: "parakeet-tdt-0.6b-v3", displayName: "Parakeet TDT v3", downloaded: true, loaded: true),
+                PluginModelInfo(id: "parakeet-tdt-0.6b-v2", displayName: "Parakeet TDT v2 (English)", downloaded: true, loaded: false),
+                PluginModelInfo(id: "parakeet-ultra", displayName: "Parakeet Ultra", downloaded: false, loaded: false),
+            ]
+        )
+        let groq = DictationQuickSelectionEngine(
+            providerId: "groq",
+            displayName: "Groq",
+            isAuthAvailable: true,
+            isConfigured: true,
+            managesLocalModels: false,
+            selectedModelId: "whisper-large-v3-turbo",
+            restorableModelId: nil,
+            models: [
+                PluginModelInfo(id: "whisper-large-v3-turbo", displayName: "Whisper Large v3 Turbo"),
+                PluginModelInfo(id: "whisper-large-v3", displayName: "Whisper Large v3"),
+            ]
+        )
+        let openAI = DictationQuickSelectionEngine(
+            providerId: "openai",
+            displayName: "OpenAI",
+            isAuthAvailable: true,
+            isConfigured: false,
+            managesLocalModels: false,
+            selectedModelId: nil,
+            restorableModelId: nil,
+            models: [PluginModelInfo(id: "gpt-4o-transcribe", displayName: "GPT-4o Transcribe")]
+        )
+        var snapshot = DictationQuickSelectionSnapshot()
+        snapshot.isLocked = true
+        snapshot.modelGroups = DictationQuickSelection.modelGroups(
+            engines: [parakeet, groq, openAI],
+            selectedProviderId: "parakeet"
+        )
+        snapshot.modelName = "Parakeet TDT v3"
+        let next = DictationModelChoice(providerId: "groq", modelId: "whisper-large-v3-turbo")
+        IndicatorModelMenuController.shared.prepareScreenshotFixture(
+            snapshot: snapshot,
+            pending: PendingDictationModelSwitch(
+                choice: next,
+                title: "Whisper Large v3 Turbo",
+                baseline: DictationModelSelectionState(providerId: "parakeet", modelId: "parakeet-tdt-0.6b-v3")
+            )
+        )
     }
 }
 #endif
@@ -224,6 +294,17 @@ struct IndicatorStylePicker: View {
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
                 .background(.white.opacity(0.2), in: Capsule())
+        case .model:
+            HStack(spacing: 1) {
+                Text("M")
+                    .font(.system(size: size * 0.9, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: size * 0.55, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .background(.white.opacity(0.2), in: Capsule())
         case .none:
             Color.clear.frame(width: 0, height: 0)
         }
