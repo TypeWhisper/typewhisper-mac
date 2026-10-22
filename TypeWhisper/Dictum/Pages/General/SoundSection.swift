@@ -15,10 +15,11 @@ struct SoundSection: View {
                 HStack(spacing: 2) {
                     ForEach(0..<12) { segment in
                         RoundedRectangle(cornerRadius: 2)
-                            .fill(Float(segment) < level * 12 ? DictumTheme.accent : DictumTheme.separator)
-                            .frame(width: 8, height: 8)
+                            .fill(Float(segment) < level * 12 ? DictumTheme.accent : DictumTheme.separatorStrong)
+                            .frame(height: 8)
                     }
                 }
+                .frame(width: 120)
                 .accessibilityLabel(Text("Microphone level", tableName: "DictumShell"))
                 .accessibilityValue(level.formatted(.percent))
                 Picker(selection: $devices.selectedDeviceUID) {

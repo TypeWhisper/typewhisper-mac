@@ -12,11 +12,13 @@ enum DictumTheme {
     static let danger = color(0xE0434B, 0xFF6369)
     static let windowBackground = color(0xFFFFFF, 0x1E1E20)
     static let card = color(0xF6F6F8, 0x262629)
+    static let raised = color(0xFFFFFF, 0x2C2C2F)
     static let inset = color(0xF1F1F4, 0x18181A)
     static let textPrimary = color(0x1D1D1F, 0xF2F2F4)
     static let textSecondary = color(0x6E6E73, 0xA1A1A8)
     static let textTertiary = color(0xA1A1A6, 0x6C6C72)
     static let separator = color(0x000000, 0xFFFFFF, lightAlpha: 0.085, darkAlpha: 0.08)
+    static let separatorStrong = color(0x000000, 0xFFFFFF, lightAlpha: 0.14, darkAlpha: 0.14)
     static let heat = zip(
         [0xECECF0, 0xCDD6F6, 0x9AAEEE, 0x6A86E3, 0x3B5BDB],
         [0x2C2C30, 0x283463, 0x34479A, 0x4E67D1, 0x7B94FF]
