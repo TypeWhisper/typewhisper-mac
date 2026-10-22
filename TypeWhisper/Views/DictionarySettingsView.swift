@@ -183,6 +183,52 @@ struct DictionarySettingsView: View {
                 Text(resetConfirmationMessage(for: request))
             }
         }
+        .alert(String(localized: "Could Not Import Term Pack"), isPresented: Binding(
+            get: { viewModel.localTermPackImportError != nil },
+            set: { if !$0 { viewModel.clearLocalTermPackImportError() } }
+        )) {
+            Button(String(localized: "OK")) { viewModel.clearLocalTermPackImportError() }
+        } message: {
+            Text(viewModel.localTermPackImportError ?? "")
+        }
+        .alert(
+            String(localized: "Replace “\(viewModel.pendingLocalTermPackReplacement?.existingName ?? "")”?"),
+            isPresented: Binding(
+                get: { viewModel.pendingLocalTermPackReplacement != nil },
+                set: { if !$0 { viewModel.cancelLocalTermPackReplacement() } }
+            )
+        ) {
+            if viewModel.pendingLocalTermPackReplacement != nil {
+                Button(String(localized: "Replace"), role: .destructive) {
+                    viewModel.confirmLocalTermPackReplacement()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelLocalTermPackReplacement()
+            }
+        } message: {
+            if let replacement = viewModel.pendingLocalTermPackReplacement {
+                Text(String(localized: "A local pack with the id “\(replacement.id)” is already imported. The file replaces its name, terms and corrections. If the pack is on, its dictionary entries are updated."))
+            }
+        }
+        .alert(
+            String(localized: "Remove “\(viewModel.pendingLocalTermPackRemoval?.name ?? "")”?"),
+            isPresented: Binding(
+                get: { viewModel.pendingLocalTermPackRemoval != nil },
+                set: { if !$0 { viewModel.cancelLocalTermPackRemoval() } }
+            )
+        ) {
+            if viewModel.pendingLocalTermPackRemoval != nil {
+                Button(String(localized: "Remove"), role: .destructive) {
+                    viewModel.confirmLocalTermPackRemoval()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelLocalTermPackRemoval()
+            }
+        } message: {
+            Text(String(localized: "The pack is deleted from this Mac, and the entries it added are removed from the dictionary. You can import the file again later."))
+        }
     }
 
     private var dictionaryHeader: some View {
@@ -564,9 +610,59 @@ struct DictionarySettingsView: View {
 
                 // Community Packs
                 communityPacksSection
+
+                // Local Packs
+                if viewModel.supportsLocalTermPacks {
+                    localPacksSection
+                }
             }
             .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
+        }
+    }
+
+    @ViewBuilder
+    private var localPacksSection: some View {
+        Section {
+            Text(String(localized: "Your own packs from a JSON file in the community pack format. They stay on this Mac and are not reviewed, synced or updated by TypeWhisper; import an edited file to change a pack. Community packs come from the reviewed TypeWhisper registry."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+
+            if viewModel.visibleLocalPacks.isEmpty {
+                HStack {
+                    Spacer()
+                    Text(String(localized: "No local packs imported yet."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+            } else {
+                ForEach(viewModel.visibleLocalPacks) { pack in
+                    TermPackCardView(pack: pack, viewModel: viewModel)
+                }
+            }
+        } header: {
+            HStack {
+                Text(String(localized: "Local Packs"))
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+
+                Spacer()
+
+                Button {
+                    viewModel.importLocalTermPackFromFile()
+                } label: {
+                    Label(String(localized: "Import Term Pack..."), systemImage: "square.and.arrow.down")
+                }
+                .controlSize(.small)
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 4)
         }
     }
 
@@ -1325,10 +1421,19 @@ private struct TermPackCardView: View {
         isActivated && viewModel.hasUpdate(for: pack)
     }
 
+    private var localConflict: LocalTermPackConflict? {
+        viewModel.localPackConflict(for: pack)
+    }
+
+    /// Local pack files may name a symbol this macOS version does not have.
+    private var iconName: String {
+        NSImage(systemSymbolName: pack.icon, accessibilityDescription: nil) == nil ? "shippingbox" : pack.icon
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: pack.icon)
+                Image(systemName: iconName)
                     .font(.title3)
                     .foregroundStyle(isActivated ? Color.accentColor : .secondary)
                     .frame(width: 28)
@@ -1357,7 +1462,7 @@ private struct TermPackCardView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
 
-                        if pack.source == .community, let author = pack.author {
+                        if pack.source != .builtIn, let author = pack.author {
                             Text("-")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
@@ -1366,6 +1471,17 @@ private struct TermPackCardView: View {
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
+                    }
+
+                    if let localConflict {
+                        Label(
+                            localConflict.error(forID: pack.id).localizedDescription,
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1383,12 +1499,26 @@ private struct TermPackCardView: View {
                     .buttonStyle(.bordered)
                 }
 
+                if pack.source == .local {
+                    Menu {
+                        localPackActions
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel(String(localized: "More actions for \(pack.name)"))
+                }
+
                 Toggle("", isOn: Binding(
                     get: { isActivated },
                     set: { _ in viewModel.togglePack(pack) }
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
+                // A local pack whose ID a registry pack took can still be turned off, not on.
+                .disabled(localConflict != nil && !isActivated)
                 .accessibilityLabel(String(localized: "Enable \(pack.name)"))
 
                 Button {
@@ -1469,6 +1599,21 @@ private struct TermPackCardView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(pack.name)
+    }
+
+    @ViewBuilder
+    private var localPackActions: some View {
+        Button {
+            viewModel.exportLocalTermPackToFile(pack)
+        } label: {
+            Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
+        }
+
+        Button(role: .destructive) {
+            viewModel.requestLocalTermPackRemoval(pack)
+        } label: {
+            Label(String(localized: "Remove..."), systemImage: "trash")
+        }
     }
 }
 

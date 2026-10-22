@@ -83,6 +83,7 @@ final class ServiceContainer: ObservableObject {
     let pluginManager: PluginManager
     let pluginRegistryService: PluginRegistryService
     let termPackRegistryService: TermPackRegistryService
+    let localTermPackStore: LocalTermPackStore
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
     let appFormatterService: AppFormatterService
@@ -197,6 +198,10 @@ final class ServiceContainer: ObservableObject {
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
+        localTermPackStore = LocalTermPackStore(
+            directory: AppConstants.appSupportDirectory
+                .appendingPathComponent(LocalTermPackStore.directoryName, isDirectory: true)
+        )
         widgetDataService = WidgetDataService(
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
@@ -501,6 +506,7 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             licenseService: licenseService,
             termPackRegistryService: termPackRegistryService,
+            localTermPackStore: localTermPackStore,
             selectedTranscriptionEngine: { [modelManagerService] in
                 modelManagerService.selectedProviderId.flatMap {
                     PluginManager.shared?.transcriptionEngine(for: $0)
