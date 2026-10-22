@@ -91,8 +91,11 @@ final class ParakeetModelPrewarm: @unchecked Sendable {
 
 // MARK: - Plugin Entry Point
 
+// Parakeet keeps the host's default transcript preview policy (allowed) instead of declaring it:
+// a host reads a declared policy for a model override by selecting that model, which reloads
+// Parakeet models.
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, TransientModelSelectionProviding, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsSettingEnabling, LiveTranscriptionCapablePlugin, LiveTranscriptionModelSupportProviding, LiveTranscriptionProgressModeProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, TransientModelSelectionProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     static let vocabularyAssetFileName = "parakeet_vocab.json"
@@ -107,6 +110,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     fileprivate var host: HostServices?
     fileprivate var asrManager: AsrManager?
     fileprivate var loadedAsrModels: AsrModels?
+    /// Opens decode streams on the loaded Nemotron model; nil while a Parakeet TDT model, or none, is loaded.
+    fileprivate var nemotronStreams: ParakeetNemotronStreamFactory?
     fileprivate(set) var loadedModelId: String?
     fileprivate var _selectedModelId: String?
     var modelState: ParakeetModelState = .notLoaded
@@ -141,6 +146,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     /// Test hook replacing the Parakeet model download and Core ML load while
     /// keeping `modelLoadGate` and the state updates around them.
     var asrModelLoadOverrideForTests: (@Sendable (_ version: ParakeetVersion) async throws -> Void)?
+    /// Test hook: the decode streams a Nemotron load installs while `asrModelLoadOverrideForTests` replaces the load.
+    var nemotronStreamFactoryForTests: ParakeetNemotronStreamFactory?
     var lastConfiguredPrompt: String?
     var lastBoostingTermCount: Int = 0
 
@@ -195,6 +202,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedAsrModels = nil
+        nemotronStreams = nil
         loadedModelId = nil
         _selectedModelId = nil
         modelState = .notLoaded
@@ -208,7 +216,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var providerDisplayName: String { "Parakeet" }
 
     var isConfigured: Bool {
-        asrManager != nil && loadedModelId != nil
+        (asrManager != nil || nemotronStreams != nil) && loadedModelId != nil
     }
 
     var canDismissSettingsAfterSetup: Bool {
@@ -231,8 +239,40 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     var selectedModelId: String? { transientSelection.modelId ?? _selectedModelId }
-    var allowsTranscriptPreviewFallback: Bool { true }
     var supportsStreaming: Bool { true }
+
+    // MARK: - Live Transcription
+
+    /// Only Nemotron streams. The Parakeet TDT models transcribe in batches, so the host
+    /// previews them by transcribing the growing recording and transcribes it again at the end.
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        guard let modelId else { return selectedVersion.streamsLive }
+        return ParakeetVersion.from(modelId: modelId)?.streamsLive ?? false
+    }
+
+    /// Nemotron reports the transcript of all audio so far, not a recent window.
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
+
+    /// Nemotron ignores the prompt: it takes no dictionary terms (see `dictionaryTermsSupport`).
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        if translate {
+            throw PluginTranscriptionError.apiError("Parakeet does not support translation")
+        }
+        guard let nemotronStreams, isConfigured else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        let relay = ParakeetNemotronProgressRelay(onProgress)
+        let stream = try await nemotronStreams.open(
+            Self.nemotronLanguagePrompt(for: language),
+            { relay.forward($0) }
+        )
+        return ParakeetNemotronLiveSession(stream: stream, relay: relay)
+    }
 
     func selectModel(_ modelId: String) {
         guard let version = ParakeetVersion.from(modelId: modelId) else { return }
@@ -310,8 +350,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     var supportsTranslation: Bool { false }
+    /// The Parakeet TDT models use dictionary terms through Vocabulary Boosting and its CTC
+    /// model. Nemotron takes none: FluidAudio's decode-time biasing changed unrelated words
+    /// when tested with an ordinary dictionary.
     var dictionaryTermsSupport: DictionaryTermsSupport {
-        vocabularyBoostingEnabled ? .supported : .requiresPluginSetting
+        guard selectedVersion.supportsVocabularyBoosting else { return .unsupported }
+        return vocabularyBoostingEnabled ? .supported : .requiresPluginSetting
     }
 
     var dictionaryTermsSettingSummary: String {
@@ -383,6 +427,18 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        if let nemotronStreams, loadedModelId != nil {
+            if translate {
+                throw PluginTranscriptionError.apiError("Parakeet does not support translation")
+            }
+            return try await transcribeWithNemotron(
+                audio: audio,
+                streams: nemotronStreams,
+                language: language,
+                onProgress: onProgress,
+                onSourceProgress: onSourceProgress
+            )
+        }
         guard let asrManager else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -465,6 +521,57 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         _ = onProgress(trimmedText)
         return PluginTranscriptionResult(text: trimmedText, detectedLanguage: nil, segments: segments)
+    }
+
+    /// Feeds the recording through a fresh Nemotron stream, in blocks so a long file
+    /// reports its progress and stops soon after cancellation. FluidAudio reports no token
+    /// confidence for Nemotron, so the short-clip confidence gate does not apply.
+    private func transcribeWithNemotron(
+        audio: AudioData,
+        streams: ParakeetNemotronStreamFactory,
+        language: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        let stream = try await streams.open(Self.nemotronLanguagePrompt(for: language), { _ in })
+        let samples = audio.samples
+        let totalDuration = Double(samples.count) / 16_000
+        var reportsSourceProgress = Self.shouldObserveSourceProgress(sampleCount: samples.count)
+        var offset = 0
+        while offset < samples.count {
+            try Task.checkCancellation()
+            let end = min(offset + Self.nemotronBlockSampleCount, samples.count)
+            try await stream.process(Array(samples[offset..<end]))
+            offset = end
+            if reportsSourceProgress,
+               let progress = Self.sourceProgress(
+                   fromFraction: Double(offset) / Double(samples.count),
+                   totalDuration: totalDuration
+               ) {
+                reportsSourceProgress = onSourceProgress(progress)
+            }
+        }
+        try Task.checkCancellation()
+        let result = Self.nemotronResult(from: try await stream.finish())
+        _ = onProgress(result.text)
+        return result
+    }
+
+    /// 10 seconds of 16 kHz audio per Nemotron call during batch transcription.
+    private static let nemotronBlockSampleCount = 160_000
+
+    /// Builds the transcription result of a finished Nemotron stream and reports its word timings.
+    static func nemotronResult(from output: ParakeetNemotronStreamOutput) -> PluginTranscriptionResult {
+        let text = removingUnknownTokens(from: output.text).trimmingCharacters(in: .whitespacesAndNewlines)
+        let words = groupTokensIntoWords(output.tokenTimings)
+        if !words.isEmpty {
+            PluginWordTimings.report(words)
+        }
+        return PluginTranscriptionResult(
+            text: text,
+            detectedLanguage: output.detectedLanguage.flatMap(nemotronLanguageCode(forTag:)),
+            segments: groupWordsIntoSegments(words)
+        )
     }
 
     /// Parakeet's vocabulary has no token for a few characters, mostly "&", brackets and some
@@ -570,6 +677,39 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         guard let primaryCode, !primaryCode.isEmpty else { return nil }
         return Language(rawValue: primaryCode)
     }
+
+    /// Nemotron's language prompt: the requested locale when the model card lists it, otherwise
+    /// the first locale it lists for the language. Nil, which detects the language, without a
+    /// language or for one the model does not transcribe.
+    static func nemotronLanguagePrompt(for language: String?) -> String? {
+        guard let language else { return nil }
+        let parts = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+            .split(separator: "-", maxSplits: 1)
+            .map(String.init)
+        guard let primary = parts.first?.lowercased(), !primary.isEmpty,
+              let locales = NemotronStreaming.promptLocales[primary == "nb" ? "no" : primary] else {
+            return nil
+        }
+        if parts.count == 2 {
+            let requested = "\(primary)-\(parts[1].uppercased())"
+            if locales.contains(requested) { return requested }
+        }
+        return locales.first
+    }
+
+    /// TypeWhisper's language code for a language tag Nemotron emits, such as "de-DE".
+    static func nemotronLanguageCode(forTag tag: String) -> String? {
+        let primary = tag
+            .trimmingCharacters(in: CharacterSet(charactersIn: "<> "))
+            .split(separator: "-")
+            .first
+            .map { $0.lowercased() }
+        guard let primary, !primary.isEmpty else { return nil }
+        return primary == "nb" ? "no" : primary
+    }
+
     // MARK: - Token-to-Segment Grouping
 
     static func groupTokensIntoWords(_ tokenTimings: [TokenTiming]) -> [PluginWordTiming] {
@@ -983,7 +1123,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         // FluidAudio's CTC loader may repair its cache by downloading assets.
         // It runs outside `modelLoadGate`, so switching models meanwhile does not
         // wait for it with no model loaded.
-        if didLoad, !passively, vocabularyBoostingEnabled {
+        if didLoad, !passively, vocabularyBoostingEnabled, version.supportsVocabularyBoosting {
             await loadDownloadedCtcModel()
         }
     }
@@ -1001,9 +1141,11 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 throw PluginModelDownloadRefusedError(reason: downloadRefusal)
             }
             let models: AsrModels?
+            var nemotron: ParakeetNemotronStreamFactory?
             if let asrModelLoadOverrideForTests {
                 try await asrModelLoadOverrideForTests(version)
                 models = nil
+                nemotron = version == .nemotronStreaming ? nemotronStreamFactoryForTests : nil
             } else if allowDownloads, downloadRefusal == nil {
                 let spaceReservation = isModelDownloaded(version: version)
                     ? nil
@@ -1012,10 +1154,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 if version == .fluidSpeechMini {
                     try await installFluidSpeechMini()
                     models = try Self.loadInstalledModels(version: version)
+                } else if version == .nemotronStreaming {
+                    try await installNemotronStreaming()
+                    downloadProgress = 0.7
+                    nemotron = try await NemotronStreaming.loadInstalledModels()
+                    models = nil
                 } else {
                     try await ensureVocabularyAsset(for: version)
                     models = try await AsrModels.downloadAndLoad(
-                        version: version.asrModelVersion,
+                        version: try version.requiredAsrModelVersion(),
                         progressHandler: { [weak self] progress in
                             guard let self, self.modelState == .downloading,
                                   case .downloading = progress.phase else { return }
@@ -1026,6 +1173,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                         }
                     )
                 }
+            } else if version == .nemotronStreaming {
+                // Local Core ML loading only, as for the other models.
+                nemotron = try await NemotronStreaming.loadInstalledModels()
+                models = nil
             } else {
                 models = try Self.loadInstalledModels(version: version)
             }
@@ -1033,8 +1184,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
             // Keep the pre-0.15.7 chunk context: the new v3 default changes
             // punctuation at chunk boundaries in paired long-form recordings.
-            let manager = AsrManager(config: Self.asrConfiguration)
-            if let models {
+            // Nemotron decodes with its own streams instead.
+            let manager: AsrManager? = version == .nemotronStreaming ? nil : AsrManager(config: Self.asrConfiguration)
+            if let manager, let models {
                 try await manager.loadModels(models)
             }
             downloadProgress = 1.0
@@ -1047,6 +1199,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                 selectedVersion = version
                 asrManager = manager
                 loadedAsrModels = models
+                nemotronStreams = nemotron
                 loadedModelId = version.modelDef.id
                 _selectedModelId = version.modelDef.id
                 modelState = .ready
@@ -1094,10 +1247,26 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             try await FluidSpeechMini.downloadRemoteFile(remotePath, to: destination, token: token)
         }
         try await FluidSpeechMini.install(listFiles: listFiles, downloadFile: downloadFile) { [weak self] fraction in
-            guard let self, self.modelState == .downloading else { return }
-            // The download fills the 10-70% band that precedes model loading.
-            self.downloadProgress = max(self.downloadProgress, 0.1 + min(max(fraction, 0), 1) * 0.6)
+            self?.reportPinnedDownloadProgress(fraction)
         }
+    }
+
+    private func installNemotronStreaming() async throws {
+        let token = Self.currentHuggingFaceToken()
+        let download = NemotronStreaming.download
+        try await download.install(
+            listFiles: { try await download.listRemoteFiles(token: token) },
+            downloadFile: { remotePath, destination in
+                try await download.downloadRemoteFile(remotePath, to: destination, token: token)
+            },
+            progress: { [weak self] fraction in self?.reportPinnedDownloadProgress(fraction) }
+        )
+    }
+
+    /// The download fills the 10-70% band that precedes model loading.
+    private func reportPinnedDownloadProgress(_ fraction: Double) {
+        guard modelState == .downloading else { return }
+        downloadProgress = max(downloadProgress, 0.1 + min(max(fraction, 0), 1) * 0.6)
     }
 
     /// FluidAudio's high-level loaders can delete and re-download a corrupt cache,
@@ -1125,7 +1294,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             joint: MLModel(contentsOf: directory.appendingPathComponent(jointFile), configuration: configuration),
             configuration: configuration,
             vocabulary: vocabulary,
-            version: version.asrModelVersion
+            version: try version.requiredAsrModelVersion()
         )
     }
 
@@ -1310,6 +1479,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedAsrModels = nil
+        // A live session still open keeps its own stream until it ends.
+        nemotronStreams = nil
         loadedModelId = nil
         modelState = .notLoaded
         downloadProgress = 0
@@ -1339,18 +1510,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
         let cacheDir = version.installDirectory
         if version == .fluidSpeechMini {
-            // Files download into the staging folder and move into place when complete.
-            let staging = FluidSpeechMini.stagingDirectory(for: cacheDir)
-            return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
-                repositoryID: FluidSpeechMini.repository,
-                revision: FluidSpeechMini.revision,
-                matching: FluidSpeechMini.filePatterns,
-                token: _hfToken,
-                destination: cacheDir,
-                trackedDirectory: staging,
-                localRepositoryRoot: staging,
-                modelName: version.modelDef.displayName
-            )
+            return try await FluidSpeechMini.download.reserveDiskSpace(token: _hfToken)
+        }
+        if version == .nemotronStreaming {
+            return try await NemotronStreaming.download.reserveDiskSpace(token: _hfToken)
         }
         return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
             repositoryID: version.huggingFaceRepository,
@@ -1378,14 +1541,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
-        if version == .fluidSpeechMini {
+        switch version {
+        case .fluidSpeechMini:
             return FluidSpeechMini.isInstalled(at: version.installDirectory)
+        case .nemotronStreaming:
+            return NemotronStreaming.isInstalled(at: version.installDirectory)
+        case .ultra, .v3, .v2:
+            guard let asrModelVersion = version.asrModelVersion else { return false }
+            return AsrModels.modelsExist(at: version.installDirectory, version: asrModelVersion)
         }
-        return AsrModels.modelsExist(at: version.installDirectory, version: version.asrModelVersion)
     }
 
-    /// Whether `loadInstalledModels` finds everything it needs without downloading.
+    /// Whether the model loads from its installed files without downloading.
     private func isModelInstalled(version: ParakeetVersion) -> Bool {
+        // Nemotron has no separate vocabulary file to fetch; its tokenizer is part of the model folder.
+        guard version != .nemotronStreaming else { return isModelDownloaded(version: version) }
         let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
             .appendingPathComponent(Self.vocabularyAssetFileName)
         return isModelDownloaded(version: version) && Self.vocabularyAssetExists(at: vocabularyURL)
@@ -1452,20 +1622,41 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 // MARK: - Model Version
 
 /// Ordered as offered: Ultra is the default because it is more accurate than v3 and keeps
-/// transcribing the person dictating when someone else talks in the background.
+/// transcribing the person dictating when someone else talks in the background. Nemotron
+/// comes last: it transcribes while the user speaks, but less accurately than the TDT models.
 enum ParakeetVersion: String, CaseIterable {
     case ultra
     case v3
     case fluidSpeechMini
     case v2
+    case nemotronStreaming
 
-    var asrModelVersion: AsrModelVersion {
+    /// The Parakeet TDT decode contract; nil for Nemotron, which decodes in FluidAudio streams.
+    var asrModelVersion: AsrModelVersion? {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
         // Fluid Speech Mini keeps Ultra's decoder, joint network and decode contract.
         case .ultra, .fluidSpeechMini: return .ultra
+        case .nemotronStreaming: return nil
         }
+    }
+
+    func requiredAsrModelVersion() throws -> AsrModelVersion {
+        guard let asrModelVersion else {
+            throw AsrModelsError.loadingFailed("\(modelDef.displayName) is not a Parakeet TDT model")
+        }
+        return asrModelVersion
+    }
+
+    /// Whether the host gets live sessions for this model: only Nemotron is a streaming model.
+    var streamsLive: Bool {
+        self == .nemotronStreaming
+    }
+
+    /// Whether Vocabulary Boosting and its CTC model work with this model's output.
+    var supportsVocabularyBoosting: Bool {
+        self != .nemotronStreaming
     }
 
     /// Hugging Face repository the model files come from.
@@ -1475,24 +1666,29 @@ enum ParakeetVersion: String, CaseIterable {
         case .v3: return Repo.parakeetV3.remotePath
         case .ultra: return Repo.parakeetUltra.remotePath
         case .fluidSpeechMini: return FluidSpeechMini.repository
+        case .nemotronStreaming: return NemotronStreaming.repository
         }
     }
 
     /// Folder the model is installed in.
     var installDirectory: URL {
         switch self {
-        case .v2, .v3, .ultra: return AsrModels.defaultCacheDirectory(for: asrModelVersion)
+        case .v2: return AsrModels.defaultCacheDirectory(for: .v2)
+        case .v3: return AsrModels.defaultCacheDirectory(for: .v3)
+        case .ultra: return AsrModels.defaultCacheDirectory(for: .ultra)
         case .fluidSpeechMini: return FluidSpeechMini.directory
+        case .nemotronStreaming: return NemotronStreaming.directory
         }
     }
 
     /// Model folders `AsrModels.download` fetches with its default int8 encoder, or that
-    /// the plugin downloads itself for Fluid Speech Mini.
+    /// the plugin downloads itself for Fluid Speech Mini and Nemotron.
     var requiredModelFiles: Set<String> {
         switch self {
         case .v2: return ModelNames.ASR.requiredModels
         case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
         case .fluidSpeechMini: return FluidSpeechMini.modelFolders
+        case .nemotronStreaming: return NemotronStreaming.modelFolders
         }
     }
 
@@ -1501,11 +1697,13 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2, .fluidSpeechMini: return ModelNames.ASR.jointFile
         case .v3, .ultra: return ModelNames.ASR.jointV3File
+        case .nemotronStreaming: return ModelNames.NemotronMultilingualStreaming.jointFile
         }
     }
 
     /// FluidAudio filters tokens by a language's script through the joint network's top-K
-    /// outputs, which Fluid Speech Mini does not have; v2 ignores the hint.
+    /// outputs, which Fluid Speech Mini does not have; v2 ignores the hint. Nemotron takes
+    /// the language as its prompt.
     var acceptsLanguageHint: Bool {
         self != .fluidSpeechMini
     }
@@ -1540,6 +1738,13 @@ enum ParakeetVersion: String, CaseIterable {
                 sizeDescription: "~250 MB",
                 ramRequirement: "8 GB+"
             )
+        case .nemotronStreaming:
+            return ParakeetModelDef(
+                id: "nemotron-3.5-asr-streaming-0.6b",
+                displayName: "Nemotron 3.5 ASR Streaming",
+                sizeDescription: "~665 MB",
+                ramRequirement: "8 GB+"
+            )
         }
     }
 
@@ -1549,6 +1754,8 @@ enum ParakeetVersion: String, CaseIterable {
             return ["en"]
         case .v3, .ultra:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
+        case .nemotronStreaming:
+            return NemotronStreaming.supportedLanguages
         }
     }
 
@@ -1567,11 +1774,161 @@ enum ParakeetVersion: String, CaseIterable {
         case .fluidSpeechMini:
             // CC BY 4.0 asks for this attribution wherever the model is offered.
             return String(localized: "Fluid Speech Mini by FluidVoice, built on NVIDIA Parakeet TDT 0.6B v3 and Moondream Parakeet Ultra. Smallest download, English only, no API key required.", bundle: bundle)
+        case .nemotronStreaming:
+            return String(localized: "NVIDIA Nemotron 3.5 ASR Streaming - streams as you speak, so the text is ready when you stop. 28 languages, no API key required.", bundle: bundle)
         }
     }
 
     static func from(modelId: String) -> ParakeetVersion? {
         allCases.first { $0.modelDef.id == modelId }
+    }
+}
+
+// MARK: - Pinned Downloads
+
+/// A model the plugin downloads itself from a reviewed Hugging Face revision. Files land in a
+/// staging folder that mirrors the repository, so an interrupted download resumes, and the
+/// model moves into place only once every file has the size the repository lists.
+struct PinnedModelDownload: Sendable {
+    typealias FileLister = @Sendable () async throws -> [PluginHuggingFaceDownloadSize.RemoteFile]
+    typealias FileDownloader = @Sendable (_ remotePath: String, _ destination: URL) async throws -> Void
+
+    struct DownloadError: LocalizedError, Equatable {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    let modelName: String
+    let repository: String
+    let revision: String
+    /// Folder inside the repository that holds the model; nil for the repository root.
+    let repositoryFolder: String?
+    /// `fnmatch` globs matched against full repository paths.
+    let filePatterns: [String]
+    let directory: URL
+    let isInstalled: @Sendable (URL) -> Bool
+
+    var stagingDirectory: URL {
+        Self.stagingDirectory(for: directory)
+    }
+
+    static func stagingDirectory(for directory: URL) -> URL {
+        directory.deletingLastPathComponent()
+            .appendingPathComponent(".\(directory.lastPathComponent).download", isDirectory: true)
+    }
+
+    /// Downloads the pinned revision into `directory`, skipping files a previous attempt finished.
+    func install(
+        listFiles: FileLister,
+        downloadFile: FileDownloader,
+        progress: @Sendable (Double) -> Void
+    ) async throws {
+        guard !isInstalled(directory) else { return }
+        let files = try await listFiles()
+        guard !files.isEmpty else {
+            throw DownloadError(message: "\(modelName) has no files at revision \(revision)")
+        }
+        let staging = stagingDirectory
+        let fileManager = FileManager.default
+        let total = max(1, files.reduce(Int64(0)) { $0 + $1.size })
+        var completed: Int64 = 0
+        for file in files {
+            try Task.checkCancellation()
+            guard Self.isSafeRelativePath(file.path), isInsideModelFolder(file.path) else {
+                throw DownloadError(message: "Unexpected file path in \(modelName): \(file.path)")
+            }
+            let target = staging.appendingPathComponent(file.path, isDirectory: false)
+            if Self.fileSize(of: target) != file.size {
+                try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try await downloadFile(file.path, target)
+                guard Self.fileSize(of: target) == file.size else {
+                    try? fileManager.removeItem(at: target)
+                    throw DownloadError(message: "Incomplete download of \(file.path)")
+                }
+            }
+            completed += file.size
+            progress(Double(completed) / Double(total))
+        }
+        let stagedModel = repositoryFolder.map { staging.appendingPathComponent($0, isDirectory: true) } ?? staging
+        guard isInstalled(stagedModel) else {
+            throw DownloadError(message: "\(modelName) is missing model files after the download")
+        }
+        if fileManager.fileExists(atPath: directory.path) {
+            try fileManager.removeItem(at: directory)
+        }
+        try fileManager.moveItem(at: stagedModel, to: directory)
+        if repositoryFolder != nil {
+            // Only the emptied folders of the repository layout remain.
+            try? fileManager.removeItem(at: staging)
+        }
+    }
+
+    func listRemoteFiles(token: String?) async throws -> [PluginHuggingFaceDownloadSize.RemoteFile] {
+        try await PluginHuggingFaceDownloadSize.files(
+            repositoryID: repository,
+            revision: revision,
+            path: repositoryFolder,
+            matching: filePatterns,
+            token: token
+        )
+    }
+
+    func downloadRemoteFile(_ remotePath: String, to destination: URL, token: String?) async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        guard let url = URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(remotePath)") else {
+            throw DownloadError(message: "Invalid \(modelName) file path: \(remotePath)")
+        }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 600
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (temporaryFile, response) = try await URLSession.shared.download(for: request)
+        defer { try? FileManager.default.removeItem(at: temporaryFile) }
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode
+            throw DownloadError(message: "HTTP \(status.map(String.init) ?? "error") while downloading \(remotePath)")
+        }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        try FileManager.default.moveItem(at: temporaryFile, to: destination)
+    }
+
+    /// Files download into the staging folder and move into place when complete, so the
+    /// staging folder holds the bytes a previous attempt already fetched.
+    func reserveDiskSpace(token: String?) async throws -> PluginDownloadSpaceReservation? {
+        try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: repository,
+            revision: revision,
+            path: repositoryFolder,
+            matching: filePatterns,
+            token: token,
+            destination: directory,
+            trackedDirectory: stagingDirectory,
+            localRepositoryRoot: stagingDirectory,
+            modelName: modelName
+        )
+    }
+
+    private func isInsideModelFolder(_ path: String) -> Bool {
+        guard let repositoryFolder else { return true }
+        return path.hasPrefix(repositoryFolder + "/")
+    }
+
+    static func isSafeRelativePath(_ path: String) -> Bool {
+        let components = path.split(separator: "/", omittingEmptySubsequences: false)
+        return !path.hasPrefix("/") && !components.isEmpty
+            && components.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }
+
+    static func fileSize(of url: URL) -> Int64? {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              (attributes[.type] as? FileAttributeType) == .typeRegular,
+              let size = attributes[.size] as? NSNumber else {
+            return nil
+        }
+        return size.int64Value
     }
 }
 
@@ -1597,11 +1954,26 @@ enum FluidSpeechMini {
             .appendingPathComponent("fluid-speech-mini-coreml", isDirectory: true)
     }
 
+    static var download: PinnedModelDownload {
+        download(into: directory)
+    }
+
+    static func download(into directory: URL) -> PinnedModelDownload {
+        PinnedModelDownload(
+            modelName: "Fluid Speech Mini",
+            repository: repository,
+            revision: revision,
+            repositoryFolder: nil,
+            filePatterns: filePatterns,
+            directory: directory,
+            isInstalled: { FluidSpeechMini.isInstalled(at: $0) }
+        )
+    }
+
     /// Files land here first and move into place once all of them are complete, so an
     /// interrupted download resumes instead of leaving a broken model folder.
     static func stagingDirectory(for directory: URL) -> URL {
-        directory.deletingLastPathComponent()
-            .appendingPathComponent(".\(directory.lastPathComponent).download", isDirectory: true)
+        PinnedModelDownload.stagingDirectory(for: directory)
     }
 
     static func isInstalled(at directory: URL) -> Bool {
@@ -1610,16 +1982,12 @@ enum FluidSpeechMini {
             fileManager.fileExists(atPath: directory.appendingPathComponent($0).appendingPathComponent("coremldata.bin").path)
         }
         let vocabulary = directory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
-        return foldersExist && (fileSize(of: vocabulary) ?? 0) > 0
+        return foldersExist && (PinnedModelDownload.fileSize(of: vocabulary) ?? 0) > 0
     }
 
-    typealias FileLister = @Sendable () async throws -> [PluginHuggingFaceDownloadSize.RemoteFile]
-    typealias FileDownloader = @Sendable (_ remotePath: String, _ destination: URL) async throws -> Void
-
-    struct DownloadError: LocalizedError, Equatable {
-        let message: String
-        var errorDescription: String? { message }
-    }
+    typealias FileLister = PinnedModelDownload.FileLister
+    typealias FileDownloader = PinnedModelDownload.FileDownloader
+    typealias DownloadError = PinnedModelDownload.DownloadError
 
     /// Downloads the pinned revision into `directory`, skipping files a previous attempt finished.
     static func install(
@@ -1628,85 +1996,228 @@ enum FluidSpeechMini {
         downloadFile: FileDownloader,
         progress: @Sendable (Double) -> Void
     ) async throws {
-        guard !isInstalled(at: directory) else { return }
-        let files = try await listFiles()
-        guard !files.isEmpty else {
-            throw DownloadError(message: "Fluid Speech Mini has no files at revision \(revision)")
-        }
-        let staging = stagingDirectory(for: directory)
-        let fileManager = FileManager.default
-        let total = max(1, files.reduce(Int64(0)) { $0 + $1.size })
-        var completed: Int64 = 0
-        for file in files {
-            try Task.checkCancellation()
-            guard isSafeRelativePath(file.path) else {
-                throw DownloadError(message: "Unexpected file path in Fluid Speech Mini: \(file.path)")
-            }
-            let target = staging.appendingPathComponent(file.path, isDirectory: false)
-            if fileSize(of: target) != file.size {
-                try fileManager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try await downloadFile(file.path, target)
-                guard fileSize(of: target) == file.size else {
-                    try? fileManager.removeItem(at: target)
-                    throw DownloadError(message: "Incomplete download of \(file.path)")
-                }
-            }
-            completed += file.size
-            progress(Double(completed) / Double(total))
-        }
-        guard isInstalled(at: staging) else {
-            throw DownloadError(message: "Fluid Speech Mini is missing model files after the download")
-        }
-        if fileManager.fileExists(atPath: directory.path) {
-            try fileManager.removeItem(at: directory)
-        }
-        try fileManager.moveItem(at: staging, to: directory)
+        try await download(into: directory).install(listFiles: listFiles, downloadFile: downloadFile, progress: progress)
     }
 
     static func listRemoteFiles(token: String?) async throws -> [PluginHuggingFaceDownloadSize.RemoteFile] {
-        try await PluginHuggingFaceDownloadSize.files(
-            repositoryID: repository,
-            revision: revision,
-            matching: filePatterns,
-            token: token
-        )
+        try await download.listRemoteFiles(token: token)
     }
 
     static func downloadRemoteFile(_ remotePath: String, to destination: URL, token: String?) async throws {
-        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
-        guard let url = URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(remotePath)") else {
-            throw DownloadError(message: "Invalid Fluid Speech Mini file path: \(remotePath)")
-        }
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 600
-        if let token {
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        let (temporaryFile, response) = try await URLSession.shared.download(for: request)
-        defer { try? FileManager.default.removeItem(at: temporaryFile) }
-        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
-            let status = (response as? HTTPURLResponse)?.statusCode
-            throw DownloadError(message: "HTTP \(status.map(String.init) ?? "error") while downloading \(remotePath)")
-        }
-        if FileManager.default.fileExists(atPath: destination.path) {
-            try FileManager.default.removeItem(at: destination)
-        }
-        try FileManager.default.moveItem(at: temporaryFile, to: destination)
+        try await download.downloadRemoteFile(remotePath, to: destination, token: token)
     }
 
     static func isSafeRelativePath(_ path: String) -> Bool {
-        let components = path.split(separator: "/", omittingEmptySubsequences: false)
-        return !path.hasPrefix("/") && !components.isEmpty
-            && components.allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+        PinnedModelDownload.isSafeRelativePath(path)
+    }
+}
+
+// MARK: - Nemotron Streaming
+
+/// NVIDIA Nemotron 3.5 ASR Streaming 0.6B (OpenMDW-1.1), in the Core ML build from FluidAudio's
+/// model registry. FluidAudio downloads it from the repository's main branch, so the plugin
+/// downloads it itself, pinned to a reviewed revision, next to FluidAudio's Parakeet folders.
+enum NemotronStreaming {
+    static let repository = Repo.nemotronMultilingual.remotePath
+    static let revision = "1a41b75758b0337ff67db7d5408280aaaf23074e"
+    /// The full-vocabulary model serves every language below; the repository's smaller Latin
+    /// model only six. 1120 ms chunks keep the live text about a second behind the speech and
+    /// had the lowest error rates of the four chunk sizes in the repository's benchmarks.
+    static let variantFolder = "multilingual/1120ms"
+    static let decoderJointFile = "decoder_joint.mlmodelc"
+    /// The Core ML models FluidAudio loads; its mel front end replaced the preprocessor model.
+    static let modelFolders: Set<String> = [
+        ModelNames.NemotronMultilingualStreaming.encoderFile,
+        ModelNames.NemotronMultilingualStreaming.decoderFile,
+        ModelNames.NemotronMultilingualStreaming.jointFile,
+        decoderJointFile,
+    ]
+    static let configurationFiles = [
+        ModelNames.NemotronMultilingualStreaming.metadata,
+        ModelNames.NemotronMultilingualStreaming.tokenizer,
+    ]
+    static let filePatterns = modelFolders.sorted().map { "\(variantFolder)/\($0)/*" }
+        + configurationFiles.map { "\(variantFolder)/\($0)" }
+
+    static var directory: URL {
+        AsrModels.defaultCacheDirectory(for: .v3)
+            .deletingLastPathComponent()
+            .appendingPathComponent("nemotron-3.5-asr-streaming-multilingual-1120ms", isDirectory: true)
     }
 
-    private static func fileSize(of url: URL) -> Int64? {
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              (attributes[.type] as? FileAttributeType) == .typeRegular,
-              let size = attributes[.size] as? NSNumber else {
-            return nil
+    static var download: PinnedModelDownload {
+        download(into: directory)
+    }
+
+    static func download(into directory: URL) -> PinnedModelDownload {
+        PinnedModelDownload(
+            modelName: "Nemotron 3.5 ASR Streaming",
+            repository: repository,
+            revision: revision,
+            repositoryFolder: variantFolder,
+            filePatterns: filePatterns,
+            directory: directory,
+            isInstalled: { NemotronStreaming.isInstalled(at: $0) }
+        )
+    }
+
+    static func isInstalled(at directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        let foldersExist = modelFolders.allSatisfy {
+            fileManager.fileExists(atPath: directory.appendingPathComponent($0).appendingPathComponent("coremldata.bin").path)
         }
-        return size.int64Value
+        return foldersExist && configurationFiles.allSatisfy {
+            (PinnedModelDownload.fileSize(of: directory.appendingPathComponent($0)) ?? 0) > 0
+        }
+    }
+
+    /// Loads the installed Core ML models once; every stream shares them.
+    static func loadInstalledModels(from directory: URL = NemotronStreaming.directory) async throws -> ParakeetNemotronStreamFactory {
+        .fluidAudio(try await StreamingNemotronMultilingualAsrManager.preloadShared(from: directory))
+    }
+
+    /// The 32 locales NVIDIA's model card lists as transcribing out of the box, by TypeWhisper
+    /// language code. The first is the prompt when only the language is known. The card's
+    /// eight adaptation-ready locales need fine-tuning first, so they are not offered.
+    static let promptLocales: [String: [String]] = [
+        "ar": ["ar-AR"], "bg": ["bg-BG"], "cs": ["cs-CZ"], "da": ["da-DK"], "de": ["de-DE"],
+        "en": ["en-US", "en-GB"], "es": ["es-US", "es-ES"], "et": ["et-EE"], "fi": ["fi-FI"],
+        "fr": ["fr-FR", "fr-CA"], "hi": ["hi-IN"], "hr": ["hr-HR"], "hu": ["hu-HU"], "it": ["it-IT"],
+        "ja": ["ja-JP"], "ko": ["ko-KR"], "nl": ["nl-NL"], "no": ["nb-NO"], "pl": ["pl-PL"],
+        "pt": ["pt-BR", "pt-PT"], "ro": ["ro-RO"], "ru": ["ru-RU"], "sk": ["sk-SK"], "sv": ["sv-SE"],
+        "tr": ["tr-TR"], "uk": ["uk-UA"], "vi": ["vi-VN"], "zh": ["zh-CN"],
+    ]
+
+    static let supportedLanguages = promptLocales.keys.sorted()
+}
+
+// MARK: - Nemotron Streams
+
+struct ParakeetNemotronStreamOutput: Sendable {
+    let text: String
+    let tokenTimings: [TokenTiming]
+    /// Language tag the model emitted, such as "de-DE".
+    let detectedLanguage: String?
+}
+
+/// One decode stream on the loaded Nemotron model, with its own caches and decoder state.
+protocol ParakeetNemotronStream: AnyObject, Sendable {
+    /// Decodes every complete chunk of the audio so far; the rest waits for more audio.
+    func process(_ samples: [Float]) async throws
+    /// Decodes the remaining audio and returns the transcript of the whole stream.
+    func finish() async throws -> ParakeetNemotronStreamOutput
+}
+
+/// Opens decode streams on the loaded Nemotron model, prompted with a locale such as "de-DE"
+/// or, with nil, detecting the language. A stream reports its running transcript to
+/// `onPartial` as chunks decode.
+struct ParakeetNemotronStreamFactory: Sendable {
+    let open: @Sendable (
+        _ languagePrompt: String?,
+        _ onPartial: @escaping @Sendable (String) -> Void
+    ) async throws -> any ParakeetNemotronStream
+
+    static func fluidAudio(_ models: SharedNemotronMultilingualModels) -> ParakeetNemotronStreamFactory {
+        ParakeetNemotronStreamFactory { languagePrompt, onPartial in
+            try await FluidAudioNemotronStream(models: models, languagePrompt: languagePrompt, onPartial: onPartial)
+        }
+    }
+}
+
+/// A FluidAudio streaming manager on the shared Core ML models. Releasing the stream frees
+/// its state; the shared models stay loaded.
+final class FluidAudioNemotronStream: ParakeetNemotronStream {
+    private let manager = StreamingNemotronMultilingualAsrManager()
+
+    init(
+        models: SharedNemotronMultilingualModels,
+        languagePrompt: String?,
+        onPartial: @escaping @Sendable (String) -> Void
+    ) async throws {
+        try await manager.loadFromShared(models)
+        await manager.setLanguage(languagePrompt)
+        await manager.setPartialCallback(onPartial)
+    }
+
+    func process(_ samples: [Float]) async throws {
+        _ = try await manager.process(samples: samples)
+    }
+
+    func finish() async throws -> ParakeetNemotronStreamOutput {
+        let (text, tokenTimings) = try await manager.finishWithTokenTimings()
+        return ParakeetNemotronStreamOutput(
+            text: text,
+            tokenTimings: tokenTimings,
+            detectedLanguage: await manager.detectedLanguage()
+        )
+    }
+}
+
+/// Passes a stream's running transcript to the host until the session finishes, is
+/// cancelled, or the host stops asking, so it holds no host callback afterwards.
+final class ParakeetNemotronProgressRelay: @unchecked Sendable {
+    private let lock = NSLock()
+    private var onProgress: (@Sendable (String) -> Bool)?
+
+    init(_ onProgress: @escaping @Sendable (String) -> Bool) {
+        self.onProgress = onProgress
+    }
+
+    func forward(_ text: String) {
+        let text = ParakeetPlugin.removingUnknownTokens(from: text).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let onProgress = lock.withLock({ self.onProgress }) else { return }
+        if !onProgress(text) {
+            close()
+        }
+    }
+
+    func close() {
+        lock.withLock { onProgress = nil }
+    }
+}
+
+/// A live transcription on the loaded Nemotron model: audio decodes as it arrives, and
+/// `finish` decodes the rest and returns the transcript of the whole session.
+final class ParakeetNemotronLiveSession: LiveTranscriptionSession, @unchecked Sendable {
+    private let lock = NSLock()
+    private var stream: (any ParakeetNemotronStream)?
+    private let relay: ParakeetNemotronProgressRelay
+    /// Keeps appended audio in order and lets `finish` wait for audio still decoding.
+    private let gate = AsyncTranscriptionGate()
+
+    init(stream: any ParakeetNemotronStream, relay: ParakeetNemotronProgressRelay) {
+        self.stream = stream
+        self.relay = relay
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try await gate.withLock { [self] in
+            guard let stream = lock.withLock({ self.stream }) else { throw CancellationError() }
+            try await stream.process(samples)
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        try await gate.withLock { [self] in
+            guard let stream = takeStream() else { throw CancellationError() }
+            defer { relay.close() }
+            return ParakeetPlugin.nemotronResult(from: try await stream.finish())
+        }
+    }
+
+    /// Ends the session at once: progress stops and the stream is released, after any
+    /// audio still decoding.
+    func cancel() async {
+        _ = takeStream()
+        relay.close()
+    }
+
+    private func takeStream() -> (any ParakeetNemotronStream)? {
+        lock.withLock {
+            let stream = self.stream
+            self.stream = nil
+            return stream
+        }
     }
 }
 
@@ -1890,7 +2401,8 @@ private struct ParakeetSettingsView: View {
                     }
                 }
 
-                if case .ready = modelState {
+                // Nemotron takes no dictionary terms, so Vocabulary Boosting does not apply.
+                if case .ready = modelState, selectedVersion.supportsVocabularyBoosting {
                     Divider()
                     vocabularyBoostingSection
                 }

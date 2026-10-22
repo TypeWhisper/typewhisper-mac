@@ -118,7 +118,8 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 
 ### Transcription
 
-- **Local and cloud engines** - Choose from WhisperKit, Parakeet (Ultra, TDT v3 and v2), Apple
+- **Local and cloud engines** - Choose from WhisperKit, Parakeet (Ultra, TDT v3 and v2, Fluid
+  Speech Mini, and Nemotron 3.5 ASR Streaming, which shows text while you speak), Apple
   SpeechAnalyzer, Granite Speech, Qwen3 ASR, Voxtral, Cohere Transcribe, GigaAM (Russian), Groq
   Whisper, OpenAI Whisper, Soniox, Smallest Pulse, xAI/Grok STT, OpenAI
   Compatible, and additional bundled or community providers
