@@ -1241,6 +1241,7 @@ final class DictationViewModel: ObservableObject {
         let historyClearGeneration: Int
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
+        let llmUsage: HistoryLLMUsage?
         /// Set when `.transcriptionCompleted` went out before persistence, so it is emitted once.
         var completionEventEmitted = false
     }
@@ -1364,6 +1365,7 @@ final class DictationViewModel: ObservableObject {
                 modelUsed: dictation.modelUsed,
                 audioFileName: historyAudioFileName,
                 pipelineSteps: dictation.pipelineSteps,
+                llmUsage: dictation.llmUsage,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
         }
@@ -2940,6 +2942,8 @@ final class DictationViewModel: ObservableObject {
         let accessibilityObservationLease = targetAppAccessibilityObservationLease
         // Incremental results are only valid for a final text from the same live session.
         let incrementalPostProcessing = usedLiveSessionResult ? incrementalWorkflowPostProcessing : nil
+        // Segments sent while recording used tokens even when the final text cannot reuse them.
+        let incrementalLLMUsage = incrementalWorkflowPostProcessing?.usage
         if !usedLiveSessionResult {
             incrementalWorkflowPostProcessing?.cancel()
         }
@@ -3096,15 +3100,20 @@ final class DictationViewModel: ObservableObject {
                     configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
                 )
-                let ppResult = try await postProcessingPipeline.process(
-                    text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
-                    outputFormat: resolvedOutputFormat,
-                    llmStepName: llmStepName,
-                    normalizeNumbers: self.effectiveNumberNormalizationOverride,
-                    llmFailureFallbackText: actionPluginId == nil ? text : nil,
-                    // Snippet and correction usage counters are saved after insertion.
-                    deferUsageCountSaves: true
-                )
+                // Every LLM request of this dictation, including fallbacks, retries and segments.
+                let llmUsage = LLMUsageLedger()
+                let ppResult = try await LLMUsageLedger.$current.withValue(llmUsage) {
+                    try await postProcessingPipeline.process(
+                        text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
+                        outputFormat: resolvedOutputFormat,
+                        llmStepName: llmStepName,
+                        normalizeNumbers: self.effectiveNumberNormalizationOverride,
+                        llmFailureFallbackText: actionPluginId == nil ? text : nil,
+                        // Snippet and correction usage counters are saved after insertion.
+                        deferUsageCountSaves: true
+                    )
+                }
+                llmUsage.merge(incrementalLLMUsage)
                 text = ppResult.text
                 let postProcessingFallback = ppResult.fallback
                 if let postProcessingFallback {
@@ -3439,7 +3448,8 @@ final class DictationViewModel: ObservableObject {
                         historyEnabled: UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true,
                         historyClearGeneration: historyService.clearGeneration,
                         audioSamples: audioSamplesForHistory,
-                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps
+                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps,
+                        llmUsage: llmUsage.usage
                     ),
                     pendingURLResolution: activeApp.url == nil ? pendingURLResolution : nil
                 )
@@ -4729,6 +4739,9 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
+        // A replacement session of the same recording keeps counting the tokens
+        // the replaced one already used.
+        let earlierLLMUsage = incrementalWorkflowPostProcessing?.usage
         cancelIncrementalWorkflowPostProcessing()
         guard let configuration else { return }
 
@@ -4740,7 +4753,8 @@ final class DictationViewModel: ObservableObject {
             prepareInput: configuration.prepareInput,
             processor: { segment in
                 try await workflowProcessor.process(request: request, text: segment)
-            }
+            },
+            usage: earlierLLMUsage ?? LLMUsageLedger()
         )
         logger.info("Incremental workflow post-processing armed for this recording localProvider=\(configuration.policy.isLocalProvider, privacy: .public)")
     }

@@ -444,6 +444,19 @@ curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 
 Entries with speaker detection carry `speaker_state`. Once a speaker transcript exists, they also carry `speakers`. Each speaker has an `id` and a `name`: the confirmed name, or `Speaker N`. When a voice profile suggested a name that nobody has confirmed yet, it is returned as `suggested_name`, and `name` stays `Speaker N`. Add `include=speaker_segments` to get the speaker segments. Entries that came from the Recorder carry the `recording_id` used by `GET /v1/recorder/recordings` and the `.transcript-ready.json` sidecar.
 
+Entries whose text an LLM processed carry `llm_usage`: `requests`, the summed `input_tokens` and `output_tokens`, and `providers`, one item per provider and model with `provider`, `provider_name`, `model`, `requests`, `input_tokens` and `output_tokens`. Token counts are what the providers reported, summed over every request for the text, including fallback attempts and retries. A count is absent when no request reported it, for example with Apple Intelligence or a plugin that does not report usage. Entries without LLM processing, and entries made before TypeWhisper recorded usage, have no `llm_usage`. TypeWhisper does not estimate costs.
+
+```json
+"llm_usage": {
+  "requests": 1,
+  "input_tokens": 1284,
+  "output_tokens": 18,
+  "providers": [
+    { "provider": "Claude", "provider_name": "Claude", "model": "claude-haiku-4-5", "requests": 1, "input_tokens": 1284, "output_tokens": 18 }
+  ]
+}
+```
+
 #### Name speakers and teach voice profiles
 
 History entries with a speaker transcript also include `transcript_revision` and
