@@ -17,8 +17,8 @@ struct SetupWizardView: View {
     @State private var trialAnnouncementTask: Task<Void, Never>?
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
-    @State private var isActivatingParakeet = false
-    @State private var parakeetModelProgress: Double?
+    @State private var isActivatingQwen3 = false
+    @State private var qwen3ModelProgress: Double?
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
     @State private var isMovingForward = true
@@ -831,10 +831,10 @@ struct SetupWizardView: View {
             localReadinessCard
 
             recommendationCard(
-                manifestId: SetupWizardParakeetRecommendation.manifestId,
-                title: String(localized: "Parakeet"),
+                manifestId: SetupWizardQwen3Recommendation.manifestId,
+                title: "Qwen3 ASR",
                 badge: localizedAppText("Recommended", de: "Empfohlen"),
-                description: SetupWizardParakeetRecommendation.description,
+                description: SetupWizardQwen3Recommendation.description,
                 systemImage: "desktopcomputer",
                 isProminent: true
             )
@@ -880,15 +880,15 @@ struct SetupWizardView: View {
     }
 
     private var localReadinessText: String {
-        if isActivatingParakeet {
-            return localizedAppText("Activating Parakeet for local dictation", de: "Parakeet wird für lokales Diktieren aktiviert")
+        if isActivatingQwen3 {
+            return localizedAppText("Activating Qwen3 for local dictation", de: "Qwen3 wird für lokales Diktieren aktiviert")
         }
         if hasEngineReadyForSetupTest {
             if selectedTranscriptionEngineForSetup?.providerId == SetupWizardAppleSpeechFallback.providerId {
                 return localizedAppText("Apple Speech is ready for local dictation", de: "Apple Speech ist für lokales Diktieren bereit")
             }
-            if selectedTranscriptionEngineForSetup?.providerId == SetupWizardParakeetRecommendation.providerId {
-                return localizedAppText("Parakeet is ready for local dictation", de: "Parakeet ist für lokales Diktieren bereit")
+            if selectedTranscriptionEngineForSetup?.providerId == SetupWizardQwen3Recommendation.providerId {
+                return localizedAppText("Qwen3 is ready for local dictation", de: "Qwen3 ist für lokales Diktieren bereit")
             }
             return localizedAppText("Ready to use locally", de: "Lokal einsatzbereit")
         }
@@ -989,7 +989,7 @@ struct SetupWizardView: View {
         manifestId: String,
         availability: SetupWizardRecommendationAvailability
     ) -> Bool {
-        availability == .setupRequired && manifestId != SetupWizardParakeetRecommendation.manifestId
+        availability == .setupRequired && manifestId != SetupWizardQwen3Recommendation.manifestId
     }
 
     @ViewBuilder
@@ -998,9 +998,9 @@ struct SetupWizardView: View {
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> some View {
-        if manifestId == SetupWizardParakeetRecommendation.manifestId, isActivatingParakeet {
-            if let parakeetModelProgress {
-                setupProgressIndicator(parakeetModelProgress)
+        if manifestId == SetupWizardQwen3Recommendation.manifestId, isActivatingQwen3 {
+            if let qwen3ModelProgress {
+                setupProgressIndicator(qwen3ModelProgress)
             } else {
                 ProgressView()
                     .controlSize(.small)
@@ -1009,15 +1009,15 @@ struct SetupWizardView: View {
         } else {
             switch availability {
             case .ready:
-                if manifestId == SetupWizardParakeetRecommendation.manifestId, isSelected {
+                if manifestId == SetupWizardQwen3Recommendation.manifestId, isSelected {
                     statusPill(localizedAppText("Selected", de: "Ausgewählt"), systemImage: "checkmark.circle.fill", color: .blue)
-                } else if manifestId == SetupWizardParakeetRecommendation.manifestId {
+                } else if manifestId == SetupWizardQwen3Recommendation.manifestId {
                     statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
                 } else {
                     statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
                 }
             case .setupRequired:
-                if manifestId == SetupWizardParakeetRecommendation.manifestId {
+                if manifestId == SetupWizardQwen3Recommendation.manifestId {
                     statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
                 } else {
                     RecommendationSettingsButton(manifestId: manifestId)
@@ -1052,7 +1052,7 @@ struct SetupWizardView: View {
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> Bool {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId, !isSelected else {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId, !isSelected else {
             return false
         }
 
@@ -1068,49 +1068,49 @@ struct SetupWizardView: View {
         manifestId: String,
         availability: SetupWizardRecommendationAvailability
     ) -> String {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId else {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId else {
             return ""
         }
 
         switch availability {
         case .setupRequired:
-            return localizedAppText("Activates Parakeet.", de: "Aktiviert Parakeet.")
+            return localizedAppText("Activates Qwen3.", de: "Aktiviert Qwen3.")
         default:
-            return localizedAppText("Selects Parakeet.", de: "Wählt Parakeet aus.")
+            return localizedAppText("Selects Qwen3.", de: "Wählt Qwen3 aus.")
         }
     }
 
     @MainActor
     private func handleRecommendationCardAction(manifestId: String) async {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId else { return }
-        await activateParakeetForSetup()
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId else { return }
+        await activateQwen3ForSetup()
     }
 
     @MainActor
-    private func activateParakeetForSetup() async {
-        guard !isActivatingParakeet else { return }
+    private func activateQwen3ForSetup() async {
+        guard !isActivatingQwen3 else { return }
 
-        manuallySelectedSetupProviderId = SetupWizardParakeetRecommendation.providerId
-        isActivatingParakeet = true
+        manuallySelectedSetupProviderId = SetupWizardQwen3Recommendation.providerId
+        isActivatingQwen3 = true
         defer {
-            isActivatingParakeet = false
-            parakeetModelProgress = nil
+            isActivatingQwen3 = false
+            qwen3ModelProgress = nil
         }
 
-        if parakeetEngine == nil {
-            if let loaded = pluginManager.loadedPlugins.first(where: { $0.manifest.id == SetupWizardParakeetRecommendation.manifestId }),
+        if qwen3Engine == nil {
+            if let loaded = pluginManager.loadedPlugins.first(where: { $0.manifest.id == SetupWizardQwen3Recommendation.manifestId }),
                !loaded.isEnabled {
-                pluginManager.setPluginEnabled(SetupWizardParakeetRecommendation.manifestId, enabled: true)
+                pluginManager.setPluginEnabled(SetupWizardQwen3Recommendation.manifestId, enabled: true)
             }
         }
 
-        guard let engine = await waitForParakeetEngine() else { return }
+        guard let engine = await waitForQwen3Engine() else { return }
 
         modelManager.selectProvider(engine.providerId)
 
         if !engine.isConfigured {
             let modelId = engine.selectedModelId
-                ?? SetupWizardParakeetRecommendation.preferredModelId(from: engine.modelCatalog)
+                ?? SetupWizardQwen3Recommendation.preferredModelId(from: engine.modelCatalog)
             if let modelId {
                 engine.selectModel(modelId)
             }
@@ -1122,23 +1122,23 @@ struct SetupWizardView: View {
             if Task.isCancelled || engine.isConfigured || idlePolls >= 240 { return }
             let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
             if activity?.isError == true { return }
-            parakeetModelProgress = activity?.progress
+            qwen3ModelProgress = activity?.progress
             if activity == nil { idlePolls += 1 }
             try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
     @MainActor
-    private func waitForParakeetEngine() async -> TranscriptionEnginePlugin? {
+    private func waitForQwen3Engine() async -> TranscriptionEnginePlugin? {
         for _ in 0..<40 {
             if Task.isCancelled { return nil }
-            if let parakeetEngine {
-                return parakeetEngine
+            if let qwen3Engine {
+                return qwen3Engine
             }
             try? await Task.sleep(for: .milliseconds(100))
         }
 
-        return parakeetEngine
+        return qwen3Engine
     }
 
     private func recommendationDescription(
@@ -1217,8 +1217,8 @@ struct SetupWizardView: View {
         }
 
         return localizedAppText(
-            "Lightweight built-in option with no large local model. Parakeet gives better quality for daily dictation.",
-            de: "Leichte integrierte Option ohne großes lokales Modell. Parakeet liefert bessere Qualität fürs tägliche Diktieren."
+            "Lightweight built-in option with no large local model. Qwen3 gives better quality for daily dictation.",
+            de: "Leichte integrierte Option ohne großes lokales Modell. Qwen3 liefert bessere Qualität fürs tägliche Diktieren."
         )
     }
 
@@ -1498,13 +1498,13 @@ struct SetupWizardView: View {
         pluginManager.transcriptionEngine(for: SetupWizardAppleSpeechFallback.providerId)
     }
 
-    private var parakeetEngine: TranscriptionEnginePlugin? {
-        pluginManager.transcriptionEngine(for: SetupWizardParakeetRecommendation.providerId)
+    private var qwen3Engine: TranscriptionEnginePlugin? {
+        pluginManager.transcriptionEngine(for: SetupWizardQwen3Recommendation.providerId)
     }
 
-    private var isParakeetReadyForSetup: Bool {
-        guard let parakeetEngine else { return false }
-        return canUseEngineForSetupTest(parakeetEngine)
+    private var isQwen3ReadyForSetup: Bool {
+        guard let qwen3Engine else { return false }
+        return canUseEngineForSetupTest(qwen3Engine)
     }
 
     private var canUseAppleSpeechFallback: Bool {
@@ -1603,7 +1603,7 @@ struct SetupWizardView: View {
 
     @MainActor
     private func preparePreferredSetupEngineIfNeeded() async {
-        guard !isActivatingParakeet else { return }
+        guard !isActivatingQwen3 else { return }
 
         if let manuallySelectedSetupProviderId,
            let manuallySelectedEngine = pluginManager.transcriptionEngine(for: manuallySelectedSetupProviderId),
@@ -1616,12 +1616,12 @@ struct SetupWizardView: View {
         let preferredProviderId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: modelManager.selectedProviderId,
             selectedEngineReady: selectedEngineReady,
-            parakeetReady: isParakeetReadyForSetup,
+            qwen3Ready: isQwen3ReadyForSetup,
             appleSpeechAvailable: canUseAppleSpeechFallback
         )
 
-        if preferredProviderId == SetupWizardParakeetRecommendation.providerId, let parakeetEngine {
-            modelManager.selectProvider(parakeetEngine.providerId)
+        if preferredProviderId == SetupWizardQwen3Recommendation.providerId, let qwen3Engine {
+            modelManager.selectProvider(qwen3Engine.providerId)
             return
         }
 
@@ -1643,7 +1643,7 @@ struct SetupWizardView: View {
               SetupWizardEngineSelection.preferredProviderId(
                 selectedProviderId: modelManager.selectedProviderId,
                 selectedEngineReady: selectedEngineReady,
-                parakeetReady: isParakeetReadyForSetup,
+                qwen3Ready: isQwen3ReadyForSetup,
                 appleSpeechAvailable: true
               ) == SetupWizardAppleSpeechFallback.providerId else {
             return
@@ -1930,9 +1930,9 @@ enum SetupWizardDefaultHotkey {
     }
 }
 
-enum SetupWizardParakeetRecommendation {
-    static let providerId = "parakeet"
-    static let manifestId = "com.typewhisper.parakeet"
+enum SetupWizardQwen3Recommendation {
+    static let providerId = "qwen3"
+    static let manifestId = "com.typewhisper.qwen3"
 
     static var description: String {
         localizedAppText(
@@ -1942,9 +1942,7 @@ enum SetupWizardParakeetRecommendation {
     }
 
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
-        models.first { $0.id == "parakeet-ultra" }?.id
-            ?? models.first { $0.id == "parakeet-tdt-0.6b-v3" }?.id
-            ?? models.first { $0.id.localizedCaseInsensitiveContains("v3") }?.id
+        models.first { $0.id == "qwen3-asr-1.7b-6bit" }?.id
             ?? models.first?.id
     }
 }
@@ -1953,19 +1951,19 @@ enum SetupWizardEngineSelection {
     static func preferredProviderId(
         selectedProviderId: String?,
         selectedEngineReady: Bool,
-        parakeetReady: Bool,
+        qwen3Ready: Bool,
         appleSpeechAvailable: Bool
     ) -> String? {
-        if parakeetReady, selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
-            return SetupWizardParakeetRecommendation.providerId
+        if qwen3Ready, selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
+            return SetupWizardQwen3Recommendation.providerId
         }
 
         if selectedEngineReady {
             return selectedProviderId
         }
 
-        if parakeetReady {
-            return SetupWizardParakeetRecommendation.providerId
+        if qwen3Ready {
+            return SetupWizardQwen3Recommendation.providerId
         }
 
         if appleSpeechAvailable {
@@ -2144,7 +2142,7 @@ enum SetupWizardRecommendationAvailability: Equatable {
         isReady: Bool,
         architecture: String = RuntimeArchitecture.current
     ) -> SetupWizardRecommendationAvailability {
-        if manifestId == SetupWizardParakeetRecommendation.manifestId, architecture != "arm64" {
+        if manifestId == SetupWizardQwen3Recommendation.manifestId, architecture != "arm64" {
             return .unavailable(.appleSiliconOnly)
         }
 

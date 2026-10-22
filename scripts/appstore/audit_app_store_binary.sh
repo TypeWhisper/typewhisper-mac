@@ -35,11 +35,7 @@ PROCESS_SYMBOL_PATTERN='^_(posix_spawn|posix_spawnp|execve|execv|execvp|fork|vfo
 # if its imports match its entry exactly; any new symbol fails the audit.
 #   _popen: MLX CPU JIT compiler (mlx-swift Cmlx, mlx/backend/cpu/jit_compiler.cpp).
 KNOWN_PLUGIN_PROCESS_IMPORTS=(
-    "CanaryPlugin.bundle:_popen"
-    "GranitePlugin.bundle:_popen"
-    "LocalLLMPlugin.bundle:_popen"
     "Qwen3Plugin.bundle:_popen"
-    "VoxtralPlugin.bundle:_popen"
 )
 
 script_dir="$(cd "$(dirname "$0")" && pwd)"

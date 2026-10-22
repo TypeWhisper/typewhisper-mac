@@ -37,7 +37,7 @@ output goes to that checkout's `build/` folder.
 # Build, sign with your Apple Development identity and launch the sandboxed app
 scripts/appstore/build-dev.sh --run
 
-# 以德语运行并重新请求系统权限
+# Launch in German and request system permissions again
 scripts/appstore/build-dev.sh --run --reset-permissions --language de
 
 # Relaunch the last build without building
@@ -65,7 +65,7 @@ launching quits any running App Store Dev build first. `--language` applies to t
 
 Run the unit tests in Xcode or with `xcodebuild ... test` on the generated
 `TypeWhisperAppStore.xcodeproj`. After changing the plugin set in
-`appstore-project.yml`, refresh the marketplace metadata with
+`appstore-project.yml`, refresh the bundled plugin audit catalog with
 `scripts/appstore/update_plugin_catalog.py`.
 
 The audit checks bundle ID, Info.plist keys, bundled components against
@@ -148,27 +148,22 @@ into those languages.
 
 ## Plugins
 
-应用启动时加载随应用内置的插件，用户可以在各插件的设置页面启用或停用它们。
-`AppStore/Resources/AppStorePluginCatalog.json` 供构建审计核对打包内容。
-说话人检测在说话人页面中管理。
+The app loads bundled plugins at launch. Each plugin has its own settings page.
+`AppStore/Resources/AppStorePluginCatalog.json` defines the bundle set for build audits.
+Speaker detection is managed on the Speakers page.
 
 | Status | Plugins |
 |---|---|
-| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
-| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB), and the Russian-only GigaAM (adds a second ONNX Runtime copy next to Supertonic) |
-| Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local): they run external programs or downloaded binaries |
+| Bundled | Qwen3, WhisperKit, Apple Speech, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs, Soniox, Gemini, Claude, OpenRouter, OpenAI Compatible, Speaker Detection |
 
-Some bundled plugins are reduced in the App Store edition (`#if APPSTORE`):
+OpenAI has an App Store-specific login policy (`#if APPSTORE`):
 
 | Plugin | App Store edition |
 |---|---|
 | OpenAI | API key only. The ChatGPT login (localhost OAuth callback, Codex login import) is not compiled in. |
-| System TTS | Speaks in-process with `NSSpeechSynthesizer` instead of launching `/usr/bin/say`. |
-| Obsidian | The vault is picked in an open panel and kept as a security-scoped bookmark; no auto-detection from Obsidian's config. |
-| MCP Client | Streamable HTTP servers only; the stdio transport is not compiled in. |
 
-`update_plugin_catalog.py` overrides the marketplace text of OpenAI and MCP Client
-accordingly.
+`update_plugin_catalog.py` reads local manifests and applies the OpenAI metadata
+for the App Store build.
 
 ## Premium
 

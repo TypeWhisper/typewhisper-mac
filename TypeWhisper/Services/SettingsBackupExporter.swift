@@ -104,7 +104,6 @@ enum SettingsBackupExporter {
         /// References `PromptActionDTO.localId`, remapped to the newly-imported
         /// prompt action's UUID on import.
         let promptActionId: String?
-        let memoryEnabled: Bool
         let outputFormat: String?
         let hotkey: UnifiedHotkey?
         let inlineCommandsEnabled: Bool
@@ -803,7 +802,6 @@ enum SettingsBackupExporter {
                 engineOverride: profile.engineOverride,
                 cloudModelOverride: profile.cloudModelOverride,
                 promptActionId: remappedPromptActionId,
-                memoryEnabled: profile.memoryEnabled,
                 outputFormat: profile.outputFormat,
                 hotkeyData: profile.hotkey.flatMap { try? JSONEncoder().encode($0) },
                 inlineCommandsEnabled: profile.inlineCommandsEnabled,
@@ -1241,7 +1239,6 @@ extension SettingsBackupExporter.ProfileDTO {
             engineOverride: profile.engineOverride,
             cloudModelOverride: profile.cloudModelOverride,
             promptActionId: profile.promptActionId,
-            memoryEnabled: profile.memoryEnabled,
             outputFormat: profile.outputFormat,
             hotkey: profile.hotkey,
             inlineCommandsEnabled: profile.inlineCommandsEnabled,
@@ -1265,7 +1262,6 @@ extension SettingsBackupExporter.ProfileDTO {
             engineOverride: engineOverride,
             cloudModelOverride: cloudModelOverride,
             promptActionId: promptActionId,
-            memoryEnabled: memoryEnabled,
             outputFormat: outputFormat,
             hotkey: hotkey,
             inlineCommandsEnabled: inlineCommandsEnabled,
@@ -1284,7 +1280,6 @@ extension SettingsBackupExporter.ProfileDTO {
             && engineOverride == other.engineOverride
             && cloudModelOverride == other.cloudModelOverride
             && promptActionId == other.promptActionId
-            && memoryEnabled == other.memoryEnabled
             && outputFormat == other.outputFormat
             && hotkey == other.hotkey
             && inlineCommandsEnabled == other.inlineCommandsEnabled
@@ -1304,7 +1299,6 @@ extension SettingsBackupExporter.ProfileDTO {
         profile.engineOverride = engineOverride
         profile.cloudModelOverride = cloudModelOverride
         profile.promptActionId = promptActionId
-        profile.memoryEnabled = memoryEnabled
         profile.outputFormat = outputFormat
         profile.hotkey = hotkey
         profile.inlineCommandsEnabled = inlineCommandsEnabled

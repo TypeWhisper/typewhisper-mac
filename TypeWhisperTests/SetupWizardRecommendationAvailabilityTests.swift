@@ -65,11 +65,11 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         XCTAssertNil(modelId)
     }
 
-    func testEngineSelectionUsesAppleSpeechWhenNoEngineAndParakeetIsUnavailable() {
+    func testEngineSelectionUsesAppleSpeechWhenNoEngineAndQwen3IsUnavailable() {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            qwen3Ready: false,
             appleSpeechAvailable: true
         )
 
@@ -80,67 +80,67 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: "groq",
             selectedEngineReady: true,
-            parakeetReady: true,
+            qwen3Ready: true,
             appleSpeechAvailable: true
         )
 
         XCTAssertEqual(providerId, "groq")
     }
 
-    func testEngineSelectionPrefersReadyParakeetOverReadyAppleSpeechFallback() {
+    func testEngineSelectionPrefersReadyQwen3OverReadyAppleSpeechFallback() {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: SetupWizardAppleSpeechFallback.providerId,
             selectedEngineReady: true,
-            parakeetReady: true,
+            qwen3Ready: true,
             appleSpeechAvailable: true
         )
 
-        XCTAssertEqual(providerId, SetupWizardParakeetRecommendation.providerId)
+        XCTAssertEqual(providerId, SetupWizardQwen3Recommendation.providerId)
     }
 
-    func testEngineSelectionPrefersParakeetBeforeAppleSpeech() {
+    func testEngineSelectionPrefersQwen3BeforeAppleSpeech() {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: true,
+            qwen3Ready: true,
             appleSpeechAvailable: true
         )
 
-        XCTAssertEqual(providerId, SetupWizardParakeetRecommendation.providerId)
+        XCTAssertEqual(providerId, SetupWizardQwen3Recommendation.providerId)
     }
 
     func testEngineSelectionReturnsNilWhenNoLocalFallbackIsAvailable() {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            qwen3Ready: false,
             appleSpeechAvailable: false
         )
 
         XCTAssertNil(providerId)
     }
 
-    func testParakeetRecommendationPrefersUltraModel() {
-        let modelId = SetupWizardParakeetRecommendation.preferredModelId(
+    func testQwen3RecommendationPrefers17B6BitModel() {
+        let modelId = SetupWizardQwen3Recommendation.preferredModelId(
             from: [
-                PluginModelInfo(id: "parakeet-tdt-0.6b-v2", displayName: "Parakeet TDT v2"),
-                PluginModelInfo(id: "parakeet-tdt-0.6b-v3", displayName: "Parakeet TDT v3"),
-                PluginModelInfo(id: "parakeet-ultra", displayName: "Parakeet Ultra")
+                PluginModelInfo(id: "qwen3-asr-0.6b-6bit", displayName: "Qwen3 0.6B 6-bit"),
+                PluginModelInfo(id: "qwen3-asr-1.7b-8bit", displayName: "Qwen3 1.7B 8-bit"),
+                PluginModelInfo(id: "qwen3-asr-1.7b-6bit", displayName: "Qwen3 1.7B 6-bit")
             ]
         )
 
-        XCTAssertEqual(modelId, "parakeet-ultra")
+        XCTAssertEqual(modelId, "qwen3-asr-1.7b-6bit")
     }
 
-    func testParakeetRecommendationFallsBackToV3WithoutUltra() {
-        let modelId = SetupWizardParakeetRecommendation.preferredModelId(
+    func testQwen3RecommendationFallsBackToFirstAvailableModel() {
+        let modelId = SetupWizardQwen3Recommendation.preferredModelId(
             from: [
-                PluginModelInfo(id: "parakeet-tdt-0.6b-v2", displayName: "Parakeet TDT v2"),
-                PluginModelInfo(id: "parakeet-tdt-0.6b-v3", displayName: "Parakeet TDT v3")
+                PluginModelInfo(id: "qwen3-asr-0.6b-6bit", displayName: "Qwen3 0.6B 6-bit"),
+                PluginModelInfo(id: "qwen3-asr-1.7b-8bit", displayName: "Qwen3 1.7B 8-bit")
             ]
         )
 
-        XCTAssertEqual(modelId, "parakeet-tdt-0.6b-v3")
+        XCTAssertEqual(modelId, "qwen3-asr-0.6b-6bit")
     }
 
     func testRecommendedHybridFnCanBeAppliedWhenTriggerSlotsAreEmpty() {
@@ -191,30 +191,30 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         )
     }
 
-    func testParakeetOnIntelIsUnavailableImmediately() {
+    func testQwen3OnIntelIsUnavailableImmediately() {
         XCTAssertEqual(SetupWizardRecommendationAvailability.resolve(
-            manifestId: "com.typewhisper.parakeet", isInstalled: false, isReady: false,
+            manifestId: "com.typewhisper.qwen3", isInstalled: false, isReady: false,
             architecture: "x86_64"
         ), .unavailable(.appleSiliconOnly))
     }
 
     func testBundledEngineReadyForUse() {
         XCTAssertEqual(SetupWizardRecommendationAvailability.resolve(
-            manifestId: "com.typewhisper.parakeet", isInstalled: true, isReady: true,
+            manifestId: "com.typewhisper.qwen3", isInstalled: true, isReady: true,
             architecture: "arm64"
         ), .ready)
     }
 
     func testBundledEngineRequiresSetup() {
         XCTAssertEqual(SetupWizardRecommendationAvailability.resolve(
-            manifestId: "com.typewhisper.parakeet", isInstalled: true, isReady: false,
+            manifestId: "com.typewhisper.qwen3", isInstalled: true, isReady: false,
             architecture: "arm64"
         ), .setupRequired)
     }
 
     func testMissingEngineIsUnavailable() {
         XCTAssertEqual(SetupWizardRecommendationAvailability.resolve(
-            manifestId: "com.typewhisper.parakeet", isInstalled: false, isReady: false,
+            manifestId: "com.typewhisper.qwen3", isInstalled: false, isReady: false,
             architecture: "arm64"
         ), .unavailable(.engineUnavailable))
     }

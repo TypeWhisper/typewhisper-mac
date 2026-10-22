@@ -650,21 +650,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    private final class MemoryRetrieverSpy: MemoryRetrieving {
-        private(set) var requestedTexts: [String] = []
-        var context = """
-        <memory_context>
-        The user prefers concise wording.
-        </memory_context>
-        """
-
-        func retrieveRelevantMemories(for text: String) async -> String {
-            requestedTexts.append(text)
-            return context
-        }
-    }
-
-    @MainActor
     private final class ProcessActivityManagerSpy: ProcessActivityManaging {
         private(set) var reasons: [String] = []
 
@@ -15069,67 +15054,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testPromptProcessingInjectsMemoryByDefault() async throws {
-        let providerKey = "llmProviderType"
-        let modelKey = "llmCloudModel"
-        let originalProvider = UserDefaults.standard.object(forKey: providerKey)
-        let originalModel = UserDefaults.standard.object(forKey: modelKey)
-        defer {
-            if let originalProvider {
-                UserDefaults.standard.set(originalProvider, forKey: providerKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: providerKey)
-            }
-            if let originalModel {
-                UserDefaults.standard.set(originalModel, forKey: modelKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: modelKey)
-            }
-        }
-
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(appSupportDirectory) }
-
-        EventBus.shared = EventBus()
-        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-
-        let plugin = MockLLMProviderPlugin()
-        plugin.models = [PluginModelInfo(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash")]
-
-        let manifest = PluginManifest(
-            id: "com.typewhisper.mock.llm",
-            name: "Mock LLM",
-            version: "1.0.0",
-            principalClass: "APIRouterMockLLMProviderPlugin"
-        )
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: manifest,
-                instance: plugin,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
-
-        let memoryRetriever = MemoryRetrieverSpy()
-        let service = PromptProcessingService()
-        service.memoryService = memoryRetriever
-
-        _ = try await service.process(
-            prompt: "Fix grammar.",
-            text: "hello world",
-            providerOverride: "Gemini"
-        )
-
-        XCTAssertEqual(memoryRetriever.requestedTexts, ["hello world"])
-        XCTAssertTrue(plugin.lastSystemPrompt?.contains("<memory_context>") == true)
-        XCTAssertTrue(plugin.lastSystemPrompt?.contains("The user prefers concise wording.") == true)
-        XCTAssertTrue(plugin.lastSystemPrompt?.contains("Fix grammar.") == true)
-        XCTAssertEqual(plugin.lastUserText, "hello world")
-    }
-
-    @MainActor
     func testPromptProcessingUsesStableProviderIdsAndLegacyAliases() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -15409,7 +15333,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testWorkflowPromptProcessingSkipsMemoryAndUsesWorkflowBehavior() async throws {
+    func testWorkflowPromptProcessingUsesWorkflowBehavior() async throws {
         let providerKey = "llmProviderType"
         let modelKey = "llmCloudModel"
         let originalProvider = UserDefaults.standard.object(forKey: providerKey)
@@ -15455,9 +15379,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         ]
 
-        let memoryRetriever = MemoryRetrieverSpy()
         let service = PromptProcessingService()
-        service.memoryService = memoryRetriever
 
         let behavior = WorkflowBehavior(
             providerId: "Gemini",
@@ -15472,7 +15394,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             behavior: behavior
         )
 
-        XCTAssertTrue(memoryRetriever.requestedTexts.isEmpty)
         XCTAssertEqual(plugin.lastSystemPrompt, "Clean up the dictated text.")
         XCTAssertEqual(
             plugin.lastUserText,
@@ -17229,45 +17150,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 processIdentifier: 42
             ),
             fallback
-        )
-    }
-
-    func testScreenshotPluginSourcePolicyRejectsSelectedExternalCandidate() {
-        XCTAssertFalse(
-            ScreenshotPluginSourcePolicy.allowsCandidate(
-                isScreenshotAutomation: true,
-                selectedPluginId: "com.typewhisper.groq",
-                manifestId: "com.typewhisper.groq",
-                isBundledSource: false,
-                isIsolatedScreenshotSource: false
-            )
-        )
-        XCTAssertTrue(
-            ScreenshotPluginSourcePolicy.allowsCandidate(
-                isScreenshotAutomation: true,
-                selectedPluginId: "com.typewhisper.groq",
-                manifestId: "com.typewhisper.groq",
-                isBundledSource: true,
-                isIsolatedScreenshotSource: false
-            )
-        )
-        XCTAssertTrue(
-            ScreenshotPluginSourcePolicy.allowsCandidate(
-                isScreenshotAutomation: true,
-                selectedPluginId: "com.typewhisper.groq",
-                manifestId: "com.typewhisper.groq",
-                isBundledSource: false,
-                isIsolatedScreenshotSource: true
-            )
-        )
-        XCTAssertTrue(
-            ScreenshotPluginSourcePolicy.allowsCandidate(
-                isScreenshotAutomation: false,
-                selectedPluginId: "com.typewhisper.groq",
-                manifestId: "com.typewhisper.groq",
-                isBundledSource: false,
-                isIsolatedScreenshotSource: false
-            )
         )
     }
 
@@ -22159,7 +22041,6 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
         XCTAssertNil(service.currentMode)
     }
-
 
     @MainActor
     func testHybridModifierHoldDoesNotStartBeforeDelay() async throws {

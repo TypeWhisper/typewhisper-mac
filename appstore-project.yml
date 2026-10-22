@@ -33,18 +33,6 @@ packages:
   MLXAudio:
     url: https://github.com/Blaizzy/mlx-audio-swift.git
     revision: 01dec7c9bdce3088a6b6b7ab9f2e403458195efb
-  MLXSwiftLM:
-    url: https://github.com/ml-explore/mlx-swift-lm.git
-    exactVersion: 3.31.4
-  SwiftTransformers:
-    url: https://github.com/huggingface/swift-transformers.git
-    exactVersion: 1.3.4
-  ONNXRuntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
-    exactVersion: 1.24.2
-  MCP:
-    url: https://github.com/modelcontextprotocol/swift-sdk.git
-    exactVersion: 0.12.1
 
 settings:
   base:
@@ -126,19 +114,7 @@ targets:
         embed: true
         copy:
           destination: plugins
-      - target: CartesiaPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: CerebrasPlugin
-        embed: true
-        copy:
-          destination: plugins
       - target: ClaudePlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: CoherePlugin
         embed: true
         copy:
           destination: plugins
@@ -150,31 +126,11 @@ targets:
         embed: true
         copy:
           destination: plugins
-      - target: FireworksPlugin
-        embed: true
-        copy:
-          destination: plugins
       - target: GeminiPlugin
         embed: true
         copy:
           destination: plugins
-      - target: GladiaPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: GoogleCloudSTTPlugin
-        embed: true
-        copy:
-          destination: plugins
       - target: GroqPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: MetaPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: MicrosoftAIPlugin
         embed: true
         copy:
           destination: plugins
@@ -190,31 +146,11 @@ targets:
         embed: true
         copy:
           destination: plugins
-      - target: SmallestAIPlugin
-        embed: true
-        copy:
-          destination: plugins
       - target: SonioxPlugin
         embed: true
         copy:
           destination: plugins
-      - target: SpeechmaticsPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: VercelAIGatewayPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: XAIPlugin
-        embed: true
-        copy:
-          destination: plugins
       - target: WhisperKitPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: ParakeetPlugin
         embed: true
         copy:
           destination: plugins
@@ -227,62 +163,6 @@ targets:
         copy:
           destination: plugins
       - target: Qwen3Plugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: LocalLLMPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: SupertonicPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: SystemTTSPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: FillerWordsPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: LiveTranscriptPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: FileMemoryPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: OpenAIVectorMemoryPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: WebhookPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: LinearPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: ObsidianPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: MCPClientPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: MistralAIPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: CloudflareASRPlugin
-        embed: true
-        copy:
-          destination: plugins
-      - target: Reson8Plugin
         embed: true
         copy:
           destination: plugins
@@ -331,22 +211,10 @@ targets:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.assemblyai
-  CartesiaPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.cartesia
-  CerebrasPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.cerebras
   ClaudePlugin:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.claude
-  CoherePlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.cohere
   DeepgramPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
@@ -355,34 +223,14 @@ targets:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.elevenlabs
-  FireworksPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.fireworks
   GeminiPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.gemini
-  GladiaPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.gladia
-  GoogleCloudSTTPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.google-cloud-stt
   GroqPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.groq
-  MetaPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.meta
-  MicrosoftAIPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.microsoft-ai
   OpenAIPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
@@ -395,26 +243,10 @@ targets:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.openrouter
-  SmallestAIPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.smallest-pulse
   SonioxPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.soniox
-  SpeechmaticsPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.speechmatics
-  VercelAIGatewayPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.vercel-ai-gateway
-  XAIPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.xai
   WhisperKitPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
@@ -422,16 +254,6 @@ targets:
     dependencies:
       - package: WhisperKit
         product: WhisperKit
-    settings:
-      base:
-        EXCLUDED_ARCHS: x86_64
-  ParakeetPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.parakeet
-    dependencies:
-      - package: TypeWhisperPluginSDK
-        product: TypeWhisperFluidAudio
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
@@ -464,79 +286,6 @@ targets:
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
-  LocalLLMPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.local-llm-mlx
-    dependencies:
-      - package: MLXSwiftLM
-        product: MLXLLM
-      - package: SwiftTransformers
-        product: Transformers
-    settings:
-      base:
-        EXCLUDED_ARCHS: x86_64
-  SupertonicPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.tts.supertonic
-    dependencies:
-      - package: ONNXRuntime
-        product: onnxruntime
-    settings:
-      base:
-        EXCLUDED_ARCHS: x86_64
-  SystemTTSPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.tts.system
-  FillerWordsPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.filler-words
-  LiveTranscriptPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.livetranscript
-  FileMemoryPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.memory.file
-  OpenAIVectorMemoryPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.memory.openai-vector
-  WebhookPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.webhook
-  LinearPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.linear
-  ObsidianPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.obsidian
-  MCPClientPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.mcp-client
-    dependencies:
-      - package: MCP
-        product: MCP
-  MistralAIPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.minerale.mistralai
-  CloudflareASRPlugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.cloudflare-asr
-  Reson8Plugin:
-    templates: [AppStorePlugin]
-    templateAttributes:
-      bundleId: com.typewhisper.reson8
 
   TypeWhisperWidgetExtension:
     type: app-extension

@@ -16,7 +16,6 @@ final class Profile {
     var engineOverride: String?
     var cloudModelOverride: String?
     var promptActionId: String?
-    var memoryEnabled: Bool = false
     var outputFormat: String?
     var hotkeyData: Data?
     var inlineCommandsEnabled: Bool
@@ -57,7 +56,6 @@ final class Profile {
         engineOverride: String? = nil,
         cloudModelOverride: String? = nil,
         promptActionId: String? = nil,
-        memoryEnabled: Bool = false,
         outputFormat: String? = nil,
         hotkeyData: Data? = nil,
         inlineCommandsEnabled: Bool = false,
@@ -78,7 +76,6 @@ final class Profile {
         self.engineOverride = engineOverride
         self.cloudModelOverride = cloudModelOverride
         self.promptActionId = promptActionId
-        self.memoryEnabled = memoryEnabled
         self.outputFormat = outputFormat
         self.hotkeyData = hotkeyData
         self.inlineCommandsEnabled = inlineCommandsEnabled

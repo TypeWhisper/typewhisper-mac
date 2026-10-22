@@ -1,1 +1,0 @@
-sdk:R2T2PluginTests/testConnectTimesOutWhenNothingListens() # 本机 127.0.0.1:7897 的本地代理与 utun 接口接受所有 TCP 连接，包括 TEST-NET-1 的 192.0.2.1:9，连接立即成功，测试前提不成立，随后触发 120 秒响应超时；保留完整超时断言。此项仅适用于该代理环境。

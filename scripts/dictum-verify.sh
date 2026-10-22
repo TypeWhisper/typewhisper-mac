@@ -37,6 +37,10 @@ xcode() {
 }
 
 build() {
+  if [[ -d "$app/Contents/PlugIns" ]]; then
+    find "$app/Contents/PlugIns" -maxdepth 1 \( -name '*.bundle' -o -name '*.xctest' \) \
+      -type d -exec /bin/rm -r {} +
+  fi
   xcode build >"$receipts/build.log" 2>&1 || {
     tail -60 "$receipts/build.log" >&2
     return 1

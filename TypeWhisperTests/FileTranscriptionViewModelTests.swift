@@ -1542,10 +1542,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
         XCTAssertEqual(SettingsView.availableTab(.dictationRecovery), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.fileTranscription), .fileTranscription)
-        XCTAssertEqual(
-            SettingsView.availableTab(.plugin(pluginId: "com.example.player", itemId: "player")),
-            .plugin(pluginId: "com.example.player", itemId: "player")
-        )
     }
 
     func testAutomaticRecoveryFallbackAllowsKnownRecoverableErrors() {

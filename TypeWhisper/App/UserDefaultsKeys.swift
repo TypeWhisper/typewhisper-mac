@@ -135,14 +135,6 @@ enum UserDefaultsKeys {
     static let dockIconBehaviorWhenMenuBarHidden = "dockIconBehaviorWhenMenuBarHidden"
     static let menuBarIconHiddenAlertShown = "menuBarIconHiddenAlertShown"
 
-    // MARK: - Memory
-    static let memoryEnabled = "memoryEnabled"
-    static let memoryExtractionProvider = "memoryExtractionProvider"
-    static let memoryExtractionModel = "memoryExtractionModel"
-    static let memoryMinTextLength = "memoryMinTextLength"
-    static let memoryExtractionPrompt = "memoryExtractionPrompt"
-    static let memoryCaptureScope = "memoryCaptureScope"
-
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
     static let stripFinalPeriodFromStandaloneValuesEnabled = "stripFinalPeriodFromStandaloneValuesEnabled"
@@ -203,9 +195,6 @@ enum UserDefaultsKeys {
     static let workflowDefaultLLMProviderId = "workflowDefaultLLMProviderId"
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
-
-    // MARK: - Release presentation
-    static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
 
     // MARK: - Managed settings
     /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once

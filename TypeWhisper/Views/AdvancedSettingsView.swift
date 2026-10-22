@@ -3,12 +3,10 @@ import UniformTypeIdentifiers
 
 struct AdvancedSettingsView: View {
     @ObservedObject private var viewModel = APIServerViewModel.shared
-    @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
     @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
@@ -16,7 +14,6 @@ struct AdvancedSettingsView: View {
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
-    @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
@@ -183,109 +180,6 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-                // MARK: - Memory
-                Section(String(localized: "Memory")) {
-                Toggle(isOn: $memoryService.isEnabled) {
-                    SettingsInfoLabel(
-                        title: String(localized: "Enable Memory"),
-                        info: String(localized: "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context.")
-                    )
-                }
-
-                if memoryService.isEnabled {
-                    Picker(selection: $memoryService.captureScope) {
-                        ForEach(MemoryCaptureScope.allCases) { scope in
-                            Text(scope.localizedTitle).tag(scope)
-                        }
-                    } label: {
-                        SettingsInfoLabel(
-                            title: String(localized: "Capture From"),
-                            info: memoryService.captureScope.localizedDescription
-                        )
-                    }
-
-                    Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
-                        Text(String(localized: "None")).tag("")
-                        ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
-                            Text(provider.displayName).tag(provider.id)
-                        }
-                    }
-
-                    if !memoryService.extractionProviderId.isEmpty {
-                        let models = promptProcessingService.modelsForProvider(memoryService.extractionProviderId)
-                        if !models.isEmpty {
-                            Picker(String(localized: "Extraction Model"), selection: $memoryService.extractionModel) {
-                                Text(String(localized: "Default")).tag("")
-                                ForEach(models, id: \.id) { model in
-                                    Text(model.displayName).tag(model.id)
-                                }
-                            }
-                        }
-                    }
-
-                    Stepper(value: $memoryService.minimumTextLength, in: 10...200, step: 10) {
-                        HStack {
-                            SettingsInfoLabel(
-                                title: String(localized: "Min. text length"),
-                                info: String(localized: "Transcriptions shorter than this are skipped for memory extraction.")
-                            )
-                            Spacer()
-                            Text("\(memoryService.minimumTextLength)")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    DisclosureGroup(String(localized: "Extraction Prompt")) {
-                        TextEditor(text: $memoryService.extractionPrompt)
-                            .font(.system(.caption, design: .monospaced))
-                            .frame(minHeight: 120)
-                            .border(.separator)
-                            .accessibilityLabel(String(localized: "Extraction Prompt"))
-
-                        Button(String(localized: "Reset to Default")) {
-                            memoryService.extractionPrompt = MemoryService.defaultExtractionPrompt
-                        }
-                        .font(.caption)
-                    }
-
-                    let pluginCount = PluginManager.shared.memoryStoragePlugins.count
-                    HStack {
-                        Image(systemName: "circle.fill")
-                            .foregroundStyle(pluginCount > 0 && !memoryService.extractionProviderId.isEmpty ? .green : .orange)
-                            .font(.caption2)
-                            .accessibilityHidden(true)
-                        if pluginCount == 0 {
-                            Text(String(localized: "No memory storage plugins active. Enable one in Integrations."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else if memoryService.extractionProviderId.isEmpty {
-                            Text(String(localized: "Select an extraction provider to start collecting memories."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "\(pluginCount) storage plugin(s) active"))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        showClearMemoryConfirmation = true
-                    } label: {
-                        Label(String(localized: "Clear All Memories"), systemImage: "trash")
-                    }
-                    .confirmationDialog(
-                        String(localized: "Clear All Memories?"),
-                        isPresented: $showClearMemoryConfirmation
-                    ) {
-                        Button(String(localized: "Clear All"), role: .destructive) {
-                            Task { await memoryService.clearAllMemories() }
-                        }
-                    } message: {
-                        Text(String(localized: "This will permanently delete all stored memories from all plugins. This cannot be undone."))
-                    }
-                }
-            }
 
                 // MARK: - Recording
                 Section(String(localized: "Recording")) {
@@ -397,43 +291,6 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
-                if speechFeedbackService.hasAvailableProviders {
-                    Toggle(isOn: $dictation.spokenFeedbackEnabled) {
-                        SettingsInfoLabel(
-                            title: String(localized: "Spoken feedback"),
-                            info: String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements.")
-                        )
-                    }
-
-                    if dictation.spokenFeedbackEnabled {
-                        let providerSelection = Binding(
-                            get: { speechFeedbackService.effectiveProviderId ?? speechFeedbackService.selectedProviderId },
-                            set: { speechFeedbackService.selectedProviderId = $0 }
-                        )
-
-                        Picker(String(localized: "Speech Provider"), selection: providerSelection) {
-                            ForEach(speechFeedbackService.availableProviders, id: \.id) { provider in
-                                Text(provider.displayName).tag(provider.id)
-                            }
-                        }
-
-                        if let summary = speechFeedbackService.currentSettingsSummary {
-                            Text(summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let activeProviderId = speechFeedbackService.effectiveProviderId,
-                           let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
-                           plugin.instance.settingsView != nil {
-                            Button(String(localized: "Configure Voice & Speed…")) {
-                                SettingsNavigationCoordinator.shared.navigate(
-                                    to: .installedPlugin(pluginId: plugin.id)
-                                )
-                            }
-                        }
-                    }
-                }
             }
 
                 SpokenPunctuationSettingsSection()
@@ -658,10 +515,6 @@ struct AdvancedSettingsView: View {
                 withBundleIdentifier: "com.raycast.macos"
             ) != nil
             checkCLIInstallation()
-            syncSpeechFeedbackAvailability()
-        }
-        .onReceive(pluginManager.$registryRevision) { _ in
-            syncSpeechFeedbackAvailability()
         }
         .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
             Button(String(localized: "OK"), role: .cancel) {}
@@ -1092,14 +945,6 @@ struct AdvancedSettingsView: View {
         try? process.run()
     }
 
-    private func syncSpeechFeedbackAvailability() {
-        guard !speechFeedbackService.hasAvailableProviders else { return }
-        if dictation.spokenFeedbackEnabled {
-            dictation.spokenFeedbackEnabled = false
-        } else {
-            _ = speechFeedbackService.disableIfNoProvidersAvailable()
-        }
-    }
 }
 
 /// Wraps a built `SettingsBackup` snapshot with a stable identity so the

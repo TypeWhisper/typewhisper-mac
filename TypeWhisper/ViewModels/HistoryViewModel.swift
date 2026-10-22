@@ -566,11 +566,6 @@ final class HistoryViewModel: ObservableObject {
         dictionaryService.learnCorrections(suggestions)
         correctionSuggestions = suggestions
         showCorrectionBanner = true
-        ServiceContainer.shared.memoryService.storeCorrections(
-            suggestions.map { (original: $0.original, replacement: $0.replacement) },
-            appName: record.appName,
-            bundleIdentifier: record.appBundleIdentifier
-        )
         return true
     }
 

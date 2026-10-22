@@ -466,7 +466,6 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             CommandGroup(after: .appInfo) {
                 ManagedWindowOpenerRegistrar()
             }
-            PluginAppCommands(pluginManager: ServiceContainer.shared.pluginManager)
         }
 
         WindowConfiguration.settings(content: AnyView(settingsContent))
@@ -1058,6 +1057,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "dictum" else { return }
+        if url.host == "settings", url.path == "/plugins" {
+            SettingsNavigationCoordinator.shared.navigate(to: SettingsView.firstPluginTab)
+        }
         openSettingsWindow()
     }
 

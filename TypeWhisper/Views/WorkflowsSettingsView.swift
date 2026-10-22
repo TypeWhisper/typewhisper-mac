@@ -238,7 +238,6 @@ private struct MyWorkflowsPage: View {
             ),
             compact: true
         ) {
-            let providers = promptProcessingService.availableProviders
 
             VStack(alignment: .leading, spacing: 8) {
                 if let enforced = pluginManager.enforcedLlmResolution {
@@ -1662,8 +1661,8 @@ private struct WorkflowEditorPage: View {
             if engines.isEmpty {
                 Text(
                     localizedAppText(
-                        "Install a transcription engine in Integrations before using workflow engine overrides.",
-                        de: "Installiere zuerst eine Transkriptions-Engine in Integrationen, bevor du Workflow-Engine-Overrides nutzt."
+                        "Enable a transcription engine in its settings before using workflow engine overrides.",
+                        de: "Aktiviere zuerst eine Transkriptions-Engine in ihren Einstellungen, bevor du Workflow-Engine-Overrides nutzt."
                     )
                 )
                 .font(.caption)
@@ -2032,8 +2031,8 @@ private struct WorkflowEditorPage: View {
                     if !promptProcessingService.isProviderReady(providerId) {
                         Text(
                             localizedAppText(
-                                "This provider is not ready yet. Finish its setup in Integrations before this workflow can use it.",
-                                de: "Dieser Provider ist noch nicht einsatzbereit. Schließe sein Setup in Integrationen ab, bevor der Workflow ihn nutzen kann."
+                                "This provider is not ready yet. Finish its setup on its settings page before this workflow can use it.",
+                                de: "Dieser Provider ist noch nicht einsatzbereit. Schließe sein Setup in seinen Einstellungen ab, bevor der Workflow ihn nutzen kann."
                             )
                         )
                         .font(.caption)

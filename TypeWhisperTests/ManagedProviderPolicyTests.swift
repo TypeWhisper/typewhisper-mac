@@ -233,7 +233,7 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         let service = PromptProcessingService(userDefaults: defaults)
 
         do {
-            _ = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Cloud LLM", skipMemoryInjection: true)
+            _ = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Cloud LLM")
             XCTFail("A refused provider must not run")
         } catch {
             XCTAssertEqual(error as? ManagedPolicyRefusal, ManagedPolicyRefusal(
@@ -258,7 +258,7 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTextProcessing: false))
 
         do {
-            _ = try await service.process(prompt: "Fix", text: "hello", skipMemoryInjection: true)
+            _ = try await service.process(prompt: "Fix", text: "hello")
             XCTFail("A refused provider must not run")
         } catch {
             XCTAssertEqual(error as? ManagedPolicyRefusal, ManagedPolicyRefusal(

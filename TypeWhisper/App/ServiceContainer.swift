@@ -82,7 +82,6 @@ final class ServiceContainer: ObservableObject {
     let pluginManager: PluginManager
     let termPackRegistryService: TermPackRegistryService
     let widgetDataService: WidgetDataService
-    let memoryService: MemoryService
     let appFormatterService: AppFormatterService
     let dictationPunctuationProfileStore: DictationPunctuationProfileStore
     let punctuationRulesLoader: PunctuationRulesLoader
@@ -190,7 +189,6 @@ final class ServiceContainer: ObservableObject {
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
-        memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
         dictationPunctuationProfileStore = DictationPunctuationProfileStore()
         punctuationRulesLoader = PunctuationRulesLoader()
@@ -199,7 +197,6 @@ final class ServiceContainer: ObservableObject {
         audioRecorderService = AudioRecorderService(
             inputActivationGuard: inputActivationGuard
         )
-        promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
@@ -291,42 +288,6 @@ final class ServiceContainer: ObservableObject {
                 onProgress: { _ in true },
                 onSourceProgress: { _ in true }
             )
-        }
-        speakerCoordinator.wordTimingSource = { [audioFileService, modelManagerService] url, language in
-            // Parakeet reports when each word is spoken and runs on this Mac.
-            let engineID = "parakeet"
-            let log = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
-            guard let engine = PluginManager.shared?.transcriptionEngine(for: engineID) else {
-                log.info("Word timing pass skipped: Parakeet is not installed")
-                return []
-            }
-            guard modelManagerService.canPrepareForTranscription(engine) else {
-                log.info("Word timing pass skipped: Parakeet has no model to load")
-                return []
-            }
-            // Engines store a code or a name ("de", "German").
-            let language = SpeakerTranscriptBuilder.languageCode(from: language)
-            let languages = engine.supportedLanguages
-            if let language, !languages.isEmpty,
-               !languages.contains(where: { language.hasPrefix($0) || $0.hasPrefix(language) }) {
-                log.info("Word timing pass skipped: Parakeet does not support \(language, privacy: .public)")
-                return []
-            }
-            let samples = try await audioFileService.loadAudioSamples(from: url)
-            let result = try await modelManagerService.transcribe(
-                audioSamples: samples,
-                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
-                task: .transcribe,
-                engineOverrideId: engineID,
-                onProgress: { _ in true },
-                onSourceProgress: { _ in true }
-            )
-            // The words are matched to another engine's text, which may
-            // punctuate differently.
-            return result.words.compactMap { word in
-                let text = word.text.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
-                return text.isEmpty ? nil : TranscriptionWord(text: text, start: word.start, end: word.end)
-            }
         }
         speakerVoiceProfileService = SpeakerVoiceProfileService(
             store: VoiceProfileStore(),
@@ -561,8 +522,6 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.validateSelectionAfterPluginLoad()
 
 
-        // Start memory service
-        memoryService.startListening()
 
 
         // Auto-start watch folder if configured

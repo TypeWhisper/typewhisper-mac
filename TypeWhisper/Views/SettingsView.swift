@@ -5,7 +5,6 @@ import TypeWhisperPluginSDK
 enum SettingsTab: Hashable {
     case home, general, appearance, dictation, hotkeys, recorder, speakers
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, advanced, about
-    case plugin(pluginId: String, itemId: String)
     case installedPlugin(pluginId: String)
 }
 
@@ -56,7 +55,7 @@ struct SettingsView: View {
         case "dictionary", "dictionary-term-packs": return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
-        case "plugins": return .dictation
+        case "plugins": return firstPluginTab
         case "advanced": return .advanced
         case "about": return .about
         default: return .home
@@ -103,16 +102,6 @@ struct SettingsView: View {
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
 
-        let pluginDestinations = pluginManager.userInterfaceContributions.flatMap { contribution in
-            contribution.settingsSidebarItems.map { item in
-                SettingsDestination(
-                    tab: .plugin(pluginId: contribution.pluginId, itemId: item.id),
-                    title: item.title,
-                    systemImage: item.systemImageName,
-                    badge: nil
-                )
-            }
-        }
 
         let installedPluginDestinations = pluginManager.loadedPlugins
             // Speaker detection is managed on the Speakers page, not as a plugin.
@@ -136,7 +125,7 @@ struct SettingsView: View {
                 )
             }
 
-        return builtInDestinations + installedPluginDestinations + pluginDestinations
+        return builtInDestinations + installedPluginDestinations
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -200,7 +189,7 @@ struct SettingsView: View {
         .onChange(of: pluginManager.loadedPlugins.map(\.id)) { _, pluginIds in
             // An uninstalled plugin takes its sidebar entry with it.
             if case .installedPlugin(let pluginId) = selectedTab, !pluginIds.contains(pluginId) {
-                selectedTab = .dictation
+                selectedTab = Self.firstPluginTab
             }
             selectScreenshotPluginPageIfNeeded()
         }
@@ -208,6 +197,16 @@ struct SettingsView: View {
 
     static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
+    }
+
+    static var firstPluginTab: SettingsTab {
+        guard let plugin = PluginManager.shared?.loadedPlugins
+            .filter({ $0.id != SpeakerTranscriptCoordinator.bundledPluginID })
+            .sorted(by: {
+                if $0.isEnabled != $1.isEnabled { return $0.isEnabled }
+                return $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending
+            }).first else { return .dictation }
+        return .installedPlugin(pluginId: plugin.id)
     }
 
     private func selectScreenshotPluginPageIfNeeded() {
@@ -290,16 +289,6 @@ struct SettingsView: View {
         case .installedPlugin(let pluginId):
             PluginSettingsView(focusedPluginId: pluginId)
                 .id(pluginId)
-        case .plugin(let pluginId, let itemId):
-            if let view = pluginManager.settingsSidebarView(pluginId: pluginId, itemId: itemId) {
-                view
-            } else {
-                ContentUnavailableView(
-                    String(localized: "Integration Unavailable"),
-                    systemImage: "puzzlepiece.extension",
-                    description: Text(String(localized: "Enable the integration to open this page."))
-                )
-            }
         }
     }
 }
@@ -641,7 +630,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
 
     let pluginDestinations = destinations.filter {
         switch $0.tab {
-        case .plugin, .installedPlugin: return true
+        case .installedPlugin: return true
         default: return false
         }
     }
@@ -1143,7 +1132,7 @@ struct RecordingSettingsView: View {
                 Section(String(localized: "Engine")) {
                 let engines = pluginManager.transcriptionEngines
                 if engines.isEmpty {
-                    Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
+                    Text(String(localized: "Enable a transcription engine in its settings."))
                         .foregroundStyle(.secondary)
                 } else {
                     // Shows the engine dictation uses right now, which can be a
