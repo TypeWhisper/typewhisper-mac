@@ -298,6 +298,11 @@ def validate_mac_store_screenshots!
       UI.user_error!("#{directory} must contain #{expected.join(', ')} rendered by TypeWhisper Studio; found #{actual.empty? ? 'nothing' : actual.join(', ')}")
     end
     composed_mac_store_screenshots(locale).each do |path|
+      # A capture rerun without a new Studio render would otherwise upload the old images.
+      raw = File.join(APPSTORE_SCREENSHOT_OUTPUT, locale, File.basename(path).sub(/\A\d{2}-/, ""))
+      if File.file?(raw) && File.mtime(raw) > File.mtime(path)
+        UI.user_error!("#{path} is older than its capture #{raw}; render the store images again with TypeWhisper Studio")
+      end
       properties = sh(Shellwords.join(["/usr/bin/sips", "-g", "pixelWidth", "-g", "pixelHeight", "-g", "hasAlpha", path]), log: false)
       width = properties[/pixelWidth: (\d+)/, 1].to_i
       height = properties[/pixelHeight: (\d+)/, 1].to_i
