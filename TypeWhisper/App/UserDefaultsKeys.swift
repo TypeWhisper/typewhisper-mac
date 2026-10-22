@@ -20,6 +20,8 @@ enum UserDefaultsKeys {
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
+    static let toggleDictationSilenceStopEnabled = "toggleDictationSilenceStopEnabled"
+    static let toggleDictationSilenceStopDuration = "toggleDictationSilenceStopDuration"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
     static let cancellationBehavior = "cancellationBehavior"

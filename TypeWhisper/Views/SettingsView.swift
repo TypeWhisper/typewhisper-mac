@@ -954,6 +954,10 @@ struct RecordingSettingsView: View {
         return selection.usesBluetoothTransport
     }
 
+    private var toggleSilenceStopDurationText: String {
+        DictationViewModel.formattedSilenceDuration(dictation.toggleSilenceStopDuration)
+    }
+
     private func transcriptionAuthNotice(for engines: [TranscriptionEnginePlugin]) -> String? {
         engines
             .map { modelManager.transcriptionAuthStatus(for: $0) }
@@ -1360,6 +1364,37 @@ struct RecordingSettingsView: View {
                         }
                     }
                 }
+            }
+
+                Section(String(localized: "Toggle Mode")) {
+                Toggle(
+                    String(localized: "Stop recording after silence"),
+                    isOn: $dictation.toggleSilenceStopEnabled
+                )
+
+                if dictation.toggleSilenceStopEnabled {
+                    Stepper(
+                        value: $dictation.toggleSilenceStopDuration,
+                        in: DictationSilenceEndpointDetector.silenceDurationRange,
+                        step: 0.5
+                    ) {
+                        HStack {
+                            Text(String(localized: "Silence duration"))
+                            Spacer()
+                            Text(toggleSilenceStopDurationText)
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        .accessibilityHidden(true)
+                    }
+                    // One element: the stepper is named after the row and reads the duration as its value.
+                    .accessibilityLabel(String(localized: "Silence duration"))
+                    .accessibilityValue(toggleSilenceStopDurationText)
+                }
+
+                Text(String(localized: "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
                 Section(String(localized: "Sound")) {

@@ -375,6 +375,27 @@ final class DictationViewModel: ObservableObject {
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
+    /// Ends a toggle-mode dictation after sustained silence once speech was heard (#1023).
+    @Published var toggleSilenceStopEnabled: Bool {
+        didSet {
+            Self.persistToggleSilenceStopEnabled(toggleSilenceStopEnabled)
+            // Turning it off also ends the watch and the countdown of a running recording.
+            if !toggleSilenceStopEnabled {
+                stopSilenceEndpointMonitor()
+            }
+        }
+    }
+    /// Seconds of silence after speech that end a toggle dictation. Applies from the next recording.
+    @Published var toggleSilenceStopDuration: TimeInterval {
+        didSet {
+            let clampedDuration = DictationSilenceEndpointDetector.clampedSilenceDuration(toggleSilenceStopDuration)
+            // Assigning inside didSet does not run didSet again, so persist here in both cases.
+            if clampedDuration != toggleSilenceStopDuration {
+                toggleSilenceStopDuration = clampedDuration
+            }
+            Self.persistToggleSilenceStopDuration(clampedDuration)
+        }
+    }
     @Published private(set) var lastTranscribedText: String?
     @Published private(set) var lastTranscriptionLanguage: String?
     /// Updated only by the completed text-insertion path, never by indicator feedback.
@@ -399,6 +420,8 @@ final class DictationViewModel: ObservableObject {
     /// The running recording has delivered only digital silence so far: a muted microphone
     /// or a dead input stream. Shown while recording instead of only after the stop (#1606).
     @Published private(set) var isRecordingInputSilent = false
+    /// Whole seconds until silence ends the toggle recording, nil outside that countdown (#1023).
+    @Published private(set) var silenceStopCountdownSeconds: Int?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
@@ -511,6 +534,7 @@ final class DictationViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
+    private let silenceEndpointMonitor: DictationSilenceEndpointMonitor
     private let streamingHandler: StreamingHandler
     private let promptPaletteHandler: PromptPaletteHandler
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
@@ -622,6 +646,14 @@ final class DictationViewModel: ObservableObject {
         return String(localized: "No sound from the microphone. Is it muted?")
     }
 
+    /// Countdown before silence ends a toggle recording. Text, not only an indicator color,
+    /// says that the recording is about to stop and how to keep it going.
+    var silenceStopWarningMessage: String? {
+        guard state == .recording, !isStopInFlight, let seconds = silenceStopCountdownSeconds else { return nil }
+        let remaining = Self.formattedSilenceDuration(TimeInterval(seconds))
+        return String(localized: "Stopping in \(remaining). Keep talking to continue.")
+    }
+
     var rejectedShortcutWarningMessage: String? {
         guard let rejectedShortcutWarning, rejectedShortcutWarning.state == state else { return nil }
         return rejectedShortcutWarning.message
@@ -629,8 +661,12 @@ final class DictationViewModel: ObservableObject {
 
     /// Shown by the indicator in place of its regular status. The Esc confirmation comes
     /// first, since it expires; a silent microphone is shown again once the others are gone.
+    /// The silence countdown cannot coincide with a silent microphone, which has no speech.
     var indicatorWarningMessage: String? {
-        cancelWarningMessage ?? rejectedShortcutWarningMessage ?? silentInputWarningMessage
+        cancelWarningMessage
+            ?? rejectedShortcutWarningMessage
+            ?? silenceStopWarningMessage
+            ?? silentInputWarningMessage
     }
 
     init(
@@ -755,6 +791,9 @@ final class DictationViewModel: ObservableObject {
                 audioRecordingService?.totalBufferDuration ?? 0
             }
         )
+        self.silenceEndpointMonitor = DictationSilenceEndpointMonitor { [weak audioRecordingService] offset in
+            audioRecordingService?.getBufferDelta(since: offset) ?? ([], offset)
+        }
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
             workflowService: workflowService,
@@ -791,6 +830,8 @@ final class DictationViewModel: ObservableObject {
         self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
+        self.toggleSilenceStopEnabled = Self.loadToggleSilenceStopEnabled()
+        self.toggleSilenceStopDuration = Self.loadToggleSilenceStopDuration()
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -832,6 +873,12 @@ final class DictationViewModel: ObservableObject {
         }
         audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] uptimeNanoseconds in
             self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
+        }
+        silenceEndpointMonitor.onPhaseChange = { [weak self] sessionID, phase in
+            self?.handleSilenceEndpointPhase(phase, sessionID: sessionID)
+        }
+        silenceEndpointMonitor.onEndpoint = { [weak self] sessionID in
+            self?.handleSilenceEndpoint(sessionID: sessionID)
         }
 
         promptPaletteHandler.onWorkflowProcessingChanged = { [weak self] isProcessing in
@@ -985,6 +1032,41 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistMicrophoneBoostEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+    }
+
+    nonisolated static func loadToggleSilenceStopEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+    }
+
+    nonisolated static func persistToggleSilenceStopEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+    }
+
+    /// A stored value outside the offered range, or not a number, falls back into it.
+    nonisolated static func loadToggleSilenceStopDuration(defaults: UserDefaults = .standard) -> TimeInterval {
+        DictationSilenceEndpointDetector.clampedSilenceDuration(
+            defaults.object(forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration) as? Double
+        )
+    }
+
+    nonisolated static func persistToggleSilenceStopDuration(_ duration: TimeInterval, defaults: UserDefaults = .standard) {
+        defaults.set(duration, forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration)
+    }
+
+    /// "3 seconds" or "2.5 seconds" in the app language, with its plural form.
+    nonisolated static func formattedSilenceDuration(
+        _ seconds: TimeInterval,
+        locale: Locale = Locale(identifier: preferredAppLanguageCode())
+    ) -> String {
+        let isWholeSecond = seconds.rounded() == seconds
+        return Duration.milliseconds(Int64((seconds * 1000).rounded())).formatted(
+            .units(
+                allowed: [.seconds],
+                width: .wide,
+                fractionalPart: isWholeSecond ? .hide : .show(length: 1)
+            )
+            .locale(locale)
+        )
     }
 
     nonisolated static func indicatorTranscriptPreviewFontSize(for style: IndicatorStyle, offset: Int) -> CGFloat {
@@ -1142,6 +1224,26 @@ final class DictationViewModel: ObservableObject {
         updateRecordingInputSilence()
     }
 
+    /// Tests pass a long interval and step the silence watch with `testingPollSilenceEndpoint`.
+    func testingSetSilenceEndpointPollInterval(_ interval: Duration) {
+        silenceEndpointMonitor.pollInterval = interval
+    }
+
+    var testingSilenceEndpointSessionID: UUID? {
+        silenceEndpointMonitor.monitoredSessionID
+    }
+
+    /// One poll of the silence watch for `sessionID`, by default the watched session.
+    func testingPollSilenceEndpoint(sessionID: UUID? = nil) {
+        guard let sessionID = sessionID ?? silenceEndpointMonitor.monitoredSessionID else { return }
+        silenceEndpointMonitor.poll(sessionID: sessionID)
+    }
+
+    /// Delivers an endpoint report as the watch would, including a late one for an old session.
+    func testingReportSilenceEndpoint(sessionID: UUID) {
+        handleSilenceEndpoint(sessionID: sessionID)
+    }
+
     func testingWaitForPostInsertionPersistence() async {
         await postInsertionPersistenceTask?.value
     }
@@ -1163,6 +1265,10 @@ final class DictationViewModel: ObservableObject {
         isRecordingInputReady = true
         state = .recording
         self.partialText = partialText
+        // Shows the countdown before a silence stop (#1023) for screenshots of that state.
+        if ProcessInfo.processInfo.arguments.contains("--screenshot-silence-stop-countdown") {
+            silenceStopCountdownSeconds = 2
+        }
     }
 #endif
 
@@ -2272,6 +2378,7 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = false
         recordingStartTime = Date()
         startRecordingTimer()
+        startSilenceEndpointMonitorIfNeeded(sessionID: sessionID)
 
         let contextStartTimestamp = CFAbsoluteTimeGetCurrent()
         // Match the rule after the audio engine is live. When live-field insertion
@@ -2681,7 +2788,9 @@ final class DictationViewModel: ObservableObject {
         return false
     }
 
-    private func stopDictation(submitRequested: Bool = false) {
+    /// `stoppedAfterSilence` marks the silence stop of a toggle dictation, which takes the same
+    /// path as a second press of the shortcut and only announces its own reason.
+    private func stopDictation(submitRequested: Bool = false, stoppedAfterSilence: Bool = false) {
         if state == .processing, recordingStartTask != nil, !isStopInFlight {
             cancelCurrentOperation()
             return
@@ -2695,6 +2804,7 @@ final class DictationViewModel: ObservableObject {
             return
         }
         isStopInFlight = true
+        stopSilenceEndpointMonitor()
         let stopUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         updateLatencyTrace(sessionID: activeDictationSessionID) { $0.stopUptimeNanoseconds = stopUptimeNanoseconds }
         let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
@@ -2710,7 +2820,11 @@ final class DictationViewModel: ObservableObject {
         // A push-to-talk recording interrupted by other keys is discarded without
         // transcription; its discard banner is announced instead.
         if pendingPushToTalkDiscardMessage == nil {
-            accessibilityAnnouncementService.announceRecordingStopped()
+            if stoppedAfterSilence {
+                accessibilityAnnouncementService.announceRecordingStoppedAfterSilence()
+            } else {
+                accessibilityAnnouncementService.announceRecordingStopped()
+            }
         }
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
@@ -4045,6 +4159,7 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = false
         activeDictationSessionID = nil
         pendingPushToTalkDiscardMessage = nil
+        stopSilenceEndpointMonitor()
         clearRecordingStartCueState()
         clearCancelWarning()
         state = .idle
@@ -5411,6 +5526,59 @@ final class DictationViewModel: ObservableObject {
         recordingTimer = nil
         recordingDuration = 0
         isRecordingInputSilent = false
+        stopSilenceEndpointMonitor()
+    }
+
+    /// Watches a hotkey dictation for trailing silence while the setting is on. Only a
+    /// toggle-mode session stops on it; a hybrid press can still become one after the start.
+    private func startSilenceEndpointMonitorIfNeeded(sessionID: UUID) {
+        stopSilenceEndpointMonitor()
+        // Sessions started without a shortcut, such as API requests, never become toggle sessions.
+        guard toggleSilenceStopEnabled, hotkeyService.currentMode != nil else { return }
+        silenceEndpointMonitor.start(sessionID: sessionID, silenceDuration: toggleSilenceStopDuration)
+    }
+
+    private func stopSilenceEndpointMonitor() {
+        silenceEndpointMonitor.stop()
+        silenceStopCountdownSeconds = nil
+    }
+
+    /// Push-to-talk and holding the hybrid shortcut never stop on silence.
+    private var appliesToggleSilenceStop: Bool {
+        toggleSilenceStopEnabled && hotkeyService.currentMode == .toggle
+    }
+
+    private func handleSilenceEndpointPhase(_ phase: DictationSilenceEndpointDetector.Phase, sessionID: UUID) {
+        guard sessionID == activeDictationSessionID else { return }
+        var countdownSeconds: Int?
+        if case .stopping(let remaining) = phase,
+           state == .recording,
+           !isStopInFlight,
+           appliesToggleSilenceStop {
+            countdownSeconds = DictationSilenceEndpointDetector.countdownSeconds(for: remaining)
+        }
+        if silenceStopCountdownSeconds != countdownSeconds {
+            silenceStopCountdownSeconds = countdownSeconds
+        }
+    }
+
+    /// Ends a toggle dictation whose trailing silence reached the configured duration, through
+    /// the same stop as a second press of the shortcut: transcription, workflows, insertion,
+    /// history and recovery stay the same. A report for another session, a recording that is
+    /// already stopping, another mode or a setting turned off in the meantime does nothing.
+    private func handleSilenceEndpoint(sessionID: UUID) {
+        guard sessionID == activeDictationSessionID else { return }
+        silenceStopCountdownSeconds = nil
+        guard state == .recording,
+              !isStopInFlight,
+              isRecordingInputReady,
+              appliesToggleSilenceStop else { return }
+        logger.info(
+            "Silence endpoint reached, stopping toggle dictation: silenceSeconds=\(String(format: "%.1f", self.toggleSilenceStopDuration), privacy: .public)"
+        )
+        // The shortcut no longer counts as active, so its next press starts a new dictation.
+        hotkeyService.cancelDictation()
+        stopDictation(stoppedAfterSilence: true)
     }
 
     private func updateRecordingInputSilence() {

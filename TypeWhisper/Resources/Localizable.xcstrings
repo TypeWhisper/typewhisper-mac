@@ -19933,6 +19933,97 @@
         }
       }
     },
+    "Toggle Mode" : {
+      "comment" : "Dictation settings section for dictations started with the Toggle shortcut or a short press of the Hybrid shortcut.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Umschaltmodus"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切り替えモード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换模式"
+          }
+        }
+      }
+    },
+    "Stop recording after silence" : {
+      "comment" : "Dictation setting that ends a toggle-mode dictation after the user stops speaking.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme nach Stille beenden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音が続いたら録音を停止"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音后停止录音"
+          }
+        }
+      }
+    },
+    "Silence duration" : {
+      "comment" : "Label of the stepper for how long the silence before an automatic stop lasts.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauer der Stille"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音の長さ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音时长"
+          }
+        }
+      }
+    },
+    "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beendet ein Diktat im Umschaltmodus, sobald du für die gewählte Dauer still bist, und transkribiert und fügt es wie gewohnt ein. Vor dem Stoppen zählt der Indikator herunter; sprich weiter, um die Aufnahme fortzusetzen. Bevor du zu sprechen beginnst, stoppt die Aufnahme nie. Push-to-Talk und das Gedrückthalten des Hybrid-Tastenkürzels sind nicht betroffen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選択した時間だけ無音が続くと、切り替えモードのディクテーションを終了し、通常どおり文字起こしして挿入します。停止前にインジケーターがカウントダウンします。録音を続けるには話し続けてください。話し始める前に停止することはありません。プッシュトゥトークとハイブリッドショートカットの長押しには影響しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "静音持续达到所选时长后，结束切换模式下的听写，并照常转录和插入。停止前指示器会倒计时，继续说话即可继续录音。在你开始说话之前绝不会停止。按住说话和按住混合模式快捷键不受影响。"
+          }
+        }
+      }
+    },
     "On Macs where the built-in microphone needs voice processing, it cannot stay active between dictations. This setting has no effect there; choose another microphone to use it." : {
       "localizations" : {
         "de" : {
@@ -31247,6 +31338,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录音已开始"
+          }
+        }
+      }
+    },
+    "Recording stopped after silence, transcribing" : {
+      "comment" : "VoiceOver announcement when a toggle dictation stops on its own after silence.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme nach Stille beendet, wird transkribiert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無音のため録音を停止しました。文字起こし中"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测到静音，录音已停止，正在转录"
           }
         }
       }
@@ -48466,6 +48580,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它没有已下载的模型。"
+          }
+        }
+      }
+    },
+    "Stopping in %@. Keep talking to continue." : {
+      "comment" : "Indicator countdown before a toggle dictation stops after silence. %@ is a localized duration such as “2 seconds”.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stoppt in %@. Sprich weiter, um fortzufahren."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@後に停止します。続けるには話し続けてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@后停止。继续说话即可继续录音。"
           }
         }
       }

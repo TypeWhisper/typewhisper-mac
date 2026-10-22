@@ -9872,6 +9872,337 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
     }
 
+    // MARK: Silence stop for toggle dictations (#1023)
+
+    /// What the silence-stop tests observe from a dictation context.
+    private final class SilenceStopProbe {
+        var stopPolicies: [String] = []
+        var announcements: [String] = []
+    }
+
+    /// F14, F15 and F16. Each press in a test uses its own key, so the duplicate filter
+    /// for presses within 0.12 s cannot drop one.
+    private static let silenceStopStartHotkey = silenceStopHotkey(keyCode: 0x6B)
+    private static let silenceStopStopHotkey = silenceStopHotkey(keyCode: 0x71)
+    private static let silenceStopRestartHotkey = silenceStopHotkey(keyCode: 0x6A)
+
+    private static func silenceStopHotkey(keyCode: UInt16) -> UnifiedHotkey {
+        UnifiedHotkey(keyCode: keyCode, modifierFlags: NSEvent.ModifierFlags.function.rawValue, isFn: false)
+    }
+
+    /// RMS 0.05, like speech close to the microphone.
+    private static func silenceStopSpeech(seconds: TimeInterval) -> [Float] {
+        silenceStopSamples(seconds: seconds, level: 0.05)
+    }
+
+    /// RMS 0.002, a quiet room below the speech floor. Not digital silence, so the
+    /// silent-microphone warning stays out of the way.
+    private static func silenceStopQuiet(seconds: TimeInterval) -> [Float] {
+        silenceStopSamples(seconds: seconds, level: 0.002)
+    }
+
+    private static func silenceStopSamples(seconds: TimeInterval, level: Float) -> [Float] {
+        let count = Int((seconds * AudioRecordingService.targetSampleRate).rounded())
+        return (0..<count).map { $0.isMultiple(of: 2) ? level : -level }
+    }
+
+    /// The text an announcement speaks in the current app language.
+    @MainActor
+    private static func silenceStopAnnouncementText(
+        _ announce: (AccessibilityAnnouncementService) -> Void
+    ) -> String? {
+        let probe = SilenceStopProbe()
+        let service = AccessibilityAnnouncementService()
+        service.isVoiceOverEnabled = { true }
+        service.post = { message, _ in
+            probe.announcements.append(message)
+        }
+        announce(service)
+        return probe.announcements.last
+    }
+
+    /// A dictation context whose silence watch is polled by hand, with a one-second silence stop.
+    @MainActor
+    private static func makeSilenceStopContext(
+        appSupportDirectory: URL,
+        silenceStopEnabled: Bool,
+        probe: SilenceStopProbe
+    ) -> DictationContext {
+        let announcementService = AccessibilityAnnouncementService()
+        announcementService.isVoiceOverEnabled = { true }
+        announcementService.post = { message, _ in
+            probe.announcements.append(message)
+        }
+        let context = makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            accessibilityAnnouncementService: announcementService
+        )
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { policy in
+            probe.stopPolicies.append(policy.logDescription)
+            return []
+        }
+        let viewModel = context.dictationViewModel
+        viewModel.testingSetSilenceEndpointPollInterval(.seconds(3_600))
+        viewModel.toggleSilenceStopDuration = 1
+        viewModel.toggleSilenceStopEnabled = silenceStopEnabled
+        return context
+    }
+
+    /// Presses a shortcut of `slot`, and releases it unless it stays held.
+    @MainActor
+    private static func pressSilenceStopHotkey(
+        _ hotkey: UnifiedHotkey,
+        slot: HotkeySlotType,
+        in context: DictationContext,
+        release: Bool = true
+    ) {
+        context.hotkeyService.setHotkeyForTesting(hotkey, for: slot)
+        context.hotkeyService.processCarbonHotkeyForTesting(slotType: slot, hotkey: hotkey, isPressed: true)
+        if release {
+            context.hotkeyService.processCarbonHotkeyForTesting(slotType: slot, hotkey: hotkey, isPressed: false)
+        }
+    }
+
+    /// Presses a dictation shortcut and waits until the recording runs with a live input.
+    @MainActor
+    private static func startSilenceStopDictation(
+        _ context: DictationContext,
+        slot: HotkeySlotType,
+        hotkey: UnifiedHotkey = silenceStopStartHotkey,
+        releaseAfterPress: Bool
+    ) async throws {
+        let viewModel = context.dictationViewModel
+        pressSilenceStopHotkey(hotkey, slot: slot, in: context, release: releaseAfterPress)
+        // A press during the feedback of the previous dictation starts once that feedback ends.
+        for _ in 0..<300 {
+            if viewModel.state == .recording { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(viewModel.state, .recording)
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        XCTAssertTrue(viewModel.isRecordingInputReady)
+    }
+
+    /// Keeps the silence-stop settings these tests change out of the other tests.
+    private static func restoreSilenceStopDefaults() {
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration)
+    }
+
+    @MainActor
+    func testToggleDictationStopsAfterSilenceThroughTheRegularStop() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: true,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        XCTAssertEqual(context.hotkeyService.currentMode, .toggle)
+        let sessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+
+        // Quiet before the first words never stops the recording.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+
+        // A pause shorter than the silence duration only brings up the countdown.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.silenceStopCountdownSeconds, 1)
+        XCTAssertNotNil(viewModel.silenceStopWarningMessage)
+        XCTAssertEqual(viewModel.indicatorWarningMessage, viewModel.silenceStopWarningMessage)
+
+        // Speaking again hides the countdown and restarts the silence.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.3))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.indicatorWarningMessage)
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.9))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertTrue(probe.stopPolicies.isEmpty)
+
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.1))
+        viewModel.testingPollSilenceEndpoint()
+
+        // The same stop as a second press of the shortcut, with its own announcement.
+        XCTAssertEqual(viewModel.state, .processing)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertNil(context.hotkeyService.currentMode, "The next press of the shortcut starts a new dictation")
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStoppedAfterSilence() }
+        )
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+        XCTAssertEqual(probe.stopPolicies, [AudioRecordingService.StopPolicy.finalizeShortSpeech().logDescription])
+    }
+
+    @MainActor
+    func testToggleDictationKeepsRecordingWhenSilenceStopIsOff() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: false,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID, "Nothing watches the recording")
+
+        context.audioRecordingService.testingProcessConvertedSamples(
+            Self.silenceStopSpeech(seconds: 1) + Self.silenceStopQuiet(seconds: 10)
+        )
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertTrue(probe.stopPolicies.isEmpty)
+
+        let sessionID = viewModel.apiStopRecording()
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
+        )
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+    }
+
+    @MainActor
+    func testPushToTalkAndHybridHoldNeverStopOnSilence() async throws {
+        for slot in [HotkeySlotType.pushToTalk, .hybrid] {
+            let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+            var dictationContext: DictationContext?
+            defer {
+                dictationContext = nil
+                TestSupport.remove(appSupportDirectory)
+                Self.restoreSilenceStopDefaults()
+            }
+            let probe = SilenceStopProbe()
+            dictationContext = Self.makeSilenceStopContext(
+                appSupportDirectory: appSupportDirectory,
+                silenceStopEnabled: true,
+                probe: probe
+            )
+            let context = try XCTUnwrap(dictationContext)
+            let viewModel = context.dictationViewModel
+
+            // The shortcut stays held.
+            try await Self.startSilenceStopDictation(context, slot: slot, releaseAfterPress: false)
+            XCTAssertEqual(context.hotkeyService.currentMode, .pushToTalk, "\(slot)")
+
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+            viewModel.testingPollSilenceEndpoint()
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.5))
+            viewModel.testingPollSilenceEndpoint()
+            XCTAssertNil(viewModel.silenceStopCountdownSeconds, "\(slot): no countdown while held")
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 5))
+            viewModel.testingPollSilenceEndpoint()
+
+            XCTAssertEqual(viewModel.state, .recording, "\(slot)")
+            XCTAssertTrue(probe.stopPolicies.isEmpty, "\(slot)")
+            XCTAssertEqual(context.hotkeyService.currentMode, .pushToTalk, "\(slot)")
+
+            let sessionID = viewModel.apiStopRecording()
+            await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+        }
+    }
+
+    @MainActor
+    func testLateSilenceReportForAStoppedDictationDoesNotStopTheNextOne() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: true,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        let firstSessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+        context.audioRecordingService.testingProcessConvertedSamples(
+            Self.silenceStopSpeech(seconds: 0.5) + Self.silenceStopQuiet(seconds: 0.5)
+        )
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.silenceStopCountdownSeconds, 1)
+
+        // The user stops by hand while the silence watch counts down.
+        Self.pressSilenceStopHotkey(Self.silenceStopStopHotkey, slot: .toggle, in: context)
+        XCTAssertEqual(viewModel.state, .processing)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
+        )
+        // The watch of the stopped dictation reports late; it does not stop anything twice.
+        viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
+        await Self.waitForDictationSessionToFinish(viewModel, id: firstSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 1)
+
+        try await Self.startSilenceStopDictation(
+            context,
+            slot: .toggle,
+            hotkey: Self.silenceStopRestartHotkey,
+            releaseAfterPress: true
+        )
+        let secondSessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertNotEqual(secondSessionID, firstSessionID)
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+
+        // A poll and an endpoint report of the first dictation arrive during the second one.
+        viewModel.testingPollSilenceEndpoint(sessionID: firstSessionID)
+        viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.testingSilenceEndpointSessionID, secondSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 1)
+
+        // The second dictation still stops on its own silence.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 1))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .processing)
+        await Self.waitForDictationSessionToFinish(viewModel, id: secondSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 2)
+    }
+
     @MainActor
     func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
