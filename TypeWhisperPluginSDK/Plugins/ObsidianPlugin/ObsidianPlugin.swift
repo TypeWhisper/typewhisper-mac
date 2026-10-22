@@ -1220,7 +1220,7 @@ private struct ObsidianSettingsView: View {
                         VStack(alignment: .leading) {
                             Text("Auto-Export", bundle: bundle)
                                 .font(.headline)
-                            Text("Automatically save every transcription to Obsidian.", bundle: bundle)
+                            Text("Automatically save the transcriptions selected below to Obsidian.", bundle: bundle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
