@@ -51,8 +51,8 @@ final class ObsidianPluginTests: XCTestCase {
         )
 
         XCTAssertEqual(manifest.id, "com.typewhisper.obsidian")
-        XCTAssertEqual(manifest.version, "1.1.3")
-        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.version, "1.2.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
     }
 
@@ -211,6 +211,79 @@ final class ObsidianPluginTests: XCTestCase {
         XCTAssertTrue(updatedContent.contains("Corrected final text"))
         XCTAssertFalse(updatedContent.contains("Initial final text"))
         plugin?.deactivate()
+    }
+
+    /// Recordings can be exported without dictations (#1083). A calendar recording keeps
+    /// the Recorder's Markdown, gains the configured tags, and a retranscription updates it.
+    func testAutoExportSavesRecorderTranscriptsWithoutDictations() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultRecorder")
+        let recordingsURL = try Self.makeTemporaryDirectory(prefix: "ObsidianRecordings")
+        defer {
+            try? FileManager.default.removeItem(at: vaultURL)
+            try? FileManager.default.removeItem(at: recordingsURL)
+        }
+        let audioURL = recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.m4a")
+        let markdownURL = recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.transcript.md")
+        try "---\ntitle: \"Weekly sync\"\nattendees:\n  - \"Wijtze\"\n---\n\n# Weekly sync\n\nFirst take\n"
+            .write(to: markdownURL, atomically: true, encoding: .utf8)
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "subfolder": "Meetings",
+                "frontmatterEnabled": true,
+                "frontmatterTags": ["meeting"],
+                "autoExportEnabled": true,
+                "exportDictations": false,
+                "exportRecordings": true,
+                "liveSyncEnabled": true,
+            ],
+            eventBus: eventBus
+        )
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        await eventBus.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
+            timestamp: Date(),
+            rawText: "A dictation",
+            finalText: "A dictation",
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: nil,
+            durationSeconds: 2,
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            ruleName: nil
+        )))
+        let recordingID = UUID()
+        func ready(_ text: String) -> TypeWhisperEvent {
+            .recorderTranscriptReady(RecorderTranscriptReadyPayload(
+                recordingID: recordingID,
+                text: text,
+                audioFilePath: audioURL.path,
+                transcriptFilePath: recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.txt").path,
+                markdownFilePath: markdownURL.path
+            ))
+        }
+        await eventBus.emit(ready("First take"))
+
+        let folderURL = vaultURL.appendingPathComponent("Meetings", isDirectory: true)
+        let files = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+        XCTAssertEqual(files.map(\.lastPathComponent), ["2026-10-22 11-44 Weekly sync.md"], "Dictations stay out")
+        let note = try String(contentsOf: files[0], encoding: .utf8)
+        XCTAssertTrue(note.hasPrefix("---\ntitle: \"Weekly sync\"\nattendees:\n  - \"Wijtze\"\ntags:\n  - \"meeting\"\n---\n"), note)
+        XCTAssertTrue(note.contains("First take"))
+
+        try "---\ntitle: \"Weekly sync\"\n---\n\n# Weekly sync\n\nSecond take\n"
+            .write(to: markdownURL, atomically: true, encoding: .utf8)
+        await eventBus.emit(ready("Second take"))
+
+        let updated = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+        XCTAssertEqual(updated.map(\.lastPathComponent), ["2026-10-22 11-44 Weekly sync.md"])
+        let updatedNote = try String(contentsOf: updated[0], encoding: .utf8)
+        XCTAssertTrue(updatedNote.contains("Second take"))
+        XCTAssertFalse(updatedNote.contains("First take"))
     }
 
     func testWorkflowActionLiveSyncPersistsMappingWithoutDuplicateAutoExport() async throws {
