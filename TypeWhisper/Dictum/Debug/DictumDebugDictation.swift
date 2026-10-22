@@ -9,15 +9,25 @@ import os
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation")
 
     func handle(_ url: URL) {
-        guard task == nil,
-              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let path = components.queryItems?.first(where: { $0.name == "file" })?.value,
               let output = components.queryItems?.first(where: { $0.name == "result" })?.value else { return }
         let resultURL = URL(fileURLWithPath: output).standardizedFileURL
         guard ["/tmp", "/private/tmp"].contains(resultURL.deletingLastPathComponent().path),
               resultURL.lastPathComponent.hasPrefix("dictum-dictate-") else { return }
+        guard task == nil, DictationViewModel.shared.canStartAPIRecording else {
+            try? writeResult(status: "failed", text: nil, error: "busy", to: resultURL)
+            return
+        }
+        guard DictumDebugAudioConfiguration.launchFileURL != nil else {
+            try? writeResult(status: "failed", text: nil, error: "Launch with --audio-file before dictating a clip.", to: resultURL)
+            return
+        }
         task = Task { @MainActor in
-            defer { task = nil }
+            defer {
+                DictumDebugAudioConfiguration.select(nil)
+                task = nil
+            }
             do {
                 let audioURL = URL(fileURLWithPath: path)
                 guard FileManager.default.isReadableFile(atPath: path) else { throw CocoaError(.fileReadNoSuchFile) }

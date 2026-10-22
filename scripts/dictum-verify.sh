@@ -146,9 +146,11 @@ acquire_lock() {
 }
 
 run() {
-  local app_pid attempt
+  local app_pid attempt login_item=0
+  if [[ "${1:-}" == --login-item ]]; then login_item=1; shift; fi
   if [[ "${1:-}" == --audio-file ]]; then
     [[ -n "${2:-}" && -r "$2" ]] || { printf '音频文件不可读取。\n' >&2; return 2; }
+    set -- --audio-file "$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve())' "$2")" "${@:3}"
   fi
   acquire_lock
   quit_app
@@ -156,7 +158,27 @@ run() {
   mkdir -p "$HOME/Applications"
   rm -rf "$installed_app"
   ditto "$app" "$installed_app"
-  open "$installed_app" --args "$@"
+  if [[ "$login_item" == 1 ]]; then
+    swift -e '
+import AppKit
+import Carbon
+let configuration = NSWorkspace.OpenConfiguration()
+configuration.activates = false
+configuration.arguments = Array(CommandLine.arguments.dropFirst(2))
+let event = NSAppleEventDescriptor(eventClass: kCoreEventClass, eventID: kAEOpenApplication,
+                                 targetDescriptor: nil, returnID: AEReturnID(kAutoGenerateReturnID),
+                                 transactionID: AETransactionID(kAnyTransactionID))
+event.setParam(NSAppleEventDescriptor(enumCode: keyAELaunchedAsLogInItem), forKeyword: keyAEPropData)
+configuration.appleEvent = event
+NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: CommandLine.arguments[1]), configuration: configuration) { app, error in
+    if let error { fputs("\(error)\n", stderr); exit(1) }
+    exit(app == nil ? 1 : 0)
+}
+RunLoop.main.run()
+' "$installed_app" "$@"
+  else
+    open "$installed_app" --args "$@"
+  fi
   app_pid=""
   for ((attempt=0; attempt<40; attempt++)); do
     app_pid="$(running_pids | awk 'NR == 1 { print }')"
@@ -233,5 +255,5 @@ case "${1:-}" in
   locked-run) shift; run "$@" ;;
   locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|all|run [--audio-file 路径] [应用参数...]|dictate 音频文件|stop [--force]}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 音频文件|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac

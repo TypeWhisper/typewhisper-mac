@@ -8,6 +8,10 @@ enum DictumDebugAudioConfiguration {
 
     static var fileURL: URL? {
         if let url = override.withLock({ $0 }) { return url }
+        return launchFileURL
+    }
+
+    static var launchFileURL: URL? {
         let arguments = ProcessInfo.processInfo.arguments
         if let index = arguments.firstIndex(of: "--audio-file"), arguments.indices.contains(index + 1) {
             return URL(fileURLWithPath: arguments[index + 1])
@@ -15,7 +19,7 @@ enum DictumDebugAudioConfiguration {
         return ProcessInfo.processInfo.environment["DICTUM_AUDIO_FILE"].map { URL(fileURLWithPath: $0) }
     }
 
-    static func select(_ url: URL) { override.withLock { $0 = url } }
+    static func select(_ url: URL?) { override.withLock { $0 = url } }
 }
 
 final class DictumAudioFileInput: @unchecked Sendable {
