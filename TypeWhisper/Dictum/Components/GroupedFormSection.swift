@@ -55,7 +55,6 @@ struct GroupedFormToggle: View {
             Spacer()
             Toggle(isOn: $isOn) { Text(title, tableName: tableName) }
                 .labelsHidden().toggleStyle(.switch).controlSize(.mini)
-                .tint(DictumTheme.accent)
         }
     }
 }

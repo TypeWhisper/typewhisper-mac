@@ -56,6 +56,7 @@ struct DictumMainView: View {
         .ignoresSafeArea()
         .font(DictumTheme.Typography.body)
         .foregroundStyle(DictumTheme.textPrimary)
+        .tint(DictumTheme.accent)
         .frame(minWidth: 860, minHeight: 560)
         .background(DictumWindowAccessor(page: navigation.page))
     }
