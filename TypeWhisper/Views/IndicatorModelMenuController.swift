@@ -53,6 +53,16 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
                 self?.applyPendingSwitchIfPossible()
             }
             .store(in: &cancellables)
+        // The snapshot is debounced by 100 ms. A dictation that ends and a new one that
+        // starts within that window would look locked in both snapshots, and the new one
+        // would capture the old model. Checking on every dictation state change applies the
+        // switch on the next main-queue turn after the dictation went idle.
+        DictationViewModel.shared.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.applyPendingSwitchIfPossible()
+            }
+            .store(in: &cancellables)
         return model
     }
 
