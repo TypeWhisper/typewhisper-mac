@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Foundation
 import TypeWhisperPluginSDK
@@ -35,7 +36,12 @@ extension ServiceContainer {
         }
         seedScreenshotRecorderFolders(state: AppConstants.screenshotState)
 
-        seedScreenshotHistory(content.history, languageCode: language.rawValue)
+        if AppConstants.screenshotState != "correct-last-dictation-empty" {
+            seedScreenshotHistory(content.history, languageCode: language.rawValue)
+        }
+        if AppConstants.screenshotState?.hasPrefix("correct-last-dictation") == true {
+            prepareScreenshotLastDictationCorrection()
+        }
         usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
         seedScreenshotFileTranscriptionQueue(languageCode: language.rawValue)
 
@@ -206,6 +212,26 @@ extension ServiceContainer {
             )
             try? file.data.write(to: destination, options: .atomic)
         }
+    }
+
+    /// Correct Last Dictation copies the corrected text, which must not replace the clipboard
+    /// of the Mac the screenshots are taken on. The newest dictation was post-processed, so
+    /// the editor also shows its original transcript.
+    private func prepareScreenshotLastDictationCorrection() {
+        let clipboard = NSPasteboard(name: NSPasteboard.Name("com.typewhisper.screenshots.clipboard"))
+        dictationViewModel.pasteboardProvider = { clipboard }
+        guard AppConstants.screenshotState == "correct-last-dictation" else { return }
+        _ = historyService.addRecord(
+            timestamp: Date().addingTimeInterval(-120),
+            rawText: "please deploy the release build to kubernetis after the review",
+            finalText: "Please deploy the release build to Kubernetis after the review.",
+            appName: "Slack",
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            durationSeconds: 4.5,
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "Parakeet TDT 0.6B v3"
+        )
     }
 
     private func seedScreenshotHistory(

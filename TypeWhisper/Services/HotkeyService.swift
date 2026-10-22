@@ -103,6 +103,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case recorderToggle
     case undoLastDictation
     case restoreRawTranscript
+    case correctLastDictation
 
     var defaultsKey: String {
         switch self {
@@ -116,6 +117,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkey
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
+        case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkey
         }
     }
 
@@ -131,6 +133,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkeys
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
+        case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkeys
         }
     }
 }
@@ -143,7 +146,7 @@ extension HotkeySlotType {
         case .hybrid, .pushToTalk, .toggle:
             true
         case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
-             .undoLastDictation, .restoreRawTranscript:
+             .undoLastDictation, .restoreRawTranscript, .correctLastDictation:
             false
         }
     }
@@ -229,6 +232,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onRecorderToggle: (() -> Void)?
     var onUndoLastDictation: (() -> Void)?
     var onRestoreRawTranscript: (() -> Void)?
+    var onCorrectLastDictation: (() -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
@@ -3085,6 +3089,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onRestoreRawTranscript?()
             return
         }
+        if slotType == .correctLastDictation {
+            onCorrectLastDictation?()
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -3168,6 +3176,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .undoLastDictation:
             break // handled on keyDown only
         case .restoreRawTranscript:
+            break // handled on keyDown only
+        case .correctLastDictation:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only

@@ -44,6 +44,7 @@ enum SettingsBackupExporter {
         UserDefaultsKeys.recorderToggleHotkeys,
         UserDefaultsKeys.undoLastDictationHotkeys,
         UserDefaultsKeys.restoreRawTranscriptHotkeys,
+        UserDefaultsKeys.correctLastDictationHotkeys,
     ]
 
     // MARK: - DTOs

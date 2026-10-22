@@ -110,7 +110,7 @@ struct HistoryPostFilter {
         text.range(of: searchText, options: .caseInsensitive) != nil
     }
 
-    private static func matchesDevice(
+    static func matchesDevice(
         _ record: TranscriptionRecord,
         deviceID: String,
         includeLegacyMac: Bool
@@ -1132,6 +1132,15 @@ final class HistoryService: ObservableObject {
             logger.error("Failed to fetch complete history: \(error.localizedDescription)")
             return []
         }
+    }
+
+    /// Whether a record was made on this Mac. Records synced from another Mac also have the
+    /// Mac source but carry that Mac's device ID; records without a device ID are local.
+    func isFromThisMac(_ record: TranscriptionRecord) -> Bool {
+        guard let deviceID = historySyncPreferences?.deviceID else {
+            return record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return HistoryPostFilter.matchesDevice(record, deviceID: deviceID, includeLegacyMac: true)
     }
 
     func record(withID id: UUID) -> TranscriptionRecord? {

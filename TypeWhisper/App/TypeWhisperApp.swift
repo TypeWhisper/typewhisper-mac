@@ -1014,6 +1014,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ServiceContainer.shared.hotkeyService.onRestoreRawTranscript = {
             DictationViewModel.shared.restoreRawTranscript()
         }
+        ServiceContainer.shared.hotkeyService.onCorrectLastDictation = {
+            DictationViewModel.shared.triggerCorrectLastDictation()
+        }
         ServiceContainer.shared.hotkeyService.onRecorderToggle = {
             AudioRecorderViewModel.shared.toggleRecording()
         }
