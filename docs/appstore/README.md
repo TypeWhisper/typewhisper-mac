@@ -158,6 +158,16 @@ only before submission or after a rejection, not while waiting for review. Frenc
 Italian and Spanish show the en-US screenshots because the app is not localized
 into those languages.
 
+The en-US store images are also kept at 1600 x 1000 in
+`.github/screenshots/app-store/`; the README header shows the first one.
+Refresh them after a new render:
+
+```sh
+for image in fastlane/screenshots/appstore/store/en-US/*.png; do
+  sips -Z 1600 "$image" --out .github/screenshots/app-store/
+done
+```
+
 ## Plugins
 
 The marketplace lists the bundled plugins from
