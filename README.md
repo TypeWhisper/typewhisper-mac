@@ -432,7 +432,7 @@ Delete downloaded model files:
 curl -X DELETE "http://localhost:8978/v1/models?engine=whisper&model=openai_whisper-large-v3_turbo"
 ```
 
-Deleting the last downloaded model of a transcription engine keeps its plugin enabled and the saved default engine unchanged (plugins without a transcription engine are still disabled when their last model is deleted). The engine is not ready until a model is downloaded again; meanwhile dictation temporarily uses another ready engine, or reports the missing model if there is none. If API authentication is enabled, include the same bearer token used by the other protected endpoints.
+Deleting the last downloaded model of a transcription engine keeps its plugin enabled and the saved default engine unchanged (plugins without a transcription engine are still disabled when their last model is deleted). The engine is not ready until a model is downloaded again; meanwhile dictation temporarily falls back to another usable engine, preferring one that is ready, or reports the missing model if there is none. If API authentication is enabled, include the same bearer token used by the other protected endpoints.
 
 ### History
 
