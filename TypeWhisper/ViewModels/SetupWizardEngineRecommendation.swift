@@ -40,13 +40,15 @@ enum SetupWizardSpokenLanguages: Equatable, Sendable {
 // MARK: - Engine table
 
 /// Local engines the wizard can recommend, in the order it prefers them when several
-/// support the spoken languages. Parakeet comes first because it transcribes far faster
-/// than the others in the benchmark at similar accuracy in English, German and Russian.
-/// WhisperKit covers the most languages. Qwen3 adds Filipino. Apple Speech needs no
-/// plugin download but was the least accurate where measured. None of them takes
-/// language hints: with a mix of languages, each transcribes the first one, and Apple
-/// Speech loads the system model for it before each transcription.
+/// support the spoken languages. GigaAM transcribes Russian only, with punctuation, so it
+/// comes first but only counts when Russian is the only spoken language. Parakeet comes
+/// next because it transcribes far faster than the others in the benchmark at similar
+/// accuracy in English, German and Russian. WhisperKit covers the most languages. Qwen3
+/// adds Filipino. Apple Speech needs no plugin download but was the least accurate where
+/// measured. None of them takes language hints: with a mix of languages, each transcribes
+/// the first one, and Apple Speech loads the system model for it before each transcription.
 enum SetupWizardLocalEngine: String, CaseIterable, Sendable {
+    case gigaAM
     case parakeet
     case whisperKit
     case qwen3
@@ -62,6 +64,7 @@ struct SetupWizardEngineModel: Equatable, Sendable {
 extension SetupWizardLocalEngine {
     var providerId: String {
         switch self {
+        case .gigaAM: "gigaam"
         case .parakeet: SetupWizardParakeetRecommendation.providerId
         case .whisperKit: "whisper"
         case .qwen3: "qwen3"
@@ -71,6 +74,7 @@ extension SetupWizardLocalEngine {
 
     var manifestId: String {
         switch self {
+        case .gigaAM: "com.typewhisper.gigaam"
         case .parakeet: SetupWizardParakeetRecommendation.manifestId
         case .whisperKit: "com.typewhisper.whisperkit"
         case .qwen3: "com.typewhisper.qwen3"
@@ -80,6 +84,7 @@ extension SetupWizardLocalEngine {
 
     var displayName: String {
         switch self {
+        case .gigaAM: "GigaAM"
         case .parakeet: "Parakeet"
         case .whisperKit: "WhisperKit"
         case .qwen3: "Qwen3 ASR"
@@ -87,9 +92,15 @@ extension SetupWizardLocalEngine {
         }
     }
 
-    /// From the plugin manifests: Parakeet, WhisperKit and Qwen3 ship for arm64 only.
+    /// From the plugin manifests: GigaAM, Parakeet, WhisperKit and Qwen3 ship for arm64 only.
     var requiresAppleSilicon: Bool {
         self != .appleSpeech
+    }
+
+    /// An engine for a single language. It is recommended only when that language is the
+    /// only spoken language, never for automatic detection.
+    var isSingleLanguageEngine: Bool {
+        self == .gigaAM
     }
 
     /// From the plugin manifests (`minOSVersion`).
@@ -102,6 +113,9 @@ extension SetupWizardLocalEngine {
     /// `SetupWizardEngineRecommendationTests` checks these lists against the plugins.
     var knownLanguages: [String]? {
         switch self {
+        case .gigaAM:
+            // GigaAMPlugin.supportedLanguages
+            ["ru"]
         case .parakeet:
             // ParakeetVersion.ultra and .v3
             ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
@@ -125,6 +139,8 @@ extension SetupWizardLocalEngine {
     /// Apple Speech picks a model for the spoken language itself.
     var models: [SetupWizardEngineModel] {
         switch self {
+        case .gigaAM:
+            [SetupWizardEngineModel(id: "gigaam-v3-e2e-rnnt", minimumMemoryGB: 2)]
         case .parakeet:
             // Ultra is the plugin's default; v3 only for an installed plugin without Ultra.
             [
@@ -253,6 +269,7 @@ extension SetupWizardEngineRecommendation {
             // reports those of the model selected in it, which can be another one.
             guard runs(engine, state: state, input: input, memoryGB: memoryGB),
                   let reason = reason(
+                      for: engine,
                       languages: engine.knownLanguages ?? state.reportedLanguages,
                       spokenLanguages: input.spokenLanguages
                   )
@@ -302,6 +319,7 @@ extension SetupWizardEngineRecommendation {
             return state.isReady
                 && runs(engine, state: state, input: input, memoryGB: memoryGB)
                 && reason(
+                    for: engine,
                     languages: state.reportedLanguages ?? engine.knownLanguages,
                     spokenLanguages: input.spokenLanguages
                 ) != nil
@@ -365,6 +383,7 @@ extension SetupWizardEngineRecommendation {
     }
 
     private static func reason(
+        for engine: SetupWizardLocalEngine,
         languages: [String]?,
         spokenLanguages: SetupWizardSpokenLanguages
     ) -> SetupWizardEngineChoice.Reason? {
@@ -372,6 +391,7 @@ extension SetupWizardEngineRecommendation {
 
         switch spokenLanguages {
         case .automatic:
+            guard !engine.isSingleLanguageEngine else { return nil }
             return .detectsLanguages(count: languages.map { Set($0).count })
         case .specific(let codes):
             // Apple Speech's languages are unknown until its engine is loaded.

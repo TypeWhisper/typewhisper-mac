@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 final class SetupWizardEngineRecommendationTests: XCTestCase {
     private static let gigabyte: UInt64 = 1 << 30
-    private static let pluginEngines: [SetupWizardLocalEngine] = [.parakeet, .whisperKit, .qwen3]
+    private static let pluginEngines: [SetupWizardLocalEngine] = [.gigaAM, .parakeet, .whisperKit, .qwen3]
     private static let fullCatalog = SetupWizardCatalogState.loaded(Set(pluginEngines.map(\.manifestId)))
 
     // MARK: - Spoken languages
@@ -67,6 +67,27 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
 
         XCTAssertEqual(choice?.engine, .qwen3)
         XCTAssertEqual(choice?.modelId, "qwen3-asr-1.7b-6bit")
+    }
+
+    func testRussianRecommendsGigaAM() {
+        let choice = recommend(.specific(["ru"]))
+
+        XCTAssertEqual(choice?.engine, .gigaAM)
+        XCTAssertEqual(choice?.modelId, "gigaam-v3-e2e-rnnt")
+        XCTAssertEqual(choice?.reason, .supportsLanguages(["ru"]))
+        XCTAssertEqual(choice?.availability, .available)
+    }
+
+    func testGigaAMIsOnlyRecommendedWhenRussianIsTheOnlySpokenLanguage() {
+        XCTAssertEqual(recommend(.automatic)?.engine, .parakeet, "automatic detection")
+        XCTAssertEqual(recommend(.specific(["ru", "en"]))?.engine, .parakeet, "Russian and English")
+        XCTAssertEqual(recommend(.specific(["ru", "ja"]))?.engine, .whisperKit, "Russian and Japanese")
+    }
+
+    func testRussianFallsBackToParakeetWhenGigaAMCannotBeDownloaded() {
+        let catalog = SetupWizardCatalogState.loaded(Set([SetupWizardLocalEngine.parakeet, .whisperKit, .qwen3].map(\.manifestId)))
+
+        XCTAssertEqual(recommend(.specific(["ru"]), catalog: catalog)?.engine, .parakeet)
     }
 
     func testLanguageNoLocalEngineSupportsIsAnExplicitLimitation() {
@@ -431,6 +452,17 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ja"]), engines: engines)), .whisperKit)
     }
 
+    func testReadyGigaAMIsOnlyPickedForRussianAlone() {
+        let engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [
+            .gigaAM: SetupWizardEngineState(isInstalled: true, isReady: true, reportedLanguages: ["ru"]),
+            .parakeet: SetupWizardEngineState(isInstalled: true, isReady: true),
+        ]
+
+        XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ru"]), engines: engines)), .gigaAM)
+        XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.automatic, engines: engines)), .parakeet)
+        XCTAssertEqual(SetupWizardEngineRecommendation.readyEngine(for: input(.specific(["ru", "en"]), engines: engines)), .parakeet)
+    }
+
     func testReadyEngineIgnoresAnEngineWithoutTheLanguage() {
         let engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [
             .parakeet: SetupWizardEngineState(isInstalled: true, isReady: true),
@@ -608,8 +640,26 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         }
     }
 
+    /// GigaAM is not part of the app's test target, so its source is read instead.
+    func testGigaAMLanguagesAndModelsMatchThePlugin() throws {
+        let url = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/GigaAMPlugin/GigaAMPlugin.swift")
+        let source = try String(contentsOf: url, encoding: .utf8)
+
+        XCTAssertEqual(SetupWizardLocalEngine.gigaAM.knownLanguages, ["ru"])
+        XCTAssertTrue(source.contains(#"var supportedLanguages: [String] { ["ru"] }"#))
+        XCTAssertTrue(source.contains(#"var providerId: String { "gigaam" }"#))
+        XCTAssertEqual(SetupWizardLocalEngine.gigaAM.providerId, "gigaam")
+
+        let model = try XCTUnwrap(SetupWizardLocalEngine.gigaAM.models.first)
+        XCTAssertEqual(SetupWizardLocalEngine.gigaAM.models.count, 1)
+        let definition = try XCTUnwrap(source.range(of: #"id: "\#(model.id)""#).map { String(source[$0.lowerBound...].prefix(400)) })
+        let requirement = try XCTUnwrap(definition.range(of: #"ramRequirement: ""#).map { String(definition[$0.upperBound...]) })
+        XCTAssertEqual(Self.gigabytes(requirement), model.minimumMemoryGB)
+    }
+
     func testEngineRequirementsMatchThePluginManifests() throws {
         let directories: [SetupWizardLocalEngine: String] = [
+            .gigaAM: "GigaAMPlugin",
             .parakeet: "ParakeetPlugin",
             .whisperKit: "WhisperKitPlugin",
             .qwen3: "Qwen3Plugin",
