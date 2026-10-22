@@ -227,6 +227,7 @@ struct IndicatorLeftStatus: View {
     let dotPulse: Bool
     let hasActionFeedback: Bool
     @Environment(\.isPointerOverIndicator) private var isPointerOverIndicator
+    @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
 
     var body: some View {
         // The Recorder has no other control on screen, so the recording dot
@@ -235,12 +236,23 @@ struct IndicatorLeftStatus: View {
         let showsRecorderStop = isPointerOverIndicator
             && presentation.isRecorder
             && presentation.state == .recording
+        // A dictation shows the model menu button the same way (#1351), and keeps it
+        // while the menu is open and the pointer is on the menu.
+        let showsModelMenuButton = presentation.offersModelMenu
+            && (isPointerOverIndicator || modelMenu.isMenuOpen)
         statusContent
-            .opacity(showsRecorderStop ? 0 : 1)
+            .opacity(showsRecorderStop || showsModelMenuButton ? 0 : 1)
             .accessibilityHidden(true)
+            .background {
+                if presentation.offersModelMenu {
+                    IndicatorModelMenuAnchor()
+                }
+            }
             .overlay {
                 if showsRecorderStop {
                     IndicatorRecorderStopButton(sizing: sizing)
+                } else if showsModelMenuButton {
+                    IndicatorModelMenuButton(sizing: sizing)
                 }
             }
     }

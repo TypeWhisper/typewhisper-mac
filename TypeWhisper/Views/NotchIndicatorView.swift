@@ -273,6 +273,7 @@ struct NotchIndicatorView: View {
                 || presentation.actionFeedbackMessage != nil ? .contain : .combine
         )
         .accessibilityLabel(notchAccessibilityLabel)
+        .indicatorModelMenuAccessibilityAction(isAvailable: presentation.offersModelMenu)
     }
 
     private var notchAccessibilityLabel: String {

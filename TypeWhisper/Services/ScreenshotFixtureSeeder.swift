@@ -27,7 +27,7 @@ extension ServiceContainer {
             variant.hasPremiumAccess,
             forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled
         )
-        if ["indicator-settings", "indicator"].contains(AppConstants.screenshotState) {
+        if ["indicator-settings", "indicator", "indicator-model-menu"].contains(AppConstants.screenshotState) {
             dictationViewModel.prepareScreenshotIndicatorFixture()
         }
 

@@ -169,6 +169,7 @@ struct MinimalIndicatorView: View {
                     || presentation.actionFeedbackMessage != nil ? .contain : .combine
             )
             .accessibilityLabel(accessibilityLabel)
+            .indicatorModelMenuAccessibilityAction(isAvailable: presentation.offersModelMenu)
         }
 
     private var accessibilityLabel: String {

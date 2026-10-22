@@ -361,6 +361,23 @@ enum DictationQuickSelection {
 
     // MARK: Workflow overrides
 
+    /// The workflow whose engine and language the menus describe. A running dictation keeps
+    /// the workflow it started with, which can also come from a workflow hotkey instead of
+    /// the frontmost app. Otherwise it is the workflow the frontmost app would use.
+    static func workflowDecidingSelections(
+        dictationState: DictationViewModel.State,
+        activeDictationWorkflowId: UUID?,
+        workflows: [Workflow],
+        frontmostAppWorkflow: () -> Workflow?
+    ) -> Workflow? {
+        switch dictationState {
+        case .recording, .processing, .inserting:
+            return activeDictationWorkflowId.flatMap { id in workflows.first { $0.id == id } }
+        case .idle, .promptSelection, .promptProcessing, .error:
+            return frontmostAppWorkflow()
+        }
+    }
+
     /// Dictation fails instead of falling back when a workflow names an engine that is
     /// disabled, uninstalled or lacks access, so the menu says so.
     static func unavailableEngineSummary(engineName: String) -> String {
@@ -372,6 +389,175 @@ enum DictationQuickSelection {
             "Workflow “\(workflowName)” uses \(summary) here",
             de: "Workflow „\(workflowName)“ verwendet hier \(summary)"
         )
+    }
+}
+
+// MARK: - Recording indicator model menu
+
+/// The engine and model dictation uses when no workflow picks its own.
+struct DictationModelSelectionState: Equatable {
+    let providerId: String?
+    let modelId: String?
+}
+
+/// A model chosen on the recording indicator while a recording or transcription runs.
+/// It waits until nothing transcribes anymore, so the running session keeps its model.
+struct PendingDictationModelSwitch: Equatable {
+    let choice: DictationModelChoice
+    /// The model's name as the menu lists it.
+    let title: String
+    /// The selection when the model was chosen. If the selection differs by the time the
+    /// switch could apply, it was changed elsewhere, e.g. in Settings, and that change wins.
+    let baseline: DictationModelSelectionState
+}
+
+/// The model menu of the dictation recording indicator (#1351). It lists the same models
+/// and states as the menu bar's model selector. A choice made while a recording or
+/// transcription runs is kept for the next dictation instead of being refused.
+@MainActor
+enum IndicatorModelMenu {
+    enum Entry: Equatable {
+        /// An explanation that cannot be chosen.
+        case note(String)
+        case header(String)
+        case option(Option)
+        /// Models that need setup in Settings first, as in the menu bar.
+        case moreModels(title: String, options: [Option])
+        case separator
+        case dictationSettings(title: String)
+    }
+
+    struct Option: Equatable {
+        let title: String
+        let choice: DictationModelChoice
+        /// The model dictation uses now when no workflow picks its own.
+        let isSelected: Bool
+        let isEnabled: Bool
+    }
+
+    enum SelectionRequest: Equatable {
+        case apply(title: String)
+        case queue(PendingDictationModelSwitch)
+        /// The model in use was chosen again, so a waiting switch no longer applies.
+        case cancelPending
+        case ignore
+    }
+
+    enum PendingResolution: Equatable {
+        case wait
+        case apply(DictationModelChoice)
+        /// The selection was changed elsewhere since the model was chosen.
+        case discard
+    }
+
+    static var title: String {
+        String(localized: "Transcription Model")
+    }
+
+    static var chooseModelActionName: String {
+        String(localized: "Choose Transcription Model")
+    }
+
+    static var appliesToNextDictationNote: String {
+        String(localized: "Applies to the next dictation")
+    }
+
+    static func nextDictationNote(modelTitle: String) -> String {
+        String(localized: "Next dictation: \(modelTitle)")
+    }
+
+    static func pendingOptionTitle(_ title: String) -> String {
+        String(localized: "\(title) (next dictation)")
+    }
+
+    static func entries(
+        snapshot: DictationQuickSelectionSnapshot,
+        pending: PendingDictationModelSwitch?,
+        enforcesTranscription: Bool
+    ) -> [Entry] {
+        var entries: [Entry] = []
+        if enforcesTranscription {
+            entries.append(.note(String(localized: "Managed by your organization.")))
+        } else if snapshot.isLocked {
+            entries.append(.note(pending.map { nextDictationNote(modelTitle: $0.title) } ?? appliesToNextDictationNote))
+        }
+        if let note = snapshot.modelWorkflowNote {
+            entries.append(.note(note))
+        }
+        if !entries.isEmpty {
+            entries.append(.separator)
+        }
+
+        func option(_ option: DictationQuickSelectionOption<DictationModelChoice>) -> Option {
+            Option(
+                title: pending?.choice == option.value ? pendingOptionTitle(option.title) : option.title,
+                choice: option.value,
+                isSelected: option.isSelected,
+                isEnabled: option.isEnabled && !enforcesTranscription
+            )
+        }
+
+        for group in snapshot.modelGroups {
+            if group.options.count == 1, let only = group.options.first, only.value.modelId == nil {
+                entries.append(.option(option(only)))
+                continue
+            }
+            entries.append(.header(group.title))
+            entries.append(contentsOf: group.options.map { .option(option($0)) })
+            if !group.setupRequiredOptions.isEmpty {
+                let count = group.setupRequiredOptions.count
+                entries.append(.moreModels(
+                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))"),
+                    options: group.setupRequiredOptions.map(option)
+                ))
+            }
+        }
+        entries.append(.separator)
+        entries.append(.dictationSettings(
+            title: localizedAppText("Dictation Settings...", de: "Diktat-Einstellungen …")
+        ))
+        return entries
+    }
+
+    /// Decides what choosing a model does. Only models the menu offers can be chosen,
+    /// so a model that needs setup never starts a download from here.
+    static func request(
+        choosing choice: DictationModelChoice,
+        snapshot: DictationQuickSelectionSnapshot,
+        pending: PendingDictationModelSwitch?,
+        currentSelection: DictationModelSelectionState,
+        enforcesTranscription: Bool
+    ) -> SelectionRequest {
+        guard !enforcesTranscription,
+              let option = snapshot.modelGroups.lazy
+                .compactMap({ group in group.options.first { $0.value == choice } })
+                .first else {
+            return .ignore
+        }
+        if option.isSelected {
+            // Choosing the model in use again changes nothing, apart from dropping a
+            // switch that waits for the next dictation.
+            return pending == nil ? .ignore : .cancelPending
+        }
+        guard option.isEnabled else { return .ignore }
+        guard snapshot.isLocked else { return .apply(title: option.title) }
+        return .queue(PendingDictationModelSwitch(
+            choice: choice,
+            title: option.title,
+            baseline: currentSelection
+        ))
+    }
+
+    /// Applies a waiting switch once nothing transcribes anymore, unless the selection
+    /// was changed elsewhere in the meantime.
+    static func resolve(
+        _ pending: PendingDictationModelSwitch,
+        isLocked: Bool,
+        currentSelection: DictationModelSelectionState
+    ) -> PendingResolution {
+        guard !isLocked else { return .wait }
+        guard currentSelection == pending.baseline else { return .discard }
+        return .apply(pending.choice)
     }
 }
 
@@ -471,6 +657,8 @@ final class DictationQuickSelectionModel: ObservableObject {
             container.workflowService.$workflows.map { _ in () }.eraseToAnyPublisher(),
             container.historyRetranscriptionService.objectWillChange.map { _ in () }.eraseToAnyPublisher(),
             DictationViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
+            // Changes together with the workflow a running dictation uses.
+            DictationViewModel.shared.$activeRuleName.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$state.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$isTranscribing.map { _ in () }.eraseToAnyPublisher(),
             AudioRecorderViewModel.shared.$retranscribingRecordingURL.map { _ in () }.eraseToAnyPublisher(),
@@ -542,7 +730,9 @@ final class DictationQuickSelectionModel: ObservableObject {
         browserURLTask = (bundleId, task)
     }
 
-    private func rebuild() {
+    /// Reads the current selections. Menus call it before they open, because the
+    /// observed changes reach the snapshot with a short delay.
+    func rebuild() {
         let container = ServiceContainer.shared
         let audioDeviceService = container.audioDeviceService
         let modelManager = container.modelManagerService
@@ -550,10 +740,17 @@ final class DictationQuickSelectionModel: ObservableObject {
         let engines = PluginManager.shared?.transcriptionEngines ?? []
 
         let frontmostBundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-        let workflow = container.workflowService.matchWorkflow(
-            bundleIdentifier: frontmostBundleId,
-            url: frontmostBrowserURL?.bundleId == frontmostBundleId ? frontmostBrowserURL?.url : nil
-        )?.workflow
+        let workflow = DictationQuickSelection.workflowDecidingSelections(
+            dictationState: DictationViewModel.shared.state,
+            activeDictationWorkflowId: DictationViewModel.shared.activeWorkflowId,
+            workflows: container.workflowService.workflows,
+            frontmostAppWorkflow: {
+                container.workflowService.matchWorkflow(
+                    bundleIdentifier: frontmostBundleId,
+                    url: frontmostBrowserURL?.bundleId == frontmostBundleId ? frontmostBrowserURL?.url : nil
+                )?.workflow
+            }
+        )
 
         var next = DictationQuickSelectionSnapshot()
         next.isLocked = isLockedNow

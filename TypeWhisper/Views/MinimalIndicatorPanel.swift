@@ -246,9 +246,7 @@ class MinimalIndicatorPanel: NSPanel {
             countdownPresented: isMeetingCountdownPresented
         ) {
             show()
-            pointerTracker.setActive(
-                presentation.source == .recorder && presentation.state == .recording
-            )
+            pointerTracker.setActive(presentation.tracksPointer)
         } else {
             dismiss()
         }
@@ -352,7 +350,7 @@ class MinimalIndicatorPanel: NSPanel {
     }
 
     /// Takes the mouse only for feedback, the countdown, or while the pointer
-    /// is on a Recorder indicator; otherwise clicks pass through to other apps.
+    /// is on a recording indicator; otherwise clicks pass through to other apps.
     private func updateMouseEventHandling() {
         ignoresMouseEvents = !(isFeedbackInteractive || pointerRegion.isPointerInside)
     }

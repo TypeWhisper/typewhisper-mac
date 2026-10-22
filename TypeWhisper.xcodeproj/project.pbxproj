@@ -466,6 +466,7 @@
 			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
 			AA000000000000000A1236F1 /* IndicatorPreviewSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000A1236F1 /* IndicatorPreviewSession.swift */; };
 			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
+			CAF00C911BDE9647738CC59E /* IndicatorModelMenuController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */; };
 			4E5353420000000000000001 /* NativeSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5353460000000000000001 /* NativeSearchField.swift */; };
 			AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
 			AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
@@ -1167,6 +1168,7 @@
 			BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
 			BB000000000000000A1236F1 /* IndicatorPreviewSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorPreviewSession.swift; sourceTree = "<group>"; };
 			BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
+			853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorModelMenuController.swift; sourceTree = "<group>"; };
 			4E5353460000000000000001 /* NativeSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSearchField.swift; sourceTree = "<group>"; };
 			BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
 			BB00000000000000000309 /* MinimalIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorView.swift; sourceTree = "<group>"; };
@@ -2291,6 +2293,7 @@
 				BB00000000000000000309 /* MinimalIndicatorView.swift */,
 				6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */,
 				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+				853AFA060F972848B1D8CF15 /* IndicatorModelMenuController.swift */,
 				4E5353460000000000000001 /* NativeSearchField.swift */,
 				BB00000000000000000014 /* MenuBarView.swift */,
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
@@ -5521,6 +5524,7 @@
 					AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */,
 					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
+					CAF00C911BDE9647738CC59E /* IndicatorModelMenuController.swift in Sources */,
 					4E5353420000000000000001 /* NativeSearchField.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
