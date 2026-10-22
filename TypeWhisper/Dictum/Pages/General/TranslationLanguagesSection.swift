@@ -16,13 +16,14 @@ struct TranslationLanguagesSection: View {
                     GroupedFormRow(separated: true) {
                         Text("Translation languages", tableName: "DictumShell")
                         Spacer()
-                        Picker(selection: $settings.translationTargetLanguage) {
+                        DictumPopup(title: "Translation languages", selection: $settings.translationTargetLanguage,
+                                    value: Text(verbatim: TranslationService.availableTargetLanguages.first {
+                                $0.code == settings.translationTargetLanguage
+                            }?.name ?? settings.translationTargetLanguage)) {
                             ForEach(TranslationService.availableTargetLanguages, id: \.code) { language in
                                 Text(language.name).tag(language.code)
                             }
-                        } label: {
-                            Text("Translation languages", tableName: "DictumShell")
-                        }.labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
+                        }
                     }
                 }
             }

@@ -6,6 +6,11 @@ struct AppSection: View {
     @State private var language = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage) ?? "system"
     @State private var needsRestart = false
 
+    private var languageLabel: String {
+        ["zh-Hans": "简体中文", "en": "English", "de": "Deutsch", "ja": "日本語"][language]
+            ?? String(localized: "System", table: "DictumShell")
+    }
+
     var body: some View {
         GroupedFormSection(title: "App", tableName: "DictumShell") {
             GroupedFormToggle(title: "Launch at login", isOn: Binding(
@@ -20,15 +25,13 @@ struct AppSection: View {
             GroupedFormRow(separated: true) {
                 Text("Language", tableName: "DictumShell")
                 Spacer()
-                Picker(selection: $language) {
+                DictumPopup(title: "Language", selection: $language, value: Text(verbatim: languageLabel)) {
                     Text("System", tableName: "DictumShell").tag("system")
                     Text(verbatim: "简体中文").tag("zh-Hans")
                     Text(verbatim: "English").tag("en")
                     Text(verbatim: "Deutsch").tag("de")
                     Text(verbatim: "日本語").tag("ja")
-                } label: {
-                    Text("Language", tableName: "DictumShell")
-                }.labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
+                }
             }
             GroupedFormRow(separated: true) {
                 Text("Advanced settings", tableName: "DictumShell")
@@ -38,7 +41,7 @@ struct AppSection: View {
                         Text("Open", tableName: "DictumShell")
                         Image(systemName: "arrow.up.right").accessibilityHidden(true)
                     }
-                }.buttonStyle(.bordered).controlSize(.small).tint(.primary)
+                }.buttonStyle(DictumControlStyle(kind: .smallButton))
             }
         }
         .onAppear { launchAtLogin.refreshStatus() }

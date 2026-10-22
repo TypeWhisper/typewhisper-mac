@@ -7,6 +7,17 @@ struct SoundSection: View {
 
     private var level: Float { audio.isRecording ? audio.audioLevel : devices.previewAudioLevel }
 
+    private var automaticLabel: String {
+        String(localized: "Automatic (\(devices.systemDefaultInputDeviceName ?? String(localized: "No microphone", table: "DictumShell")))", table: "DictumShell")
+    }
+
+    private var microphoneLabel: String {
+        guard let device = devices.inputDevices.first(where: { $0.uid == devices.selectedDeviceUID }) else {
+            return automaticLabel
+        }
+        return devices.displayName(for: device)
+    }
+
     var body: some View {
         GroupedFormSection(title: "Sound", tableName: "Localizable") {
             GroupedFormRow {
@@ -22,15 +33,12 @@ struct SoundSection: View {
                 .frame(width: 120)
                 .accessibilityLabel(Text("Microphone level", tableName: "DictumShell"))
                 .accessibilityValue(level.formatted(.percent))
-                Picker(selection: $devices.selectedDeviceUID) {
-                    Text(String(localized: "Automatic (\(devices.systemDefaultInputDeviceName ?? String(localized: "No microphone", table: "DictumShell")))", table: "DictumShell"))
-                        .tag(nil as String?)
+                DictumPopup(title: "Microphone", selection: $devices.selectedDeviceUID, value: Text(verbatim: microphoneLabel)) {
+                    Text(verbatim: automaticLabel).tag(nil as String?)
                     ForEach(devices.inputDevices) { device in
                         Text(devices.displayName(for: device)).tag(Optional(device.uid))
                     }
-                } label: {
-                    Text("Microphone", tableName: "DictumShell")
-                }.labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
+                }
             }
             GroupedFormToggle(title: "Interaction sounds", isOn: $dictation.soundFeedbackEnabled, tableName: "DictumShell")
             GroupedFormToggle(title: "Pause other audio while dictating", isOn: Binding(

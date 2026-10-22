@@ -23,16 +23,15 @@ struct ShortcutsSection: View {
             GroupedFormRow(separated: true) {
                 Text("When held", tableName: "DictumShell")
                 Spacer()
-                Picker(selection: Binding(
+                DictumPopup(title: "When held", selection: Binding(
                     get: { primarySlot == .hybrid },
                     set: setPushToTalk
-                )) {
+                ), value: primarySlot == .hybrid
+                    ? Text("Push to talk", tableName: "DictumShell")
+                    : Text("Off", tableName: "DictumShell")) {
                     Text("Push to talk", tableName: "DictumShell").tag(true)
                     Text("Off", tableName: "DictumShell").tag(false)
-                } label: {
-                    Text("When held", tableName: "DictumShell")
                 }
-                .labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
             }
             GroupedFormRow(separated: true) {
                 Text("External keyboard", tableName: "DictumShell")

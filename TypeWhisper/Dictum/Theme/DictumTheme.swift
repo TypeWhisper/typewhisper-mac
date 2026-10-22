@@ -15,6 +15,8 @@ enum DictumTheme {
     static let raised = color(0xFFFFFF, 0x2C2C2F)
     static let selected = color(0x000000, 0xFFFFFF, lightAlpha: 0.075, darkAlpha: 0.09)
     static let control = color(0xFFFFFF, 0x3A3A3D)
+    static let controlBorder = color(0x000000, 0xFFFFFF, lightAlpha: 0.16, darkAlpha: 0.10)
+    static let controlShadow = color(0x000000, 0x000000, lightAlpha: 0.08, darkAlpha: 0.30)
     static let inset = color(0xF1F1F4, 0x18181A)
     static let textPrimary = color(0x1D1D1F, 0xF2F2F4)
     static let textSecondary = color(0x6E6E73, 0xA1A1A8)
