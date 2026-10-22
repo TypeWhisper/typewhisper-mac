@@ -3,7 +3,7 @@
 
 The tests run inside the app, which has the bundle identifier of the installed copy.
 TestHostIsolation gives every test run its own preferences domain, and screenshot runs use
-com.typewhisper.mac.screenshots (ScreenshotPreferencesIsolation); these checks prove that
+com.schneidervvv.dictum.screenshots (ScreenshotPreferencesIsolation); these checks prove that
 no write reached the app's domains anyway.
 
     check_test_host_preferences.py snapshot STATE_FILE   # before the tests
@@ -27,8 +27,8 @@ import sys
 import tempfile
 import time
 
-DOMAINS = ("com.typewhisper.mac.dev", "com.typewhisper.mac")
-SCREENSHOT_DOMAIN = "com.typewhisper.mac.screenshots"
+DOMAINS = ("com.schneidervvv.dictum.dev", "com.schneidervvv.dictum")
+SCREENSHOT_DOMAIN = "com.schneidervvv.dictum.screenshots"
 SCREENSHOT_READY_TIMEOUT = 180
 
 

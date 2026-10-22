@@ -13,7 +13,7 @@ mkdir -p "$receipts"
 sign_app() {
   local identity
   identity="$(security find-identity -p codesigning "$keychain" |
-    awk 'index($0, "\"dictum Local Signing\"") { print $2; exit }')"
+    awk 'index($0, "\"dictum Local Signing\"") && !found++ { print $2 }')"
   if [[ "${DICTUM_SIGNING_AUTHORIZATION_PENDING:-0}" == 1 ]]; then
     identity="-"
     printf '警告：稳定签名正在等待所有者的钥匙串授权，本次使用临时签名。\n' >&2
@@ -46,8 +46,10 @@ build() {
 }
 
 test_all() {
-  local xcode_status=0 sdk_status=0
+  local xcode_status=0 sdk_status=0 summary_status=0
+  python3 "$repo_root/scripts/check-localized-keys.py" || return 1
   rm -rf "$receipts/tests.xcresult"
+  rm -f "$receipts/test-summary.json"
   if xcode build-for-testing >"$receipts/test-build.log" 2>&1; then
     sign_app
     xcode test-without-building -parallel-testing-enabled NO \
@@ -60,23 +62,28 @@ test_all() {
     --scratch-path "$repo_root/.build/spm" >"$receipts/sdk-test.log" 2>&1 || sdk_status=$?
   if [[ -d "$receipts/tests.xcresult" ]]; then
     xcrun xcresulttool get test-results summary --path "$receipts/tests.xcresult" \
-      >"$receipts/test-summary.json"
+      >"$receipts/test-summary.json" || summary_status=$?
     cat "$receipts/test-summary.json"
   fi
   tail -8 "$receipts/sdk-test.log"
   printf 'Xcode exit=%s; SDK exit=%s; logs=%s\n' "$xcode_status" "$sdk_status" "$receipts"
-  [[ "$xcode_status" -eq 0 && "$sdk_status" -eq 0 ]]
+  python3 "$repo_root/scripts/check-test-failures.py" "$receipts" \
+    "$xcode_status" "$sdk_status" "$summary_status"
 }
 
 running_pids() {
-  pgrep -x 'dictum Dev' || true
+  ps -axww -o pid=,comm= | awk -v executable="$installed_app/Contents/MacOS/dictum Dev" '
+    { pid=$1; sub(/^[[:space:]]*[0-9]+[[:space:]]+/, ""); if ($0 == executable) print pid }
+  '
 }
 
 quit_app() {
-  local pids
+  local pids pid attempt
   pids="$(running_pids)"
   [[ -n "$pids" ]] || return 0
-  osascript -e 'tell application id "com.schneidervvv.dictum.dev" to quit' >/dev/null 2>&1 || true
+  while IFS= read -r pid; do
+    kill -TERM "$pid" 2>/dev/null || true
+  done <<< "$pids"
   for ((attempt=0; attempt<40; attempt++)); do
     [[ -n "$(running_pids)" ]] || return 0
     sleep 0.25
@@ -92,38 +99,38 @@ release_owned_lock() {
 }
 
 acquire_lock() {
-  local holder_pid holder_path
+  local holder_pid
   lock_token="$$-$(date +%s)"
   if ! mkdir "$run_lock" 2>/dev/null; then
     holder_pid="$(cat "$run_lock/pid" 2>/dev/null || true)"
-    holder_path="$(cat "$run_lock/worktree" 2>/dev/null || true)"
     if [[ "$holder_pid" =~ ^[0-9]+$ ]] && ! kill -0 "$holder_pid" 2>/dev/null; then
       rm -rf "$run_lock"
       mkdir "$run_lock" || return 1
     else
-      printf '运行锁已占用。工作区 %s，PID %s。使用 scripts/dictum-verify.sh stop 释放。\n' "$holder_path" "$holder_pid" >&2
+      print_lock_holder
       return 1
     fi
   fi
   printf '%s\n' "$lock_token" >"$run_lock/token"
   printf '%s\n' "$repo_root" >"$run_lock/worktree"
+  date '+%Y-%m-%d %H:%M:%S %Z' >"$run_lock/since"
   printf '%s\n' "$$" >"$run_lock/pid"
   printf 'building\n' >"$run_lock/state"
   trap 'release_owned_lock' EXIT
 }
 
 run() {
-  local app_pid
+  local app_pid attempt
   acquire_lock
   quit_app
   build
   mkdir -p "$HOME/Applications"
   rm -rf "$installed_app"
   ditto "$app" "$installed_app"
-  open "$installed_app"
+  open "$installed_app" --args "$@"
   app_pid=""
   for ((attempt=0; attempt<40; attempt++)); do
-    app_pid="$(running_pids | head -1)"
+    app_pid="$(running_pids | awk 'NR == 1 { print }')"
     [[ -z "$app_pid" ]] || break
     sleep 0.25
   done
@@ -135,11 +142,11 @@ run() {
 }
 
 stop() {
-  local holder_pid state
-  holder_pid="$(cat "$run_lock/pid" 2>/dev/null || true)"
-  state="$(cat "$run_lock/state" 2>/dev/null || true)"
-  if [[ "$state" == building && "$holder_pid" =~ ^[0-9]+$ ]] && kill -0 "$holder_pid" 2>/dev/null; then
-    printf '构建仍在运行，PID %s。请等待构建结束后停止应用。\n' "$holder_pid" >&2
+  local holder_path
+  holder_path="$(cat "$run_lock/worktree" 2>/dev/null || true)"
+  if [[ -d "$run_lock" && "$holder_path" != "$repo_root" && "${1:-}" != --force ]]; then
+    print_lock_holder
+    printf '拒绝停止其他工作区的应用。仅在明确需要接管时使用 stop --force。\n' >&2
     return 1
   fi
   quit_app
@@ -147,15 +154,27 @@ stop() {
   printf 'dictum Dev 已停止，运行锁已释放。\n'
 }
 
+print_lock_holder() {
+  printf '运行锁已占用。工作区 %s，PID %s，自 %s 起持有。请等待持有者完成验证并停止应用。\n' \
+    "$(cat "$run_lock/worktree" 2>/dev/null || printf '未知')" \
+    "$(cat "$run_lock/pid" 2>/dev/null || printf '未知')" \
+    "$(cat "$run_lock/since" 2>/dev/null || stat -f '%Sm' "$run_lock" 2>/dev/null || printf '未知')" >&2
+}
+
 case "${1:-}" in
   build) build ;;
   test) test_all ;;
   run|stop)
-    exec /usr/bin/lockf -k -t 0 "$run_lock.guard" \
-      /bin/bash "$repo_root/scripts/dictum-verify.sh" "locked-$1"
+    command="$1"
+    shift
+    status=0
+    /usr/bin/lockf -k -s -t 0 "$run_lock.guard" \
+      /bin/bash "$repo_root/scripts/dictum-verify.sh" "locked-$command" "$@" || status=$?
+    if [[ "$status" -eq 75 ]]; then print_lock_holder; fi
+    exit "$status"
     ;;
-  locked-run) run ;;
-  locked-stop) stop ;;
+  locked-run) shift; run "$@" ;;
+  locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|run|stop|all}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [应用参数...]|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac

@@ -7,7 +7,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 find_identity() {
   security find-identity -p codesigning "$keychain" |
-    awk -v name="\"$identity_name\"" 'index($0, name) { print $2; exit }'
+    awk -v name="\"$identity_name\"" 'index($0, name) && !found++ { print $2 }'
 }
 
 if [[ -n "$(find_identity)" ]]; then
@@ -36,7 +36,7 @@ openssl pkcs12 -export -inkey "$temporary_dir/key.pem" \
   -out "$temporary_dir/identity.p12" -passout "pass:$password"
 printf '正在导入登录钥匙串。如果系统要求授权，请由所有者在本机处理。\n'
 security import "$temporary_dir/identity.p12" -k "$keychain" \
-  -P "$password" -T /usr/bin/codesign
+  -P "$password" -x -T /usr/bin/codesign
 [[ -n "$(find_identity)" ]] || {
   printf '未找到可用身份，构建将继续使用临时签名。\n' >&2
   exit 1

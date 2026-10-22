@@ -1,0 +1,1 @@
+sdk:R2T2PluginTests/testConnectTimesOutWhenNothingListens() # 本机对 TEST-NET-1 的 192.0.2.1:9 实际 TCP 连接立即成功，测试前提不成立，随后触发 120 秒响应超时；保留完整超时断言。
