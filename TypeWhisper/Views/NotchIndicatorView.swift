@@ -9,6 +9,7 @@ struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
     @Environment(\.colorScheme) private var systemColorScheme
@@ -52,7 +53,8 @@ struct NotchIndicatorView: View {
                 leftContent: viewModel.notchIndicatorLeftContent,
                 rightContent: viewModel.notchIndicatorRightContent,
                 recordingDuration: presentation.recordingDuration,
-                activeRuleName: presentation.activeRuleName
+                activeRuleName: presentation.activeRuleName,
+                modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)
             )
         }
 
@@ -70,7 +72,8 @@ struct NotchIndicatorView: View {
         let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
             viewModel.notchIndicatorLeftContent,
             recordingDuration: presentation.recordingDuration,
-            activeRuleName: presentation.activeRuleName
+            activeRuleName: presentation.activeRuleName,
+            modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)
         )
         return leftContentWidth > 0 ? NotchIndicatorLayout.leftContentSpacing : 0
     }

@@ -58,6 +58,8 @@ struct DictationQuickSelectionSnapshot: Equatable {
     var moreLanguageOptions: [DictationQuickSelectionOption<LanguageSelection>] = []
 
     var modelSummary = ""
+    /// The model name alone, as the indicator's Model content shows it.
+    var modelName = ""
     var modelWorkflowNote: String?
     var modelGroups: [DictationModelGroup] = []
 }
@@ -458,6 +460,12 @@ enum IndicatorModelMenu {
         String(localized: "Choose Transcription Model")
     }
 
+    /// What the indicator's Model content shows before the model name is known.
+    nonisolated static func contentTitle(modelName: String?) -> String {
+        guard let modelName, !modelName.isEmpty else { return String(localized: "Model") }
+        return modelName
+    }
+
     static var appliesToNextDictationNote: String {
         String(localized: "Applies to the next dictation")
     }
@@ -778,10 +786,12 @@ final class DictationQuickSelectionModel: ObservableObject {
             engines: engines.map { quickSelectionEngine(for: $0, modelManager: modelManager) },
             selectedProviderId: modelManager.selectedProviderId
         )
+        let noModelSelected = localizedAppText("No model selected", de: "Kein Modell ausgewählt")
         let globalModelSummary = modelManager.activeModelName.map {
             DictationQuickSelection.modelLabel(engine: modelManager.activeEngineName, model: $0)
-        } ?? localizedAppText("No model selected", de: "Kein Modell ausgewählt")
+        } ?? noModelSelected
         next.modelSummary = globalModelSummary
+        next.modelName = modelManager.activeModelName ?? noModelSelected
 
         var effectiveEngine = globalEngine
         var effectiveModelId: String?
@@ -789,6 +799,7 @@ final class DictationQuickSelectionModel: ObservableObject {
            let engineId = DictationTranscriptionOverrideResolver.engineId(for: workflow) {
             let overrideEngine = engines.first { $0.providerId == engineId }
             let summary: String
+            let overrideModelName: String
             if let overrideEngine, modelManager.canUseForTranscription(overrideEngine) {
                 let modelId = DictationTranscriptionOverrideResolver.modelId(for: workflow)
                 let modelName = modelManager.resolvedModelDisplayName(
@@ -796,16 +807,19 @@ final class DictationQuickSelectionModel: ObservableObject {
                     cloudModelOverride: modelId
                 ) ?? overrideEngine.providerDisplayName
                 summary = DictationQuickSelection.modelLabel(engine: overrideEngine.providerDisplayName, model: modelName)
+                overrideModelName = modelName
                 effectiveEngine = overrideEngine
                 effectiveModelId = modelId
             } else {
                 summary = DictationQuickSelection.unavailableEngineSummary(
                     engineName: overrideEngine?.providerDisplayName ?? Self.engineName(for: engineId)
                 )
+                overrideModelName = summary
                 effectiveEngine = nil
             }
             if summary != globalModelSummary {
                 next.modelSummary = summary
+                next.modelName = overrideModelName
                 next.modelWorkflowNote = DictationQuickSelection.workflowNote(
                     workflowName: workflow.name,
                     summary: summary

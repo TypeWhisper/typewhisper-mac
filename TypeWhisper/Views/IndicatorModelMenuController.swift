@@ -16,9 +16,14 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
     /// A model chosen for the next dictation.
     @Published private(set) var pendingSwitch: PendingDictationModelSwitch?
     @Published private(set) var isMenuOpen = false
+    /// The model a dictation uses now, including a workflow's own engine. The indicator's
+    /// Model content shows it; nil until that content first appears.
+    @Published private(set) var modelName: String?
 
     private var quickSelectionModel: DictationQuickSelectionModel?
-    private var anchors: [WeakView] = []
+    private var anchors: [WeakAnchor] = []
+    /// The kind of anchor the menu opening now was asked for.
+    private var requestedAnchorRole: AnchorRole?
     private var menuChoices: [DictationModelChoice] = []
     /// The menu on screen, from `popUpMenu()` until `menuDidClose(_:)`.
     private var openMenu: NSMenu?
@@ -28,9 +33,20 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
     private var menuWindowTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
-    private final class WeakView {
+    /// Where a menu can open from: the Model content, or the status area, which VoiceOver
+    /// uses when no side shows the Model content.
+    enum AnchorRole {
+        case status
+        case content
+    }
+
+    private final class WeakAnchor {
         weak var view: NSView?
-        init(_ view: NSView) { self.view = view }
+        let role: AnchorRole
+        init(_ view: NSView, role: AnchorRole) {
+            self.view = view
+            self.role = role
+        }
     }
 
     private struct HiddenMenuWindow {
@@ -51,6 +67,18 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.applyPendingSwitchIfPossible()
+            }
+            .store(in: &cancellables)
+        model.$snapshot
+            .map(\.modelName)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] name in
+                guard let self else { return }
+                #if DEBUG
+                guard self.screenshotSnapshot == nil else { return }
+                #endif
+                self.modelName = name.isEmpty ? nil : name
             }
             .store(in: &cancellables)
         // The snapshot is debounced by 100 ms. A dictation that ends and a new one that
@@ -81,24 +109,33 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
 
     // MARK: Menu
 
-    /// Registers the view the menu opens from. Each indicator style has its own.
-    func registerAnchor(_ view: NSView) {
+    /// Starts following the model name for the indicator's Model content.
+    func prepareModelName() {
+        _ = quickSelection
+    }
+
+    /// Registers a view the menu opens from. Each indicator style has its own.
+    func registerAnchor(_ view: NSView, role: AnchorRole) {
         anchors.removeAll { $0.view == nil || $0.view === view }
-        anchors.append(WeakView(view))
+        anchors.append(WeakAnchor(view, role: role))
     }
 
     /// The anchor of the indicator on screen; only one indicator style shows at a time.
+    /// The Model content is preferred, so VoiceOver opens the menu where pointer users do.
     private var visibleAnchor: NSView? {
         anchors.removeAll { $0.view == nil }
-        return anchors.reversed().compactMap(\.view).first { $0.window?.isVisible == true }
+        let visible = anchors.reversed().filter { $0.view?.window?.isVisible == true }
+        let role = requestedAnchorRole ?? .content
+        return (visible.first { $0.role == role } ?? visible.first)?.view
     }
 
-    func showMenu() {
-        guard !isMenuOpen, visibleAnchor != nil else { return }
+    func showMenu(from role: AnchorRole? = nil) {
+        guard !isMenuOpen else { return }
+        requestedAnchorRole = role
+        guard visibleAnchor != nil else { return }
         isMenuOpen = true
         // A menu can track in a nested run loop. Started from a run loop block instead of
-        // a main queue job, the main queue keeps serving the recording meanwhile. The
-        // indicator also shows its menu button before the menu appears.
+        // a main queue job, the main queue keeps serving the recording meanwhile.
         RunLoop.main.perform(inModes: [.common]) { [weak self] in
             MainActor.assumeIsolated {
                 self?.popUpMenu()
@@ -137,6 +174,7 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
 
     private func finishMenuSession() {
         openMenu = nil
+        requestedAnchorRole = nil
         isOpenMenuTracking = false
         ServiceContainer.shared.hotkeyService.isIndicatorMenuOpen = false
         menuWindowTimer?.invalidate()
@@ -279,6 +317,7 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
         guard AppConstants.isScreenshotAutomation else { return }
         screenshotSnapshot = snapshot
         pendingSwitch = pending
+        modelName = snapshot.modelName.isEmpty ? nil : snapshot.modelName
     }
     #endif
 
@@ -340,11 +379,13 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
 
 // MARK: - Indicator views
 
-/// Where the model menu opens: the status area of a dictation indicator.
+/// Where the model menu opens: the Model content or the status area of a dictation indicator.
 struct IndicatorModelMenuAnchor: NSViewRepresentable {
+    var role: IndicatorModelMenuController.AnchorRole
+
     func makeNSView(context: Context) -> NSView {
         let view = AnchorView()
-        IndicatorModelMenuController.shared.registerAnchor(view)
+        IndicatorModelMenuController.shared.registerAnchor(view, role: role)
         return view
     }
 
@@ -356,31 +397,68 @@ struct IndicatorModelMenuAnchor: NSViewRepresentable {
     }
 }
 
-/// Opens the transcription model menu. A dictation indicator shows it in place of its
-/// status while the pointer rests on the indicator, as the Recorder shows Stop.
-struct IndicatorModelMenuButton: View {
+/// The indicator's Model content: the model a dictation uses, with a chevron. During a
+/// dictation a click opens the menu that picks the model for the next dictation. Elsewhere,
+/// such as the preview in Settings, it only shows the name.
+struct IndicatorModelContent: View {
+    let offersMenu: Bool
     let sizing: IndicatorSizing
-    var action: () -> Void = { IndicatorModelMenuController.shared.showMenu() }
+    @ObservedObject private var controller = IndicatorModelMenuController.shared
 
     var body: some View {
-        Button(action: action) {
-            Image(systemName: "cpu")
-                .font(.system(size: sizing.iconSize * 0.6, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: sizing.iconSize, height: sizing.iconSize)
-                .background(Circle().fill(Color.accentColor))
-                .contentShape(Circle())
+        Group {
+            if offersMenu {
+                Button {
+                    controller.showMenu(from: .content)
+                } label: {
+                    chip
+                }
+                .buttonStyle(.plain)
+                .background {
+                    IndicatorModelMenuAnchor(role: .content)
+                }
+                .help(IndicatorModelMenu.chooseModelActionName)
+                .accessibilityLabel(IndicatorModelMenu.title)
+                .accessibilityValue(title)
+                .accessibilityIdentifier("indicator.dictation.model")
+            } else {
+                chip
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(IndicatorModelMenu.title)
+                    .accessibilityValue(title)
+            }
         }
-        .buttonStyle(.plain)
-        .help(IndicatorModelMenu.title)
-        .accessibilityLabel(IndicatorModelMenu.title)
-        .accessibilityIdentifier("indicator.dictation.model")
+        .onAppear {
+            controller.prepareModelName()
+        }
+    }
+
+    private var title: String {
+        IndicatorModelMenu.contentTitle(modelName: controller.modelName)
+    }
+
+    private var chip: some View {
+        HStack(spacing: NotchIndicatorLayout.modelChipChevronSpacing) {
+            Text(title)
+                .font(.system(size: sizing.profileFontSize, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Image(systemName: "chevron.down")
+                .font(.system(size: sizing.profileFontSize * 0.75, weight: .bold))
+                .frame(width: NotchIndicatorLayout.modelChipChevronWidth(for: sizing))
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, sizing.profilePaddingH)
+        .padding(.vertical, sizing.profilePaddingV)
+        .background(Capsule().fill(Color.primary.opacity(0.16)))
+        .contentShape(Capsule())
+        .frame(maxWidth: NotchIndicatorLayout.modelChipMaxWidth, alignment: .leading)
     }
 }
 
 extension View {
     /// Lets VoiceOver open the model menu of a dictation indicator, which pointer users
-    /// reach through the button that appears on hover.
+    /// reach through the Model content.
     func indicatorModelMenuAccessibilityAction(isAvailable: Bool) -> some View {
         accessibilityActions {
             if isAvailable {

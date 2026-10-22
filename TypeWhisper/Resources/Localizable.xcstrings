@@ -47744,6 +47744,28 @@
         }
       }
     },
+    "During a dictation, click the model to choose the model for the next dictation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke während eines Diktats auf das Modell, um das Modell für das nächste Diktat zu wählen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディクテーション中にモデルをクリックすると、次のディクテーションで使うモデルを選べます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写过程中点击模型，即可选择下一次听写使用的模型。"
+          }
+        }
+      }
+    },
     "Next dictation: %@" : {
       "localizations" : {
         "de" : {

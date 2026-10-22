@@ -669,12 +669,37 @@ final class IndicatorModelMenuTests: XCTestCase {
     // MARK: Indicator
 
     func testIndicatorTakesThePointerOnlyWhileARecordingOffersAControl() {
-        XCTAssertTrue(IndicatorPresentationState(source: .dictation, state: .recording).tracksPointer)
-        XCTAssertTrue(IndicatorPresentationState(source: .recorder, state: .recording).tracksPointer)
-        XCTAssertFalse(IndicatorPresentationState(source: .preview, state: .recording).tracksPointer)
+        let dictation = IndicatorPresentationState(source: .dictation, state: .recording)
+        XCTAssertTrue(dictation.tracksPointer(showsModelContent: true))
+        XCTAssertFalse(
+            dictation.tracksPointer(showsModelContent: false),
+            "without the Model content a dictation indicator stays click-through"
+        )
+        XCTAssertTrue(IndicatorPresentationState(source: .recorder, state: .recording).tracksPointer(showsModelContent: false))
+        XCTAssertFalse(IndicatorPresentationState(source: .preview, state: .recording).tracksPointer(showsModelContent: true))
         for state: DictationViewModel.State in [.idle, .processing, .inserting, .error("failed")] {
-            XCTAssertFalse(IndicatorPresentationState(source: .dictation, state: state).tracksPointer, "\(state)")
+            XCTAssertFalse(
+                IndicatorPresentationState(source: .dictation, state: state).tracksPointer(showsModelContent: true),
+                "\(state)"
+            )
         }
+    }
+
+    func testModelContentCountsOnlyOnASideTheStyleHas() {
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .notch, left: .model, right: .waveform))
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .overlay, left: .timer, right: .model))
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .minimal, left: .timer, right: .model))
+        XCTAssertFalse(
+            NotchIndicatorContent.showsModel(style: .minimal, left: .model, right: .waveform),
+            "the Minimal style has no left side"
+        )
+        XCTAssertFalse(NotchIndicatorContent.showsModel(style: .notch, left: .timer, right: .waveform))
+    }
+
+    func testModelContentTitleFallsBackUntilTheModelNameIsKnown() {
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: nil), "Model")
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: ""), "Model")
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: "Parakeet TDT v3"), "Parakeet TDT v3")
     }
 
     // MARK: Keys while the menu is open

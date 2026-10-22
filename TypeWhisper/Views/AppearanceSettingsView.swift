@@ -207,6 +207,16 @@ struct AppearanceSettingsView: View {
                         notchContentPickerOptions
                     }
 
+                    if NotchIndicatorContent.showsModel(
+                        style: dictation.indicatorStyle,
+                        left: dictation.notchIndicatorLeftContent,
+                        right: dictation.notchIndicatorRightContent
+                    ) {
+                        Text(String(localized: "During a dictation, click the model to choose the model for the next dictation."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     if dictation.indicatorStyle == .notch {
                         Text(String(localized: "The notch indicator extends the MacBook notch area to show recording status."))
                             .font(.caption)
@@ -259,6 +269,7 @@ struct AppearanceSettingsView: View {
         Text(String(localized: "Timer")).tag(NotchIndicatorContent.timer)
         Text(String(localized: "Waveform")).tag(NotchIndicatorContent.waveform)
         Text(localizedAppText("Workflow", de: "Workflow")).tag(NotchIndicatorContent.profile)
+        Text(String(localized: "Model")).tag(NotchIndicatorContent.model)
         Text(String(localized: "None")).tag(NotchIndicatorContent.none)
     }
 }

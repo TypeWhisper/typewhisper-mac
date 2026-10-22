@@ -18,7 +18,17 @@ enum NotchIndicatorContent: String, CaseIterable {
     case timer
     case waveform
     case profile
+    /// The transcription model; during a dictation it opens the model menu (#1351).
+    case model
     case none
+}
+
+extension NotchIndicatorContent {
+    /// Whether an indicator style shows the model content on one of its sides. The
+    /// Minimal style only has the right side.
+    static func showsModel(style: IndicatorStyle, left: NotchIndicatorContent, right: NotchIndicatorContent) -> Bool {
+        right == .model || (style != .minimal && left == .model)
+    }
 }
 
 enum NotchIndicatorDisplay: String, CaseIterable {

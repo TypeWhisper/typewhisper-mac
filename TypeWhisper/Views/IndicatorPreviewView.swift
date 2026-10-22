@@ -25,6 +25,7 @@ struct ScreenshotIndicatorShowcaseView: View {
                     )
                 }
                 if AppConstants.screenshotState == "indicator-model-menu" {
+                    dictation.notchIndicatorRightContent = .model
                     prepareModelMenuFixture()
                     // Opens the menu once the showcase and its indicator are on screen.
                     let timer = Timer(timeInterval: 1.5, repeats: false) { _ in
@@ -83,6 +84,7 @@ struct ScreenshotIndicatorShowcaseView: View {
             engines: [parakeet, groq, openAI],
             selectedProviderId: "parakeet"
         )
+        snapshot.modelName = "Parakeet TDT v3"
         let next = DictationModelChoice(providerId: "groq", modelId: "whisper-large-v3-turbo")
         IndicatorModelMenuController.shared.prepareScreenshotFixture(
             snapshot: snapshot,
@@ -292,6 +294,17 @@ struct IndicatorStylePicker: View {
                 .padding(.horizontal, 3)
                 .padding(.vertical, 1)
                 .background(.white.opacity(0.2), in: Capsule())
+        case .model:
+            HStack(spacing: 1) {
+                Text("M")
+                    .font(.system(size: size * 0.9, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: size * 0.55, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .background(.white.opacity(0.2), in: Capsule())
         case .none:
             Color.clear.frame(width: 0, height: 0)
         }
