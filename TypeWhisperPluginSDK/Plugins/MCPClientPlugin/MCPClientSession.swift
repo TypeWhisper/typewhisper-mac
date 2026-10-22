@@ -337,7 +337,7 @@ actor MCPServerSession {
 
         let clientVersion = Bundle(for: MCPClientPlugin.self)
             .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.1"
-        let client = Client(name: "TypeWhisper", version: clientVersion, title: "TypeWhisper MCP Client")
+        let client = Client(name: "dictum", version: clientVersion, title: "dictum MCP Client")
 
         self.transport = transport
         self.client = client
@@ -490,7 +490,7 @@ actor MCPServerSession {
                 operationName: MCPClientLocalization.string("MCP tool call"),
                 onTimeout: {
                     if canCancelRequest {
-                        try? await client.cancelRequest(context.requestID, reason: "TypeWhisper tool-call timeout")
+                        try? await client.cancelRequest(context.requestID, reason: "dictum tool-call timeout")
                     }
                     await self.disconnectClient(client)
                 }
@@ -500,7 +500,7 @@ actor MCPServerSession {
         } onCancel: {
             Task {
                 if canCancelRequest {
-                    try? await client.cancelRequest(context.requestID, reason: "TypeWhisper action cancelled")
+                    try? await client.cancelRequest(context.requestID, reason: "dictum action cancelled")
                 }
                 await self.disconnectClient(client)
             }

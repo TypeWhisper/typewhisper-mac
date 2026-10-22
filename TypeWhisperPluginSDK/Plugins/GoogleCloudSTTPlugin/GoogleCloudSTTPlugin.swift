@@ -927,7 +927,7 @@ private struct GoogleCloudSTTSettingsView: View {
                     }
                     .accessibilityLabel(Text("Default Language", bundle: bundle))
 
-                Text("If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.", bundle: bundle)
+                Text("If dictum already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

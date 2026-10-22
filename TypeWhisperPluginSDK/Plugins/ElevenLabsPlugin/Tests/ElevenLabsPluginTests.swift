@@ -510,8 +510,8 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Audio events and Clean transcript can be enabled together.",
             "Speaker count",
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
-            "Use TypeWhisper dictionary terms",
-            "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.",
+            "Use dictum dictionary terms",
+            "Sends active dictum dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.",
         ]
 
         for key in requiredKeys {

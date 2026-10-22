@@ -27,7 +27,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     /// grants access to folders the user picked, so the path alone is not enough.
     fileprivate var _vaultURL: URL?
     #endif
-    fileprivate var _subfolder: String = "TypeWhisper"
+    fileprivate var _subfolder: String = "dictum"
     fileprivate var _filenameTemplate: String = "{{DATE}} {{TIME}} {{APP}}"
     fileprivate var _noteTemplate: String = "{{TRANSCRIPT}}"
     fileprivate var _dailyNoteEnabled: Bool = false
@@ -69,7 +69,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
     fileprivate func loadSettings() {
         _vaultPath = host?.userDefault(forKey: "vaultPath") as? String ?? ""
-        _subfolder = host?.userDefault(forKey: "subfolder") as? String ?? "TypeWhisper"
+        _subfolder = host?.userDefault(forKey: "subfolder") as? String ?? "dictum"
         _filenameTemplate = host?.userDefault(forKey: "filenameTemplate") as? String ?? "{{DATE}} {{TIME}} {{APP}}"
         _noteTemplate = host?.userDefault(forKey: "noteTemplate") as? String ?? "{{TRANSCRIPT}}"
         _dailyNoteEnabled = host?.userDefault(forKey: "dailyNoteEnabled") as? Bool ?? false
@@ -848,7 +848,7 @@ private struct ObsidianSettingsView: View {
     let plugin: ObsidianPlugin
     @State private var vaultPath: String = ""
     @State private var detectedVaults: [ObsidianPlugin.VaultInfo] = []
-    @State private var subfolder: String = "TypeWhisper"
+    @State private var subfolder: String = "dictum"
     @State private var filenameTemplate: String = "{{DATE}} {{TIME}} {{APP}}"
     @State private var noteTemplate: String = "{{TRANSCRIPT}}"
     @State private var dailyNoteEnabled: Bool = false
@@ -907,7 +907,7 @@ private struct ObsidianSettingsView: View {
 
                 #if APPSTORE
                 if !vaultPath.isEmpty && !plugin.isConfigured {
-                    Text("TypeWhisper can no longer access this vault. Choose it again with Browse.", bundle: bundle)
+                    Text("dictum can no longer access this vault. Choose it again with Browse.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -925,7 +925,7 @@ private struct ObsidianSettingsView: View {
                     HStack {
                         Text("Subfolder:", bundle: bundle)
                             .frame(width: 100, alignment: .trailing)
-                        TextField("TypeWhisper", text: $subfolder)
+                        TextField("dictum", text: $subfolder)
                             .textFieldStyle(.roundedBorder)
                             .onChange(of: subfolder) { _, newValue in
                                 plugin._subfolder = newValue
@@ -1105,7 +1105,7 @@ private struct ObsidianSettingsView: View {
                         VStack(alignment: .leading) {
                             Text("Live Sync History Edits", bundle: bundle)
                                 .font(.headline)
-                            Text("Keep exported individual notes up to date when their transcript is edited in TypeWhisper. External Obsidian edits may be overwritten.", bundle: bundle)
+                            Text("Keep exported individual notes up to date when their transcript is edited in dictum. External Obsidian edits may be overwritten.", bundle: bundle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

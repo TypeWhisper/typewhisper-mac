@@ -145,7 +145,7 @@ final class OpenAIVectorMemoryPlugin: NSObject, TypeWhisperPlugin, MemoryStorage
         request.addValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("assistants=v2", forHTTPHeaderField: "OpenAI-Beta")
-        request.httpBody = try? JSONSerialization.data(withJSONObject: ["name": "TypeWhisper Memories"])
+        request.httpBody = try? JSONSerialization.data(withJSONObject: ["name": "dictum Memories"])
         request.timeoutInterval = 15
 
         guard let (data, response) = try? await PluginHTTPClient.data(for: request),

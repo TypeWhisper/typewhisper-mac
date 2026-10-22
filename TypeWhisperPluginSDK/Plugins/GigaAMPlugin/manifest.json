@@ -17,8 +17,7 @@
     "category": "transcription",
     "iconResourceName": "sber.svg",
     "iconSystemName": "waveform.badge.mic",
-    "iconURL": "https://www.typewhisper.com/brand-logos/sber/logo.svg",
     "principalClass": "GigaAMPlugin",
     "locality": "local",
-    "detailsURL": "https://www.typewhisper.com/addons/gigaam/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

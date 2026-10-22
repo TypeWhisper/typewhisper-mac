@@ -17,10 +17,8 @@
         "llm"
     ],
     "iconSystemName": "globe",
-    "iconURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-light.svg",
-    "iconDarkURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-dark.svg",
     "principalClass": "OpenRouterPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/openrouter/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

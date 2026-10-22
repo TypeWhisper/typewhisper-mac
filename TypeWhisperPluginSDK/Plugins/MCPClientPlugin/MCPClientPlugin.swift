@@ -156,8 +156,8 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         }
         guard draft.launchAcknowledged else {
             let message = draft.transport == .stdio
-                ? MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
-                : MCPClientLocalization.string("Acknowledge that TypeWhisper may connect to this MCP server and send configured workflow data.")
+                ? MCPClientLocalization.string("Acknowledge that dictum may launch this executable with your user permissions.")
+                : MCPClientLocalization.string("Acknowledge that dictum may connect to this MCP server and send configured workflow data.")
             throw MCPClientError.invalidConfiguration(message)
         }
 
@@ -309,8 +309,8 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     ) async throws -> [MCPToolDescriptor] {
         guard draft.launchAcknowledged else {
             let message = draft.transport == .stdio
-                ? MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
-                : MCPClientLocalization.string("Acknowledge that TypeWhisper may connect to this MCP server and send configured workflow data.")
+                ? MCPClientLocalization.string("Acknowledge that dictum may launch this executable with your user permissions.")
+                : MCPClientLocalization.string("Acknowledge that dictum may connect to this MCP server and send configured workflow data.")
             throw MCPClientError.invalidConfiguration(message)
         }
         let host = state.withLock { $0.host }

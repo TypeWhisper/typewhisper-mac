@@ -24,5 +24,5 @@
     "principalClass": "SonioxPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/soniox/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

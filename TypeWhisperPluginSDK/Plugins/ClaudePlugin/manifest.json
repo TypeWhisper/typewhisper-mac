@@ -13,9 +13,8 @@
     },
     "category": "llm",
     "iconSystemName": "brain.head.profile",
-    "iconURL": "https://www.typewhisper.com/brand-logos/claude-ai/logo.svg",
     "principalClass": "ClaudePlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/claude/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

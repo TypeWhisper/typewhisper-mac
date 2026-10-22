@@ -16,8 +16,7 @@
     "locality": "cloud",
     "iconResourceName": "smallest.svg",
     "iconSystemName": "waveform.badge.mic",
-    "iconURL": "https://www.typewhisper.com/brand-logos/smallest/logo.svg",
     "principalClass": "SmallestAIPlugin",
     "requiresAPIKey": true,
-    "detailsURL": "https://www.typewhisper.com/addons/smallest-pulse/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

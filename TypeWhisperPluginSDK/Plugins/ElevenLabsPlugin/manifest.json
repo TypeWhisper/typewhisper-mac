@@ -16,5 +16,5 @@
     "principalClass": "ElevenLabsPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

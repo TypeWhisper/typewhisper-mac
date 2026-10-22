@@ -3963,7 +3963,7 @@ private struct OpenAISettingsView: View {
     #if !APPSTORE
     private func startBrowserLogin() {
         oauthBusy = true
-        oauthStatusMessage = String(localized: "Complete the OpenAI login in your browser. TypeWhisper will finish the connection automatically.", bundle: bundle)
+        oauthStatusMessage = String(localized: "Complete the OpenAI login in your browser. dictum will finish the connection automatically.", bundle: bundle)
         oauthErrorMessage = nil
 
         Task {

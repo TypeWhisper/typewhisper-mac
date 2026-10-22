@@ -16,5 +16,5 @@
     "principalClass": "DeepgramPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/deepgram/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

@@ -16,5 +16,5 @@
     "principalClass": "CerebrasPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/cerebras/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

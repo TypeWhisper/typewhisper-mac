@@ -332,7 +332,7 @@ final class ObsidianPluginTests: XCTestCase {
         )
 
         let files = try FileManager.default.contentsOfDirectory(
-            at: vaultURL.appendingPathComponent("TypeWhisper", isDirectory: true),
+            at: vaultURL.appendingPathComponent("dictum", isDirectory: true),
             includingPropertiesForKeys: nil
         )
         XCTAssertEqual(files.count, 1)
@@ -374,7 +374,7 @@ final class ObsidianPluginTests: XCTestCase {
         }
 
         let files = try FileManager.default.contentsOfDirectory(
-            at: vaultURL.appendingPathComponent("TypeWhisper", isDirectory: true),
+            at: vaultURL.appendingPathComponent("dictum", isDirectory: true),
             includingPropertiesForKeys: nil
         )
         XCTAssertEqual(files.count, 1)
@@ -418,7 +418,7 @@ final class ObsidianPluginTests: XCTestCase {
         )
 
         let files = try FileManager.default.contentsOfDirectory(
-            at: vaultURL.appendingPathComponent("TypeWhisper", isDirectory: true),
+            at: vaultURL.appendingPathComponent("dictum", isDirectory: true),
             includingPropertiesForKeys: nil
         )
         XCTAssertEqual(files.count, 1)

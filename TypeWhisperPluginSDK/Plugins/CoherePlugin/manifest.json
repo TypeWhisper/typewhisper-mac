@@ -13,9 +13,8 @@
     },
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
-    "iconURL": "https://www.typewhisper.com/brand-logos/cohere/logo.svg",
     "principalClass": "CoherePlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/cohere/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

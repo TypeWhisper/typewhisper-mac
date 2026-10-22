@@ -165,7 +165,7 @@ enum WebLinkPluginError: LocalizedError {
         case .noSupportedMedia:
             webLinkLocalized("The download did not produce a supported audio or video file.")
         case .transcriptionQueueRejected:
-            webLinkLocalized("TypeWhisper could not add the downloaded media to the transcription queue.")
+            webLinkLocalized("dictum could not add the downloaded media to the transcription queue.")
         }
     }
 }
@@ -615,7 +615,7 @@ private struct WebLinkTranscriptionSidebarView: View {
                         Text(webLinkLocalized("Transcribe audio from a web link"))
                             .font(.headline)
 
-                        Text(webLinkLocalized("Paste a supported video or audio link. The add-on downloads its audio and adds it to TypeWhisper's transcription queue."))
+                        Text(webLinkLocalized("Paste a supported video or audio link. The add-on downloads its audio and adds it to dictum's transcription queue."))
                             .foregroundStyle(.secondary)
 
                         HStack(spacing: 8) {
@@ -719,7 +719,7 @@ private struct WebLinkSettingsView: View {
     var body: some View {
         Form {
             Section(webLinkLocalized("Web Link Transcription")) {
-                Text(webLinkLocalized("Download audio from a supported web link and pass it to TypeWhisper's regular file-transcription queue."))
+                Text(webLinkLocalized("Download audio from a supported web link and pass it to dictum's regular file-transcription queue."))
                     .foregroundStyle(.secondary)
             }
 

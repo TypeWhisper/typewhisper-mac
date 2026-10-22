@@ -277,7 +277,7 @@ enum MCPServerTransport: String, Codable, CaseIterable, Identifiable, Sendable {
 
     static var unsupportedError: MCPClientError {
         .invalidConfiguration(
-            MCPClientLocalization.string("This edition of TypeWhisper can only connect to Streamable HTTP MCP servers.")
+            MCPClientLocalization.string("This edition of dictum can only connect to Streamable HTTP MCP servers.")
         )
     }
 }

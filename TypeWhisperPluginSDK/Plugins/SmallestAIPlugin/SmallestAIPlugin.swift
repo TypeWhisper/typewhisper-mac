@@ -217,7 +217,7 @@ private enum SmallestAIPluginConfigurationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingHost:
-            "Smallest Pulse is not connected to TypeWhisper."
+            "Smallest Pulse is not connected to dictum."
         }
     }
 }

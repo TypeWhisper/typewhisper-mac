@@ -6,13 +6,13 @@ import TypeWhisperPluginSDK
 final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindowLayoutProviding,
     ObservableObject, @unchecked Sendable {
     static let pluginId = "com.typewhisper.improve"
-    static let pluginName = "Improve TypeWhisper"
+    static let pluginName = "dictum"
 
     static let pluginVersion = "0.1.0"
     static let consentVersion = "contribution-text-v1"
-    static let defaultServiceURL = URL(string: "https://app.typewhisper.com")!
+    static let defaultServiceURL: URL? = nil
     static let contributionPolicyURL = URL(
-        string: "https://www.typewhisper.com/addons/improve-typewhisper/"
+        string: "https://github.com/schneidervvv/dictum"
     )!
 
     @Published private(set) var records: [ContributionRecord] = []

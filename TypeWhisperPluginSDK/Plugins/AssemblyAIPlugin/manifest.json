@@ -16,5 +16,5 @@
     "principalClass": "AssemblyAIPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/assemblyai/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

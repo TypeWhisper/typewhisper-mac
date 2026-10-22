@@ -15,5 +15,5 @@
     "iconSystemName": "terminal",
     "principalClass": "ScriptPlugin",
     "locality": "configurable",
-    "detailsURL": "https://www.typewhisper.com/addons/script-runner/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

@@ -20,9 +20,7 @@
     "hosting": "cloud",
     "locality": "cloud",
     "iconSystemName": "sparkles",
-    "iconURL": "https://www.typewhisper.com/brand-logos/xai/logo-light.svg",
-    "iconDarkURL": "https://www.typewhisper.com/brand-logos/xai/logo-dark.svg",
     "principalClass": "XAIPlugin",
     "requiresAPIKey": true,
-    "detailsURL": "https://www.typewhisper.com/addons/xai-grok/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

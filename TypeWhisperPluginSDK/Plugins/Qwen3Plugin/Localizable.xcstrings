@@ -508,24 +508,24 @@
         }
       }
     },
-    "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.": {
+    "Choose the folder containing config.json, tokenizer files and weights. dictum keeps its own copy; your original files are not changed.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. TypeWhisper erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
+            "value": "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. dictum erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "config.json、トークナイザー、重みを含むフォルダを選択してください。TypeWhisperはコピーを保存し、元のファイルは変更しません。"
+            "value": "config.json、トークナイザー、重みを含むフォルダを選択してください。dictumはコピーを保存し、元のファイルは変更しません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "选择包含 config.json、分词器文件和权重的文件夹。TypeWhisper 会保存副本，不会修改原始文件。"
+            "value": "选择包含 config.json、分词器文件和权重的文件夹。dictum 会保存副本，不会修改原始文件。"
           }
         }
       }

@@ -18,5 +18,5 @@
     "iconSystemName": "cpu",
     "principalClass": "Qwen3Plugin",
     "locality": "local",
-    "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

@@ -38,7 +38,7 @@ struct AuthenticatedCLISettingsView: View {
 
                     Link(
                         String(localized: "Setup guide", bundle: bundle),
-                        destination: URL(string: "https://www.typewhisper.com/addons/authenticated-cli/macos/")!
+                        destination: URL(string: "https://github.com/schneidervvv/dictum")!
                     )
                 }
             }
@@ -62,7 +62,7 @@ struct AuthenticatedCLISettingsView: View {
             }
 
             Text(String(
-                localized: "Use the accounts already signed in to supported provider CLIs. No separate API key is stored in TypeWhisper.",
+                localized: "Use the accounts already signed in to supported provider CLIs. No separate API key is stored in dictum.",
                 bundle: bundle
             ))
             .foregroundStyle(.secondary)

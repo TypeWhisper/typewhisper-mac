@@ -13,9 +13,8 @@
     },
     "category": "transcription",
     "iconSystemName": "globe.badge.chevron.backward",
-    "iconURL": "https://www.typewhisper.com/brand-logos/google-cloud/logo.svg",
     "principalClass": "GoogleCloudSTTPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/google-cloud-stt/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

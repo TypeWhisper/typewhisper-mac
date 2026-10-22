@@ -489,7 +489,7 @@ private enum SaluteSpeechPluginConfigurationError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingHost:
-            "Sber SaluteSpeech is not connected to TypeWhisper."
+            "Sber SaluteSpeech is not connected to dictum."
         case .emptyAuthorizationKey:
             "Sber SaluteSpeech Authorization Key is empty."
         }

@@ -17,9 +17,8 @@
         "llm"
     ],
     "iconSystemName": "bolt.fill",
-    "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg",
     "principalClass": "GroqPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/groq/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

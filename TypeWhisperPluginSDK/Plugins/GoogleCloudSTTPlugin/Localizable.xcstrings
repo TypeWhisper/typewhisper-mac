@@ -221,24 +221,24 @@
         }
       }
     },
-    "If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.": {
+    "If dictum already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wenn TypeWhisper bereits eine gesprochene Sprache übergibt, hat dieser Wert Vorrang. Andernfalls wird dieser BCP-47-Code für die Spracherkennungsanfragen an Google verwendet."
+            "value": "Wenn dictum bereits eine gesprochene Sprache übergibt, hat dieser Wert Vorrang. Andernfalls wird dieser BCP-47-Code für die Spracherkennungsanfragen an Google verwendet."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperから発話言語が渡される場合は、その値が優先されます。それ以外の場合、このBCP-47コードがGoogle認識リクエストに使われます。"
+            "value": "dictumから発話言語が渡される場合は、その値が優先されます。それ以外の場合、このBCP-47コードがGoogle認識リクエストに使われます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "如果 TypeWhisper 已传递口语语言，则使用该值。否则，此 BCP-47 代码将用于 Google 识别请求。"
+            "value": "如果 dictum 已传递口语语言，则使用该值。否则，此 BCP-47 代码将用于 Google 识别请求。"
           }
         }
       }

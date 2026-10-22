@@ -13,8 +13,7 @@
     },
     "category": "action",
     "iconSystemName": "doc.text",
-    "iconURL": "https://www.typewhisper.com/brand-logos/obsidian/logo.svg",
     "principalClass": "ObsidianPlugin",
     "locality": "configurable",
-    "detailsURL": "https://www.typewhisper.com/addons/obsidian/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

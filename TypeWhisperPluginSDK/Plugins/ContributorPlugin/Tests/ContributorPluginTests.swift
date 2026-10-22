@@ -12,10 +12,10 @@ final class ContributorPluginTests: XCTestCase {
 
     func testPluginIdentity() {
         XCTAssertEqual(ContributorPlugin.pluginId, "com.typewhisper.improve")
-        XCTAssertEqual(ContributorPlugin.pluginName, "Improve TypeWhisper")
+        XCTAssertEqual(ContributorPlugin.pluginName, "dictum")
         XCTAssertEqual(
             ContributorPlugin.contributionPolicyURL.absoluteString,
-            "https://www.typewhisper.com/addons/improve-typewhisper/"
+            "https://github.com/schneidervvv/dictum"
         )
     }
 
@@ -131,7 +131,10 @@ final class ContributorPluginTests: XCTestCase {
     func testPluginRenewsStaleContributorTokenAfterAuthenticationFailure() async throws {
         let eventBus = PluginTestEventBus()
         let host = try PluginTestHostServices(
-            defaults: ["collectCorrections": true],
+            defaults: [
+                "collectCorrections": true,
+                "serviceURL": "https://app.typewhisper.com"
+            ],
             secrets: ["contributor-token": "stale-token"],
             eventBus: eventBus
         )

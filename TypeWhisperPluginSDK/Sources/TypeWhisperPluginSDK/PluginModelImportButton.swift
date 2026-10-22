@@ -75,7 +75,7 @@ private struct PluginModelImportSheet: View {
                         Button(String(localized: "Choose Folder…", bundle: bundle)) { showFolderPicker = true }
                             .disabled(importTask != nil)
                     }
-                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.", bundle: bundle))
+                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. dictum keeps its own copy; your original files are not changed.", bundle: bundle))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     TextField("https://huggingface.co/owner/model", text: $repository)

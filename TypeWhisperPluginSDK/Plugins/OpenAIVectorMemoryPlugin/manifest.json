@@ -15,5 +15,5 @@
     "iconSystemName": "brain",
     "principalClass": "OpenAIVectorMemoryPlugin",
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/openai-vector-memory/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

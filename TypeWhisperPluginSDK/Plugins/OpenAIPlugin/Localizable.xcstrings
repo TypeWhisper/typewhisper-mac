@@ -573,24 +573,24 @@
         }
       }
     },
-    "Complete the OpenAI login in your browser. TypeWhisper will finish the connection automatically.": {
+    "Complete the OpenAI login in your browser. dictum will finish the connection automatically.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+            "value": "Schliessen Sie den OpenAI-Login im Browser ab. dictum verbindet den Account danach automatisch."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ブラウザでOpenAIログインを完了してください。TypeWhisperはその後自動でアカウントを接続します。"
+            "value": "ブラウザでOpenAIログインを完了してください。dictumはその後自動でアカウントを接続します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在浏览器中完成 OpenAI 登录。TypeWhisper 会自动完成连接。"
+            "value": "在浏览器中完成 OpenAI 登录。dictum 会自动完成连接。"
           }
         }
       }

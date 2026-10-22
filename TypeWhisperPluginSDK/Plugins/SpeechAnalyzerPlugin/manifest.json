@@ -15,5 +15,5 @@
     "iconSystemName": "apple.logo",
     "principalClass": "SpeechAnalyzerPlugin",
     "locality": "local",
-    "detailsURL": "https://www.typewhisper.com/addons/apple-speech/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

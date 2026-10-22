@@ -328,7 +328,7 @@ final class CartesiaPlugin: NSObject,
             return .available
         case .llm:
             return .unavailable(
-                reason: "Cartesia does not provide a TypeWhisper prompt processor.",
+                reason: "Cartesia does not provide a dictum prompt processor.",
                 requiredCredentialLabel: nil
             )
         }
@@ -511,7 +511,7 @@ final class CartesiaPlugin: NSObject,
     fileprivate func setApiKey(_ key: String) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let host else {
-            throw CartesiaPluginError.apiError("Cartesia is not connected to TypeWhisper.")
+            throw CartesiaPluginError.apiError("Cartesia is not connected to dictum.")
         }
         try host.storeSecret(key: CartesiaDefaultsKey.apiKey, value: trimmed)
         _apiKey = trimmed
@@ -520,7 +520,7 @@ final class CartesiaPlugin: NSObject,
 
     fileprivate func removeApiKey() throws {
         guard let host else {
-            throw CartesiaPluginError.apiError("Cartesia is not connected to TypeWhisper.")
+            throw CartesiaPluginError.apiError("Cartesia is not connected to dictum.")
         }
         try host.storeSecret(key: CartesiaDefaultsKey.apiKey, value: "")
         _apiKey = nil

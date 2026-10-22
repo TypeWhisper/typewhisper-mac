@@ -18,5 +18,5 @@
     "iconSystemName": "cpu",
     "principalClass": "LocalLLMPlugin",
     "locality": "local",
-    "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

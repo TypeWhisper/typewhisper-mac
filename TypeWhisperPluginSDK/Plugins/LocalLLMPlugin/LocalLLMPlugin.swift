@@ -1368,9 +1368,9 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
     private static func unsupportedModelMessage(for modelDef: LocalLLMModelDef) -> String {
         let supportedModels = supportedModelDefinitions.map(\.displayName).joined(separator: ", ")
         if modelDef.isSupported {
-            return "Local model loading in this TypeWhisper release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
+            return "Local model loading in this dictum release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
         }
-        return "\(modelDef.displayName) is experimental in this TypeWhisper release and may still fail to load. Recommended models: \(supportedModels)."
+        return "\(modelDef.displayName) is experimental in this dictum release and may still fail to load. Recommended models: \(supportedModels)."
     }
 }
 

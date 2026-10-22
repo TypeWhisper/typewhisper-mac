@@ -16,5 +16,5 @@
     "principalClass": "GladiaPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/gladia/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

@@ -1659,24 +1659,24 @@
         }
       }
     },
-    "TypeWhisper could not reserve a local port for Cohere Transcribe.": {
+    "dictum could not reserve a local port for Cohere Transcribe.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperがCohere Transcribe用のローカルポートを確保できませんでした。"
+            "value": "dictumがCohere Transcribe用のローカルポートを確保できませんでした。"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper konnte keinen lokalen Port für Cohere Transcribe reservieren."
+            "value": "dictum konnte keinen lokalen Port für Cohere Transcribe reservieren."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper 无法为 Cohere Transcribe 预留本地端口。"
+            "value": "dictum 无法为 Cohere Transcribe 预留本地端口。"
           }
         }
       }

@@ -823,7 +823,7 @@ enum CohereLocalPluginError: LocalizedError, Sendable {
             )
         case .localPortReservationFailed:
             return CohereLocalPlugin.localizedString(
-                "TypeWhisper could not reserve a local port for Cohere Transcribe."
+                "dictum could not reserve a local port for Cohere Transcribe."
             )
         case .runtimeExited(let output):
             let description = CohereLocalPlugin.localizedString(

@@ -16,5 +16,5 @@
     "principalClass": "SpeechmaticsPlugin",
     "requiresAPIKey": true,
     "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/speechmatics/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }

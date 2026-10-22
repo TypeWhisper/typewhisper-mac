@@ -207,7 +207,7 @@ struct MCPClientSettingsView: View {
                 .listStyle(.inset)
             }
 
-            Text("Saving and selecting an action authorizes TypeWhisper to run that fixed tool automatically when the workflow completes.", bundle: bundle)
+            Text("Saving and selecting an action authorizes dictum to run that fixed tool automatically when the workflow completes.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -459,14 +459,14 @@ private struct MCPServerEditorView: View {
                             Text(
                                 String(
                                     format: String(
-                                        localized: "I understand that TypeWhisper will launch %@ with my user permissions.",
+                                        localized: "I understand that dictum will launch %@ with my user permissions.",
                                         bundle: bundle
                                     ),
                                     resolvedPath.isEmpty ? command : resolvedPath
                                 )
                             )
                         } else {
-                            Text("I understand that TypeWhisper will connect to this MCP server and may send configured workflow data.", bundle: bundle)
+                            Text("I understand that dictum will connect to this MCP server and may send configured workflow data.", bundle: bundle)
                         }
                     }
                     .toggleStyle(.checkbox)

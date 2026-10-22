@@ -19,5 +19,5 @@
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin",
     "locality": "configurable",
-    "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"
+    "detailsURL": "https://github.com/schneidervvv/dictum"
 }
