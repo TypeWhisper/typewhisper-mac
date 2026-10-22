@@ -5,8 +5,8 @@ require "digest"
 # Captures the App Store edition (APPSTORE build of TypeWhisperAppStore.xcodeproj)
 # in screenshot mode, using the deterministic fixtures and window handling of
 # the regular screenshot lane. Raw window captures are written to
-# fastlane/screenshots/appstore/<language>/<state>.png and composed into store
-# images by scripts/appstore/compose_store_screenshots.swift.
+# fastlane/screenshots/appstore/<language>/<state>.png. TypeWhisper Studio renders
+# them into the store images in fastlane/screenshots/appstore/store/<language>/.
 
 APPSTORE_SCREENSHOT_DERIVED_DATA = File.join(REPOSITORY_ROOT, "build", "appstore-screenshots")
 APPSTORE_SCREENSHOT_PRODUCT = "TypeWhisper App Store Dev"
@@ -125,7 +125,8 @@ def capture_appstore_screenshot!(language, state, destination)
 
     begin
       window_id = wait_for_screenshot_window!(ready_file, process_id, log_file)
-      sh("/usr/sbin/screencapture -x -l #{window_id} #{Shellwords.escape(destination)}", log: false)
+      # -o leaves out the window shadow; the store stills draw their own.
+      sh("/usr/sbin/screencapture -x -o -l #{window_id} #{Shellwords.escape(destination)}", log: false)
       unless File.file?(destination) && File.size(destination) > 100_000
         UI.user_error!("Screenshot capture did not produce a valid PNG: #{destination}")
       end
@@ -284,17 +285,25 @@ def verify_mac_store_metadata!(version)
   UI.success("Verified macOS #{version.version_string} store text in #{APPSTORE_STORE_LOCALES.count} locales and the review notes")
 end
 
-def compose_mac_store_screenshots!
-  script = File.join(REPOSITORY_ROOT, "scripts", "appstore", "compose_store_screenshots.swift")
+# Store images are rendered from the raw captures by TypeWhisper Studio
+# (`npm run render:mac-stills`), which adds the headline and backdrop shared with
+# the iOS and Android listings. Check that every locale has exactly the expected
+# opaque 2880 x 1800 images before anything in App Store Connect is replaced.
+def validate_mac_store_screenshots!
   APPSTORE_STORE_SCREENSHOT_LOCALES.each do |locale|
     directory = File.join(APPSTORE_COMPOSED_SCREENSHOT_OUTPUT, locale)
-    FileUtils.rm_rf(directory)
-    FileUtils.mkdir_p(directory)
-    APPSTORE_STORE_SCREENSHOT_STATES.each_with_index do |state, index|
-      raw = File.join(APPSTORE_SCREENSHOT_OUTPUT, locale, "#{state}.png")
-      UI.user_error!("Missing raw capture #{raw}; run mac appstore_screenshots first") unless File.file?(raw)
-      composed = File.join(directory, format("%02d-%s.png", index + 1, state))
-      sh(Shellwords.join(["swift", script, raw, composed]), log: false)
+    expected = APPSTORE_STORE_SCREENSHOT_STATES.each_with_index.map { |state, index| format("%02d-%s.png", index + 1, state) }
+    actual = composed_mac_store_screenshots(locale).map { |path| File.basename(path) }
+    unless actual == expected
+      UI.user_error!("#{directory} must contain #{expected.join(', ')} rendered by TypeWhisper Studio; found #{actual.empty? ? 'nothing' : actual.join(', ')}")
+    end
+    composed_mac_store_screenshots(locale).each do |path|
+      properties = sh(Shellwords.join(["/usr/bin/sips", "-g", "pixelWidth", "-g", "pixelHeight", "-g", "hasAlpha", path]), log: false)
+      width = properties[/pixelWidth: (\d+)/, 1].to_i
+      height = properties[/pixelHeight: (\d+)/, 1].to_i
+      has_alpha = properties[/hasAlpha: (\w+)/, 1]
+      UI.user_error!("#{path} is #{width} x #{height}; expected 2880 x 1800") unless width == 2880 && height == 1800
+      UI.user_error!("#{path} has an alpha channel; App Store screenshots must be opaque") unless has_alpha == "no"
     end
   end
 end
@@ -390,11 +399,11 @@ platform :mac do
     end
   end
 
-  desc "Compose the raw captures into 2880x1800 store images, replace the macOS screenshots and verify them (version:<version>)"
+  desc "Replace the macOS screenshots with the rendered store images and verify them (version:<version>)"
   lane :appstore_screenshots_upload do |options|
     version_string = options[:version].to_s
     UI.user_error!("Pass version:<version>") if version_string.empty?
-    compose_mac_store_screenshots!
+    validate_mac_store_screenshots!
     appstore_api_key!
     upload_mac_store_screenshots!(
       editable_mac_store_version!(version_string, states: APPSTORE_SCREENSHOT_EDITABLE_VERSION_STATES)
