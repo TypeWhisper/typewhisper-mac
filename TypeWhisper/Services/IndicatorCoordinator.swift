@@ -279,7 +279,7 @@ struct IndicatorPresentationData {
     ) -> IndicatorPresentationData {
         let presentation = IndicatorPresentationState.resolve(
             dictationState: dictation.state,
-            recorderState: recorder.state,
+            recorderState: recorder.indicatorState,
             previewActive: preview.isActive
         )
 

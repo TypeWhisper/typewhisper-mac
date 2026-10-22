@@ -330,7 +330,24 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    @Published var state: RecorderState = .idle
+    @Published var state: RecorderState = .idle {
+        didSet {
+            if state != .recording { isMeetingRecording = false }
+        }
+    }
+    /// True while Meeting Automation records; set before the state changes so a
+    /// hidden meeting recording never flashes the indicator.
+    private var isMeetingRecording = false {
+        didSet { updateIndicatorHidden() }
+    }
+    /// Whether the indicator shows meeting recordings; Meeting Automation sets it (#1079).
+    var showsMeetingIndicator = true {
+        didSet { updateIndicatorHidden() }
+    }
+    /// True while a meeting is recorded without anything on screen.
+    @Published private(set) var isIndicatorHidden = false
+    /// The Recorder state the indicator shows: idle while the recording is hidden.
+    var indicatorState: RecorderState { isIndicatorHidden ? .idle : state }
     @Published var duration: TimeInterval = 0
     @Published var micLevel: Float = 0
     @Published var systemLevel: Float = 0
@@ -1224,17 +1241,30 @@ final class AudioRecorderViewModel: ObservableObject {
 
     // MARK: - Calendar Meeting Automation
 
+    private func updateIndicatorHidden() {
+        let hidden = isMeetingRecording && !showsMeetingIndicator
+        if hidden != isIndicatorHidden { isIndicatorHidden = hidden }
+    }
+
     func startCalendarMeetingRecording(
         preferredBaseName: String,
         transcriptMetadata: CalendarMeetingTranscriptMetadata? = nil
     ) async throws -> CalendarMeetingRecordingHandle {
-        let outputURL = try await beginRecording(
-            micEnabled: micEnabled,
-            systemAudioEnabled: systemAudioEnabled,
-            apiSessionID: nil,
-            preferredBaseName: preferredBaseName,
-            transcriptMetadata: transcriptMetadata
-        )
+        // A recording already running is not the meeting's.
+        if state == .idle { isMeetingRecording = true }
+        let outputURL: URL
+        do {
+            outputURL = try await beginRecording(
+                micEnabled: micEnabled,
+                systemAudioEnabled: systemAudioEnabled,
+                apiSessionID: nil,
+                preferredBaseName: preferredBaseName,
+                transcriptMetadata: transcriptMetadata
+            )
+        } catch {
+            if state != .recording { isMeetingRecording = false }
+            throw error
+        }
         guard state == .recording else {
             activeCalendarMeetingHandle = nil
             throw RecorderAPIError.notRecording

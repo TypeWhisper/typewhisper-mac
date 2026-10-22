@@ -142,6 +142,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
     @Published private(set) var hasPremiumAccess: Bool
     @Published private(set) var startMode: CalendarMeetingStartMode
     @Published private(set) var autoStopEnabled: Bool
+    /// Off: meetings start and stop after the same countdowns, with nothing on screen (#1079).
+    @Published private(set) var showsMeetingIndicator: Bool
     @Published private(set) var detectAdHocMeetings: Bool
     @Published private(set) var confirmSoloEvents: Bool
     @Published private(set) var selectedCalendarIDs: Set<String>
@@ -193,6 +195,10 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var notificationService: (any CalendarMeetingNotifying)?
     private var activeCalendarRecording: ActiveCalendarRecordingContext?
     private var activeAutoStopWarningDigest: String?
+    /// Countdowns the policy started, kept while hidden so turning the
+    /// indicator back on shows them again with their deadlines (#1079).
+    private var pendingStartCountdown: (occurrence: CalendarMeetingOccurrence, deadline: Date)?
+    private var pendingStopCountdown: (handle: CalendarMeetingRecordingHandle, deadline: Date)?
     private var activeAutoStopWarningHandle: CalendarMeetingRecordingHandle?
     private var calendarAutoStopTrackingActive = false
     private var notificationRouterInstalled = false
@@ -263,6 +269,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
             rawValue: defaults.string(forKey: UserDefaultsKeys.calendarMeetingStartMode) ?? ""
         ) ?? .off
         autoStopEnabled = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
+        let showsMeetingIndicator = defaults.object(forKey: UserDefaultsKeys.calendarMeetingShowsIndicator) as? Bool ?? true
+        self.showsMeetingIndicator = showsMeetingIndicator
+        recorderViewModel.showsMeetingIndicator = showsMeetingIndicator
         detectAdHocMeetings = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
         confirmSoloEvents = defaults.bool(forKey: UserDefaultsKeys.calendarMeetingConfirmSoloEvents)
         selectedCalendarIDs = Set(
@@ -518,6 +527,29 @@ final class CalendarMeetingAutomationController: ObservableObject {
         applyPolicyConfiguration(now: nowProvider())
     }
 
+    func setShowsMeetingIndicator(_ shows: Bool) {
+        guard showsMeetingIndicator != shows else { return }
+        showsMeetingIndicator = shows
+        recorderViewModel.showsMeetingIndicator = shows
+        defaults.set(shows, forKey: UserDefaultsKeys.calendarMeetingShowsIndicator)
+        // A countdown on screen goes, and comes back when shown again; its start
+        // or stop happens at the deadline either way.
+        if shows {
+            let now = nowProvider()
+            if let start = pendingStartCountdown, start.deadline > now {
+                presentStartCountdown(start.occurrence, deadline: start.deadline)
+            }
+            if let stop = pendingStopCountdown, stop.deadline > now {
+                presentAutoStopWarning(handle: stop.handle, deadline: stop.deadline)
+            }
+        } else {
+            countdownModel.dismissStart()
+            let stop = pendingStopCountdown
+            dismissAutoStopWarning()
+            pendingStopCountdown = stop
+        }
+    }
+
     func setCalendar(_ calendarID: String, enabled: Bool) {
         invalidatePendingRecordingStart()
         if activeCalendarRecording != nil {
@@ -619,6 +651,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         activeAutoStopWarningDigest = nil
         activeAutoStopWarningHandle = nil
         countdownModel.dismissAll()
+        pendingStartCountdown = nil
+        pendingStopCountdown = nil
         invalidatePendingRecordingStart()
         if let audioCollector {
             Task { await audioCollector.stopCollecting() }
@@ -862,24 +896,19 @@ final class CalendarMeetingAutomationController: ObservableObject {
             }
 
         case .showStartCountdown(let occurrence, let deadline):
-            countdownModel.presentStart(
-                title: occurrence.title,
-                startedAt: nowProvider(),
-                deadline: deadline
-            ) { [weak self] in
-                self?.applyPolicy(.userAction(
-                    .cancelStartCountdown(occurrence.occurrenceDigest),
-                    now: self?.nowProvider() ?? Date()
-                ))
-            }
+            pendingStartCountdown = (occurrence, deadline)
+            guard showsMeetingIndicator else { break }
+            presentStartCountdown(occurrence, deadline: deadline)
 
         case .dismissStartCountdown:
+            pendingStartCountdown = nil
             countdownModel.dismissStart()
 
         case .dismissStopCountdown:
             dismissAutoStopWarning()
 
         case .startRecording(let occurrence, let identity):
+            pendingStartCountdown = nil
             startRecording(occurrence: occurrence, identity: identity)
 
         case .persistSuppression(let digest):
@@ -899,6 +928,19 @@ final class CalendarMeetingAutomationController: ObservableObject {
         }
     }
 
+    private func presentStartCountdown(_ occurrence: CalendarMeetingOccurrence, deadline: Date) {
+        countdownModel.presentStart(
+            title: occurrence.title,
+            startedAt: nowProvider(),
+            deadline: deadline
+        ) { [weak self] in
+            self?.applyPolicy(.userAction(
+                .cancelStartCountdown(occurrence.occurrenceDigest),
+                now: self?.nowProvider() ?? Date()
+            ))
+        }
+    }
+
     private func presentAutoStopWarning(
         handle: CalendarMeetingRecordingHandle,
         deadline: Date
@@ -908,6 +950,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
             return
         }
         guard canEnableAutoStop else { return }
+        pendingStopCountdown = (handle, deadline)
+        // Hidden, the recording stops at the deadline without a warning.
+        guard showsMeetingIndicator else { return }
 
         let digest = activeCalendarRecording.occurrenceDigest
         activeAutoStopWarningDigest = digest
@@ -951,6 +996,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func dismissAutoStopWarning() {
+        pendingStopCountdown = nil
         countdownModel.dismissAutoStop()
         guard let digest = activeAutoStopWarningDigest else {
             activeAutoStopWarningHandle = nil
@@ -1615,6 +1661,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         await stopCollector()
         await stopCameraCollector()
         countdownModel.dismissAll()
+        pendingStartCountdown = nil
+        pendingStopCountdown = nil
         let pendingNotificationTask = notificationTask
         notificationGeneration += 1
         pendingNotificationTask?.cancel()

@@ -113,6 +113,8 @@ enum UserDefaultsKeys {
     // MARK: - Calendar Meeting Automation (machine-local; intentionally not synced/exported)
     static let calendarMeetingStartMode = "calendarMeetingStartMode"
     static let calendarMeetingAutoStopEnabled = "calendarMeetingAutoStopEnabled"
+    /// Off records meetings without countdowns or the Recorder indicator (#1079). Default on.
+    static let calendarMeetingShowsIndicator = "calendarMeetingShowsIndicator"
     static let calendarMeetingDetectAdHoc = "calendarMeetingDetectAdHoc"
     static let calendarMeetingConfirmSoloEvents = "calendarMeetingConfirmSoloEvents"
     static let calendarMeetingSelectedCalendarIDs = "calendarMeetingSelectedCalendarIDs"

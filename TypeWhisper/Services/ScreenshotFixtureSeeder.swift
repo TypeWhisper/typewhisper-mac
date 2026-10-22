@@ -34,6 +34,9 @@ extension ServiceContainer {
         if AppConstants.screenshotState == "recorder-queue" {
             audioRecorderViewModel.prepareScreenshotQueueFixture()
         }
+        if AppConstants.screenshotState == "recorder-meetings" {
+            SettingsNavigationCoordinator.shared.recorderPart = .meetings
+        }
         seedScreenshotRecorderFolders(state: AppConstants.screenshotState)
 
         if AppConstants.screenshotState != "correct-last-dictation-empty" {

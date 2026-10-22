@@ -168,12 +168,16 @@ class NotchIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
-        recorder.$state
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.updateVisibility(vm: vm, recorder: recorder)
-            }
-            .store(in: &cancellables)
+        // A meeting recording can be hidden from the indicator (#1079).
+        Publishers.Merge(
+            recorder.$state.map { _ in () },
+            recorder.$isIndicatorHidden.map { _ in () }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            self?.updateVisibility(vm: vm, recorder: recorder)
+        }
+        .store(in: &cancellables)
 
         // A side that shows the Model content takes the pointer (#1351).
         Publishers.Merge(
@@ -273,7 +277,7 @@ class NotchIndicatorPanel: NSPanel {
 
         let presentation = IndicatorPresentationState.resolve(
             dictationState: vm.state,
-            recorderState: recorder.state,
+            recorderState: recorder.indicatorState,
             previewActive: IndicatorPreviewSession.shared.isActive,
             isErrorFeedback: vm.actionFeedbackIsError && vm.actionFeedbackMessage != nil
         )

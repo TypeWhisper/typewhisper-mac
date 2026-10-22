@@ -62489,6 +62489,74 @@
         }
       }
     },
+    "calendarMeeting.settings.showIndicator" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Countdowns und Aufnahmeanzeige für Meetings zeigen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show countdowns and indicator for meeting recordings"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar cuentas atrás e indicador en las grabaciones de reuniones"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミーティング録音のカウントダウンとインジケーターを表示"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为会议录音显示倒计时和指示器"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.showIndicatorHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgeschaltet starten und stoppen Aufnahmen nach denselben Countdowns, ohne dass etwas auf dem Bildschirm erscheint. Du kannst dann keinen Start abbrechen und keine Aufnahme fortsetzen. Die Anzeige beim Diktieren folgt weiter ihrer eigenen Einstellung, und macOS zeigt weiterhin, dass das Mikrofon benutzt wird."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turned off, recordings start and stop after the same countdowns without anything on screen, so you can't cancel a start or keep a recording going. The indicator while dictating keeps its own setting, and macOS still shows that the microphone is in use."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Si lo desactivas, las grabaciones empiezan y se detienen tras las mismas cuentas atrás sin que aparezca nada en pantalla, así que no puedes cancelar un inicio ni seguir grabando. El indicador al dictar mantiene su propio ajuste y macOS sigue mostrando que el micrófono está en uso."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフにすると、録音は同じカウントダウンの後に画面に何も表示せずに開始・停止するため、開始をキャンセルしたり録音を続けたりできません。音声入力中のインジケーターは独自の設定に従い、マイクの使用中表示はmacOSに引き続き表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭后，录音会在同样的倒计时后开始和停止，屏幕上不显示任何内容，因此无法取消开始或继续录音。听写时的指示器仍遵循其自身设置，macOS 仍会显示麦克风正在使用。"
+          }
+        }
+      }
+    },
     "calendarMeeting.settings.startModeHelp" : {
       "localizations" : {
         "de" : {
