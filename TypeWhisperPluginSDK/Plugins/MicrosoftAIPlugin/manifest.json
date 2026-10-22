@@ -17,6 +17,5 @@
     "iconSystemName": "waveform.and.mic",
     "iconResourceName": "azure.svg",
     "principalClass": "MicrosoftAIPlugin",
-    "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": true
 }

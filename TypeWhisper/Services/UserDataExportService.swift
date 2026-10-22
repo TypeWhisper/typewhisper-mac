@@ -111,9 +111,8 @@ enum UserDataExportService {
 
     static let stagingDirectoryName = "DataExport-"
 
-    /// Preferences that hold credentials. An MDM or `defaults write`
-    /// provisioned license key must not end up in a portable archive.
-    static let excludedPreferenceKeys: Set<String> = [UserDefaultsKeys.managedLicenseKey]
+    /// 旧版本写入的凭据也应排除在可移植归档之外。
+    static let excludedPreferenceKeys: Set<String> = ["ManagedLicenseKey"]
 
     static let appSupportFolderName = "Application Support"
     static let preferencesFileName = "preferences.json"

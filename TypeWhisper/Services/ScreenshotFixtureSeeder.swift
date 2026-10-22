@@ -12,7 +12,7 @@ extension ServiceContainer {
 
         cloudFolderSyncController.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
         calendarMeetingAutomationController.prepareScreenshotFixture(
-            hasPremiumAccess: variant.hasPremiumAccess,
+            isConfigured: variant.hasPremiumAccess,
             calendars: language.calendars
         )
         targetAppCorrectionLearningService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)

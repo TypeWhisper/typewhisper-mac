@@ -18,6 +18,5 @@
     ],
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin",
-    "locality": "configurable",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "configurable"
 }

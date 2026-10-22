@@ -18,9 +18,7 @@ extension UserDefaults {
 extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
-    static let iOSCompanionPromoRequested = Notification.Name("iOSCompanionPromoRequested")
     static let whatsNewRequested = Notification.Name("whatsNewRequested")
-    static let startupActivityDidBecomeIdle = Notification.Name("startupActivityDidBecomeIdle")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -936,9 +934,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func observeStartupActivity() {
         let container = ServiceContainer.shared
         guard let whatsNew = WhatsNewCoordinator.shared else { return }
-        whatsNew.activityDidBecomeIdle = {
-            NotificationCenter.default.post(name: .startupActivityDidBecomeIdle, object: nil)
-        }
         let activities = [
             container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
             container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),

@@ -14,6 +14,5 @@
     "category": "post-processor",
     "iconSystemName": "arrow.up.forward.app",
     "principalClass": "WebhookPlugin",
-    "locality": "configurable",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "configurable"
 }

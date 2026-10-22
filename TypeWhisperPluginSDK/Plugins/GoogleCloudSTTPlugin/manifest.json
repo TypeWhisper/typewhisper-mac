@@ -15,6 +15,5 @@
     "iconSystemName": "globe.badge.chevron.backward",
     "principalClass": "GoogleCloudSTTPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "cloud"
 }

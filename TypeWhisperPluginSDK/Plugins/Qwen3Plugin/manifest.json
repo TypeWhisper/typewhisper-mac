@@ -17,6 +17,5 @@
     "category": "transcription",
     "iconSystemName": "cpu",
     "principalClass": "Qwen3Plugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

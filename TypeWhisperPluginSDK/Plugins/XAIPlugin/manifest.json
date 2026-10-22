@@ -21,6 +21,5 @@
     "locality": "cloud",
     "iconSystemName": "sparkles",
     "principalClass": "XAIPlugin",
-    "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": true
 }

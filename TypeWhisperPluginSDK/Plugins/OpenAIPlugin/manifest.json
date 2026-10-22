@@ -21,6 +21,5 @@
     "locality": "cloud",
     "iconSystemName": "brain",
     "principalClass": "OpenAIPlugin",
-    "requiresAPIKey": false,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": false
 }

@@ -431,7 +431,7 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         let controller = WhatsNewWindowController(coordinator: coordinator)
         controller.showWindow(nil)
 
-        AppDelegate().application(NSApplication.shared, open: [URL(string: "typewhisper://test-action")!])
+        AppDelegate().application(NSApplication.shared, open: [URL(string: "dictum://test-action")!])
 
         XCTAssertFalse(controller.window?.isVisible ?? true)
         XCTAssertTrue(coordinator.hasUnseenContent)

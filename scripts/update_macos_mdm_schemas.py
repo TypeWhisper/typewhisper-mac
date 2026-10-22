@@ -46,7 +46,6 @@ DESCRIPTIONS = {
     "LaunchAtLogin": ("Launch at login", "Registers or removes TypeWhisper's login item and locks the setting."),
     "SkipOnboardingWhenReady": ("Skip setup when ready", "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready."),
     "SuppressOptionalPrompts": ("Hide optional prompts", "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button."),
-    "ManagedLicenseKey": ("Commercial license key", "Activates a commercial license for the signed-in user."),
 }
 ENUMERATION_TITLES = {
     "UpdateMode": ["External (deployment updates the app)", "Check only", "User-initiated"],
@@ -98,9 +97,6 @@ def jamf_property(name, kind, maximum, order):
         configured["maxItems"] = GENERATOR.MAXIMUM_LIST_ENTRIES
     elif kind == "text":
         configured.update(TEXT_CONSTRAINTS)
-        if name == "ManagedLicenseKey":
-            # JSON Editor, which Jamf Pro uses for custom schemas, masks password fields.
-            configured["format"] = "password"
     # "Not Configured" keeps Jamf Pro from writing a value for keys the administrator leaves alone.
     return {
         "title": title,
@@ -154,8 +150,6 @@ def manifest_setting(name, kind, maximum):
         setting["pfm_subkeys"] = [{"pfm_name": "Channel", "pfm_type": "string", "pfm_range_list": list(GENERATOR.UPDATE_CHANNEL_ENTRIES)}]
     elif kind == "list":
         setting["pfm_subkeys"] = [{"pfm_name": "ID", "pfm_type": "string"}]
-    if name == "ManagedLicenseKey":
-        setting["pfm_sensitive"] = True
     return setting
 
 

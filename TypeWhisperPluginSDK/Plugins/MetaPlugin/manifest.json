@@ -21,6 +21,5 @@
     "iconSystemName": "waveform.and.sparkles",
     "iconResourceName": "meta.svg",
     "principalClass": "MetaPlugin",
-    "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": true
 }

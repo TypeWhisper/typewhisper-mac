@@ -17,6 +17,5 @@
     "iconResourceName": "smallest.svg",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SmallestAIPlugin",
-    "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": true
 }

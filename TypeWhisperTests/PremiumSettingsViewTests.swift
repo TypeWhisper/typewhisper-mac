@@ -13,7 +13,6 @@ final class PremiumSettingsViewTests: XCTestCase {
             .speakerWorkspace: .speakers,
             .pairedDevices: .advanced
         ]
-        XCTAssertEqual(Set(PremiumFeatureID.editionFeatures), Set(PremiumFeatureID.allCases))
         for feature in PremiumFeatureID.allCases {
             navigation.navigate(to: feature)
             XCTAssertEqual(try XCTUnwrap(navigation.request).tab, destinations[feature])

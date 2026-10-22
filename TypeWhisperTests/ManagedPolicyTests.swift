@@ -12,7 +12,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
             "AllowedTranscriptionProviders", "AllowedLlmProviders", "AllowedPlugins",
             "AllowCloudTranscription", "AllowCloudTextProcessing", "AllowPluginDownloads", "AllowModelDownloads",
             "UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "LaunchAtLogin",
-            "SkipOnboardingWhenReady", "SuppressOptionalPrompts", "ManagedLicenseKey",
+            "SkipOnboardingWhenReady", "SuppressOptionalPrompts",
         ])
         XCTAssertEqual(
             Set(ManagedPolicyKeys.all.filter(\.allowsRecommendation).map(\.name)),
@@ -24,7 +24,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
                 XCTAssertEqual(ManagedPolicyKeys.definition(named: partner)?.pairedWith, definition.name)
             }
         }
-        XCTAssertEqual(ManagedPolicyKeys.all.filter(\.sensitive).map(\.name), ["ManagedLicenseKey"])
+        XCTAssertNil(ManagedPolicyKeys.definition(named: "ManagedLicenseKey"))
         XCTAssertNil(ManagedPolicyKeys.definition(named: "allowCloudTranscription"))
     }
 
@@ -77,8 +77,11 @@ final class ManagedPolicyValidatorTests: XCTestCase {
     }
 
     func testTextIsTrimmedAndRejectsEmptyControlLongAndNonStringValues() {
-        let trimmed = validate(forced: ["ManagedLicenseKey": .string("  KEY-123 \n")])
-        XCTAssertEqual(trimmed.enforced("ManagedLicenseKey"), .text("KEY-123"))
+        let trimmed = validate(forced: [
+            "TranscriptionProviderId": .string("test-provider"),
+            "TranscriptionModelId": .string("  model-123 \n"),
+        ])
+        XCTAssertEqual(trimmed.enforced("TranscriptionModelId"), .text("model-123"))
 
         let invalid: [ManagedPolicyRawValue] = [
             .string("   "),
@@ -87,13 +90,19 @@ final class ManagedPolicyValidatorTests: XCTestCase {
             .integer(5),
         ]
         for raw in invalid {
-            let snapshot = validate(forced: ["ManagedLicenseKey": raw])
-            XCTAssertNil(snapshot.enforced("ManagedLicenseKey"))
-            XCTAssertEqual(snapshot.invalidEnforcedKeys, ["ManagedLicenseKey"])
+            let snapshot = validate(forced: [
+                "TranscriptionProviderId": .string("test-provider"),
+                "TranscriptionModelId": raw,
+            ])
+            XCTAssertNil(snapshot.enforced("TranscriptionModelId"))
+            XCTAssertEqual(snapshot.invalidEnforcedKeys, ["TranscriptionProviderId", "TranscriptionModelId"])
             XCTAssertFalse(snapshot.issues[0].message.contains("bell"), "Issues must not carry values")
         }
         let longest = String(repeating: "a", count: ManagedPolicyValidator.maximumTextLength)
-        XCTAssertEqual(validate(forced: ["ManagedLicenseKey": .string(longest)]).enforced("ManagedLicenseKey"), .text(longest))
+        XCTAssertEqual(validate(forced: [
+            "TranscriptionProviderId": .string("test-provider"),
+            "TranscriptionModelId": .string(longest),
+        ]).enforced("TranscriptionModelId"), .text(longest))
     }
 
     func testPairRequiresBothMembersAtTheSameScope() {
@@ -187,14 +196,14 @@ final class ManagedPolicyValidatorTests: XCTestCase {
             "Recommended": .dictionary([
                 "AllowCloudTranscription": .boolean(false),
                 "AllowedPlugins": .array([]),
-                "ManagedLicenseKey": .string("KEY"),
+                "AllowModelDownloads": .boolean(false),
             ]),
         ])
 
         XCTAssertTrue(snapshot.enforcedValues.isEmpty)
         XCTAssertTrue(snapshot.recommendedValues.isEmpty)
         XCTAssertTrue(snapshot.invalidEnforcedKeys.isEmpty)
-        XCTAssertEqual(Set(snapshot.issues.compactMap(\.key)), ["AllowCloudTranscription", "AllowedPlugins", "ManagedLicenseKey"])
+        XCTAssertEqual(Set(snapshot.issues.compactMap(\.key)), ["AllowCloudTranscription", "AllowedPlugins", "AllowModelDownloads"])
         XCTAssertTrue(snapshot.issues.allSatisfy { $0.message.contains("can only be enforced") })
     }
 
@@ -274,13 +283,14 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         XCTAssertEqual(validate(forced: ["UpdateMode": .integer(1), "SUEnableAutomaticChecks": .boolean(false)]).status, .present)
     }
 
-    func testValuesSetOutsideAProfileAreReportedExceptTheManagedLicenseKey() {
+    func testValuesSetOutsideAProfileAreReported() {
         let snapshot = validate(ManagedPolicyReading(unmanagedKeys: ["AllowCloudTranscription", "ManagedLicenseKey", "Recommended"]))
 
         XCTAssertEqual(snapshot.status, .absent)
         XCTAssertFalse(snapshot.isManaged)
         XCTAssertEqual(snapshot.issues.map(\.message), [
             "AllowCloudTranscription is set outside a configuration profile and is ignored.",
+            "ManagedLicenseKey is set outside a configuration profile and is ignored.",
             "Recommended is set outside a configuration profile and is ignored.",
         ])
     }
@@ -574,7 +584,7 @@ final class ManagedPreferencesPolicySourceTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(false, forKey: ManagedPolicyKeys.allowCloudTranscription)
-        defaults.set("KEY", forKey: ManagedPolicyKeys.managedLicenseKey)
+        defaults.set("KEY", forKey: "ManagedLicenseKey")
         defaults.set(["UpdateChannel": 1], forKey: ManagedPolicyKeys.recommendedDictionary)
         defaults.set("stable", forKey: "updateChannel")
 
@@ -583,7 +593,7 @@ final class ManagedPreferencesPolicySourceTests: XCTestCase {
 
         XCTAssertTrue(reading.readable)
         XCTAssertTrue(reading.forcedValues.isEmpty)
-        XCTAssertEqual(reading.unmanagedKeys, ["AllowCloudTranscription", "ManagedLicenseKey", "Recommended"])
+        XCTAssertEqual(reading.unmanagedKeys, ["AllowCloudTranscription", "Recommended"])
         XCTAssertFalse(snapshot.isManaged)
         XCTAssertEqual(snapshot.issues.compactMap(\.key), ["AllowCloudTranscription", "Recommended"])
     }
@@ -609,13 +619,13 @@ final class ManagedPolicyDiagnosticsTests: XCTestCase {
         XCTAssertEqual(diagnostics.enforced, [
             .init(name: "AllowCloudTranscription", value: "false", items: nil),
             .init(name: "AllowedPlugins", value: nil, items: ["com.typewhisper.whisperkit", "[omitted]"]),
-            .init(name: "ManagedLicenseKey", value: "[set]", items: nil),
             .init(name: "TranscriptionModelId", value: "[omitted]", items: nil),
             .init(name: "TranscriptionProviderId", value: "com.typewhisper.parakeet", items: nil),
             .init(name: "UpdateMode", value: "1", items: nil),
         ])
         XCTAssertEqual(diagnostics.recommended, [.init(name: "UpdateChannel", value: "2", items: nil)])
         XCTAssertEqual(diagnostics.issues, [
+            .init(key: "ManagedLicenseKey", scope: "enforced", message: "ManagedLicenseKey is not a dictum managed setting and is not applied as one."),
             .init(key: "[omitted]", scope: "enforced", message: "[omitted] is not a dictum managed setting and is not applied as one."),
         ])
     }

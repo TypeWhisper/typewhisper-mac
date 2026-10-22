@@ -20,6 +20,5 @@
     ],
     "iconSystemName": "waveform",
     "principalClass": "WhisperKitPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

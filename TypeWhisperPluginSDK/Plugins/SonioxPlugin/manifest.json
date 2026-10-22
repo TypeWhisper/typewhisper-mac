@@ -23,6 +23,5 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SonioxPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "cloud"
 }

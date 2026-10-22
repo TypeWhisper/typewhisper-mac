@@ -19,6 +19,5 @@
     "iconSystemName": "sparkles",
     "principalClass": "GeminiPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "cloud"
 }

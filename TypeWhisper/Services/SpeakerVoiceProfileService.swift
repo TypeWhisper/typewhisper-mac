@@ -15,9 +15,7 @@ enum SpeakerVoiceState: String, Equatable {
     case outdated
 }
 
-/// Recognizes named voices in recordings: keeps each recording's speaker
-/// embeddings, suggests names from voice profiles, and creates or improves
-/// 用户确认后创建或更新声音档案。
+/// 保存录音的说话人特征并建议姓名，在用户确认后创建或更新声音档案。
 @MainActor
 final class SpeakerVoiceProfileService: ObservableObject {
     let store: VoiceProfileStore

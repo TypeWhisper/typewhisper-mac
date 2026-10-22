@@ -15,6 +15,5 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "CoherePlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "cloud"
 }

@@ -14,6 +14,5 @@
     "category": "memory",
     "iconSystemName": "brain",
     "principalClass": "OpenAIVectorMemoryPlugin",
-    "locality": "cloud",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "cloud"
 }

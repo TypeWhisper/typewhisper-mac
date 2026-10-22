@@ -207,7 +207,6 @@ enum UserDefaultsKeys {
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
     // MARK: - Release presentation
-    static let managedLicenseKey = "ManagedLicenseKey"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
     static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
 

@@ -17,6 +17,5 @@
     "category": "transcription",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "CohereLocalPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

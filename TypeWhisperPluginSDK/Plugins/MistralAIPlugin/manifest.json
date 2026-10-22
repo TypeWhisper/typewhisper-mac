@@ -19,6 +19,5 @@
     "hosting": "cloud",
     "locality": "cloud",
     "principalClass": "MistralAIPlugin",
-    "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "requiresAPIKey": true
 }

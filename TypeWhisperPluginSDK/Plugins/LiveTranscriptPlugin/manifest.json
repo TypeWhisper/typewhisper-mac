@@ -14,6 +14,5 @@
     "category": "utility",
     "iconSystemName": "text.bubble",
     "principalClass": "LiveTranscriptPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

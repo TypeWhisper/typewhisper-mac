@@ -15,6 +15,5 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "Reson8Plugin",
     "requiresAPIKey": true,
-    "locality": "configurable",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "configurable"
 }

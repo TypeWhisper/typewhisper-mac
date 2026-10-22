@@ -17,6 +17,5 @@
     "category": "transcription",
     "iconSystemName": "cpu",
     "principalClass": "GranitePlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

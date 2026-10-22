@@ -73,7 +73,6 @@ enum ManagedPolicyKeys {
     static let launchAtLogin = "LaunchAtLogin"
     static let skipOnboardingWhenReady = "SkipOnboardingWhenReady"
     static let suppressOptionalPrompts = "SuppressOptionalPrompts"
-    static let managedLicenseKey = UserDefaultsKeys.managedLicenseKey
 
     /// Every supported key in documentation order.
     static let all: [ManagedPolicyDefinition] = [
@@ -94,7 +93,6 @@ enum ManagedPolicyKeys {
         .init(name: launchAtLogin, kind: .boolean, allowsRecommendation: true),
         .init(name: skipOnboardingWhenReady, kind: .boolean),
         .init(name: suppressOptionalPrompts, kind: .boolean, allowsRecommendation: true),
-        .init(name: managedLicenseKey, kind: .text, sensitive: true, acceptsUnmanagedValue: true),
     ]
 
     private static let byName = Dictionary(uniqueKeysWithValues: all.map { ($0.name, $0) })

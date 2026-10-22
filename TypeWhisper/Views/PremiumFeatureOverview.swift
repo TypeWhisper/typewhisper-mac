@@ -8,7 +8,6 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case pairedDevices
 
     var id: String { rawValue }
-    static var editionFeatures: [PremiumFeatureID] { allCases }
 
     var title: String {
         switch self {
@@ -93,10 +92,6 @@ enum PremiumCorrectionExamples {
         return [("teh", "the"), ("recieve", "receive")]
     }
 
-    static var primaryLine: String {
-        guard let example = current.first else { return "" }
-        return "\(example.before)  →  \(example.after)"
-    }
 }
 
 enum PairedDevicesPremiumCopy {

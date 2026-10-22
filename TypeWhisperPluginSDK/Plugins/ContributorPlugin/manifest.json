@@ -16,6 +16,5 @@
     "locality": "cloud",
     "requiresAPIKey": false,
     "iconSystemName": "checkmark.bubble",
-    "principalClass": "ContributorPlugin",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "principalClass": "ContributorPlugin"
 }

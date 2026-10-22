@@ -101,9 +101,9 @@ def check_value(test, name, value):
 
 class CatalogTests(unittest.TestCase):
     def test_reads_the_swift_catalog(self):
-        self.assertEqual(len(CATALOG), 18)
+        self.assertEqual(len(CATALOG), 17)
         self.assertEqual(CATALOG["UpdateMode"], ("enumeration", False, 2, None))
-        self.assertEqual(CATALOG["ManagedLicenseKey"], ("text", False, 0, None))
+        self.assertNotIn("ManagedLicenseKey", CATALOG)
         self.assertEqual(CATALOG["TranscriptionProviderId"][3], "TranscriptionModelId")
 
     def test_generator_keys_match_the_app(self):
@@ -119,7 +119,7 @@ class CatalogTests(unittest.TestCase):
         self.assertEqual(GENERATOR.APP_STORE_IGNORED, APP_STORE_IGNORED)
         self.assertEqual(set(GENERATOR.UPDATE_CHANNEL_ENTRIES), {"stable", "daily", "release-candidate", "none"})
         self.assertEqual(SCHEMAS.APP_STORE_IGNORED, GENERATOR.APP_STORE_IGNORED)
-        self.assertEqual(len(APP_STORE_IGNORED), 5)
+        self.assertEqual(len(APP_STORE_IGNORED), 4)
         self.assertEqual(set(SCHEMAS.DESCRIPTIONS), set(CATALOG))
         for name, (kind, _, maximum, _) in CATALOG.items():
             if kind == "enumeration":
@@ -218,7 +218,7 @@ class GeneratorTests(unittest.TestCase):
 
         status, _, stderr = self.generate("--set", "ManagedLicenseKey=KEY", "--domain", "com.typewhisper.typewhisper-app.dev")
         self.assertEqual(status, 2)
-        self.assertIn("none of the values apply to the App Store edition", stderr)
+        self.assertIn("unknown key", stderr.lower())
 
     def test_invalid_metadata_leaves_an_existing_profile_untouched(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -348,8 +348,6 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(configured["minLength"], 1, name)
             self.assertEqual(configured["maxLength"], GENERATOR.MAXIMUM_TEXT_LENGTH, name)
             self.assertEqual(configured["pattern"], SCHEMAS.TEXT_PATTERN, name)
-        if name == "ManagedLicenseKey":
-            self.assertEqual(configured["format"], "password")
 
     def test_text_pattern_refuses_what_the_app_refuses(self):
         pattern = re.compile(SCHEMAS.TEXT_PATTERN)
@@ -391,8 +389,6 @@ class SchemaTests(unittest.TestCase):
                         if kind == "enumeration":
                             self.assertEqual(key["pfm_range_list"], list(range(maximum + 1)), name)
                             self.assertEqual(len(key["pfm_range_list_titles"]), maximum + 1, name)
-                if "ManagedLicenseKey" in settings:
-                    self.assertTrue(settings["ManagedLicenseKey"].get("pfm_sensitive"))
                 if "AllowedUpdateChannels" in settings:
                     entries = settings["AllowedUpdateChannels"]["pfm_subkeys"][0]["pfm_range_list"]
                     self.assertEqual(entries, list(GENERATOR.UPDATE_CHANNEL_ENTRIES))

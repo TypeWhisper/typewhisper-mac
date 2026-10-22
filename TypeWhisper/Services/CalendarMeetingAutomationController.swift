@@ -291,17 +291,17 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     func prepareScreenshotFixture(
-        hasPremiumAccess: Bool,
+        isConfigured: Bool,
         calendars: [CalendarMeetingCalendar]
     ) {
-        startMode = hasPremiumAccess ? .automatic : .off
-        autoStopEnabled = hasPremiumAccess
-        selectedCalendarIDs = hasPremiumAccess ? ["screenshot-team", "screenshot-personal"] : []
-        enabledProviders = hasPremiumAccess ? Set(MeetingProvider.allCases) : []
-        calendarAuthorization = hasPremiumAccess ? .fullAccess : .notDetermined
-        notificationAuthorization = hasPremiumAccess ? .authorized : .notDetermined
-        self.calendars = hasPremiumAccess ? calendars : []
-        isAutomationActive = hasPremiumAccess
+        startMode = isConfigured ? .automatic : .off
+        autoStopEnabled = isConfigured
+        selectedCalendarIDs = isConfigured ? ["screenshot-team", "screenshot-personal"] : []
+        enabledProviders = isConfigured ? Set(MeetingProvider.allCases) : []
+        calendarAuthorization = isConfigured ? .fullAccess : .notDetermined
+        notificationAuthorization = isConfigured ? .authorized : .notDetermined
+        self.calendars = isConfigured ? calendars : []
+        isAutomationActive = isConfigured
         isCalendarAccessRequestInFlight = false
         calendarAccessRequestFailure = nil
     }

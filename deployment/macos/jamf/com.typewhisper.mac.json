@@ -431,35 +431,10 @@
         }
       ]
     },
-    "ManagedLicenseKey": {
-      "title": "Commercial license key",
-      "description": "Activates a commercial license for the signed-in user.",
-      "property_order": 90,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 1024,
-          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$",
-          "format": "password"
-        }
-      ]
-    },
     "Recommended": {
       "title": "Recommended settings (users can change)",
       "description": "Defaults that apply until the user makes a choice.",
-      "property_order": 95,
+      "property_order": 90,
       "anyOf": [
         {
           "type": "null",

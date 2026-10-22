@@ -17,6 +17,5 @@
     "category": "llm",
     "iconSystemName": "cpu",
     "principalClass": "LocalLLMPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

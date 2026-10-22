@@ -56,7 +56,6 @@ KEYS = {
     "LaunchAtLogin": ("boolean", True, 0),
     "SkipOnboardingWhenReady": ("boolean", False, 0),
     "SuppressOptionalPrompts": ("boolean", True, 0),
-    "ManagedLicenseKey": ("text", False, 0),
 }
 PAIRS = [("TranscriptionProviderId", "TranscriptionModelId"), ("LlmProviderId", "LlmModelId")]
 ENUMERATION_NAMES = {
@@ -72,7 +71,7 @@ DOMAINS = (
 APP_STORE_DOMAINS = ("com.typewhisper.typewhisper-app", "com.typewhisper.typewhisper-app.dev")
 # Keys the App Store edition ignores (notApplicable in ManagedSettingsView.swift); a test keeps
 # them equal. They are left out of App Store payloads, where they would only be reported.
-APP_STORE_IGNORED = frozenset({"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads", "ManagedLicenseKey"})
+APP_STORE_IGNORED = frozenset({"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads"})
 MAXIMUM_TEXT_LENGTH = 1024
 MAXIMUM_LIST_ENTRIES = 256
 UPDATE_CHANNEL_ENTRIES = ("stable", "daily", "release-candidate", "none")

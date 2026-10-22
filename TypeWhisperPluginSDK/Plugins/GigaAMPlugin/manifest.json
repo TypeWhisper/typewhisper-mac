@@ -18,6 +18,5 @@
     "iconResourceName": "sber.svg",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "GigaAMPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

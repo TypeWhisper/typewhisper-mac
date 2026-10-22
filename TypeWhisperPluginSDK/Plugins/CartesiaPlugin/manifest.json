@@ -21,6 +21,5 @@
     "iconSystemName": "waveform",
     "principalClass": "CartesiaPlugin",
     "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum",
     "homepageURL": "https://www.cartesia.ai/"
 }

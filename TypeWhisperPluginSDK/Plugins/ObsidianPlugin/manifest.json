@@ -14,6 +14,5 @@
     "category": "action",
     "iconSystemName": "doc.text",
     "principalClass": "ObsidianPlugin",
-    "locality": "configurable",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "configurable"
 }

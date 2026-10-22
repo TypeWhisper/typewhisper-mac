@@ -20,6 +20,5 @@
     ],
     "iconSystemName": "bird",
     "principalClass": "ParakeetPlugin",
-    "locality": "local",
-    "detailsURL": "https://github.com/schneidervvv/dictum"
+    "locality": "local"
 }

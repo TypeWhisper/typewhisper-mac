@@ -15,6 +15,5 @@
   "requiresAPIKey": false,
   "locality": "local",
   "iconSystemName": "text.badge.minus",
-  "category": "post-processor",
-  "detailsURL": "https://github.com/schneidervvv/dictum"
+  "category": "post-processor"
 }

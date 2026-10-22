@@ -127,7 +127,6 @@
 		A1C0DE000000000000001313 /* ManagedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001314 /* ManagedSettingsView.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		A11800000000000000000003 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000004 /* WhatsNewView.swift */; };
-		1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000012 /* ios-companion-promo.mp4 */; };
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
 		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
@@ -294,7 +293,6 @@
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
 		AA16570000000000000001 /* AppLanguageText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000001 /* AppLanguageText.swift */; };
 		AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000002 /* InstalledAppsViewModel.swift */; };
-		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; settings = {ATTRIBUTES = (Weak, ); }; };
 		AA00000000000000000072 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000072 /* Assets.xcassets */; };
 		AA00000000000000000073 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000073 /* TranslationService.swift */; };
 		AA00000000000000000074 /* AudioDuckingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000074 /* AudioDuckingService.swift */; };
@@ -928,7 +926,6 @@
 		A1C0DE000000000000001316 /* ManagedSettingsPoliciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsPoliciesTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
 		A11800000000000000000004 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
-		1F0550000000000000000012 /* ios-companion-promo.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ios-companion-promo.mp4"; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
@@ -1452,7 +1449,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA00000000000000000071 /* Sparkle in Frameworks */,
 				AA00000000000000000128 /* TypeWhisperPluginSDK in Frameworks */,
 				AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */,
 			);
@@ -2340,7 +2336,6 @@
 				BB00000000000000000339 /* it.json */,
 				BB00000000000000000341 /* ja.json */,
 				BB00000000000000000072 /* Assets.xcassets */,
-				1F0550000000000000000012 /* ios-companion-promo.mp4 */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -3327,7 +3322,6 @@
 			);
 			name = TypeWhisper;
 			packageProductDependencies = (
-				PP00000000000000000004 /* Sparkle */,
 				PP00000000000000000005 /* TypeWhisperPluginSDK */,
 				PP00000000000000000040 /* MediaRemoteAdapter */,
 			);
@@ -4522,7 +4516,6 @@
 			mainGroup = CC00000000000000000001;
 			packageReferences = (
 				RR00000000000000000001 /* XCRemoteSwiftPackageReference "WhisperKit" */,
-				RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */,
 				RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */,
 				RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */,
 				RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
@@ -4641,7 +4634,6 @@
 				AA00000000000000000088 /* transcription_success.wav in Resources */,
 				AA00000000000000000089 /* error.wav in Resources */,
 				AA00000000000000000108 /* PrivacyInfo.xcprivacy in Resources */,
-				1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -9708,14 +9700,6 @@
 				kind = branch;
 			};
 		};
-		RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.0.0;
-			};
-		};
 		RR00000000000000000006 /* XCRemoteSwiftPackageReference "mlx-audio-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
@@ -9793,11 +9777,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
 			productName = TypeWhisperPluginSDK;
-		};
-		PP00000000000000000004 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
 		};
 		PP00000000000000000005 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -22,6 +22,5 @@
     "iconResourceName": "vercel.svg",
     "principalClass": "VercelAIGatewayPlugin",
     "requiresAPIKey": true,
-    "detailsURL": "https://github.com/schneidervvv/dictum",
     "homepageURL": "https://vercel.com/ai-gateway"
 }

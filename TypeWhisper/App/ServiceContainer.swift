@@ -481,8 +481,6 @@ final class ServiceContainer: ObservableObject {
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
 
-        // License
-
         // Plugin system
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
