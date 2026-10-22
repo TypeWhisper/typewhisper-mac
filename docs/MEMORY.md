@@ -1,0 +1,24 @@
+# dictum项目记忆
+
+## 核心记忆
+
+* 每个任务完成后更新 [MEMORY](docs/MEMORY.md)：禁止新增分区；已交付的每条记录以时间戳（YYYY-MM-DD）开头；待办完成后从待办事项表格移到已交付。
+
+## 已交付
+
+* 2026-10-22 fork TypeWhisper 为 [schneidervvv/dictum](https://github.com/schneidervvv/dictum)，关闭仓库的 GitHub Actions；新建 Notion 数据库 [dictum产品路线图](https://app.notion.com/p/00ef0a36adde4420b66feba052f66a00)。
+* 2026-10-22 完成 Typeless 功能调研（[TYPELESS RESEARCH](TYPELESS_RESEARCH.md)）和 V0.1.0 阶段计划（[ROADMAP](ROADMAP.md)）。
+
+## 待办事项
+
+| 事项 | 当前结论与状态 | 文档链接 |
+| -- | ------- | ---- |
+| 安装 Xcode | 本机只有命令行工具，无法构建和测试；安装需要负责人输入管理员密码 | [ROADMAP](ROADMAP.md) |
+| V0.1.0 阶段 0 到阶段 7 | 计划已定，等待 Xcode 安装后开始阶段 0；设计阶段先行 | [ROADMAP](ROADMAP.md) |
+
+## 关键决策
+
+* 选择 TypeWhisper 作为基础项目：它已有 Qwen3 ASR 插件、流式预览、词典、历史与同步、工作流翻译和几十个供应商插件。Handy、FluidVoice 星数更高，但缺少大部分 V0.1.0 功能。
+* 品牌只改用户可见部分，Swift 模块名和文件夹名保持不变，方便合并上游更新。
+* 云端历史使用文件夹同步，默认指向 iCloud Drive，不需要付费苹果开发者账号。
+* 功能开发使用 gpt-6.1-sol，UI/UX 设计和每阶段代码审查使用 Claude，实机测试使用 gpt-6-astra。

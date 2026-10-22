@@ -1,17 +1,42 @@
-## Pull Requests
+---
+DateCreated: 2026-10-21 20:10:50
+LastUpdated: 2026-10-21 20:16:00
+---
+## Global Rules
 
-When a pull request fixes or implements a GitHub issue, always:
-- include the issue context in the PR body
-- include an auto-close reference such as `Closes #123`
-- include a short test plan with the exact verification command(s)
+* 开始任何任务前，先读取 Routing Map 中标注"默认读取"的文档。
+* 在项目文件夹下新增文档时，将文档链接在 Routing Map，并用一句话说明文档内容，以及 Agent 应该在何时阅读该文档。
+* 我提供网页链接时，如果无法读取完整内容（需要登录、需要付费或页面打不开），直接告诉我，禁止根据标题或摘要猜测内容。
+* 你对文档或代码的更新不要保留任何错误痕迹。
+* 严格按我要求的范围执行，既不删减，也不额外添加。多余的内容被指出后直接删除，禁止在代码、注释、提交说明或 PR 中解释删除原因。所有输出都写成最终状态，不留修正痕迹。
 
-For visible UI changes, always capture screenshots of the final interface in English:
+## Routing Map
 
-- include the screenshots in the user handoff, with PNG files ready to attach to a pull request
-- include the relevant screenshots in the pull request description when creating or updating the PR
+* [MEMORY](docs/MEMORY.md)：项目的已交付内容、待办事项和关键决策。默认读取。
+* [LESSONS](docs/LESSONS.md)：Agent 犯过的错误、证据和修复方法。默认读取。
+* [CODE STANDARDS](docs/CODE_STANDARDS.md)：项目的代码编写标准。默认读取。
+* [ROADMAP](docs/ROADMAP.md)：V0.1.0 的完成标准、阶段划分、每阶段的开发与审查流程和关键决策。开始任何开发阶段前阅读。
+* [TYPELESS RESEARCH](docs/TYPELESS_RESEARCH.md)：Typeless 的功能、教程、定价和 UX 细节调研，附来源。规划功能范围或设计交互时阅读。
+* [UPSTREAM AGENTS](docs/UPSTREAM_AGENTS.md)：TypeWhisper 上游仓库的 Agent 规则（PR 要求、App Store 版本构建）。修改 `APPSTORE` 相关代码或准备 PR 时阅读。
 
-## Mac App Store Edition
+## Voice Principles
 
-- `APPSTORE` code must keep the direct-distribution app unchanged; verify both builds when touching shared files.
-- Build and launch the sandboxed edition with `scripts/appstore/build-dev.sh --run`; run `scripts/appstore/release-audit.sh` before App Store releases.
-- See `docs/appstore/README.md` for decisions, the bundled plugin list and the release workflow.
+* 与我对话和面向我的项目文档使用中文；面向Agents的文档使用英文。代码注释、提交说明和 PR 描述使用中文。
+* 沟通简洁高效。
+* 用户不是专业资深工程师，你的措辞要让用户能够理解。
+* 只有在我要求对比时才使用对比句式。禁止"不是……而是""要……而不是""……而非"等一切同类写法。
+* 词语使用完整的双字形式，例如写"修改""运行"，禁止写"改""跑"。代码标识符保留英文原名。描述操作时写清动作和对象。
+* 禁止生造名词和黑话（例如"落地""钉死""对齐"），使用普通人都能看懂的常用词。
+
+## Reply Rules
+
+* 回复开头用一两句话说明刚才完成了什么，不加"总结""一句话总结"之类的标签，也不写"下面详细展开"之类的引导句。开头说明和正文之间空一行。
+* 回复正文中，使用类似Intelligent UI的视觉阐述方式优于使用文字解说。讲解复杂流程时优先使用 mermaid 图表，禁止使用 ASCII Art。
+* 列举多个事物或多个方案时使用列表。
+* 设计方案时一次考虑完整，禁止"第一版先……观察后再……"的说法；方案确定后的实现过程按 CODE STANDARDS 运行、测试、修复。禁止把方案分成稳妥和激进；确实需要多个方案时，每个方案都必须独立成立、相互平行。
+* 我让你搜索某项内容时，只列出满足要求的结果。
+* 每次回复的结尾，告诉我下一步该做什么。
+
+## Maintenance
+
+* Agents 负责维护此文档，并保持在 200 行以内。超出时将部分分区拆成单独文档并链接到 Routing Map，原有内容保持完整。
