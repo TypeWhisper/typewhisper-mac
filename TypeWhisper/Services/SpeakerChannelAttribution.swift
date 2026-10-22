@@ -97,7 +97,8 @@ enum SpeakerChannelAttribution {
         return combined.sorted { ($0.start, $0.end) < ($1.start, $1.end) }
     }
 
-    /// Diarizer speakers with more than half of their speech inside own speech.
+    /// Diarizer speakers with at least half of their speech inside own speech,
+    /// the same rule `SpeakerWorkspaceModel.microphoneSpeaker` uses.
     private static func labelsMostlyOnMicrophone(
         _ turns: [PluginSpeakerTurn],
         ownSpeech: [ClosedRange<TimeInterval>]
@@ -110,7 +111,7 @@ enum SpeakerChannelAttribution {
                 onMicrophone[turn.speakerLabel, default: 0] += min(turn.end, range.upperBound) - max(turn.start, range.lowerBound)
             }
         }
-        return Set(onMicrophone.filter { $0.value > spoken[$0.key, default: 0] / 2 }.keys)
+        return Set(onMicrophone.filter { $0.value >= spoken[$0.key, default: 0] / 2 }.keys)
     }
 
     /// What is left of a diarizer turn around own speech only counts from this length.
