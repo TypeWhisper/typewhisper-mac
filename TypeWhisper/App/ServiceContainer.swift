@@ -330,7 +330,44 @@ final class ServiceContainer: ObservableObject {
             licenseService.objectWillChange.eraseToAnyPublisher(),
             premiumAccountService.objectWillChange.eraseToAnyPublisher(),
         ])
+        // Parakeet reports when each word is spoken and runs on this Mac, so
+        // it gives timing whatever engine wrote the text. Nil when it can't run.
+        let parakeetTimingPass: @MainActor (URL, String?) async throws -> TranscriptionResult? = {
+            [audioFileService, modelManagerService] url, language in
+            let engineID = "parakeet"
+            let log = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
+            guard let engine = PluginManager.shared?.transcriptionEngine(for: engineID) else {
+                log.info("Timing pass with Parakeet skipped: Parakeet is not installed")
+                return nil
+            }
+            guard modelManagerService.canPrepareForTranscription(engine) else {
+                log.info("Timing pass with Parakeet skipped: Parakeet has no model to load")
+                return nil
+            }
+            // Engines store a code or a name ("de", "German").
+            let language = SpeakerTranscriptBuilder.languageCode(from: language)
+            let languages = engine.supportedLanguages
+            if let language, !languages.isEmpty,
+               !languages.contains(where: { language.hasPrefix($0) || $0.hasPrefix(language) }) {
+                log.info("Timing pass with Parakeet skipped: Parakeet does not support \(language, privacy: .public)")
+                return nil
+            }
+            let samples = try await audioFileService.loadAudioSamples(from: url)
+            return try await modelManagerService.transcribe(
+                audioSamples: samples,
+                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+                task: .transcribe,
+                engineOverrideId: engineID,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+        }
         speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
+            // Engines such as Qwen3 return text without timestamps; the
+            // selected engine would then return none a second time.
+            if let result = try await parakeetTimingPass(url, language), !result.segments.isEmpty {
+                return result
+            }
             let samples = try await audioFileService.loadAudioSamples(from: url)
             return try await modelManagerService.transcribe(
                 audioSamples: samples,
@@ -340,35 +377,8 @@ final class ServiceContainer: ObservableObject {
                 onSourceProgress: { _ in true }
             )
         }
-        speakerCoordinator.wordTimingSource = { [audioFileService, modelManagerService] url, language in
-            // Parakeet reports when each word is spoken and runs on this Mac.
-            let engineID = "parakeet"
-            let log = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
-            guard let engine = PluginManager.shared?.transcriptionEngine(for: engineID) else {
-                log.info("Word timing pass skipped: Parakeet is not installed")
-                return []
-            }
-            guard modelManagerService.canPrepareForTranscription(engine) else {
-                log.info("Word timing pass skipped: Parakeet has no model to load")
-                return []
-            }
-            // Engines store a code or a name ("de", "German").
-            let language = SpeakerTranscriptBuilder.languageCode(from: language)
-            let languages = engine.supportedLanguages
-            if let language, !languages.isEmpty,
-               !languages.contains(where: { language.hasPrefix($0) || $0.hasPrefix(language) }) {
-                log.info("Word timing pass skipped: Parakeet does not support \(language, privacy: .public)")
-                return []
-            }
-            let samples = try await audioFileService.loadAudioSamples(from: url)
-            let result = try await modelManagerService.transcribe(
-                audioSamples: samples,
-                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
-                task: .transcribe,
-                engineOverrideId: engineID,
-                onProgress: { _ in true },
-                onSourceProgress: { _ in true }
-            )
+        speakerCoordinator.wordTimingSource = { url, language in
+            guard let result = try await parakeetTimingPass(url, language) else { return [] }
             // The words are matched to another engine's text, which may
             // punctuate differently.
             return result.words.compactMap { word in
