@@ -21327,6 +21327,12 @@
             "value" : "Letztes Diktat korrigieren"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corregir el último dictado"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21349,6 +21355,12 @@
             "value" : "Letztes Diktat korrigieren …"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corregir el último dictado..."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21369,6 +21381,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tastenkürzel zum Korrigieren des letzten Diktats"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Atajo para corregir el último dictado"
           }
         },
         "ja" : {
@@ -21399,6 +21417,12 @@
             "value" : "Fix your latest dictation in a small editor and copy the corrected text."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Corrige tu último dictado en un pequeño editor y copia el texto corregido."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21425,6 +21449,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "No dictation to correct yet"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todavía no hay ningún dictado que corregir"
           }
         },
         "ja" : {
@@ -21455,6 +21485,12 @@
             "value" : "Finish the current dictation first"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termina primero el dictado en curso"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21481,6 +21517,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Dictated text"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto dictado"
           }
         },
         "ja" : {
@@ -21511,6 +21553,12 @@
             "value" : "Return saves the correction and copies it. Shift-Return adds a line. Escape cancels."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retorno guarda la corrección y la copia. Mayúsculas-Retorno agrega una línea. Esc cancela."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21537,6 +21585,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Return saves · Shift-Return adds a line · Esc cancels"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retorno guarda · Mayúsculas-Retorno agrega una línea · Esc cancela"
           }
         },
         "ja" : {
@@ -21567,6 +21621,12 @@
             "value" : "Save and Copy"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar y copiar"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21593,6 +21653,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Corrected text copied"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Texto corregido copiado"
           }
         },
         "ja" : {
@@ -21623,6 +21689,12 @@
             "value" : "No changes, nothing to learn"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin cambios, nada que aprender"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21649,6 +21721,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nothing learned: only clear single-word corrections are saved to the Dictionary"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se aprendió nada: solo se guardan en el diccionario las correcciones claras de una sola palabra"
           }
         },
         "ja" : {
@@ -21679,6 +21757,12 @@
             "value" : "The correction could not be saved to the Dictionary"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar la corrección en el diccionario"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21705,6 +21789,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Learning is off. Turn on “Learn from edits after insertion” in Settings > Premium."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El aprendizaje está desactivado. Activa “Aprender correcciones de los cambios hechos después de insertar” en Ajustes > Premium."
           }
         },
         "ja" : {
@@ -21735,6 +21825,12 @@
             "value" : "Clear single-word corrections are saved to the Dictionary."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Las correcciones claras de una sola palabra se guardan en el diccionario."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21763,6 +21859,12 @@
             "value" : "Saved to Dictionary: %1$@ becomes %2$@"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardado en el diccionario: %1$@ pasa a ser %2$@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -21789,6 +21891,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Original before post-processing"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original antes del posprocesamiento"
           }
         },
         "ja" : {
