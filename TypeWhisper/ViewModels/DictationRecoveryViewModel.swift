@@ -122,7 +122,6 @@ final class DictationRecoveryViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let historyService: HistoryService
     private let usageStatisticsRecorder: UsageStatisticsRecording?
-    private let licenseService: LicenseService?
     private let audioSamplesLoader: AudioSamplesLoader
     private let transcriptionRunner: TranscriptionRunner
     private let engineReadinessChecker: EngineReadinessChecker?
@@ -136,7 +135,6 @@ final class DictationRecoveryViewModel: ObservableObject {
         historyService: HistoryService,
         audioFileService: AudioFileService,
         usageStatisticsRecorder: UsageStatisticsRecording? = nil,
-        licenseService: LicenseService? = nil,
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         transcriptionRunner: TranscriptionRunner? = nil,
@@ -146,7 +144,6 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.modelManager = modelManager
         self.historyService = historyService
         self.usageStatisticsRecorder = usageStatisticsRecorder
-        self.licenseService = licenseService
         self.defaults = defaults
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
             try await audioFileService.loadAudioSamples(from: url)
@@ -183,13 +180,6 @@ final class DictationRecoveryViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] urls in
                 self?.updateRecoveryURLs(urls)
-            }
-            .store(in: &cancellables)
-
-        licenseService?.objectWillChange
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
             }
             .store(in: &cancellables)
 
@@ -260,25 +250,6 @@ final class DictationRecoveryViewModel: ObservableObject {
         resolvedEngine?.supportedLanguages(forModel: selectedModel).sorted() ?? []
     }
 
-    var canUseAutomaticFallback: Bool {
-        licenseService?.canUseProTranscriptionFallback ?? false
-    }
-
-    var automaticFallbackUnavailableMessage: String? {
-        guard !canUseAutomaticFallback else { return nil }
-        #if APPSTORE
-        return localizedAppText(
-            "Automatic fallback requires TypeWhisper Premium.",
-            de: "Automatischer Fallback benötigt TypeWhisper Premium."
-        )
-        #else
-        return localizedAppText(
-            "Automatic fallback requires a commercial license or active supporter status.",
-            de: "Automatischer Fallback benötigt eine kommerzielle Lizenz oder aktiven Supporter-Status."
-        )
-        #endif
-    }
-
     /// Re-reads the recovery preferences after a settings-backup import wrote
     /// them to UserDefaults. The view model is initialized once at launch and is
     /// what ServiceContainer consults for the live fallback and hedge values, so
@@ -320,7 +291,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         excluding primaryEngineId: String?,
         task: TranscriptionTask
     ) -> DictationRecoveryFallbackConfiguration? {
-        guard automaticFallbackEnabled, canUseAutomaticFallback else { return nil }
+        guard automaticFallbackEnabled else { return nil }
         // An enforced pair decides the engine, so a fallback would only run the same engine again.
         guard PluginManager.shared?.enforcedTranscriptionResolution == nil else { return nil }
         guard let selectedEngine, !selectedEngine.isEmpty else { return nil }

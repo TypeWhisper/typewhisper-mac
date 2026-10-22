@@ -56,7 +56,6 @@ struct CalendarMeetingJoinSignal: Equatable, Sendable {
 }
 
 struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
-    let hasPremiumAccess: Bool
     let startMode: CalendarMeetingStartMode
     let autoStopEnabled: Bool
     let calendarAuthorization: CalendarMeetingCalendarAuthorization
@@ -67,7 +66,7 @@ struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
     var confirmSoloEvents = false
 
     var isOperational: Bool {
-        hasPremiumAccess && startMode != .off
+        startMode != .off
             && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
     }
 
@@ -203,7 +202,6 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     }
 
     private var configuration = CalendarMeetingAutomationConfiguration(
-        hasPremiumAccess: false,
         startMode: .off,
         autoStopEnabled: false,
         calendarAuthorization: .notDetermined,
@@ -244,8 +242,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             let interruptedOccurrence = interruptedStart.flatMap { occurrence(for: $0.digest) }
             let autoStopSettingsChangedDuringRecording = activeRecording != nil
                 && (
-                    previousConfiguration.hasPremiumAccess != configuration.hasPremiumAccess
-                        || previousConfiguration.startMode != configuration.startMode
+                    previousConfiguration.startMode != configuration.startMode
                         || previousConfiguration.autoStopEnabled != configuration.autoStopEnabled
                         || previousConfiguration.calendarAuthorization != configuration.calendarAuthorization
                         || previousConfiguration.selectedCalendarIDs != configuration.selectedCalendarIDs

@@ -149,8 +149,7 @@ final class SpeakerSyncHistoryTests: XCTestCase {
         // The synced profile link belongs to the other device.
         let voices = SpeakerVoiceProfileService(
             store: VoiceProfileStore(directoryURL: directory.appendingPathComponent("VoiceProfiles")),
-            historyService: history,
-            premiumAccess: { true }
+            historyService: history
         )
         XCTAssertEqual(voices.state(of: "S1", inRecordID: recordID), .none)
     }

@@ -502,7 +502,7 @@ final class PluginRegistryService: ObservableObject {
 
     private var lastFetchDate: Date?
     private var activeInstallPluginIDs: Set<String> = []
-    private let registryBaseURL: URL
+    private let registryBaseURL: URL?
     private let cacheDuration: TimeInterval
     private let userDefaults: UserDefaults
     private let infoDictionary: [String: Any]?
@@ -604,7 +604,7 @@ final class PluginRegistryService: ObservableObject {
     }
 
     init(
-        registryBaseURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-mac")!,
+        registryBaseURL: URL? = nil,
         cacheDirectory: URL = AppConstants.appSupportDirectory.appendingPathComponent("MarketplaceCache", isDirectory: true),
         cacheDuration: TimeInterval = 300,
         userDefaults: UserDefaults = .standard,
@@ -662,6 +662,13 @@ final class PluginRegistryService: ObservableObject {
             return true
         }
         #endif
+
+        guard let registryBaseURL else {
+            registry = []
+            fetchState = .loaded
+            updateAvailableUpdatesCount()
+            return true
+        }
 
         if !force,
            let lastFetch = lastFetchDate,

@@ -456,7 +456,6 @@ final class DictationViewModel: ObservableObject {
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
     private let dictionaryService: DictionaryService
-    private let licenseService: LicenseService?
     private let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     private let snippetService: SnippetService
     private let soundService: SoundService
@@ -646,7 +645,6 @@ final class DictationViewModel: ObservableObject {
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
         dictionaryService: DictionaryService,
-        licenseService: LicenseService? = nil,
         targetAppCorrectionLearningService: TargetAppCorrectionLearningService? = nil,
         snippetService: SnippetService,
         soundService: SoundService,
@@ -681,7 +679,6 @@ final class DictationViewModel: ObservableObject {
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
         self.dictionaryService = dictionaryService
-        self.licenseService = licenseService
         self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
             ?? TargetAppCorrectionLearningService(
                 textInsertionService: textInsertionService,
@@ -2616,8 +2613,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var shouldTrackTargetAppCorrectionLearning: Bool {
-        (licenseService?.hasCommercialLicense ?? false) &&
-            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
     }
 
     private var effectiveNumberNormalizationOverride: Bool? {

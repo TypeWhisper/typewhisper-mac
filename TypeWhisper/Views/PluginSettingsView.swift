@@ -1239,7 +1239,7 @@ struct PluginSettingsView: View {
 
     private var discoverHero: some View {
         Button {
-            openExternalURL(localizedTypeWhisperAddonsURLString())
+            openExternalURL("https://github.com/schneidervvv/dictum")
         } label: {
             discoverHeroContent
         }
@@ -1290,13 +1290,15 @@ struct PluginSettingsView: View {
 
     private var discoverHeroCompactCopy: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(localizedAppText("Browse plugin catalog", de: "Plugin-Katalog durchsuchen"))
+            Text(localizedAppText("dictum on GitHub", de: "dictum auf GitHub", ja: "GitHub の dictum", zh: "GitHub 上的 dictum"))
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
 
             Text(localizedAppText(
-                "Browse add-ons on the dictum website and install them directly here.",
-                de: "Durchsuche Add-ons auf der dictum-Webseite und installiere sie direkt hier."
+                "Read the project documentation and follow development.",
+                de: "Lies die Projektdokumentation und verfolge die Entwicklung.",
+                ja: "プロジェクトのドキュメントと開発状況を確認できます。",
+                zh: "阅读项目文档并查看开发进展。"
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -1700,108 +1702,13 @@ struct PluginSettingsView: View {
 
 // MARK: - Shared Components
 
-private let typeWhisperAddonSlugsByPluginID: [String: String] = [
-    "com.typewhisper.assemblyai": "assemblyai",
-    "com.typewhisper.cartesia": "cartesia",
-    "com.typewhisper.cerebras": "cerebras",
-    "com.typewhisper.claude": "claude",
-    "com.typewhisper.cloudflare-asr": "cloudflare-asr",
-    "com.typewhisper.cohere": "cohere",
-    "com.typewhisper.deepgram": "deepgram",
-    "com.typewhisper.elevenlabs": "elevenlabs",
-    "com.typewhisper.memory.file": "file-memory",
-    "com.typewhisper.filler-words": "filler-words",
-    "com.typewhisper.fireworks": "fireworks",
-    "com.typewhisper.gemini": "gemini",
-    "com.typewhisper.gigaam": "gigaam",
-    "com.typewhisper.gemma4": "local-llm-mlx",
-    "com.typewhisper.gladia": "gladia",
-    "com.typewhisper.google-cloud-stt": "google-cloud-stt",
-    "com.typewhisper.granite": "granite",
-    "com.typewhisper.groq": "groq",
-    "com.typewhisper.linear": "linear",
-    "com.typewhisper.livetranscript": "live-transcript",
-    "com.typewhisper.local-llm-mlx": "local-llm-mlx",
-    "com.typewhisper.meta": "meta",
-    "com.typewhisper.microsoft-ai": "microsoft-ai",
-    "com.typewhisper.obsidian": "obsidian",
-    "com.typewhisper.openai-compatible": "openai-compatible",
-    "com.typewhisper.openai": "openai",
-    "com.typewhisper.memory.openai-vector": "openai-vector-memory",
-    "com.typewhisper.openrouter": "openrouter",
-    "com.typewhisper.parakeet": "parakeet",
-    "com.typewhisper.qwen3": "qwen3-asr",
-    "com.typewhisper.reson8": "reson8",
-    "com.typewhisper.script": "script-runner",
-    "com.typewhisper.smallest-pulse": "smallest-pulse",
-    "com.typewhisper.soniox": "soniox",
-    "com.typewhisper.speechanalyzer": "apple-speech",
-    "com.typewhisper.speechmatics": "speechmatics",
-    "com.typewhisper.tts.supertonic": "supertonic",
-    "com.typewhisper.vercel-ai-gateway": "vercel-ai-gateway",
-    "com.typewhisper.voxtral": "voxtral",
-    "com.typewhisper.webhook": "webhook",
-    "com.typewhisper.whisperkit": "whisperkit",
-    "com.typewhisper.xai": "xai-grok"
-]
-
-private let supportedTypeWhisperWebsiteLocalePathComponents: Set<String> = ["de", "en"]
-
-private func localizedTypeWhisperAddonsURLString() -> String {
-    "https://github.com/schneidervvv/dictum"
-}
-
-private func localizedTypeWhisperAddonURLString(slug: String) -> String {
-    "https://github.com/schneidervvv/dictum"
-}
-
-private func typeWhisperWebsiteLocalePathComponent() -> String {
-    let languageCode = preferredAppLanguageCode()
-        .split(separator: "-")
-        .first
-        .map(String.init) ?? "en"
-    return supportedTypeWhisperWebsiteLocalePathComponents.contains(languageCode) ? languageCode : "en"
-}
-
-private func localizedTypeWhisperAddonURLString(from urlString: String?) -> String? {
-    guard let url = validatedExternalURL(urlString),
-          let host = url.host()?.lowercased(),
-          host == "typewhisper.com" || host == "www.typewhisper.com" else {
-        return nil
-    }
-
-    let components = url.pathComponents.filter { $0 != "/" }
-    if components.count >= 2, components[0] == "addons" {
-        return localizedTypeWhisperAddonURLString(slug: components[1])
-    }
-    if components.count >= 3,
-       supportedTypeWhisperWebsiteLocalePathComponents.contains(components[0]),
-       components[1] == "addons" {
-        return localizedTypeWhisperAddonURLString(slug: components[2])
-    }
-
-    return nil
-}
-
 private func pluginDetailURLString(
     pluginId: String,
     registryDetailsURL: String?,
     manifestDetailsURL: String? = nil
 ) -> String? {
-    if let slug = typeWhisperAddonSlugsByPluginID[pluginId] {
-        return localizedTypeWhisperAddonURLString(slug: slug)
-    }
-
-    if let localizedRegistryDetailsURL = localizedTypeWhisperAddonURLString(from: registryDetailsURL) {
-        return localizedRegistryDetailsURL
-    }
-
     if validatedExternalURL(registryDetailsURL) != nil {
         return registryDetailsURL
-    }
-
-    if let localizedManifestDetailsURL = localizedTypeWhisperAddonURLString(from: manifestDetailsURL) {
-        return localizedManifestDetailsURL
     }
 
     if validatedExternalURL(manifestDetailsURL) != nil {

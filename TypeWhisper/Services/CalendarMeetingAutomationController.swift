@@ -40,10 +40,9 @@ func requestCalendarMeetingCalendarAccess(
 @MainActor
 final class CalendarMeetingAutomationController: ObservableObject {
     nonisolated static func shouldActivateOSServices(
-        hasPremiumAccess: Bool,
         startMode: CalendarMeetingStartMode
     ) -> Bool {
-        hasPremiumAccess && startMode != .off
+        startMode != .off
     }
 
     nonisolated static func shouldResolveBrowserURL(for process: MeetingAudioProcess) -> Bool {
@@ -102,21 +101,18 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     nonisolated static func shouldStartCalendarAccessRequest(
-        hasPremiumAccess: Bool,
         startMode: CalendarMeetingStartMode,
         isRequestInFlight: Bool
     ) -> Bool {
-        hasPremiumAccess && startMode != .off && !isRequestInFlight
+        startMode != .off && !isRequestInFlight
     }
 
     nonisolated static func shouldRequestNotifications(
-        hasPremiumAccess: Bool,
         startMode: CalendarMeetingStartMode,
         calendarAuthorization: CalendarMeetingCalendarAuthorization,
         detectAdHocMeetings: Bool = false
     ) -> Bool {
-        hasPremiumAccess
-            && startMode != .off
+        startMode != .off
             && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
     }
 
@@ -139,7 +135,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     typealias BrowserResolverFactory = @MainActor () -> any BrowserURLResolving
     typealias NotificationServiceFactory = @MainActor () -> any CalendarMeetingNotifying
 
-    @Published private(set) var hasPremiumAccess: Bool
     @Published private(set) var startMode: CalendarMeetingStartMode
     @Published private(set) var autoStopEnabled: Bool
     @Published private(set) var detectAdHocMeetings: Bool
@@ -155,7 +150,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         CalendarMeetingCalendarAccessRequestFailure?
 
     var canEnableAutoStop: Bool {
-        hasPremiumAccess && startMode != .off
+        startMode != .off
             && (calendarAuthorization == .fullAccess || detectAdHocMeetings)
     }
 
@@ -165,8 +160,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let identity: CalendarMeetingCanonicalLink
     }
 
-    private let licenseService: LicenseService
-    private let premiumAccountService: PremiumAccountService
     private let recorderViewModel: AudioRecorderViewModel
     private let dictationViewModel: DictationViewModel
     private let countdownModel: CalendarMeetingCountdownModel
@@ -176,7 +169,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private let cameraCollectorFactory: CameraCollectorFactory
     private let browserResolverFactory: BrowserResolverFactory
     private let notificationServiceFactory: NotificationServiceFactory
-    private let premiumAccessProvider: @MainActor () -> Bool
     private let nowProvider: @MainActor () -> Date
 
     private var policy = CalendarMeetingAutomationPolicy()
@@ -220,8 +212,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var environmentObserverTokens: [NSObjectProtocol] = []
 
     init(
-        licenseService: LicenseService,
-        premiumAccountService: PremiumAccountService,
         recorderViewModel: AudioRecorderViewModel,
         dictationViewModel: DictationViewModel,
         countdownModel: CalendarMeetingCountdownModel,
@@ -235,11 +225,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         notificationServiceFactory: @escaping NotificationServiceFactory = {
             CalendarMeetingNotificationService()
         },
-        premiumAccessProvider: (@MainActor () -> Bool)? = nil,
         nowProvider: @escaping @MainActor () -> Date = Date.init
     ) {
-        self.licenseService = licenseService
-        self.premiumAccountService = premiumAccountService
         self.recorderViewModel = recorderViewModel
         self.dictationViewModel = dictationViewModel
         self.countdownModel = countdownModel
@@ -251,14 +238,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         self.notificationServiceFactory = notificationServiceFactory
         self.nowProvider = nowProvider
 
-        let accessProvider = premiumAccessProvider ?? {
-            CalendarMeetingPremiumAccess.isGranted(
-                hasCommercialLicense: licenseService.hasCommercialLicense,
-                hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
-            )
-        }
-        self.premiumAccessProvider = accessProvider
-        hasPremiumAccess = accessProvider()
         startMode = CalendarMeetingStartMode(
             rawValue: defaults.string(forKey: UserDefaultsKeys.calendarMeetingStartMode) ?? ""
         ) ?? .off
@@ -315,7 +294,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         hasPremiumAccess: Bool,
         calendars: [CalendarMeetingCalendar]
     ) {
-        self.hasPremiumAccess = hasPremiumAccess
         startMode = hasPremiumAccess ? .automatic : .off
         autoStopEnabled = hasPremiumAccess
         selectedCalendarIDs = hasPremiumAccess ? ["screenshot-team", "screenshot-personal"] : []
@@ -332,16 +310,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     func initialize() {
         guard !initialized else { return }
         initialized = true
-
-        licenseService.objectWillChange
-            .merge(with: premiumAccountService.objectWillChange)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.entitlementDidChange()
-                }
-            }
-            .store(in: &cancellables)
 
         recorderViewModel.$state
             .removeDuplicates()
@@ -392,7 +360,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             .store(in: &cancellables)
 
         observeEnvironmentChanges()
-        entitlementDidChange()
+        requestRefresh()
     }
 
     func installNotificationRouterIfNeeded() {
@@ -443,15 +411,10 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     func requestCalendarAccess() {
-        let hasAccess = premiumAccessProvider()
         guard Self.shouldStartCalendarAccessRequest(
-            hasPremiumAccess: hasAccess,
             startMode: startMode,
             isRequestInFlight: isCalendarAccessRequestInFlight
         ) else {
-            if !hasAccess {
-                entitlementDidChange()
-            }
             return
         }
 
@@ -482,7 +445,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
             }
 
             guard Self.shouldRequestNotifications(
-                hasPremiumAccess: self.premiumAccessProvider(),
                 startMode: self.startMode,
                 calendarAuthorization: outcome.authorization,
                 detectAdHocMeetings: self.detectAdHocMeetings
@@ -639,22 +601,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         environmentObserverTokens.removeAll()
     }
 
-    private func entitlementDidChange() {
-        let access = premiumAccessProvider()
-        guard access != hasPremiumAccess else {
-            requestRefresh()
-            return
-        }
-        invalidatePendingRecordingStart()
-        if !access {
-            calendarAutoStopTrackingActive = false
-            dismissAutoStopWarning()
-        }
-        hasPremiumAccess = access
-        applyPolicyConfiguration(now: nowProvider())
-        requestRefresh()
-    }
-
     private func persistStartMode(_ mode: CalendarMeetingStartMode) {
         startMode = mode
         defaults.set(mode.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
@@ -673,13 +619,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     private func performRefresh(generation: Int) async {
         let now = nowProvider()
-        let access = premiumAccessProvider()
-        if access != hasPremiumAccess {
-            hasPremiumAccess = access
-        }
-
         guard Self.shouldActivateOSServices(
-            hasPremiumAccess: access,
             startMode: startMode
         ) else {
             await deactivateLiveServices(removeReminders: true)
@@ -779,7 +719,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private func applyPolicyConfiguration(now: Date) {
         let effectiveAutoStopEnabled = autoStopEnabled && canEnableAutoStop
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: hasPremiumAccess,
             startMode: startMode,
             autoStopEnabled: effectiveAutoStopEnabled,
             calendarAuthorization: calendarAuthorization,
@@ -993,8 +932,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             guard let self else { return }
             defer { self.recordingStartTask = nil }
 
-            guard self.hasPremiumAccess,
-                  self.startMode != .off,
+            guard self.startMode != .off,
                   (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess),
                   self.allOccurrences.contains(where: {
                       $0.occurrenceDigest == occurrence.occurrenceDigest
@@ -1036,7 +974,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     transcriptMetadata: occurrence.isAdHoc ? nil : occurrence.transcriptMetadata
                 )
                 guard generation == self.recordingStartGeneration,
-                      self.hasPremiumAccess,
                       self.startMode != .off,
                       (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess),
                       self.allOccurrences.contains(where: {
@@ -1069,7 +1006,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 )
                 let autoStopArmed = self.autoStopEnabled
                     && self.canEnableAutoStop
-                    && self.hasPremiumAccess
                     && self.startMode != .off
                     && (occurrence.isAdHoc ? self.detectAdHocMeetings : self.calendarAuthorization == .fullAccess)
                 self.calendarAutoStopTrackingActive = autoStopArmed
@@ -1451,8 +1387,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private func scheduleNextPolicyTick() {
         policyTimerTask?.cancel()
         policyTimerTask = nil
-        guard hasPremiumAccess,
-              startMode != .off,
+        guard startMode != .off,
               (calendarAuthorization == .fullAccess || detectAdHocMeetings) else {
             return
         }

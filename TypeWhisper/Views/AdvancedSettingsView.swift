@@ -649,25 +649,7 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App")
-                integrationRow(systemImage: "iphone", title: companionAppTitle) {
-                    HStack {
-                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示")) {
-                            IOSCompanionPromoCoordinator.shared.requestManualPresentation()
-                        }
-                        .accessibilityLabel(localizedAppText(
-                            "Show \(companionAppTitle)",
-                            de: "Anzeigen: \(companionAppTitle)",
-                            ja: "\(companionAppTitle)を表示",
-                            zh: "显示\(companionAppTitle)"
-                        ))
-
-                        SettingsInfoButton(text: localizedAppText(
-                            "Show the TypeWhisper companion app for iPhone and iPad again.",
-                            de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
-                        ), topic: companionAppTitle)
-                    }
-                }
+                RemoteLinkSettingsView()
                 }
             }
             .formStyle(.grouped)

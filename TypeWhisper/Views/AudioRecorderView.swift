@@ -39,19 +39,16 @@ struct AudioRecorderView: View {
             Divider()
 
             if settingsNavigation.recorderPart == .meetings {
-                SettingsPremiumPart(
+                SettingsDetailPart(
                     backTitle: String(localized: "settings.tab.recorder"),
                     onBack: { settingsNavigation.recorderPart = .recorder }
                 ) {
-                    PremiumCalendarMeetingSettingsWindow(
-                        licenseService: .shared,
-                        premiumAccount: ServiceContainer.shared.premiumAccountService,
-                        controllerFactory: { ServiceContainer.shared.calendarMeetingAutomationController },
-                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    CalendarMeetingSettingsSection(
+                        controller: ServiceContainer.shared.calendarMeetingAutomationController
                     )
                 }
             } else {
-            PremiumActiveFeatureOverview.link(to: .calendarMeeting)
+            FeatureSettingsLink(feature: .calendarMeeting)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.top, SettingsLayoutMetrics.pagePadding)
 

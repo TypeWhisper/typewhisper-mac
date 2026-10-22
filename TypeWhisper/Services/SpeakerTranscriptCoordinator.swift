@@ -6,14 +6,6 @@ import os
 
 private let speakerLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
 
-/// Access rule for speaker detection and the speaker workspace. Supporter
-/// status alone does not unlock it.
-enum SpeakerWorkspacePremiumAccess {
-    static func isGranted(hasCommercialLicense: Bool, hasPremiumEntitlement: Bool) -> Bool {
-        hasCommercialLicense || hasPremiumEntitlement
-    }
-}
-
 /// Writes the History audio copy of a recording with speaker detection.
 enum SpeakerAudioWriter {
     static let sampleRate: Double = 16_000
@@ -212,7 +204,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     }
 
     enum StartError: Error, Equatable {
-        case premiumRequired
         case providerUnavailable
         case audioMissing
         case timingMissing
@@ -237,7 +228,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     private let historyService: HistoryService
     private let providerSource: @MainActor () -> (any SpeakerDiarizationProviderPlugin)?
-    private let premiumAccess: @MainActor () -> Bool
     /// Transcribes a record's audio again to get segment timing, for records
     /// stored without it (dictations). Parameters: audio file and language.
     var timingSource: (@MainActor (URL, String?) async throws -> TranscriptionResult)?
@@ -254,28 +244,15 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     init(
         historyService: HistoryService,
-        providerSource: @escaping @MainActor () -> (any SpeakerDiarizationProviderPlugin)?,
-        premiumAccess: @escaping @MainActor () -> Bool
+        providerSource: @escaping @MainActor () -> (any SpeakerDiarizationProviderPlugin)?
     ) {
         self.historyService = historyService
         self.providerSource = providerSource
-        self.premiumAccess = premiumAccess
         historyService.isSpeakerDetectionActive = { [weak self] recordID in
             self?.stages[recordID] != nil
         }
     }
 
-    var hasPremiumAccess: Bool { premiumAccess() }
-
-    private var premiumObservation: AnyCancellable?
-
-    /// Redraws the views that show what Premium unlocks when one of the
-    /// services behind `premiumAccess` changes.
-    func observePremiumChanges(_ changes: [AnyPublisher<Void, Never>]) {
-        premiumObservation = Publishers.MergeMany(changes)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.objectWillChange.send() }
-    }
     var provider: (any SpeakerDiarizationProviderPlugin)? { providerSource() }
 
     /// Fixed speaker counts offered besides automatic detection.
@@ -293,7 +270,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     }
 
     func downloadModels() {
-        guard premiumAccess(), let provider, modelDownloadProgress == nil else { return }
+        guard let provider, modelDownloadProgress == nil else { return }
         if let refusal = ManagedPolicySnapshotStore.shared.providerPolicy.modelDownloadRefusal {
             modelError = refusal
             return
@@ -331,7 +308,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     /// Why speaker detection cannot start for the record, or nil when it can.
     func startError(for record: TranscriptionRecord) -> StartError? {
-        guard premiumAccess() else { return .premiumRequired }
         guard providerSource() != nil else { return .providerUnavailable }
         guard historyService.audioFileURL(for: record) != nil else { return .audioMissing }
         guard record.timedTextGranularity != .none || timingSource != nil else { return .timingMissing }
@@ -384,7 +360,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     /// A Recorder recording that already has its record keeps that record,
     /// whose ID is returned.
     func addRecording(_ input: SpeakerRecordingInput) async -> UUID? {
-        guard premiumAccess() else { return nil }
         if let recordingID = input.recorderRecordingID {
             do {
                 if let existing = try historyService.speakerRecord(forRecorderRecordingID: recordingID) {
@@ -452,7 +427,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         samples: [Float],
         speakerCount: Int? = nil
     ) async throws -> [TranscriptionSegment] {
-        guard premiumAccess() else { throw StartError.premiumRequired }
         // Labels the engine returned are kept, unless a fixed number of speakers was asked for.
         guard speakerCount != nil || !result.segments.contains(where: { $0.speakerLabel != nil }) else {
             return result.segments
@@ -521,7 +495,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             }
         }
         guard !Task.isCancelled,
-              premiumAccess(),
               let provider,
               let record = historyService.record(withID: recordID),
               let audioURL = historyService.audioFileURL(for: record) else {

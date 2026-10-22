@@ -95,12 +95,6 @@ final class ServiceContainer: ObservableObject {
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
-    let licenseService: LicenseService
-    let premiumAccountService: PremiumAccountService
-    #if APPSTORE
-    let appStorePremiumService: AppStorePremiumService
-    #endif
-    let supporterDiscordService: SupporterDiscordService
     let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
     let speakerVoiceProfileService: SpeakerVoiceProfileService
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
@@ -216,24 +210,7 @@ final class ServiceContainer: ObservableObject {
         pluginRegistryService.accessibilityAnnouncementService = accessibilityAnnouncementService
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
-        licenseService = LicenseService()
-        premiumAccountService = AppConstants.isRunningTests
-            ? PremiumAccountService(
-                isSignedInOverride: false,
-                automaticallyRefresh: false
-            )
-            : PremiumAccountService()
-        #if APPSTORE
-        appStorePremiumService = AppStorePremiumService(
-            licenseService: licenseService,
-            premiumAccountService: premiumAccountService
-        )
-        // The sync controller below reads Premium access while it starts.
-        AppStorePremiumService.shared = appStorePremiumService
-        #endif
-        supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
-            premiumAccountService: premiumAccountService,
             syncStore: userDataSyncStore,
             historyService: historyService,
             historySyncPreferences: historyPreferences
@@ -251,8 +228,7 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             historyService: historyService,
             audioFileService: audioFileService,
-            usageStatisticsRecorder: usageStatisticsService,
-            licenseService: licenseService
+            usageStatisticsRecorder: usageStatisticsService
         )
         dictationRecoveryViewModel = recoveryViewModel
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
@@ -275,7 +251,6 @@ final class ServiceContainer: ObservableObject {
             translationService: translationService,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
-            licenseService: licenseService,
             targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             snippetService: snippetService,
             soundService: soundService,
@@ -310,18 +285,8 @@ final class ServiceContainer: ObservableObject {
         )
         let speakerCoordinator = SpeakerTranscriptCoordinator(
             historyService: historyService,
-            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first },
-            premiumAccess: { [licenseService, premiumAccountService] in
-                SpeakerWorkspacePremiumAccess.isGranted(
-                    hasCommercialLicense: licenseService.hasCommercialLicense,
-                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
-                )
-            }
+            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first }
         )
-        speakerCoordinator.observePremiumChanges([
-            licenseService.objectWillChange.eraseToAnyPublisher(),
-            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
-        ])
         speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
             let samples = try await audioFileService.loadAudioSamples(from: url)
             return try await modelManagerService.transcribe(
@@ -370,8 +335,7 @@ final class ServiceContainer: ObservableObject {
         }
         speakerVoiceProfileService = SpeakerVoiceProfileService(
             store: VoiceProfileStore(),
-            historyService: historyService,
-            premiumAccess: { [speakerCoordinator] in speakerCoordinator.hasPremiumAccess }
+            historyService: historyService
         )
         speakerCoordinator.voices = speakerVoiceProfileService
         speakerTranscriptCoordinator = speakerCoordinator
@@ -402,8 +366,6 @@ final class ServiceContainer: ObservableObject {
             }
         )
         calendarMeetingAutomationController = CalendarMeetingAutomationController(
-            licenseService: licenseService,
-            premiumAccountService: premiumAccountService,
             recorderViewModel: audioRecorderViewModel,
             dictationViewModel: dictationViewModel,
             countdownModel: calendarMeetingCountdownModel
@@ -474,19 +436,7 @@ final class ServiceContainer: ObservableObject {
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         remoteLinkServer = RemoteLinkServer(router: router)
-        remoteLinkViewModel = RemoteLinkViewModel(
-            server: remoteLinkServer,
-            premiumAccess: { [licenseService, premiumAccountService] in
-                CalendarMeetingPremiumAccess.isGranted(
-                    hasCommercialLicense: licenseService.hasCommercialLicense,
-                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
-                )
-            }
-        )
-        remoteLinkViewModel.observePremiumChanges([
-            licenseService.objectWillChange.eraseToAnyPublisher(),
-            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
-        ])
+        remoteLinkViewModel = RemoteLinkViewModel(server: remoteLinkServer)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
@@ -496,7 +446,6 @@ final class ServiceContainer: ObservableObject {
         installedAppsViewModel = InstalledAppsViewModel()
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,
-            licenseService: licenseService,
             termPackRegistryService: termPackRegistryService,
             selectedTranscriptionEngine: { [modelManagerService] in
                 modelManagerService.selectedProviderId.flatMap {
@@ -533,8 +482,6 @@ final class ServiceContainer: ObservableObject {
         WatchFolderViewModel._shared = watchFolderViewModel
 
         // License
-        LicenseService.shared = licenseService
-        SupporterDiscordService.shared = supporterDiscordService
 
         // Plugin system
         EventBus.shared = EventBus()
@@ -567,12 +514,6 @@ final class ServiceContainer: ObservableObject {
             snapshot,
             setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
         )
-        #if !APPSTORE
-        let key = ManagedPolicyKeys.managedLicenseKey
-        if let previous, previous.enforced(key) != snapshot.enforced(key) {
-            Task { await licenseService.validateIfNeeded() }
-        }
-        #endif
     }
 
     func initialize() async {
@@ -638,12 +579,6 @@ final class ServiceContainer: ObservableObject {
         // Start memory service
         memoryService.startListening()
 
-        #if !APPSTORE
-        // Validate license if needed
-        await licenseService.validateIfNeeded()
-        await licenseService.validateSupporterIfNeeded()
-        await supporterDiscordService.refreshStatusIfNeeded()
-        #endif
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

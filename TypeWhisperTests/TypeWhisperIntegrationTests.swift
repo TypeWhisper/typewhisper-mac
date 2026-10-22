@@ -11806,7 +11806,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testDictationWithoutReadableFocusedTextRecordsUnsupportedCorrectionLearningAttempt() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        let licenseSuiteName = "TypeWhisperIntegrationTests.License.\(UUID().uuidString)"
         let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
         let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
         let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
@@ -11815,13 +11814,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
         let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
-        guard let licenseDefaults = UserDefaults(suiteName: licenseSuiteName) else {
-            return XCTFail("Could not create isolated license defaults")
-        }
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
-            licenseDefaults.removePersistentDomain(forName: licenseSuiteName)
             Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
             Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
@@ -11833,15 +11828,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         UserDefaults.standard.set(false, forKey: liveFieldKey)
         UserDefaults.standard.set(false, forKey: preserveClipboardKey)
         UserDefaults.standard.set(false, forKey: saveAudioKey)
-        licenseDefaults.set(LicenseStatus.active.rawValue, forKey: UserDefaultsKeys.licenseStatus)
-        let licenseService = LicenseService(
-            defaults: licenseDefaults,
-            keychainServiceName: "TypeWhisperIntegrationTests.License.\(UUID().uuidString)"
-        )
-
         dictationContext = Self.makeDictationContext(
-            appSupportDirectory: appSupportDirectory,
-            licenseService: licenseService
+            appSupportDirectory: appSupportDirectory
         )
         let context = try XCTUnwrap(dictationContext)
         context.dictationViewModel.preserveClipboard = false
@@ -14821,7 +14809,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioRecordingInputActivator: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
-        licenseService: LicenseService? = nil,
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         transcriptionDeadline: TimeInterval? = nil,
         accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
@@ -14940,7 +14927,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             translationService: nil,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
-            licenseService: licenseService,
             targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             snippetService: snippetService,
             soundService: soundService,
@@ -22200,9 +22186,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(coordinator.presentationForLaunch(
             isNormalLaunch: true,
             setupWizardRequired: false,
-            operationInProgress: service.isDictationStartPending,
-            postUpdatePromptPending: true,
-            iOSCompanionPromptPending: true
+            operationInProgress: service.isDictationStartPending
         ), .none)
         XCTAssertTrue(coordinator.hasUnseenContent)
         service.cancelDictation()
@@ -22216,8 +22200,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let coordinator = WhatsNewCoordinator(defaults: defaults)
         XCTAssertEqual(coordinator.presentationForLaunch(
-            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false,
-            postUpdatePromptPending: false, iOSCompanionPromptPending: false
+            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false
         ), .whatsNew)
 
         let service = HotkeyService()
@@ -22251,8 +22234,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         let coordinator = WhatsNewCoordinator(defaults: defaults)
         XCTAssertEqual(coordinator.presentationForLaunch(
-            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false,
-            postUpdatePromptPending: false, iOSCompanionPromptPending: false
+            isNormalLaunch: true, setupWizardRequired: false, operationInProgress: false
         ), .whatsNew)
 
         let service = HotkeyService()
@@ -23738,10 +23720,6 @@ extension TypeWhisperIntegrationTests {
         let notifications = MeetingRuntimeNotifications(authorization: browser ? .authorized : .denied)
         let browserResolver = MeetingRuntimeBrowserResolver(meetingURL: meetingTabURL)
         let controller = CalendarMeetingAutomationController(
-            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
-                keychainCopyMatching: { _, _ in errSecItemNotFound }),
-            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
-                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
             recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
             countdownModel: countdown, defaults: defaults,
             eventProviderFactory: { events },
@@ -23749,7 +23727,7 @@ extension TypeWhisperIntegrationTests {
             cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
             browserResolverFactory: { browserResolver },
             notificationServiceFactory: { notifications },
-            premiumAccessProvider: { true }, nowProvider: { now }
+            nowProvider: { now }
         )
         defer { controller.shutdown() }
         if deferForComparison { controller.initialize() }
@@ -23880,10 +23858,6 @@ extension TypeWhisperIntegrationTests {
             eventID: "later-meeting", start: now.addingTimeInterval(7200), calendarID: "calendar"
         )
         let controller = CalendarMeetingAutomationController(
-            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
-                keychainCopyMatching: { _, _ in errSecItemNotFound }),
-            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
-                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
             recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
             countdownModel: countdown, defaults: defaults,
             eventProviderFactory: { events },
@@ -23891,7 +23865,7 @@ extension TypeWhisperIntegrationTests {
             cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
             browserResolverFactory: { MeetingRuntimeBrowserResolver() },
             notificationServiceFactory: { notifications },
-            premiumAccessProvider: { true }, nowProvider: { now }
+            nowProvider: { now }
         )
         defer { controller.shutdown() }
         await controller.testingRefresh()
@@ -24074,10 +24048,6 @@ extension TypeWhisperIntegrationTests {
         let events = MeetingRuntimeEventProvider(occurrences: [startOccurrence])
         let notifications = MeetingRuntimeNotifications(authorization: .authorized)
         let controller = CalendarMeetingAutomationController(
-            licenseService: LicenseService(defaults: defaults, keychainServiceName: suite,
-                keychainCopyMatching: { _, _ in errSecItemNotFound }),
-            premiumAccountService: PremiumAccountService(defaults: defaults, keychainService: suite,
-                isSignedInOverride: false, automaticallyRefresh: false, startupTokenReader: { _ in nil }),
             recorderViewModel: recorder, dictationViewModel: context.dictationViewModel,
             countdownModel: countdown, defaults: defaults,
             eventProviderFactory: { events },
@@ -24085,7 +24055,7 @@ extension TypeWhisperIntegrationTests {
             cameraCollectorFactory: { MeetingRuntimeCameraCollector() },
             browserResolverFactory: { MeetingRuntimeBrowserResolver() },
             notificationServiceFactory: { notifications },
-            premiumAccessProvider: { true }, nowProvider: { now }
+            nowProvider: { now }
         )
         defer { controller.shutdown() }
         if invalidateViaDictation { controller.initialize() }

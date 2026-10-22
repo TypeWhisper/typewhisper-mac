@@ -224,7 +224,7 @@ struct DictationRecoveryView: View {
                         systemImage: "arrow.triangle.2.circlepath"
                     )
                 }
-                .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback)
+                .disabled(viewModel.isProcessing)
 
                 Toggle(isOn: $viewModel.hedgeEnabled) {
                     Label(
@@ -232,7 +232,7 @@ struct DictationRecoveryView: View {
                         systemImage: "hare"
                     )
                 }
-                .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
+                .disabled(viewModel.isProcessing || !viewModel.automaticFallbackEnabled)
 
                 if viewModel.hedgeEnabled {
                     HStack {
@@ -263,7 +263,7 @@ struct DictationRecoveryView: View {
                             zh: "\(hedgeThresholdLabelValue) 秒"
                         ))
                     }
-                    .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
+                    .disabled(viewModel.isProcessing || !viewModel.automaticFallbackEnabled)
 
                     Text(localizedAppText(
                         "If the primary engine hasn't answered by then, the same audio is also sent to this engine; whichever finishes first is used and the other request is cancelled. A dispatched race costs one extra API call.",
@@ -273,11 +273,6 @@ struct DictationRecoveryView: View {
                     .foregroundStyle(.secondary)
                 }
 
-                if let message = viewModel.automaticFallbackUnavailableMessage {
-                    Text(message)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
             if viewModel.hasRecovery {

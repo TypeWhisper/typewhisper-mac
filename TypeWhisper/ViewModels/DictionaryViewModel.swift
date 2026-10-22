@@ -228,7 +228,6 @@ class DictionaryViewModel: ObservableObject {
     static let maximumAdvancedCtcMinSimilarity: Double = 0.95
 
     private let dictionaryService: DictionaryService
-    private let licenseService: LicenseService?
     private let termPackRegistryService: TermPackRegistryService?
     private let defaults: UserDefaults
     private let selectedTranscriptionEngine: @MainActor () -> (any TranscriptionEnginePlugin)?
@@ -305,19 +304,16 @@ class DictionaryViewModel: ObservableObject {
             return Float(value)
         }
     }
-    var hasCommercialLicense: Bool { licenseService?.hasCommercialLicense ?? false }
     var visibleBuiltInPacks: [TermPack] {
-        TermPack.allPacks.filter { !$0.requiresCommercialLicense || hasCommercialLicense }
+        TermPack.allPacks
     }
     var visibleCommunityPacks: [TermPack] {
         (termPackRegistryService ?? TermPackRegistryService.shared)?
-            .communityPacks
-            .filter(canUsePack) ?? []
+            .communityPacks ?? []
     }
 
     init(
         dictionaryService: DictionaryService,
-        licenseService: LicenseService? = nil,
         termPackRegistryService: TermPackRegistryService? = nil,
         defaults: UserDefaults = .standard,
         selectedTranscriptionEngine: @escaping @MainActor () -> (any TranscriptionEnginePlugin)? = { nil },
@@ -326,7 +322,6 @@ class DictionaryViewModel: ObservableObject {
         }
     ) {
         self.dictionaryService = dictionaryService
-        self.licenseService = licenseService
         self.termPackRegistryService = termPackRegistryService
         self.defaults = defaults
         self.selectedTranscriptionEngine = selectedTranscriptionEngine
@@ -339,7 +334,7 @@ class DictionaryViewModel: ObservableObject {
         loadActivatedPackStates()
         loadInactivePackEntryOverrides()
         migratePackTermsToPreciseBoosting()
-        reconcileCommercialPackAccess()
+        applyIndustryPreset(IndustryPreset.selected())
         setupBindings()
     }
 
@@ -352,26 +347,13 @@ class DictionaryViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        licenseService?.$licenseStatus
-            .dropFirst()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
-                self?.reconcileCommercialPackAccess()
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-
         if let registryService = termPackRegistryService ?? TermPackRegistryService.shared {
             registryService.$communityPacks
                 .dropFirst()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
                     guard let self else { return }
-                    if self.hasCommercialLicense {
-                        self.applyIndustryPreset(IndustryPreset.selected())
-                    } else {
-                        self.reconcileCommercialPackAccess()
-                    }
+                    self.applyIndustryPreset(IndustryPreset.selected())
                     self.objectWillChange.send()
                 }
                 .store(in: &cancellables)
@@ -847,11 +829,6 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func togglePack(_ pack: TermPack) {
-        guard canUsePack(pack) else {
-            error = String(localized: "This industry term pack requires an active commercial license.")
-            return
-        }
-
         if isPackActivated(pack) {
             deactivatePack(pack)
         } else {
@@ -863,11 +840,6 @@ class DictionaryViewModel: ObservableObject {
     }
 
     func activatePack(_ pack: TermPack) {
-        guard canUsePack(pack) else {
-            error = String(localized: "This industry term pack requires an active commercial license.")
-            return
-        }
-
         var nextStates = activatedPackStates
         nextStates[pack.id] = makeActivatedState(for: pack)
         reconcileActivatedPacks(from: activatedPackStates, to: nextStates)
@@ -897,32 +869,12 @@ class DictionaryViewModel: ObservableObject {
         defaults.set(preset.rawValue, forKey: UserDefaultsKeys.selectedIndustryPreset)
 
         guard let packID = preset.termPackID,
-              hasCommercialLicense,
               let pack = resolvePack(id: packID),
               !isPackActivated(pack) else {
             return
         }
 
         activatePack(pack)
-    }
-
-    func canUsePack(_ pack: TermPack) -> Bool {
-        !pack.requiresCommercialLicense || hasCommercialLicense
-    }
-
-    private func reconcileCommercialPackAccess() {
-        if hasCommercialLicense {
-            applyIndustryPreset(IndustryPreset.selected())
-            return
-        }
-
-        let industryPackIDs = Set(IndustryPreset.allCases.compactMap(\.termPackID))
-        let allowedStates = activatedPackStates.filter { packID, state in
-            state.requiresCommercialLicense != true && !industryPackIDs.contains(packID)
-        }
-
-        guard allowedStates.count != activatedPackStates.count else { return }
-        reconcileActivatedPacks(from: activatedPackStates, to: allowedStates)
     }
 
     /// Resolves a pack by ID from built-in + community packs

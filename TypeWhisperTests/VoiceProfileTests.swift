@@ -210,17 +210,14 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
     private var history: HistoryService!
     private var store: VoiceProfileStore!
     private var service: SpeakerVoiceProfileService!
-    private var hasPremium = true
 
     override func setUp() async throws {
         directory = try TestSupport.makeTemporaryDirectory()
         history = HistoryService(appSupportDirectory: directory)
         store = VoiceProfileStore(directoryURL: directory.appendingPathComponent("VoiceProfiles"))
-        hasPremium = true
         service = SpeakerVoiceProfileService(
             store: store,
-            historyService: history,
-            premiumAccess: { [unowned self] in self.hasPremium }
+            historyService: history
         )
     }
 
@@ -486,19 +483,18 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         XCTAssertEqual(names(id)?.displayName(for: "S1"), "Anna Schmidt")
     }
 
-    func testWithoutPremiumVoicesAreNeitherStoredRecognizedNorEnrolled() throws {
+    func testVoicesAreRecognizedAndEnrolledWithoutAnAccount() throws {
         let first = try addRecording()
         history.setSpeakerName("Anna", for: "S1", inRecordID: first)
         service.enroll("S1", inRecordID: first)
 
-        hasPremium = false
         let second = try addRecording()
-        XCTAssertNil(names(second))
-        XCTAssertTrue(store.recordingEmbeddings[second] == nil)
+        XCTAssertNotNil(names(second))
+        XCTAssertNotNil(store.recordingEmbeddings[second])
         history.setSpeakerName("Ben", for: "S2", inRecordID: first)
-        XCTAssertEqual(service.state(of: "S2", inRecordID: first), .none)
+        XCTAssertEqual(service.state(of: "S2", inRecordID: first), .canEnroll)
         service.enroll("S2", inRecordID: first)
-        XCTAssertEqual(store.profiles.map(\.name), ["Anna"], "profiles are kept without Premium")
+        XCTAssertEqual(Set(store.profiles.map(\.name)), ["Anna", "Ben"])
         XCTAssertEqual(service.state(of: "S1", inRecordID: first), .linked)
     }
 
@@ -562,7 +558,6 @@ final class SpeakerProfileAPITests: XCTestCase {
     private var store: VoiceProfileStore!
     private var service: SpeakerVoiceProfileService!
     private var router: APIRouter!
-    private var premium = true
     private var failHistorySave = false
 
     override func setUp() async throws {
@@ -587,7 +582,7 @@ final class SpeakerProfileAPITests: XCTestCase {
             if self.failHistorySave { throw CocoaError(.fileWriteUnknown) }
             try context.save()
         })
-        service = SpeakerVoiceProfileService(store: store, historyService: history, premiumAccess: { [unowned self] in self.premium })
+        service = SpeakerVoiceProfileService(store: store, historyService: history)
         router = APIRouter(tokenProvider: { "test-token" })
         APISpeakerProfiles.register(on: router, service: service)
     }
@@ -723,7 +718,7 @@ final class SpeakerProfileAPITests: XCTestCase {
         XCTAssertEqual(history.record(withID: record.0)?.speakerNames?.displayName(for: "S1"), "Anna")
     }
 
-    func testValidationAndPremiumLeaveStoresUntouched() async throws {
+    func testValidationLeavesStoresUntouched() async throws {
         let record = try recording(seconds: 10)
         assertStatus(try await call("name", record, extra: ["name": "  "]), 400)
         assertStatus(try await call("name", record, extra: ["name": "A\u{0}B"]), 400)
@@ -734,10 +729,7 @@ final class SpeakerProfileAPITests: XCTestCase {
         assertStatus(try await call("name", record, extra: ["name": "Anna", "speaker_id": "S99"]), 404)
         assertStatus(try await call("confirm", record), 400)
         assertStatus(try await call("enroll", record), 422)
-        premium = false
         assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
-        assertStatus(try await call("enroll", record), 403)
-        premium = true
         assertStatus(try await call("enroll", record), 422)
         XCTAssertTrue(store.profiles.isEmpty)
         history.record(withID: record.0)?.speakerTranscriptState = .pending
@@ -1026,8 +1018,6 @@ final class SpeakerProfileAPITests: XCTestCase {
         }
         assertStatus(try await call("name", record, extra: ["name": "Anna"]), 200)
         XCTAssertEqual(service.automationState(recordID: record.0, speakerID: "S1")?.voice_state, "canEnroll")
-        premium = false
-        XCTAssertEqual(service.automationState(recordID: record.0, speakerID: "S1")?.voice_state, "none")
     }
 
     func testStartupCleanupAlsoPurgesReceiptsWithoutEmbeddings() async throws {

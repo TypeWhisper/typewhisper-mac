@@ -10,13 +10,6 @@ extension ServiceContainer {
         let content = language.content
         let variant = ScreenshotFixtureVariant.current
 
-        licenseService.usageIntent = variant.hasPremiumAccess ? .workSolo : .personalOSS
-        licenseService.licenseStatus = variant.hasPremiumAccess ? .active : .unlicensed
-        licenseService.licenseTier = variant.hasPremiumAccess ? .individual : nil
-        licenseService.licenseIsLifetime = variant.hasPremiumAccess
-        licenseService.supporterStatus = .unlicensed
-        licenseService.supporterTier = nil
-        premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
         cloudFolderSyncController.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
         calendarMeetingAutomationController.prepareScreenshotFixture(
             hasPremiumAccess: variant.hasPremiumAccess,

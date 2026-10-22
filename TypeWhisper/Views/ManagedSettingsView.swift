@@ -193,7 +193,7 @@ struct ManagedSettingsSection: View {
         #if APPSTORE
         let notApplicable = [
             ManagedPolicyKeys.updateMode, ManagedPolicyKeys.updateChannel, ManagedPolicyKeys.allowedUpdateChannels,
-            ManagedPolicyKeys.allowPluginDownloads, ManagedPolicyKeys.managedLicenseKey,
+            ManagedPolicyKeys.allowPluginDownloads,
         ]
         for key in notApplicable where snapshot.enforced(key) != nil || snapshot.recommended(key) != nil {
             problems.append("\(key) does not apply to the App Store edition and is ignored.")

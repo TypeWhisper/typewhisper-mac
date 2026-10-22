@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Premium settings for iPhones and iPads that use this Mac over the local
-/// network, shown in the Premium window like the other Premium features.
 struct RemoteLinkSettingsView: View {
     @ObservedObject private var viewModel = RemoteLinkViewModel.shared
 

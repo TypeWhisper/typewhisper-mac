@@ -23,8 +23,6 @@ struct SpeakersView: View {
     @ObservedObject private var viewModel = ServiceContainer.shared.speakerTranscriptionViewModel
     @ObservedObject private var coordinator = ServiceContainer.shared.speakerTranscriptCoordinator
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
-    @ObservedObject private var license = ServiceContainer.shared.licenseService
-    @ObservedObject private var premiumAccount = ServiceContainer.shared.premiumAccountService
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var watchFolders = ServiceContainer.shared.watchFolderViewModel
     @ObservedObject private var voiceStore = ServiceContainer.shared.speakerVoiceProfileService.store
@@ -38,44 +36,29 @@ struct SpeakersView: View {
 
     private static let shownRecordings = 30
 
-    private var hasAccess: Bool {
-        SpeakerWorkspacePremiumAccess.isGranted(
-            hasCommercialLicense: license.hasCommercialLicense,
-            hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement
-        )
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             SettingsPageHeader(
                 String(localized: "speakers.page.title"),
                 summary: String(localized: "speakers.page.summary")
             ) {
-                if hasAccess {
-                    Picker(String(localized: "speakers.page.title"), selection: $section) {
-                        ForEach(Section.allCases) { section in
-                            Text(section.title).tag(section)
-                        }
+                Picker(String(localized: "speakers.page.title"), selection: $section) {
+                    ForEach(Section.allCases) { section in
+                        Text(section.title).tag(section)
                     }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
                 }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
             }
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    if !hasAccess {
-                        lockedCard
-                        howItWorks
-                        recordingsList
-                    } else {
-                        switch section {
-                        case .recordings: recordingsTab
-                        case .people: peopleTab
-                        case .setup: setupTab
-                        }
+                    switch section {
+                    case .recordings: recordingsTab
+                    case .people: peopleTab
+                    case .setup: setupTab
                     }
                 }
                 .padding(SettingsLayoutMetrics.pagePadding)
@@ -83,7 +66,6 @@ struct SpeakersView: View {
         }
         .frame(minWidth: 500, minHeight: 400)
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
-            guard hasAccess else { return false }
             return handleDrop(providers)
         }
         .fileImporter(
@@ -111,26 +93,6 @@ struct SpeakersView: View {
         }
         .onChange(of: viewModel.engineChoice) { _, _ in
             startPending()
-        }
-    }
-
-    // MARK: - Locked
-
-    private var lockedCard: some View {
-        SettingsCard(accent: .purple) {
-            VStack(alignment: .leading, spacing: 10) {
-                Label(String(localized: "speakers.premium.required"), systemImage: "lock")
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                Text(String(localized: "premium.hub.speakers.description"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Button(String(localized: "speakers.premium.open")) {
-                    SettingsNavigationCoordinator.shared.navigate(to: .premium)
-                }
-                .buttonStyle(.borderedProminent)
-            }
         }
     }
 

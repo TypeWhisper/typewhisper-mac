@@ -38316,50 +38316,6 @@
         }
       }
     },
-    "TypeWhisper is open source under GPLv3.\nYou can install and run the GPL version as-is.\nUse a commercial license for non-GPL terms, procurement, support, or proprietary redistribution." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper ist Open Source unter GPLv3.\nDu darfst die GPL-Version unverändert installieren und ausführen.\nNutze eine kommerzielle Lizenz für Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisperはGPLv3に基づいてオープンソースです。\nGPLバージョンは変更せずにインストールおよび実行できます。\n商用ライセンスは、非GPL条件、調達、サポート、またはプロプライエタリな配布のために使用してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper 是基于 GPLv3 发布的开源软件。\n你可以直接安装并运行 GPL 版本。\n如需非 GPL 条款、采购、技术支持或专有再分发，请使用商业许可证。"
-          }
-        }
-      }
-    },
-    "TypeWhisper is open source under GPLv3. If you'd like to support development, grab a supporter license for a Discord role and an in-app badge." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper ist Open Source unter GPLv3. Wenn du die Entwicklung unterstützen möchtest, hol dir eine Supporter-Lizenz für eine Discord-Rolle und ein In-App-Badge."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisperはGPLv3に基づいてオープンソースです。開発をサポートしたい場合は、Discordのロールとアプリ内バッジのためにサポート者ライセンスを取得してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper 是基于 GPLv3 发布的开源软件。如果你愿意支持项目持续开发，可以购买支持者许可证，获得 Discord 身份组和应用内徽章。"
-          }
-        }
-      }
-    },
     "dictum is ready to help you work faster." : {
       "localizations" : {
         "ja" : {

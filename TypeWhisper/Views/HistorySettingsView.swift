@@ -16,19 +16,14 @@ struct HistorySettingsView: View {
             Divider()
 
             if settingsNavigation.historyPart == .sync {
-                SettingsPremiumPart(
+                SettingsDetailPart(
                     backTitle: String(localized: "History & Sync"),
                     onBack: { settingsNavigation.historyPart = .history }
                 ) {
-                    PremiumCloudSyncSettingsWindow(
-                        licenseService: .shared,
-                        premiumAccount: ServiceContainer.shared.premiumAccountService,
-                        syncController: syncController,
-                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
-                    )
+                    CloudFolderSyncSettingsView(controller: syncController)
                 }
             } else {
-            PremiumActiveFeatureOverview.link(to: .cloudSync)
+            FeatureSettingsLink(feature: .cloudSync)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.top, SettingsLayoutMetrics.pagePadding)
 
@@ -60,7 +55,7 @@ struct HistorySettingsView: View {
                     }
                 }
 
-                Section(String(localized: "Premium Sync")) {
+                Section(String(localized: "Sync")) {
                     Toggle(String(localized: "Sync History & Inbox"), isOn: historySyncBinding)
                         .disabled(syncController.mode == .off || syncController.isSyncing)
 
@@ -70,7 +65,12 @@ struct HistorySettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text(String(localized: "Enable Premium Sync first, then choose whether this Mac participates in History and Inbox sync."))
+                        Text(localizedAppText(
+                            "Enable sync first, then choose whether this Mac participates in History and Inbox sync.",
+                            de: "Aktiviere die Synchronisierung und wähle dann, ob dieser Mac Verlauf und Eingang synchronisiert.",
+                            ja: "同期を有効にしてから、このMacの履歴と受信トレイを同期するか選択します。",
+                            zh: "先启用同步，再选择此 Mac 是否参与历史记录和收件箱同步。"
+                        ))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

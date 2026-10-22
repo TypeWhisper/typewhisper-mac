@@ -56,8 +56,6 @@
 		CA2E00000000000000000009 /* MeetingAutomationCountdownIndicatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000009 /* MeetingAutomationCountdownIndicatorTests.swift */; };
 		CA2E0000000000000000000A /* PremiumSettingsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */; };
 		CA3E00000000000000000001 /* PremiumFeatureOverview.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA3F00000000000000000001 /* PremiumFeatureOverview.swift */; };
-		CA3E00000000000000000002 /* PremiumSettingsWindowManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA3F00000000000000000002 /* PremiumSettingsWindowManager.swift */; };
-		CA3E00000000000000000003 /* PremiumSettingsWindowManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA3F00000000000000000003 /* PremiumSettingsWindowManagerTests.swift */; };
 		AA9400000000000000000001 /* SettingsVisualComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9400000000000000000001 /* SettingsVisualComponents.swift */; };
 		1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
@@ -128,8 +126,6 @@
 		A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001312 /* ManagedSettingsIntegration.swift */; };
 		A1C0DE000000000000001313 /* ManagedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0DE000000000000001314 /* ManagedSettingsView.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
-		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
-		1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000011 /* IOSCompanionPromoView.swift */; };
 		A11800000000000000000003 /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A11800000000000000000004 /* WhatsNewView.swift */; };
 		1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000012 /* ios-companion-promo.mp4 */; };
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
@@ -298,7 +294,6 @@
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
 		AA16570000000000000001 /* AppLanguageText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000001 /* AppLanguageText.swift */; };
 		AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000002 /* InstalledAppsViewModel.swift */; };
-		AA00000000000000000070 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000070 /* UpdateChecker.swift */; };
 		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; settings = {ATTRIBUTES = (Weak, ); }; };
 		AA00000000000000000072 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000072 /* Assets.xcassets */; };
 		AA00000000000000000073 /* TranslationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000073 /* TranslationService.swift */; };
@@ -660,10 +655,6 @@
 		F1177F582D186041B081F9C5 /* GoogleCloudSTTPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01D368E23E2A0AB2390B34EA /* GoogleCloudSTTPlugin.swift */; };
 		F1177F582D186041B081F9C6 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 1D584661B6B55F6329CB5FC5 /* Localizable.xcstrings */; };
 		F774802B61AFC0DCA9E8E668 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 67BE633BCFA1507F72199015 /* TypeWhisperPluginSDK */; };
-		AA00000000000000000300 /* LicenseService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000286 /* LicenseService.swift */; };
-		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
-		AA00000000000000000302 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000288 /* WelcomeSheet.swift */; };
-		AA00000000000000000303 /* SupporterBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000289 /* SupporterBadgeView.swift */; };
 		F16000000000000000000001 /* ScreenshotFixtureSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */; };
 		80B0A78BAA364082B3BA5123 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = B79D2F9EDCEE4B15B869AA87 /* MLXAudioCore */; };
 		90BCF178D8E84684B86B5B58 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 905FEC5AAC4941AD9A670CE8 /* manifest.json */; };
@@ -844,8 +835,6 @@
 		CA2F00000000000000000009 /* MeetingAutomationCountdownIndicatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAutomationCountdownIndicatorTests.swift; sourceTree = "<group>"; };
 		CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PremiumSettingsViewTests.swift; sourceTree = "<group>"; };
 		CA3F00000000000000000001 /* PremiumFeatureOverview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumFeatureOverview.swift; sourceTree = "<group>"; };
-		CA3F00000000000000000002 /* PremiumSettingsWindowManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSettingsWindowManager.swift; sourceTree = "<group>"; };
-		CA3F00000000000000000003 /* PremiumSettingsWindowManagerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PremiumSettingsWindowManagerTests.swift; sourceTree = "<group>"; };
 		BB9400000000000000000001 /* SettingsVisualComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsVisualComponents.swift; sourceTree = "<group>"; };
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
 			3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
@@ -938,8 +927,6 @@
 		A1C0DE000000000000001314 /* ManagedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsView.swift; sourceTree = "<group>"; };
 		A1C0DE000000000000001316 /* ManagedSettingsPoliciesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManagedSettingsPoliciesTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
-		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
-		1F0550000000000000000011 /* IOSCompanionPromoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSCompanionPromoView.swift; sourceTree = "<group>"; };
 		A11800000000000000000004 /* WhatsNewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhatsNewView.swift; sourceTree = "<group>"; };
 		1F0550000000000000000012 /* ios-companion-promo.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ios-companion-promo.mp4"; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
@@ -1005,7 +992,6 @@
 		BB16570000000000000001 /* AppLanguageText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguageText.swift; sourceTree = "<group>"; };
 		BB16570000000000000002 /* InstalledAppsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledAppsViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardModel.swift; sourceTree = "<group>"; };
-		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		BB00000000000000000072 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB00000000000000000073 /* TranslationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslationService.swift; sourceTree = "<group>"; };
 		BB00000000000000000074 /* AudioDuckingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDuckingService.swift; sourceTree = "<group>"; };
@@ -1412,10 +1398,6 @@
 		BB00000000000000000275 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000276 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000277 /* OpenRouterPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenRouterPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
-		BB00000000000000000286 /* LicenseService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseService.swift; sourceTree = "<group>"; };
-		BB00000000000000000287 /* LicenseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseSettingsView.swift; sourceTree = "<group>"; };
-		BB00000000000000000288 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
-		BB00000000000000000289 /* SupporterBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterBadgeView.swift; sourceTree = "<group>"; };
 		F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotFixtureSeeder.swift; sourceTree = "<group>"; };
 		905FEC5AAC4941AD9A670CE8 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		9A5C56DC96AE4CD595EEF826 /* CanaryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CanaryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -2071,7 +2053,6 @@
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
-				BB00000000000000000070 /* UpdateChecker.swift */,
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
 				BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */,
@@ -2213,7 +2194,6 @@
 				BB00000000000000000246 /* AccessibilityAnnouncementService.swift */,
 				BB00000000000000000247 /* SpeechFeedbackService.swift */,
 				BB00000000000000000272 /* TermPackRegistryService.swift */,
-				BB00000000000000000286 /* LicenseService.swift */,
 				D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */,
 				D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */,
 			);
@@ -2299,7 +2279,6 @@
 				BB9400000000000000000001 /* SettingsVisualComponents.swift */,
 				C1F000000000000000000008 /* PremiumSettingsView.swift */,
 				CA3F00000000000000000001 /* PremiumFeatureOverview.swift */,
-				CA3F00000000000000000002 /* PremiumSettingsWindowManager.swift */,
 				CA1F0000000000000000000A /* CalendarMeetingSettingsSection.swift */,
 				CA1F0000000000000000000B /* MeetingAutomationCountdownIndicator.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
@@ -2342,13 +2321,8 @@
 				BB00000000000000000364 /* VisualShortcutKeyboardView.swift */,
 				BB00000000000000000249 /* HotkeySettingsView.swift */,
 				BB00000000000000000250 /* AboutSettingsView.swift */,
-				BB00000000000000000287 /* LicenseSettingsView.swift */,
-				BB00000000000000000288 /* WelcomeSheet.swift */,
-				1F0550000000000000000011 /* IOSCompanionPromoView.swift */,
 				A11800000000000000000004 /* WhatsNewView.swift */,
 				A1C0DE000000000000001314 /* ManagedSettingsView.swift */,
-				BB00000000000000000355 /* PostUpdateLicensePromptView.swift */,
-				BB00000000000000000289 /* SupporterBadgeView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -3178,7 +3152,6 @@
 				CA2F00000000000000000008 /* CalendarMeetingRecordingTests.swift */,
 				CA2F00000000000000000009 /* MeetingAutomationCountdownIndicatorTests.swift */,
 				CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */,
-				CA3F00000000000000000003 /* PremiumSettingsWindowManagerTests.swift */,
 				E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */,
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
@@ -5198,7 +5171,6 @@
 				CA2E00000000000000000008 /* CalendarMeetingRecordingTests.swift in Sources */,
 				CA2E00000000000000000009 /* MeetingAutomationCountdownIndicatorTests.swift in Sources */,
 				CA2E0000000000000000000A /* PremiumSettingsViewTests.swift in Sources */,
-				CA3E00000000000000000003 /* PremiumSettingsWindowManagerTests.swift in Sources */,
 				7EC0EFA7DA6597CAEA640448 /* TypeWhisperIntegrationTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				8E4B0A32C5D96F7B1E203C4D /* LivePreviewEngineResolutionTests.swift in Sources */,
@@ -5452,7 +5424,6 @@
 				AA000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift in Sources */,
 				AA16570000000000000001 /* AppLanguageText.swift in Sources */,
 				AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */,
-				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 				AA00000000000000000073 /* TranslationService.swift in Sources */,
 				AA00000000000000000074 /* AudioDuckingService.swift in Sources */,
 				AA00000000000000000285 /* MediaPlaybackService.swift in Sources */,
@@ -5477,7 +5448,6 @@
 				D83600000000000000000002 /* HistorySyncAssetStore.swift in Sources */,
 				D83600000000000000000003 /* HistorySyncPreferences.swift in Sources */,
 				CA3E00000000000000000001 /* PremiumFeatureOverview.swift in Sources */,
-				CA3E00000000000000000002 /* PremiumSettingsWindowManager.swift in Sources */,
 				AA00000000000000000082 /* DictionaryViewModel.swift in Sources */,
 				445C51F3B2364A23B6B09286 /* AppVocabularyImportViewModel.swift in Sources */,
 				AA00000000000000000083 /* DictionarySettingsView.swift in Sources */,
@@ -5561,9 +5531,6 @@
 				AA00000000000000000364 /* VisualShortcutKeyboardView.swift in Sources */,
 				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
 				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
-				AA00000000000000000300 /* LicenseService.swift in Sources */,
-				AA00000000000000000301 /* LicenseSettingsView.swift in Sources */,
-				AA00000000000000000302 /* WelcomeSheet.swift in Sources */,
 				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
 				A11800000000000000000001 /* WhatsNewCoordinator.swift in Sources */,
 				A1C0DE000000000000001301 /* ManagedPolicy.swift in Sources */,
@@ -5575,10 +5542,7 @@
 				A1C0DE000000000000001311 /* ManagedSettingsIntegration.swift in Sources */,
 				A1C0DE000000000000001313 /* ManagedSettingsView.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
-				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
-				1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */,
 				A11800000000000000000003 /* WhatsNewView.swift in Sources */,
-				AA00000000000000000303 /* SupporterBadgeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

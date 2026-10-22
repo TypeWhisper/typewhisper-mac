@@ -2092,12 +2092,11 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testCommercialIndustryPacksAreHiddenWithoutCommercialLicense() throws {
+    func testIndustryPacksAreVisibleWithoutAnAccount() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
-        let license = LicenseService(defaults: UserDefaults(suiteName: #function)!)
         let registry = TermPackRegistryService()
         registry.communityPacks = [
             makeCommercialIndustryPack(id: "real-estate", terms: ["Exposé"]),
@@ -2106,34 +2105,28 @@ final class DictionaryServiceTests: XCTestCase {
         ]
         let viewModel = DictionaryViewModel(
             dictionaryService: service,
-            licenseService: license,
             termPackRegistryService: registry
         )
 
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "real-estate" })
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "architecture" })
-        XCTAssertFalse(viewModel.visibleBuiltInPacks.contains { $0.id == "legal" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "real-estate" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "architecture" })
-        XCTAssertFalse(viewModel.visibleCommunityPacks.contains { $0.id == "legal" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "real-estate" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "architecture" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "legal" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "real-estate" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "architecture" })
+        XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "legal" })
     }
 
     @MainActor
-    func testCommercialIndustryPresetActivatesMatchingPackWhenLicensed() throws {
+    func testIndustryPresetActivatesMatchingPack() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
-        let defaults = UserDefaults(suiteName: #function)!
-        let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .team
         let registry = TermPackRegistryService()
         let realEstatePack = makeCommercialIndustryPack(id: "real-estate", terms: ["Exposé", "Grundbuch"])
         registry.communityPacks = [realEstatePack]
         let viewModel = DictionaryViewModel(
             dictionaryService: service,
-            licenseService: license,
             termPackRegistryService: registry
         )
 
@@ -2145,25 +2138,23 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testIndustryPresetStoresSelectionWithoutActivatingPackWhenUnlicensed() throws {
+    func testIndustryPresetActivatesPackWithoutAnAccount() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let service = DictionaryService(appSupportDirectory: appSupportDirectory)
-        let license = LicenseService(defaults: UserDefaults(suiteName: #function)!)
         let registry = TermPackRegistryService()
         registry.communityPacks = [makeCommercialIndustryPack(id: "architecture", terms: ["HOAI"])]
         let viewModel = DictionaryViewModel(
             dictionaryService: service,
-            licenseService: license,
             termPackRegistryService: registry
         )
 
         viewModel.applyIndustryPreset(.architecture)
 
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedIndustryPreset), IndustryPreset.architecture.rawValue)
-        XCTAssertFalse(viewModel.activatedPackStates.keys.contains("architecture"))
-        XCTAssertFalse(service.entries.contains { $0.original == "HOAI" })
+        XCTAssertTrue(viewModel.activatedPackStates.keys.contains("architecture"))
+        XCTAssertTrue(service.entries.contains { $0.original == "HOAI" })
     }
 
     private func makeCommercialIndustryPack(id: String, terms: [String]) -> TermPack {
@@ -2251,6 +2242,7 @@ final class TermPackRegistryServiceTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
         let service = TermPackRegistryService(
+            registryURL: URL(string: "https://example.com/termpacks.json")!,
             userDefaults: defaults,
             fetchData: { _ in throw URLError(.notConnectedToInternet) }
         )
@@ -2292,6 +2284,7 @@ final class TermPackRegistryServiceTests: XCTestCase {
         """.data(using: .utf8)!
 
         let service = TermPackRegistryService(
+            registryURL: URL(string: "https://example.com/termpacks.json")!,
             userDefaults: defaults,
             fetchData: { _ in
                 let response = HTTPURLResponse(

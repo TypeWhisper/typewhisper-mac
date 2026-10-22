@@ -1037,6 +1037,8 @@ final class PluginManager: ObservableObject {
             throw error
         }
 
+        guard manifest.id != "com.typewhisper.improve" else { return }
+
         guard ScreenshotPluginSourcePolicy.allowsCandidate(
             isScreenshotAutomation: AppConstants.isScreenshotAutomation,
             selectedPluginId: AppConstants.screenshotPluginId,

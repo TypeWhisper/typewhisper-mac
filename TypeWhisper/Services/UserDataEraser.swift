@@ -3,13 +3,12 @@ import AppKit
 #endif
 import Foundation
 import os
-import Security
 import ServiceManagement
 import UserNotifications
 import WidgetKit
 
-/// Removes everything TypeWhisper stores on this Mac: Keychain items (API
-/// keys, license, local API token, premium account token), the Application
+/// Removes everything dictum stores on this Mac: Keychain items (API
+/// keys and the local API token), the Application
 /// Support folder including plugins and downloaded models, App Group files,
 /// caches, and all preferences. Afterwards the app must quit without running
 /// `applicationWillTerminate`, which would flush pending history and usage
@@ -43,27 +42,7 @@ enum UserDataEraser {
         await waitUntil { !container.cloudFolderSyncController.isSyncing }
         container.cloudFolderSyncController.deactivate()
 
-        await releaseRemoteActivations(
-            licenseService: container.licenseService,
-            premiumAccountService: container.premiumAccountService
-        )
         return failures
-    }
-
-    /// Frees the license and supporter activation slots on Polar and detaches
-    /// this Mac from the premium account, so the slots can be used on another
-    /// Mac. Failures are ignored; the local wipe proceeds.
-    static func releaseRemoteActivations(
-        licenseService: LicenseService,
-        premiumAccountService: PremiumAccountService
-    ) async {
-        await licenseService.deactivateLicense()
-        await licenseService.deactivateSupporterLicense()
-        // `signOutFromAccount()` is a no-op while another account operation runs.
-        await waitUntil { !premiumAccountService.isWorking }
-        if premiumAccountService.isSignedIn {
-            await premiumAccountService.signOutFromAccount()
-        }
     }
 
     private static func waitUntil(
@@ -185,24 +164,7 @@ enum UserDataEraser {
     }
 
     nonisolated static func deleteAppKeychainItems() throws {
-        // An empty prefix matches every item under `AppConstants.keychainServicePrefix`:
-        // plugin secrets, the local API token and both license items. A failure
-        // there must not skip the premium token below.
-        var firstError: Error?
-        do {
-            try KeychainService.deleteAll(withServicePrefix: "")
-        } catch {
-            firstError = error
-        }
-
-        let status = SecItemDelete([
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: AppConstants.premiumAccountKeychainService,
-        ] as CFDictionary)
-        if status != errSecSuccess, status != errSecItemNotFound, firstError == nil {
-            firstError = KeychainError.deleteFailed(status)
-        }
-        if let firstError { throw firstError }
+        try KeychainService.deleteAll(withServicePrefix: "")
     }
 
     nonisolated static func resetSystemRegistrations() -> [Failure] {

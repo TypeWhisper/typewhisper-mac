@@ -312,7 +312,6 @@ enum MenuBarMenuItem: Hashable {
     case readBackLastTranscription
     case undoLastDictation
     case restoreRawTranscript
-    case checkForUpdates
 }
 
 enum MenuBarMenuSection: String, CaseIterable, Hashable {
@@ -484,10 +483,6 @@ struct MenuBarView: View {
 
             Divider()
 
-            #if !APPSTORE
-            menuItem(for: .checkForUpdates)
-            #endif
-
             Button(String(localized: "Quit")) {
                 NSApplication.shared.terminate(nil)
             }
@@ -650,11 +645,6 @@ struct MenuBarView: View {
         case .restoreRawTranscript:
             restoreRawTranscriptButton
 
-        case .checkForUpdates:
-            Button(String(localized: "Check for Updates...")) {
-                UpdateChecker.shared?.checkForUpdates()
-            }
-            .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
         }
     }
 

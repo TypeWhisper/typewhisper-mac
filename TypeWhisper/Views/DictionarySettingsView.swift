@@ -86,14 +86,12 @@ struct DictionarySettingsView: View {
             Divider()
 
             if settingsNavigation.dictionaryPart == .learning {
-                SettingsPremiumPart(
+                SettingsDetailPart(
                     backTitle: String(localized: "Dictionary"),
                     onBack: { settingsNavigation.dictionaryPart = .dictionary }
                 ) {
-                    PremiumCorrectionLearningSettingsView(
-                        licenseService: .shared,
-                        correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService,
-                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    CorrectionLearningSettingsView(
+                        correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService
                     )
                 }
             } else {
@@ -111,7 +109,7 @@ struct DictionarySettingsView: View {
     private var dictionaryPart: some View {
         VStack(spacing: 0) {
             #if !APPSTORE
-            PremiumActiveFeatureOverview.link(to: .correctionLearning)
+            FeatureSettingsLink(feature: .correctionLearning)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.vertical, 12)
             #endif

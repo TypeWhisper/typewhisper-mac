@@ -1693,20 +1693,14 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
-    func testRecoveryAutomaticFallbackRequiresCommercialOrSupporterAccess() throws {
+    func testRecoveryAutomaticFallbackWorksWithoutAnAccount() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
 
         viewModel.selectedEngine = "backup"
         viewModel.selectedModel = "backup-large"
         viewModel.automaticFallbackEnabled = true
-
-        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
-
-        license.licenseStatus = .active
-        license.licenseTier = .individual
 
         XCTAssertEqual(
             viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),
@@ -1717,10 +1711,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoveryAutomaticFallbackStaysOffUnderAnEnforcedPair() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .individual
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
         viewModel.selectedEngine = "backup"
         viewModel.selectedModel = "backup-large"
         viewModel.automaticFallbackEnabled = true
@@ -1735,14 +1726,10 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
     }
 
-    func testRecoveryAutomaticFallbackAllowsSupporterAccessAndRejectsPrimaryEngine() throws {
+    func testRecoveryAutomaticFallbackRejectsPrimaryEngine() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
-
-        license.supporterStatus = .active
-        license.supporterTier = .bronze
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
         viewModel.selectedEngine = "backup"
         viewModel.automaticFallbackEnabled = true
 
@@ -1822,8 +1809,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     private func makeRecoveryViewModel(
-        defaults: UserDefaults,
-        licenseService: LicenseService
+        defaults: UserDefaults
     ) -> DictationRecoveryViewModel {
         let directory = makeTemporaryDirectory()
         let audioRecordingService = AudioRecordingService(
@@ -1834,7 +1820,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             modelManager: ModelManagerService(),
             historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
             audioFileService: AudioFileService(),
-            licenseService: licenseService,
             defaults: defaults
         )
     }

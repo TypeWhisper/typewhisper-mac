@@ -229,76 +229,6 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
     }
 }
 
-private actor PremiumAccountHTTPRecorder {
-    private let responses: [String: String]
-    private let statusCodes: [String: Int]
-    private(set) var requests: [URLRequest] = []
-
-    init(
-        responses: [String: String],
-        statusCodes: [String: Int] = [:]
-    ) {
-        self.responses = responses
-        self.statusCodes = statusCodes
-    }
-
-    func execute(_ request: URLRequest) throws -> (Data, URLResponse) {
-        requests.append(request)
-        let path = request.url?.path ?? ""
-        guard let body = responses[path],
-              let url = request.url,
-              let response = HTTPURLResponse(
-                  url: url,
-                  statusCode: statusCodes[path] ?? 200,
-                  httpVersion: "HTTP/1.1",
-                  headerFields: ["Content-Type": "application/json"]
-              ) else {
-            throw URLError(.badServerResponse)
-        }
-        return (Data(body.utf8), response)
-    }
-
-    func recordedRequests() -> [URLRequest] {
-        requests
-    }
-}
-
-private final class BlockingPremiumTokenReader: @unchecked Sendable {
-    private let lock = NSLock()
-    private let releaseSemaphore = DispatchSemaphore(value: 0)
-    private var released = false
-    private var storedReadCount = 0
-    private var storedReadWasOnMainThread = false
-
-    var readCount: Int {
-        lock.withLock { storedReadCount }
-    }
-
-    var readWasOnMainThread: Bool {
-        lock.withLock { storedReadWasOnMainThread }
-    }
-
-    func read(service: String) -> String? {
-        lock.withLock {
-            storedReadCount += 1
-            storedReadWasOnMainThread = Thread.isMainThread
-        }
-        releaseSemaphore.wait()
-        return "stored-token"
-    }
-
-    func release() {
-        let shouldSignal = lock.withLock {
-            guard !released else { return false }
-            released = true
-            return true
-        }
-        if shouldSignal {
-            releaseSemaphore.signal()
-        }
-    }
-}
-
 private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchecked Sendable {
     let isAvailable = true
     let localFolderURL: URL?
@@ -351,650 +281,7 @@ private actor RemovalGate {
     }
 }
 
-@MainActor
-private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
-    private(set) var authorizationURLs: [URL] = []
-    let callbackURL: URL
-
-    init(callbackURL: URL) {
-        self.callbackURL = callbackURL
-    }
-
-    func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL {
-        authorizationURLs.append(authorizationURL)
-        XCTAssertEqual(callbackScheme, "typewhisper")
-        return callbackURL
-    }
-}
-
 final class CloudFolderSyncTests: XCTestCase {
-    @MainActor
-    func testPremiumAccountDefersStartupTokenReadOffMainThread() async throws {
-        let suiteName = "PremiumStartupToken-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let reader = BlockingPremiumTokenReader()
-        defer { reader.release() }
-
-        let service = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: nil,
-            automaticallyRefresh: false,
-            startupTokenReader: { reader.read(service: $0) }
-        )
-
-        XCTAssertEqual(reader.readCount, 0)
-        XCTAssertFalse(service.isSignedIn)
-
-        for _ in 0..<100 {
-            if reader.readCount == 1 { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        XCTAssertEqual(reader.readCount, 1)
-        XCTAssertFalse(reader.readWasOnMainThread)
-        XCTAssertFalse(service.isSignedIn)
-
-        reader.release()
-        for _ in 0..<100 {
-            if service.isSignedIn { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        XCTAssertTrue(service.isSignedIn)
-    }
-
-    func testProductionPublicKeyStillVerifiesLegacyTwoDeviceEntitlement() throws {
-        let response = """
-        {
-          "status": "active",
-          "tier": "individual",
-          "source": "storeKit",
-          "isLifetime": false,
-          "expiresAt": "2026-08-01T00:00:00Z",
-          "deviceLimit": 2,
-          "verifiedAt": "2026-07-16T12:00:00Z",
-          "signature": "eyJzdGF0dXMiOiJhY3RpdmUiLCJ0aWVyIjoiaW5kaXZpZHVhbCIsInNvdXJjZSI6InN0b3JlS2l0IiwiaXNMaWZldGltZSI6ZmFsc2UsImV4cGlyZXNBdCI6IjIwMjYtMDgtMDFUMDA6MDA6MDBaIiwiZGV2aWNlTGltaXQiOjIsInZlcmlmaWVkQXQiOiIyMDI2LTA3LTE2VDEyOjAwOjAwWiJ9.zUbfGhBQzTCXdp3Epq0FKr_J-tX7PC_pGMN-X9G2LcNd7XiP_rW4PLObpJxY6lhJVLg1Oh-k9lHNPfkK4NmS5w"
-        }
-        """
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let entitlement = try decoder.decode(
-            CrossDevicePremiumEntitlement.self,
-            from: Data(response.utf8)
-        )
-        let verifier = try XCTUnwrap(CrossDevicePremiumEntitlementVerifier(
-            publicKeyBase64: "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
-        ))
-
-        XCTAssertEqual(verifier.verified(entitlement), entitlement)
-    }
-
-    @MainActor
-    func testPremiumAccountAcceptsOnlyAuthenticallySignedCachedEntitlements() throws {
-        let suiteName = "PremiumEntitlementSignature-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let privateKey = P256.Signing.PrivateKey()
-        let valid = try Self.signedEntitlement(privateKey: privateKey)
-        defaults.set(
-            try Self.entitlementEncoder.encode(valid),
-            forKey: "premium.account.cachedEntitlement"
-        )
-
-        let validService = PremiumAccountService(
-            defaults: defaults,
-            keychainService: "\(suiteName).valid",
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
-        XCTAssertEqual(validService.entitlement, valid)
-        XCTAssertTrue(validService.hasPremiumEntitlement)
-
-        let tampered = CrossDevicePremiumEntitlement(
-            status: valid.status,
-            tier: "enterprise",
-            source: valid.source,
-            isLifetime: valid.isLifetime,
-            expiresAt: valid.expiresAt,
-            deviceLimit: valid.deviceLimit,
-            verifiedAt: valid.verifiedAt,
-            signature: valid.signature
-        )
-        defaults.set(
-            try Self.entitlementEncoder.encode(tampered),
-            forKey: "premium.account.cachedEntitlement"
-        )
-
-        let tamperedService = PremiumAccountService(
-            defaults: defaults,
-            keychainService: "\(suiteName).tampered",
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
-        XCTAssertNil(tamperedService.entitlement)
-        XCTAssertFalse(tamperedService.hasPremiumEntitlement)
-        XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"))
-    }
-
-    @MainActor
-    func testPremiumAccountRefreshesRecentMissingEntitlementAfterPurchase() async throws {
-        let suiteName = "PremiumMissingEntitlementRefresh-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        let entitlementObject = try XCTUnwrap(
-            JSONSerialization.jsonObject(
-                with: Self.entitlementEncoder.encode(entitlement)
-            ) as? [String: Any]
-        )
-        let responseData = try JSONSerialization.data(
-            withJSONObject: ["entitlement": entitlementObject]
-        )
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2099-07-19T12:10:00.000Z"
-            }
-            """,
-            "/v1/auth/apple/web/exchange": """
-            {"accessToken": "account-token", "entitlement": null}
-            """,
-            "/v1/entitlements/polar/device/attach": """
-            {"entitlement": null}
-            """,
-            "/v1/entitlements/current": try XCTUnwrap(
-                String(data: responseData, encoding: .utf8)
-            ),
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
-            ))
-        )
-
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-        defer { service.signOut() }
-
-        await service.signInWithApple(
-            commercialLicenseProof: CommercialLicenseLinkProof(
-                key: "polar-license",
-                activationId: "polar-activation"
-            )
-        )
-        XCTAssertTrue(service.isSignedIn)
-        XCTAssertNil(service.entitlement)
-        defaults.set(Date(), forKey: "premium.account.lastRefresh")
-
-        await service.refreshIfNeeded()
-
-        XCTAssertEqual(service.entitlement, entitlement)
-        XCTAssertTrue(service.hasPremiumEntitlement)
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(
-            requests.compactMap(\.url?.path),
-            [
-                "/v1/auth/apple/web/start",
-                "/v1/auth/apple/web/exchange",
-                "/v1/entitlements/polar/device/attach",
-                "/v1/entitlements/current",
-            ]
-        )
-    }
-
-    @MainActor
-    func testPremiumAccountKeepsRecentActiveEntitlementRefreshThrottled() async throws {
-        let suiteName = "PremiumActiveEntitlementRefresh-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        defaults.set(
-            try Self.entitlementEncoder.encode(entitlement),
-            forKey: "premium.account.cachedEntitlement"
-        )
-        defaults.set(Date(), forKey: "premium.account.lastRefresh")
-        let recorder = PremiumAccountHTTPRecorder(responses: [:])
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
-
-        await service.refreshIfNeeded()
-
-        XCTAssertEqual(service.entitlement, entitlement)
-        let requests = await recorder.recordedRequests()
-        XCTAssertTrue(requests.isEmpty)
-    }
-
-    @MainActor
-    func testPremiumAccountLinksCommercialLicenseAfterSignIn() async throws {
-        let suiteName = "PremiumCommercialLink-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        let entitlementObject = try XCTUnwrap(
-            JSONSerialization.jsonObject(
-                with: Self.entitlementEncoder.encode(entitlement)
-            ) as? [String: Any]
-        )
-        let attachResponse = try JSONSerialization.data(
-            withJSONObject: ["entitlement": entitlementObject]
-        )
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2099-07-19T12:10:00.000Z"
-            }
-            """,
-            "/v1/auth/apple/web/exchange": """
-            {"accessToken": "account-token", "entitlement": null}
-            """,
-            "/v1/entitlements/current": """
-            {"entitlement": null}
-            """,
-            "/v1/entitlements/polar/device/attach": try XCTUnwrap(
-                String(data: attachResponse, encoding: .utf8)
-            ),
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-        defer { service.signOut() }
-
-        await service.signInWithApple(commercialLicenseProof: nil)
-        XCTAssertTrue(service.isSignedIn)
-        XCTAssertFalse(service.hasPremiumEntitlement)
-
-        await service.linkCommercialLicense(
-            CommercialLicenseLinkProof(
-                key: "polar-license",
-                activationId: "polar-activation"
-            )
-        )
-
-        XCTAssertEqual(service.entitlement, entitlement)
-        XCTAssertTrue(service.hasPremiumEntitlement)
-        XCTAssertNil(service.errorMessage)
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(
-            requests.compactMap(\.url?.path),
-            [
-                "/v1/auth/apple/web/start",
-                "/v1/auth/apple/web/exchange",
-                "/v1/entitlements/current",
-                "/v1/entitlements/polar/device/attach",
-            ]
-        )
-    }
-
-    @MainActor
-    func testAuthorizationFailureClearsSignedEntitlementButTransientFailureDoesNot() throws {
-        let suiteName = "PremiumEntitlementAuthorization-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        defaults.set(
-            try Self.entitlementEncoder.encode(entitlement),
-            forKey: "premium.account.cachedEntitlement"
-        )
-
-        let service = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
-
-        service.clearAuthorizationForHTTPStatus(503)
-        XCTAssertTrue(service.isSignedIn)
-        XCTAssertEqual(service.entitlement, entitlement)
-
-        service.clearAuthorizationForHTTPStatus(401)
-        XCTAssertFalse(service.isSignedIn)
-        XCTAssertNil(service.entitlement)
-        XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"))
-    }
-
-    @MainActor
-    func testPremiumAccountUsesAppleWebAuthWithStatePKCEAndAttachesExistingPolarActivation() async throws {
-        let suiteName = "PremiumAppleWebAuth-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2099-07-19T12:10:00.000Z"
-            }
-            """,
-            "/v1/auth/apple/web/exchange": """
-            {"accessToken": "account-token", "entitlement": null}
-            """,
-            "/v1/entitlements/polar/device/attach": """
-            {"entitlement": null}
-            """,
-            "/v1/entitlements/polar/device/current": """
-            {"ok": true, "released": false}
-            """,
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-        defer { service.signOut() }
-
-        await service.signInWithApple(
-            commercialLicenseProof: CommercialLicenseLinkProof(
-                key: "polar-license",
-                activationId: "polar-activation"
-            )
-        )
-
-        XCTAssertTrue(service.isSignedIn)
-        XCTAssertNil(service.errorMessage)
-        XCTAssertEqual(
-            authenticator.authorizationURLs.map(\.host),
-            ["appleid.apple.com"]
-        )
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(
-            requests.compactMap(\.url?.path),
-            [
-                "/v1/auth/apple/web/start",
-                "/v1/auth/apple/web/exchange",
-                "/v1/entitlements/polar/device/attach",
-            ]
-        )
-
-        let startRequest = try XCTUnwrap(
-            requests.first { $0.url?.path == "/v1/auth/apple/web/start" }
-        )
-        let exchangeRequest = try XCTUnwrap(
-            requests.first { $0.url?.path == "/v1/auth/apple/web/exchange" }
-        )
-        let attachRequest = try XCTUnwrap(
-            requests.first {
-                $0.url?.path == "/v1/entitlements/polar/device/attach"
-            }
-        )
-
-        let startBody = try XCTUnwrap(startRequest.httpBody)
-        let startJSON = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: startBody) as? [String: String]
-        )
-        XCTAssertEqual(startJSON["nonceHash"]?.count, 64)
-        XCTAssertTrue(startJSON["nonceHash"]?.allSatisfy(\.isHexDigit) == true)
-
-        let exchangeBody = try XCTUnwrap(exchangeRequest.httpBody)
-        let exchangeJSON = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: exchangeBody) as? [String: String]
-        )
-        XCTAssertEqual(exchangeJSON["state"], "server-state")
-        XCTAssertEqual(exchangeJSON["code"], "exchange-code")
-        let verifier = try XCTUnwrap(exchangeJSON["codeVerifier"])
-        let expectedChallenge = Data(SHA256.hash(data: Data(verifier.utf8)))
-            .base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-        XCTAssertEqual(startJSON["codeChallenge"], expectedChallenge)
-        XCTAssertEqual(
-            attachRequest.value(forHTTPHeaderField: "Authorization"),
-            "Bearer account-token"
-        )
-        XCTAssertEqual(
-            attachRequest.value(
-                forHTTPHeaderField: "X-TypeWhisper-Entitlement-Version"
-            ),
-            "2"
-        )
-        let attachBody = try XCTUnwrap(attachRequest.httpBody)
-        let attachJSON = try XCTUnwrap(
-            JSONSerialization.jsonObject(with: attachBody)
-                as? [String: String]
-        )
-        XCTAssertEqual(attachJSON["licenseKey"], "polar-license")
-        XCTAssertEqual(attachJSON["activationId"], "polar-activation")
-
-        await service.signOutFromAccount()
-        XCTAssertFalse(service.isSignedIn)
-        let finalRequests = await recorder.recordedRequests()
-        XCTAssertEqual(
-            finalRequests.last?.url?.path,
-            "/v1/entitlements/polar/device/current"
-        )
-        XCTAssertEqual(finalRequests.last?.httpMethod, "DELETE")
-    }
-
-    @MainActor
-    func testPremiumAccountRollsBackSessionWhenPolarAttachmentFails() async throws {
-        let suiteName = "PremiumAppleWebAuthAttachFailure-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let recorder = PremiumAccountHTTPRecorder(
-            responses: [
-                "/v1/auth/apple/web/start": """
-                {
-                  "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-                  "state": "server-state",
-                  "expiresAt": "2099-07-19T12:10:00.000Z"
-                }
-                """,
-                "/v1/auth/apple/web/exchange": """
-                {"accessToken": "account-token", "entitlement": null}
-                """,
-                "/v1/entitlements/polar/device/attach": """
-                {"error": "Polar activation could not be attached."}
-                """,
-            ],
-            statusCodes: [
-                "/v1/entitlements/polar/device/attach": 503,
-            ]
-        )
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-        defer { service.signOut() }
-
-        await service.signInWithApple(
-            commercialLicenseProof: CommercialLicenseLinkProof(
-                key: "polar-license",
-                activationId: "polar-activation"
-            )
-        )
-
-        XCTAssertFalse(service.isSignedIn)
-        XCTAssertNil(service.entitlement)
-        XCTAssertEqual(
-            service.errorMessage,
-            "Polar activation could not be attached."
-        )
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(
-            requests.compactMap(\.url?.path),
-            [
-                "/v1/auth/apple/web/start",
-                "/v1/auth/apple/web/exchange",
-                "/v1/entitlements/polar/device/attach",
-            ]
-        )
-    }
-
-    @MainActor
-    func testPremiumAccountKeepsAppleCancellationSilent() async throws {
-        let suiteName = "PremiumAppleWebAuthCancel-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2099-07-19T12:10:00.000Z"
-            }
-            """,
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&error=user_cancelled_authorize"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-
-        await service.signInWithApple(commercialLicenseProof: nil)
-
-        XCTAssertFalse(service.isSignedIn)
-        XCTAssertNil(service.errorMessage)
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(requests.count, 1)
-    }
-
-    @MainActor
-    func testPremiumAccountRejectsMismatchedAppleCallbackState() async throws {
-        let suiteName = "PremiumAppleWebAuthStateMismatch-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2099-07-19T12:10:00.000Z"
-            }
-            """,
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=wrong-state&code=exchange-code"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-
-        await service.signInWithApple(commercialLicenseProof: nil)
-
-        XCTAssertFalse(service.isSignedIn)
-        XCTAssertNotNil(service.errorMessage)
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/auth/apple/web/start"])
-    }
-
-    @MainActor
-    func testPremiumAccountRejectsExpiredAppleWebStart() async throws {
-        let suiteName = "PremiumAppleWebAuthExpired-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let recorder = PremiumAccountHTTPRecorder(responses: [
-            "/v1/auth/apple/web/start": """
-            {
-              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
-              "state": "server-state",
-              "expiresAt": "2020-07-19T12:10:00.000Z"
-            }
-            """,
-        ])
-        let authenticator = PremiumAppleWebAuthenticator(
-            callbackURL: try XCTUnwrap(URL(
-                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
-            ))
-        )
-        let service = PremiumAccountService(
-            defaults: defaults,
-            baseURL: URL(string: "https://app.typewhisper.com"),
-            requestExecutor: { request in try await recorder.execute(request) },
-            appleWebAuthenticator: authenticator,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
-
-        await service.signInWithApple(commercialLicenseProof: nil)
-
-        XCTAssertFalse(service.isSignedIn)
-        XCTAssertNotNil(service.errorMessage)
-        XCTAssertTrue(authenticator.authorizationURLs.isEmpty)
-        let requests = await recorder.recordedRequests()
-        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/auth/apple/web/start"])
-    }
-
     @MainActor
     func testAutomaticSyncStateSurvivesModeToggle() async throws {
         let suiteName = "PremiumSyncModeState-\(UUID().uuidString)"
@@ -1014,15 +301,8 @@ final class CloudFolderSyncTests: XCTestCase {
         )
         defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
 
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
         let store = InMemoryUserDataSyncStore()
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: store,
             defaults: defaults
         )
@@ -1042,21 +322,8 @@ final class CloudFolderSyncTests: XCTestCase {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncBridge")
         defer { TestSupport.remove(folder) }
 
-        let privateKey = P256.Signing.PrivateKey()
-        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
-        defaults.set(
-            try Self.entitlementEncoder.encode(entitlement),
-            forKey: "premium.account.cachedEntitlement"
-        )
         defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
 
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
         let store = InMemoryUserDataSyncStore(dictionaryEntries: [
             UserDataSyncDictionaryEntry(
                 entryType: .term,
@@ -1072,7 +339,6 @@ final class CloudFolderSyncTests: XCTestCase {
         ])
         let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: store,
             defaults: defaults,
             automaticICloudBridge: bridge,
@@ -1152,22 +418,9 @@ final class CloudFolderSyncTests: XCTestCase {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncRemoveDevice")
         defer { TestSupport.remove(folder) }
 
-        let privateKey = P256.Signing.PrivateKey()
-        defaults.set(
-            try Self.entitlementEncoder.encode(Self.signedEntitlement(privateKey: privateKey)),
-            forKey: "premium.account.cachedEntitlement"
-        )
         defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
         let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: InMemoryUserDataSyncStore(),
             defaults: defaults,
             automaticICloudBridge: bridge,
@@ -1227,25 +480,12 @@ final class CloudFolderSyncTests: XCTestCase {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncIdlePoll")
         defer { TestSupport.remove(folder) }
 
-        let privateKey = P256.Signing.PrivateKey()
-        defaults.set(
-            try Self.entitlementEncoder.encode(Self.signedEntitlement(privateKey: privateKey)),
-            forKey: "premium.account.cachedEntitlement"
-        )
         defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
         let store = InMemoryUserDataSyncStore(dictionaryEntries: [
             Self.dictionaryEntry(original: "Launch", updatedAt: Self.date(10)),
         ])
         let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: store,
             defaults: defaults,
             automaticICloudBridge: bridge,
@@ -1278,7 +518,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remoteStore,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(200)
         )
         await controller.automaticPollTick()
@@ -1322,7 +561,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remoteStore,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(200)
         )
         let remoteFiles = try FileManager.default.contentsOfDirectory(
@@ -1430,7 +668,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: InMemoryUserDataSyncStore(),
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(200)
         )
         await controller.automaticPollTick()
@@ -1462,14 +699,7 @@ final class CloudFolderSyncTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: suiteName) }
         defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
 
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: InMemoryUserDataSyncStore(),
             defaults: defaults,
             automaticICloudAvailable: false
@@ -1504,15 +734,8 @@ final class CloudFolderSyncTests: XCTestCase {
         let packageURL = CloudFolderSyncEngine.packageURL(for: folder)
         try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
 
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
         let store = InMemoryUserDataSyncStore()
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: store,
             defaults: defaults
         )
@@ -1538,8 +761,8 @@ final class CloudFolderSyncTests: XCTestCase {
             TestSupport.remove(remoteRoot)
         }
 
-        let localPackage = localRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
-        let remotePackage = remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        let localPackage = localRoot.appendingPathComponent("dictum-sync", isDirectory: true)
+        let remotePackage = remoteRoot.appendingPathComponent("dictum-sync", isDirectory: true)
         let localOnly = localPackage.appendingPathComponent("ops/mac/local.json")
         let remoteOnly = remotePackage.appendingPathComponent("ops/ios/remote.json")
         let localManifest = localPackage.appendingPathComponent("manifest.json")
@@ -1590,8 +813,8 @@ final class CloudFolderSyncTests: XCTestCase {
     func testICloudBridgeComparesMetadataBeforeReadingFiles() throws {
         let localRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeMetadataLocal")
         let remoteRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeMetadataRemote")
-        let localFile = localRoot.appendingPathComponent("typewhisper-sync/ops/mac/operation.json")
-        let remoteFile = remoteRoot.appendingPathComponent("typewhisper-sync/ops/mac/operation.json")
+        let localFile = localRoot.appendingPathComponent("dictum-sync/ops/mac/operation.json")
+        let remoteFile = remoteRoot.appendingPathComponent("dictum-sync/ops/mac/operation.json")
         defer {
             for file in [localFile, remoteFile] {
                 try? FileManager.default.setAttributes(
@@ -1653,7 +876,7 @@ final class CloudFolderSyncTests: XCTestCase {
 
         // Manifest and device files are rewritten in place, so equal size and date do not
         // prove equal contents.
-        for relativePath in ["typewhisper-sync/manifest.json", "typewhisper-sync/devices/mac.json"] {
+        for relativePath in ["dictum-sync/manifest.json", "dictum-sync/devices/mac.json"] {
             let localFile = localRoot.appendingPathComponent(relativePath)
             let remoteFile = remoteRoot.appendingPathComponent(relativePath)
             for (file, contents) in [(localFile, "metadata-a"), (remoteFile, "metadata-b")] {
@@ -1671,7 +894,7 @@ final class CloudFolderSyncTests: XCTestCase {
 
         try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
 
-        for relativePath in ["typewhisper-sync/manifest.json", "typewhisper-sync/devices/mac.json"] {
+        for relativePath in ["dictum-sync/manifest.json", "dictum-sync/devices/mac.json"] {
             XCTAssertEqual(
                 try Data(contentsOf: localRoot.appendingPathComponent(relativePath)),
                 try Data(contentsOf: remoteRoot.appendingPathComponent(relativePath)),
@@ -1801,7 +1024,7 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertTrue(Self.bridgeFileExists("ops/ios/operation.json", in: localRoot))
 
         try FileManager.default.removeItem(
-            at: remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+            at: remoteRoot.appendingPathComponent("dictum-sync", isDirectory: true)
         )
         try Self.writeBridgeFile("ops/mac/new.json", in: localRoot, seconds: 20)
         try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
@@ -1827,7 +1050,7 @@ final class CloudFolderSyncTests: XCTestCase {
 
         // Erasing all data removes the local package; other devices' data must survive.
         try FileManager.default.removeItem(
-            at: localRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+            at: localRoot.appendingPathComponent("dictum-sync", isDirectory: true)
         )
         try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
 
@@ -1983,7 +1206,7 @@ final class CloudFolderSyncTests: XCTestCase {
         try Data("keep".utf8).write(to: unrelated)
         for root in [localRoot, remoteRoot] {
             try FileManager.default.createDirectory(
-                at: root.appendingPathComponent("typewhisper-sync", isDirectory: true),
+                at: root.appendingPathComponent("dictum-sync", isDirectory: true),
                 withIntermediateDirectories: true
             )
         }
@@ -1994,10 +1217,10 @@ final class CloudFolderSyncTests: XCTestCase {
         )
 
         XCTAssertFalse(FileManager.default.fileExists(
-            atPath: localRoot.appendingPathComponent("typewhisper-sync").path
+            atPath: localRoot.appendingPathComponent("dictum-sync").path
         ))
         XCTAssertFalse(FileManager.default.fileExists(
-            atPath: remoteRoot.appendingPathComponent("typewhisper-sync").path
+            atPath: remoteRoot.appendingPathComponent("dictum-sync").path
         ))
         XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
     }
@@ -2042,7 +1265,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             historyOriginDeviceID: "mac-history-origin",
             now: Self.date(20)
         )
@@ -2149,8 +1371,8 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
-    func testUnpaidSyncDoesNotCreateFiles() async throws {
-        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncUnpaid")
+    func testSyncCreatesFilesWithoutAnAccount() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncFree")
         defer { TestSupport.remove(folder) }
 
         let store = InMemoryUserDataSyncStore(dictionaryEntries: [
@@ -2158,18 +1380,15 @@ final class CloudFolderSyncTests: XCTestCase {
         ])
         var state = CloudFolderSyncState(deviceId: "mac-a")
 
-        do {
-            _ = try await CloudFolderSyncEngine.sync(
-                folderURL: folder,
-                store: store,
-                state: &state,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: false),
-                now: Self.date(20)
-            )
-            XCTFail("Expected unpaid sync to throw")
-        } catch CloudFolderSyncError.notEntitled {
-            XCTAssertFalse(FileManager.default.fileExists(atPath: CloudFolderSyncEngine.packageURL(for: folder).path))
-        }
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            now: Self.date(20)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("manifest.json").path
+        ))
     }
 
     @MainActor
@@ -2203,7 +1422,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceAStore,
             state: &deviceAState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let operationFile = try XCTUnwrap(Self.operationFiles(folder: folder, deviceId: "mac-a").first)
@@ -2214,7 +1432,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceBStore,
             state: &deviceBState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
 
@@ -2239,7 +1456,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -2271,7 +1487,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -2297,7 +1512,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -2358,7 +1572,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20),
             afterFileIO: editDuringFileIO
         )
@@ -2366,7 +1579,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
 
@@ -2397,7 +1609,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let remoteStore = InMemoryUserDataSyncStore(dictionaryEntries: [
@@ -2408,7 +1619,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remoteStore,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
 
@@ -2424,7 +1634,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(60),
             afterFileIO: editDuringFileIO
         )
@@ -2432,7 +1641,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(70)
         )
 
@@ -2469,14 +1677,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceAStore,
             state: &deviceAState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let secondResult = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: deviceBStore,
             state: &deviceBState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
 
@@ -2650,7 +1856,6 @@ final class CloudFolderSyncTests: XCTestCase {
                 folderURL: folder,
                 store: store,
                 state: &state,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
                 now: Self.date(seconds)
             )
         }
@@ -2789,7 +1994,6 @@ final class CloudFolderSyncTests: XCTestCase {
                 folderURL: folder,
                 store: mac,
                 state: &macState,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
                 now: Self.date(seconds)
             )
         }
@@ -2864,14 +2068,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: watch,
             state: &watchState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let imported = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: mac,
             state: &macState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
 
@@ -2901,14 +2103,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: mac,
             state: &macState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(50)
         )
         let completionImport = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: watch,
             state: &watchState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(60)
         )
 
@@ -2940,14 +2140,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: first,
             state: &firstState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         _ = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: second,
             state: &secondState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
         XCTAssertEqual(second.historyRecords.count, 1)
@@ -2957,7 +2155,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: first,
             state: &firstState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(35)
         )
         XCTAssertEqual(retentionPass.operationsWritten, 0)
@@ -2969,14 +2166,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: first,
             state: &firstState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(45)
         )
         let deletionImport = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: second,
             state: &secondState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(50)
         )
 
@@ -3093,7 +2288,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -3147,14 +2341,7 @@ final class CloudFolderSyncTests: XCTestCase {
             )),
             .upsertHistoryAudio(descriptor),
         ])
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: InMemoryUserDataSyncStore(),
             historyService: historyService,
             historySyncPreferences: preferences,
@@ -3215,14 +2402,7 @@ final class CloudFolderSyncTests: XCTestCase {
             .upsertHistoryAudio(descriptor),
         ])
         preferences.isAudioEnabled = true
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            isSignedInOverride: false,
-            automaticallyRefresh: false
-        )
         let controller = CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: InMemoryUserDataSyncStore(),
             historyService: historyService,
             historySyncPreferences: preferences,
@@ -3251,7 +2431,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceAStore,
             state: &deviceAState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -3260,7 +2439,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceAStore,
             state: &deviceAState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
 
@@ -3270,7 +2448,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceBStore,
             state: &deviceBState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
 
@@ -3293,7 +2470,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceAStore,
             state: &deviceAState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
 
@@ -3301,14 +2477,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: deviceBStore,
             state: &deviceBState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
         let secondResult = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: deviceBStore,
             state: &deviceBState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
 
@@ -3330,7 +2504,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remoteStore,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let remoteFile = try XCTUnwrap(Self.operationFiles(folder: folder, deviceId: "mac-remote").first)
@@ -3348,7 +2521,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30),
             cache: cache
         )
@@ -3363,7 +2535,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40),
             cache: cache
         )
@@ -3375,7 +2546,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &uncachedState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(50)
         )
         XCTAssertEqual(uncached.diagnostics.map(\.kind), [.unreadableFile])
@@ -3389,7 +2559,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(70),
             cache: cache
         )
@@ -3425,7 +2594,6 @@ final class CloudFolderSyncTests: XCTestCase {
                 folderURL: folder,
                 store: store,
                 state: &state,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
                 now: Self.date(seconds)
             )
         }
@@ -3444,7 +2612,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remoteStore,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(36)
         )
         let importing = try await sync(40)
@@ -3499,7 +2666,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20),
             cache: cache
         )
@@ -3517,7 +2683,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30),
             cache: cache
         )
@@ -3529,7 +2694,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &uncachedState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
         XCTAssertEqual(uncached.diagnostics.map(\.kind), [.audioTransferFailed])
@@ -3555,7 +2719,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remote,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         remote.historyRecords = [records[0], records[2]]
@@ -3566,7 +2729,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: remote,
             state: &remoteState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(45)
         )
 
@@ -3576,7 +2738,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: local,
             state: &localState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(50)
         )
 
@@ -3639,7 +2800,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         let operationFile = try XCTUnwrap(Self.operationFiles(folder: folder, deviceId: "mac-dates").first)
@@ -3667,7 +2827,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(40)
         )
         XCTAssertEqual(result.mutationsApplied, 1)
@@ -3688,7 +2847,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(10)
         )
         XCTAssertEqual(Self.operationFiles(folder: folder, deviceId: "mac-a").count, 1)
@@ -3697,7 +2855,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(10 + 91 * 24 * 60 * 60)
         )
 
@@ -3821,14 +2978,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: first,
             state: &firstState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(20)
         )
         _ = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: second,
             state: &secondState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
         XCTAssertEqual(
@@ -3846,14 +3001,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: second,
             state: &secondState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(50)
         )
         _ = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: first,
             state: &firstState,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(60)
         )
 
@@ -3899,7 +3052,6 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(25)
         )
         XCTAssertEqual(
@@ -3916,14 +3068,12 @@ final class CloudFolderSyncTests: XCTestCase {
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(30)
         )
         let repeated = try await CloudFolderSyncEngine.sync(
             folderURL: folder,
             store: store,
             state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
             now: Self.date(35)
         )
         XCTAssertEqual(republish.operationsWritten, 1)
@@ -4301,13 +3451,12 @@ final class CloudFolderSyncTests: XCTestCase {
         let second = InMemoryUserDataSyncStore()
         var a = CloudFolderSyncState(deviceId: "mac")
         var b = CloudFolderSyncState(deviceId: "windows")
-        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(20))
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, entitlements: entitlement, now: Self.date(30))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(20))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, now: Self.date(30))
         XCTAssertEqual(second.dictionaryEntries.count, 3)
         second.dictionaryEntries.removeAll { $0.isRegex && $0.original == #"\D"# }
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, entitlements: entitlement, now: Self.date(40))
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: second, state: &b, now: Self.date(40))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(50))
         XCTAssertEqual(first.dictionaryEntries.count, 2)
         XCTAssertTrue(first.dictionaryEntries.allSatisfy { $0.original == #"\d"# })
         XCTAssertEqual(first.dictionaryEntries.filter(\.isRegex).count, 1)
@@ -4326,7 +3475,7 @@ final class CloudFolderSyncTests: XCTestCase {
             try Self.writeLegacyOperation(operation, to: folder)
             var state = CloudFolderSyncState(deviceId: "mac")
             _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: true), now: Self.date(30))
+                now: Self.date(30))
             XCTAssertEqual(store.dictionaryEntries.count, hasLiteral ? 2 : 1)
             XCTAssertEqual(store.dictionaryEntries.first { $0.isRegex }?.replacement, hasLiteral ? "regex" : "updated")
             if hasLiteral { XCTAssertEqual(store.dictionaryEntries.first { !$0.isRegex }?.replacement, "updated") }
@@ -4345,14 +3494,13 @@ final class CloudFolderSyncTests: XCTestCase {
         ), deviceId: "legacy", operationId: "legacy")
         try Self.writeLegacyOperation(legacy, to: folder)
         var state = CloudFolderSyncState(deviceId: "mac")
-        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-        let first = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(25))
+        let first = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(25))
         XCTAssertEqual(store.dictionaryEntries.count, 1)
         XCTAssertTrue(try XCTUnwrap(store.dictionaryEntries.first).isRegex)
         XCTAssertEqual(store.dictionaryEntries.first?.replacement, "new")
         XCTAssertTrue(first.requiresFollowUpSync)
-        let republish = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
-        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
+        let republish = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(35))
         XCTAssertEqual(republish.operationsWritten, 1)
         XCTAssertEqual(repeated.operationsWritten, 0)
     }
@@ -4376,8 +3524,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 try JSONSerialization.data(withJSONObject: payload).write(to: remote.appendingPathComponent("unsupported.json"))
                 let store = TypeWhisperUserDataSyncStore(dictionaryService: dictionary, snippetService: SnippetService(appSupportDirectory: folder))
                 var state = CloudFolderSyncState(deviceId: "mac")
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 XCTAssertEqual(dictionary.entries.count, 1)
                 XCTAssertEqual(dictionary.entries.first?.replacement, "literal")
                 XCTAssertFalse(state.appliedOperationIDs.contains(operation.operationId))
@@ -4403,14 +3550,13 @@ final class CloudFolderSyncTests: XCTestCase {
         let store = InMemoryUserDataSyncStore(dictionaryEntries: [entry], snippets: [snippet])
         var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
             exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [operation.operationId])
-        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
         XCTAssertEqual(store.dictionaryEntries, [entry])
         let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
             try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
         }
         XCTAssertTrue(published.contains { $0.snippet == snippet })
-        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
         XCTAssertEqual(repeated.operationsWritten, 0)
     }
 
@@ -4437,15 +3583,14 @@ final class CloudFolderSyncTests: XCTestCase {
                 let store = InMemoryUserDataSyncStore(dictionaryEntries: [regex])
                 var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
                     exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"], appliedOperationIDs: [synced.operationId])
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 XCTAssertEqual(store.dictionaryEntries, [regex])
                 let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                     try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
                 }
                 XCTAssertEqual(published.contains { $0.kind == .delete && $0.itemId == oldID }, recovery || !previouslyRegex)
                 XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.dictionary == regex })
-                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
                 XCTAssertEqual(repeated.operationsWritten, 0)
                 XCTAssertEqual(store.dictionaryEntries, [regex])
             }
@@ -4472,13 +3617,12 @@ final class CloudFolderSyncTests: XCTestCase {
                 }
                 let store = InMemoryUserDataSyncStore()
                 var state = CloudFolderSyncState(deviceId: "mac")
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 XCTAssertEqual(store.dictionaryEntries, [current])
                 XCTAssertTrue(state.appliedOperationIDs.contains(old.operationId))
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
                 try FileManager.default.removeItem(at: remote.appendingPathComponent("current.json"))
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(50))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(50))
                 XCTAssertEqual(store.dictionaryEntries, [current])
             }
         }
@@ -4507,15 +3651,14 @@ final class CloudFolderSyncTests: XCTestCase {
             var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID, removed.itemId],
                 exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z", removed.itemId: "2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: ["removed-local-upsert", "removed-peer-upsert"])
-            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
             XCTAssertEqual(store.dictionaryEntries, [local])
             XCTAssertTrue(store.snippets.isEmpty)
             let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                 try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
             }
             XCTAssertTrue(published.contains { $0.kind == .delete && $0.itemId == removed.itemId })
-            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
             XCTAssertEqual(repeated.operationsWritten, 0)
             XCTAssertEqual(store.dictionaryEntries, [local])
             XCTAssertTrue(store.snippets.isEmpty)
@@ -4546,15 +3689,14 @@ final class CloudFolderSyncTests: XCTestCase {
             var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID],
                 exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: [old.operationId, deleted.operationId, current.operationId])
-            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
             XCTAssertEqual(store.dictionaryEntries, mode == "deletedRegex" ? [] : [entry])
             let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                 try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
             }
             XCTAssertEqual(published.contains { $0.kind == .delete }, mode == "deletedRegex")
             if mode == "deletedRegex" { XCTAssertTrue(published.contains { $0.schemaVersion == 2 && $0.kind == .delete }) }
-            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
             XCTAssertEqual(repeated.operationsWritten, 0)
         }
     }
@@ -4582,8 +3724,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [oldID, snippetID],
                     exportedItemVersions: [oldID: "dictionary-v2|2023-11-14T22:13:30.000Z", snippetID: "2023-11-14T22:13:30.000Z"],
                     appliedOperationIDs: ["removed-dictionary", "removed-snippet"])
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                     try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
                 }
@@ -4594,7 +3735,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 XCTAssertTrue(store.dictionaryEntries.contains(entry))
                 XCTAssertEqual(store.dictionaryEntries.count, package == "replaced" ? 2 : 1)
                 for now in [Self.date(40), Self.date(50)] {
-                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: now)
+                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: now)
                     XCTAssertEqual(repeated.operationsWritten, 0)
                 }
             }
@@ -4620,8 +3761,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
                     exportedItemVersions: [legacy.itemId: prefix + "2023-11-14T22:13:30.000Z"],
                     appliedOperationIDs: [legacy.operationId, history.operationId, "expired-dictionary-delete", "expired-snippet-delete", "expired-history-delete"])
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                     try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
                 }
@@ -4639,7 +3779,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 }
                 XCTAssertTrue(published.contains { $0.snippet == snippet })
                 for now in [Self.date(40), Self.date(50)] {
-                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: now)
+                    let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: now)
                     XCTAssertEqual(repeated.operationsWritten, 0)
                 }
             }
@@ -4686,10 +3826,9 @@ final class CloudFolderSyncTests: XCTestCase {
                         appliedOperationIDs: [legacy.operationId])
                     let previousState = state
                     let cache = CloudFolderSyncCache()
-                    let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
                     do {
                         _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                            entitlements: entitlement, now: Self.date(30), cache: cache)
+                            now: Self.date(30), cache: cache)
                         XCTFail("Incomplete envelope must postpone migration: \(context)")
                     } catch CloudFolderSyncError.incompleteMigrationHistory {
                         // The pending deletion or mode change still needs the legacy pattern identity.
@@ -4702,7 +3841,7 @@ final class CloudFolderSyncTests: XCTestCase {
                     // Unrelated malformed files must not block once the required history arrives.
                     try Self.writeLegacyOperation(legacy, to: folder)
                     let recovered = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                        entitlements: entitlement, now: Self.date(40), cache: cache)
+                        now: Self.date(40), cache: cache)
                     XCTAssertEqual(recovered.diagnostics.map(\.kind), [.malformedOperation], context)
                     let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                         try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
@@ -4712,7 +3851,7 @@ final class CloudFolderSyncTests: XCTestCase {
                     XCTAssertEqual(store.dictionaryEntries, snapshot, context)
                     XCTAssertFalse(state.appliedOperationIDs.contains("ignored"), context)
                     let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                        entitlements: entitlement, now: Self.date(50), cache: cache)
+                        now: Self.date(50), cache: cache)
                     XCTAssertEqual(repeated.operationsWritten, 0, context)
                 }
             }
@@ -4736,9 +3875,8 @@ final class CloudFolderSyncTests: XCTestCase {
                 var state = CloudFolderSyncState(deviceId: "mac", knownLocalItemIDs: [legacy.itemId],
                     exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                     appliedOperationIDs: [legacy.operationId])
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
                 let recovered = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                    entitlements: entitlement, now: Self.date(30))
+                    now: Self.date(30))
                 XCTAssertEqual(recovered.operationsWritten, 1, category)
                 XCTAssertEqual(recovered.diagnostics.map(\.kind), category == "history" ? [] : [.unsupportedSchema], category)
                 let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
@@ -4750,7 +3888,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 XCTAssertEqual(store.dictionaryEntries, [entry], category)
                 XCTAssertFalse(state.appliedOperationIDs.contains("ignored"), category)
                 let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                    entitlements: entitlement, now: Self.date(40))
+                    now: Self.date(40))
                 XCTAssertEqual(repeated.operationsWritten, 0, category)
             }
         }
@@ -4785,9 +3923,8 @@ final class CloudFolderSyncTests: XCTestCase {
                 exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: [legacy.operationId, older.operationId])
             let previousState = state
-            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
             do {
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(20))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(20))
                 XCTFail("Migration must wait for the applied operation to become readable")
             } catch CloudFolderSyncError.incompleteMigrationHistory {
                 XCTAssertEqual(state.knownLocalItemIDs, previousState.knownLocalItemIDs)
@@ -4801,7 +3938,7 @@ final class CloudFolderSyncTests: XCTestCase {
             try data.write(to: legacyFile)
             // Unrelated partial files are harmless once the applied history is readable.
             try Data("{".utf8).write(to: legacyFile.deletingLastPathComponent().appendingPathComponent("unapplied-partial.json"))
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
             let published = try Self.operationFiles(folder: folder, deviceId: "mac").map {
                 try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
             }
@@ -4813,7 +3950,7 @@ final class CloudFolderSyncTests: XCTestCase {
                 XCTAssertEqual(published.count, 1)
                 XCTAssertTrue(published.allSatisfy { $0.schemaVersion == 2 && $0.kind == .upsert })
             }
-            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
             XCTAssertEqual(repeated.operationsWritten, 0)
         }
     }
@@ -4826,18 +3963,17 @@ final class CloudFolderSyncTests: XCTestCase {
         try Self.writeLegacyOperation(legacy, to: folder)
         let store = InMemoryUserDataSyncStore()
         var state = CloudFolderSyncState(deviceId: "mac")
-        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(20))
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(25))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(20))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(25))
         let updated = Self.dictionaryEntry(entryType: .correction, original: try XCTUnwrap(legacy.dictionary).original,
             replacement: "edited", updatedAt: Self.date(30), isRegex: true)
         let operation = CloudFolderSyncOperation.upsertDictionary(updated,
             itemID: UserDataSyncIdentity.dictionaryItemID(entryType: UserDataSyncDictionaryEntryType.correction, original: updated.original, isRegex: true), deviceId: "peer")
         try Self.writeLegacyOperation(operation, to: folder)
-        let received = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+        let received = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
         XCTAssertEqual(store.dictionaryEntries.first?.replacement, "edited")
         XCTAssertFalse(received.requiresFollowUpSync)
-        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(50))
+        let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(50))
         XCTAssertEqual(repeated.operationsWritten, 0)
     }
 
@@ -4858,10 +3994,9 @@ final class CloudFolderSyncTests: XCTestCase {
         let first = InMemoryUserDataSyncStore(dictionaryEntries: [entry])
         let changed = InMemoryUserDataSyncStore(dictionaryEntries: [Self.dictionaryEntry(
             entryType: .correction, original: "foo", replacement: "bar", updatedAt: Self.date(20), isRegex: true)])
-        let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(30))
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: changed, state: &b, entitlements: entitlement, now: Self.date(40))
-        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(30))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: changed, state: &b, now: Self.date(40))
+        _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(50))
         for store in [first, changed] {
             XCTAssertEqual(store.dictionaryEntries.count, 1)
             XCTAssertTrue(try XCTUnwrap(store.dictionaryEntries.first).isRegex)
@@ -4891,15 +4026,14 @@ final class CloudFolderSyncTests: XCTestCase {
                 entryType: .correction, original: #"\D+"#, replacement: "#", updatedAt: Self.date(35), isRegex: true)]
                 : convertToLiteral ? [Self.dictionaryEntry(entryType: .correction, original: entry.original,
                     replacement: entry.replacement, updatedAt: Self.date(35))] : [])
-            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(30))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(30))
             if laterLegacyDelete {
                 let deletion = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: legacy.itemId, deviceId: "old-peer", deletedAt: Self.date(35))
                 let path = CloudFolderSyncEngine.packageURL(for: folder).appendingPathComponent("ops/\(legacy.deviceId)/other-delete.json")
                 try Self.entitlementEncoder.encode(deletion).write(to: path)
             }
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, entitlements: entitlement, now: Self.date(40))
-            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, entitlements: entitlement, now: Self.date(50))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, now: Self.date(40))
+            _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: first, state: &a, now: Self.date(50))
             for store in [first, removed] {
                 XCTAssertFalse(store.dictionaryEntries.contains { $0.isRegex && $0.original == entry.original })
                 XCTAssertEqual(store.dictionaryEntries.count, renamePattern || convertToLiteral ? 1 : 0)
@@ -4912,7 +4046,7 @@ final class CloudFolderSyncTests: XCTestCase {
             }
             XCTAssertEqual(published.contains { $0.kind == .delete && $0.itemId == legacy.itemId && $0.schemaVersion == 1 }, !convertToLiteral)
             XCTAssertTrue(published.contains { $0.kind == .delete && $0.itemId == rawID && $0.schemaVersion == 2 })
-            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, entitlements: entitlement, now: Self.date(60))
+            let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: removed, state: &b, now: Self.date(60))
             XCTAssertEqual(repeated.operationsWritten, 0)
         }
     }
@@ -4941,9 +4075,8 @@ final class CloudFolderSyncTests: XCTestCase {
             var state = CloudFolderSyncState(deviceId: deviceID, knownLocalItemIDs: [legacy.itemId],
                 exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
                 appliedOperationIDs: [legacy.operationId])
-            let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
             _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                entitlements: entitlement, now: Self.date(30))
+                now: Self.date(30))
             XCTAssertEqual(dictionary.corrections.count, 1)
             XCTAssertTrue(try XCTUnwrap(dictionary.corrections.first).isRegex)
             XCTAssertEqual(dictionary.corrections.first?.id, oldUUID)
@@ -4955,15 +4088,15 @@ final class CloudFolderSyncTests: XCTestCase {
             XCTAssertTrue(published.allSatisfy { $0.schemaVersion == 2 && $0.kind == .upsert && $0.dictionary?.isRegex == true })
             XCTAssertFalse(state.knownLocalItemIDs.contains(legacy.itemId))
             let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                entitlements: entitlement, now: Self.date(40))
+                now: Self.date(40))
             XCTAssertEqual(repeated.operationsWritten, 0)
 
             dictionary.addEntry(type: .correction, original: regex.original, replacement: "literal")
             _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                entitlements: entitlement, now: Self.date(50))
+                now: Self.date(50))
             dictionary.deleteEntry(try XCTUnwrap(dictionary.corrections.first { !$0.isRegex }))
             _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-                entitlements: entitlement, now: Self.date(60))
+                now: Self.date(60))
             let allOperations = try Self.operationFiles(folder: folder, deviceId: deviceID).map {
                 try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: Data(contentsOf: $0))
             }
@@ -4985,7 +4118,7 @@ final class CloudFolderSyncTests: XCTestCase {
             exportedItemVersions: [legacy.itemId: "dictionary-v2|2023-11-14T22:13:30.000Z"],
             appliedOperationIDs: [legacy.operationId])
         _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state,
-            entitlements: PaidEntitlements(canUseCloudFolderSync: true), now: Self.date(30))
+            now: Self.date(30))
         XCTAssertEqual(store.dictionaryEntries, [literal])
     }
 
@@ -5012,27 +4145,26 @@ final class CloudFolderSyncTests: XCTestCase {
                 try Self.entitlementEncoder.encode(upsert).write(to: directory.appendingPathComponent("regex.json"))
                 let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntries ? [literal, regex] : [])
                 var state = CloudFolderSyncState(deviceId: "mac")
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(35))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(35))
                 XCTAssertEqual(store.dictionaryEntries, [regex])
                 // A first-time exporter can still publish its deleted local literal's
                 // tombstone on the next sync. Check that publication then settles.
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
-                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(42))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
+                let repeated = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(42))
                 XCTAssertEqual(repeated.operationsWritten, 0)
                 let newcomer = InMemoryUserDataSyncStore()
                 var newcomerState = CloudFolderSyncState(deviceId: "newcomer")
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, entitlements: entitlement, now: Self.date(45))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, now: Self.date(45))
                 XCTAssertEqual(newcomer.dictionaryEntries, [regex])
                 let exactDelete = CloudFolderSyncOperation.delete(collection: .dictionary, itemID: regexID, deviceId: "modern", deletedAt: Self.date(50))
                 try Self.entitlementEncoder.encode(exactDelete).write(to: directory.appendingPathComponent("delete-regex.json"))
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(60))
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, entitlements: entitlement, now: Self.date(65))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(60))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: newcomer, state: &newcomerState, now: Self.date(65))
                 XCTAssertTrue(store.dictionaryEntries.isEmpty)
                 XCTAssertTrue(newcomer.dictionaryEntries.isEmpty)
                 let afterDeletion = InMemoryUserDataSyncStore()
                 var afterDeletionState = CloudFolderSyncState(deviceId: "after-deletion")
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: afterDeletion, state: &afterDeletionState, entitlements: entitlement, now: Self.date(70))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: afterDeletion, state: &afterDeletionState, now: Self.date(70))
                 XCTAssertTrue(afterDeletion.dictionaryEntries.isEmpty)
             }
         }
@@ -5053,12 +4185,11 @@ final class CloudFolderSyncTests: XCTestCase {
                 try Self.entitlementEncoder.encode(deletion).write(to: deletionURL)
                 let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntry ? [entry] : [])
                 var state = CloudFolderSyncState(deviceId: "mac")
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 XCTAssertTrue(store.dictionaryEntries.isEmpty)
                 XCTAssertTrue(state.appliedOperationIDs.contains(upsert.operationId))
                 try FileManager.default.removeItem(at: deletionURL)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
                 XCTAssertTrue(store.dictionaryEntries.isEmpty)
             }
         }
@@ -5079,12 +4210,11 @@ final class CloudFolderSyncTests: XCTestCase {
                 try Self.entitlementEncoder.encode(deletion).write(to: deletionURL)
                 let store = InMemoryUserDataSyncStore(dictionaryEntries: hasLocalEntry ? [entry] : [])
                 var state = CloudFolderSyncState(deviceId: "mac")
-                let entitlement = PaidEntitlements(canUseCloudFolderSync: true)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(30))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(30))
                 XCTAssertTrue(store.dictionaryEntries.isEmpty)
                 XCTAssertTrue(state.appliedOperationIDs.contains(upsert.operationId))
                 try FileManager.default.removeItem(at: deletionURL)
-                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, entitlements: entitlement, now: Self.date(40))
+                _ = try await CloudFolderSyncEngine.sync(folderURL: folder, store: store, state: &state, now: Self.date(40))
                 XCTAssertTrue(store.dictionaryEntries.isEmpty)
             }
         }
@@ -5251,21 +4381,8 @@ final class CloudFolderSyncTests: XCTestCase {
         folder: URL,
         store: InMemoryUserDataSyncStore
     ) throws -> CloudFolderSyncController {
-        let privateKey = P256.Signing.PrivateKey()
-        defaults.set(
-            try entitlementEncoder.encode(signedEntitlement(privateKey: privateKey)),
-            forKey: "premium.account.cachedEntitlement"
-        )
         defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
-        let account = PremiumAccountService(
-            defaults: defaults,
-            keychainService: suiteName,
-            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
-            isSignedInOverride: true,
-            automaticallyRefresh: false
-        )
         return CloudFolderSyncController(
-            premiumAccountService: account,
             syncStore: store,
             defaults: defaults,
             automaticICloudBridge: RecordingPremiumICloudBridge(localFolderURL: folder),
@@ -5285,7 +4402,7 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     private static func bridgeFileURL(_ path: String, in root: URL) -> URL {
-        root.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        root.appendingPathComponent("dictum-sync", isDirectory: true)
             .appendingPathComponent(path)
     }
 
@@ -5309,40 +4426,6 @@ final class CloudFolderSyncTests: XCTestCase {
             [.modificationDate: date(seconds)],
             ofItemAtPath: file.path
         )
-    }
-
-    private static func signedEntitlement(
-        privateKey: P256.Signing.PrivateKey
-    ) throws -> CrossDevicePremiumEntitlement {
-        let entitlement = CrossDevicePremiumEntitlement(
-            status: "active",
-            tier: "individual",
-            source: "polar",
-            isLifetime: true,
-            expiresAt: nil,
-            deviceLimit: 3,
-            verifiedAt: date(10),
-            signature: nil
-        )
-        let payload = try entitlementEncoder.encode(entitlement.signedClaims)
-        let signature = try privateKey.signature(for: payload)
-        return CrossDevicePremiumEntitlement(
-            status: entitlement.status,
-            tier: entitlement.tier,
-            source: entitlement.source,
-            isLifetime: entitlement.isLifetime,
-            expiresAt: entitlement.expiresAt,
-            deviceLimit: entitlement.deviceLimit,
-            verifiedAt: entitlement.verifiedAt,
-            signature: "\(base64URL(payload)).\(base64URL(signature.rawRepresentation))"
-        )
-    }
-
-    private static func base64URL(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
     }
 
     private static func operationFiles(folder: URL, deviceId: String) -> [URL] {

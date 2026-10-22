@@ -97,16 +97,10 @@
 			</dict>
 		</dict>
 	</dict>
-	<key>SUFeedURL</key>
-	<string>https://typewhisper.github.io/typewhisper-mac/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
 	<key>TypeWhisperReleaseChannel</key>
 	<string>$(TYPEWHISPER_RELEASE_CHANNEL)</string>
 	<key>TypeWhisperReleaseTag</key>
 	<string>$(TYPEWHISPER_RELEASE_TAG)</string>
-	<key>TypeWhisperDiscordClaimBaseURL</key>
-	<string>https://community.typewhisper.com</string>
 	<key>AppGroupIdentifier</key>
 	<string>$(APP_GROUP_ID)</string>
 	<key>TypeWhisperICloudContainer</key>
@@ -115,7 +109,5 @@
 	<string>$(ICLOUD_HELPER_BUNDLE_ID)</string>
 	<key>TypeWhisperICloudEnabled</key>
 	<string>$(TYPEWHISPER_ICLOUD_ENABLED)</string>
-	<key>TypeWhisperAccountBaseURL</key>
-	<string>https://app.typewhisper.com</string>
 </dict>
 </plist>

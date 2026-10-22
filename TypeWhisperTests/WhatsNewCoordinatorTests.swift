@@ -463,9 +463,7 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         coordinator.presentationForLaunch(
             isNormalLaunch: normal,
             setupWizardRequired: setupRequired,
-            operationInProgress: busy,
-            postUpdatePromptPending: otherPromptsPending,
-            iOSCompanionPromptPending: otherPromptsPending
+            operationInProgress: busy
         )
     }
 }

@@ -73,7 +73,6 @@ enum ManagedPolicyKeys {
     static let launchAtLogin = "LaunchAtLogin"
     static let skipOnboardingWhenReady = "SkipOnboardingWhenReady"
     static let suppressOptionalPrompts = "SuppressOptionalPrompts"
-    /// Read by `LicenseService` since 1.6.1, which also accepts values set with `defaults write`.
     static let managedLicenseKey = UserDefaultsKeys.managedLicenseKey
 
     /// Every supported key in documentation order.

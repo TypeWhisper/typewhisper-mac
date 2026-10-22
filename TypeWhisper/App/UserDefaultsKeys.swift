@@ -206,20 +206,10 @@ enum UserDefaultsKeys {
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
-    // MARK: - Licensing
+    // MARK: - Release presentation
     static let managedLicenseKey = "ManagedLicenseKey"
-    static let usageIntent = "usageIntent"
-    static let userType = "userType"
-    static let licenseStatus = "licenseStatus"
-    static let licenseTier = "licenseTier"
-    static let lastLicenseValidation = "lastLicenseValidation"
-    static let licenseIsLifetime = "licenseIsLifetime"
-    static let welcomeSheetShown = "welcomeSheetShown"
-    static let workUsagePromptDismissed = "workUsagePromptDismissed"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
-    static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
     static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
-    static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
 
     // MARK: - Managed settings
     /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once
@@ -237,10 +227,4 @@ enum UserDefaultsKeys {
     /// Set once a recommended LLM pair has become the initial default language model.
     static let managedLlmRecommendationApplied = "managedLlmRecommendationApplied"
 
-    // MARK: - Supporter
-    static let supporterTier = "supporterTier"
-    static let supporterStatus = "supporterStatus"
-    static let lastSupporterValidation = "lastSupporterValidation"
-    static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
-    static let supporterDiscordSessionId = "supporterDiscordSessionId"
 }

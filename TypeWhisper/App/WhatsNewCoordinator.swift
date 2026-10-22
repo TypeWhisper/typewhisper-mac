@@ -50,9 +50,7 @@ final class WhatsNewCoordinator: ObservableObject {
     func presentationForLaunch(
         isNormalLaunch: Bool,
         setupWizardRequired: Bool,
-        operationInProgress: Bool,
-        postUpdatePromptPending: Bool,
-        iOSCompanionPromptPending: Bool
+        operationInProgress: Bool
     ) -> InitialWindowPresentation {
         guard !didConsiderLaunch else { return .none }
         didConsiderLaunch = true
@@ -71,8 +69,6 @@ final class WhatsNewCoordinator: ObservableObject {
 
         let presentation = InitialWindowPresentationPolicy.presentation(
             setupWizardRequired: setupWizardRequired,
-            postUpdatePromptPending: postUpdatePromptPending,
-            iOSCompanionPromptPending: iOSCompanionPromptPending,
             whatsNewPending: hasUnseenContent
         )
         isPresenting = presentation == .whatsNew

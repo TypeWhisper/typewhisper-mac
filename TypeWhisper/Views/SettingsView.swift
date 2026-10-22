@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, appearance, dictation, hotkeys, recorder, speakers
-    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
+    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, integrations, advanced, about
     case plugin(pluginId: String, itemId: String)
     case installedPlugin(pluginId: String)
 }
@@ -58,11 +58,9 @@ struct SettingsView: View {
         case "dictionary", "dictionary-term-packs": return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
-        case "premium": return .premium
         // "plugins" moves on to the first installed plugin once the plugins are loaded.
         case "plugins", "integrations-available", "integrations-local": return .integrations
         case "advanced": return .advanced
-        case "license": return .license
         case "about": return .about
         default: return .home
         }
@@ -105,19 +103,12 @@ struct SettingsView: View {
                 badge: nil
             ),
             SettingsDestination(
-                tab: .premium,
-                title: localizedAppText("Premium", de: "Premium"),
-                systemImage: "sparkles",
-                badge: nil
-            ),
-            SettingsDestination(
                 tab: .integrations,
                 title: localizedAppText("Discover plugins", de: "Plugins entdecken"),
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
 
@@ -309,18 +300,10 @@ struct SettingsView: View {
             WorkflowsSettingsView()
         case .prompts:
             WorkflowsSettingsView()
-        case .premium:
-            PremiumSettingsView()
         case .integrations:
             PluginSettingsView()
         case .advanced:
             AdvancedSettingsView()
-        case .license:
-            #if APPSTORE
-            PremiumSettingsView()
-            #else
-            LicenseSettingsView()
-            #endif
         case .about:
             AboutSettingsView()
         case .installedPlugin(let pluginId):
@@ -672,8 +655,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .statistics),
         settingsDestination(destinations, .dictionary),
         settingsDestination(destinations, .snippets),
-        settingsDestination(destinations, .workflows),
-        settingsDestination(destinations, .premium)
+        settingsDestination(destinations, .workflows)
     ]
 
     let pluginDestinations = destinations.filter {
@@ -685,19 +667,10 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
 
     let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
 
-    #if APPSTORE
-    // Premium is bought on the Premium page, so there is no License page.
     let systemDestinations = [
         settingsDestination(destinations, .advanced),
         settingsDestination(destinations, .about)
     ]
-    #else
-    let systemDestinations = [
-        settingsDestination(destinations, .advanced),
-        settingsDestination(destinations, .license),
-        settingsDestination(destinations, .about)
-    ]
-    #endif
 
     return [
         SettingsDestinationSection(
