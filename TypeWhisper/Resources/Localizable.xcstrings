@@ -20002,6 +20002,50 @@
         }
       }
     },
+    "seconds" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒"
+          }
+        }
+      }
+    },
+    "Seconds, from 1 to 10" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sekunden, von 1 bis 10"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒数（1〜10）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秒数，1 到 10"
+          }
+        }
+      }
+    },
     "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected." : {
       "localizations" : {
         "de" : {

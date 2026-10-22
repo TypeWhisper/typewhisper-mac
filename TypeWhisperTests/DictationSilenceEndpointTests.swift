@@ -20,6 +20,39 @@ private enum ScriptedAudio {
     static func silence(_ seconds: TimeInterval) -> [Float] { samples(seconds: seconds, level: 0) }
 }
 
+final class DictationSilenceDurationInputTests: XCTestCase {
+    func testFilterKeepsDigitsAndOneDecimalPlace() {
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("4.5"), "4.5")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("4,5"), "4,5")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("4a s"), "4")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("4.55"), "4.5")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("4.5.1"), "4.5")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("123"), "12")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("-3"), "3")
+        XCTAssertEqual(DictationSilenceDurationInput.filtered("٣"), "", "only ASCII digits")
+    }
+
+    func testDurationRoundsToTenthsAndClampsToTheRange() {
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: "4,5"), 4.5)
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: "2.5"), 2.5)
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: "7"), 7)
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: "0.2"), 1)
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: "25"), 10)
+        XCTAssertEqual(DictationSilenceDurationInput.duration(from: ",5"), 1)
+    }
+
+    func testTextWithoutANumberKeepsTheSavedValue() {
+        XCTAssertNil(DictationSilenceDurationInput.duration(from: ""))
+        XCTAssertNil(DictationSilenceDurationInput.duration(from: "."))
+    }
+
+    func testTextUsesTheAppLanguageSeparator() {
+        XCTAssertEqual(DictationSilenceDurationInput.text(for: 4.5, locale: Locale(identifier: "de")), "4,5")
+        XCTAssertEqual(DictationSilenceDurationInput.text(for: 4.5, locale: Locale(identifier: "en")), "4.5")
+        XCTAssertEqual(DictationSilenceDurationInput.text(for: 3, locale: Locale(identifier: "en")), "3")
+    }
+}
+
 final class DictationSilenceEndpointDetectorTests: XCTestCase {
     func testSpeechThenSustainedSilenceReachesTheEndpoint() {
         var detector = DictationSilenceEndpointDetector(silenceDuration: 3)

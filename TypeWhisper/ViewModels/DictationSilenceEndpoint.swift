@@ -124,6 +124,46 @@ struct DictationSilenceEndpointDetector: Sendable {
     }
 }
 
+/// The silence duration as typed in Settings (#1023): digits with at most one decimal
+/// place, applied rounded to tenths and clamped to the offered range.
+enum DictationSilenceDurationInput {
+    /// Keeps up to two digits, the first decimal separator ("." or ",") and one digit after it.
+    static func filtered(_ text: String) -> String {
+        var result = ""
+        var hasSeparator = false
+        var integerDigits = 0
+        var fractionDigits = 0
+        for character in text {
+            if character.isASCII, character.isNumber {
+                if hasSeparator {
+                    guard fractionDigits < 1 else { continue }
+                    fractionDigits += 1
+                } else {
+                    guard integerDigits < 2 else { continue }
+                    integerDigits += 1
+                }
+                result.append(character)
+            } else if character == "." || character == ",", !hasSeparator {
+                hasSeparator = true
+                result.append(character)
+            }
+        }
+        return result
+    }
+
+    /// The typed value, rounded to tenths and clamped; nil when the text holds no number.
+    static func duration(from text: String) -> TimeInterval? {
+        guard let value = Double(text.replacingOccurrences(of: ",", with: ".")), value.isFinite else {
+            return nil
+        }
+        return DictationSilenceEndpointDetector.clampedSilenceDuration((value * 10).rounded() / 10)
+    }
+
+    static func text(for duration: TimeInterval, locale: Locale) -> String {
+        duration.formatted(.number.precision(.fractionLength(0...1)).grouping(.never).locale(locale))
+    }
+}
+
 /// Watches the recording of one dictation for its silence endpoint (#1023). The poll
 /// clock is injectable, so tests step through a recording without waiting.
 @MainActor
