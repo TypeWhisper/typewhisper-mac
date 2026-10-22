@@ -54,6 +54,30 @@ enum SpeakerAudioWriter {
 
 /// Turns transcription and diarization results into the speaker model.
 enum SpeakerTranscriptBuilder {
+    /// The segments of a speaker transcript whose text was edited, as timed
+    /// text for a new detection run, so the run keeps the edits; nil while the
+    /// transcript holds the text the run would start from anyway. Paragraph
+    /// edits change only the speaker transcript and `finalText`, not the
+    /// transcription's timing.
+    static func editedTimedText(
+        of transcript: SpeakerTranscript?,
+        insteadOf transcribedTiming: [TimedTextEntry],
+        granularity: TimedTextGranularity,
+        text: String
+    ) -> [TimedTextEntry]? {
+        guard let transcript, !transcript.segments.isEmpty else { return nil }
+        // Corrections only cut segments apart, so spaces do not count.
+        func letters(_ strings: [String]) -> String {
+            String(strings.joined().filter { !$0.isWhitespace })
+        }
+        let transcribed = granularity == .word ? [text] : transcribedTiming.map(\.text)
+        guard letters(transcript.segments.map(\.text)) != letters(transcribed) else { return nil }
+        let edited = Self.timedText(from: transcript.segments.map {
+            TranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+        })
+        return edited.isEmpty ? nil : edited
+    }
+
     /// Segment timing of a transcription, for aligning with speaker turns later.
     static func timedText(from segments: [TranscriptionSegment]) -> [TimedTextEntry] {
         var location = 0
@@ -580,6 +604,17 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             }
             try Task.checkCancellation()
             guard isCurrent() else { return }
+
+            // A paragraph edit is kept: the run starts from the edited text.
+            if let edited = SpeakerTranscriptBuilder.editedTimedText(
+                of: record.speakerTranscript,
+                insteadOf: timedText,
+                granularity: granularity,
+                text: text
+            ) {
+                timedText = edited
+                granularity = .segment
+            }
 
             // With a microphone channel the user's own speech is taken from it.
             let rawTurns = SpeakerChannelAttribution.combining(result.turns, ownSpeech: ownSpeech)

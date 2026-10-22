@@ -69,9 +69,20 @@ final class SpeakerVoiceProfileService: ObservableObject {
         suggestNames(inRecordID: recordID)
     }
 
-    /// Moves embeddings along when turns were moved or speakers merged.
-    func transcriptCorrected(recordID: UUID, from old: SpeakerTranscript, to new: SpeakerTranscript) {
-        store.transcriptCorrected(recordID: recordID, from: old, to: new)
+    /// Moves embeddings along when turns were moved or speakers merged; an
+    /// undo passes the embeddings that belonged to the transcript it restores.
+    func transcriptCorrected(
+        recordID: UUID,
+        from old: SpeakerTranscript,
+        to new: SpeakerTranscript,
+        restoring saved: RecordingSpeakerEmbeddings? = nil
+    ) {
+        store.transcriptCorrected(recordID: recordID, from: old, to: new, restoring: saved)
+    }
+
+    /// The recording's stored embeddings as they are now, for undoing a correction.
+    func storedVoices(ofRecordID recordID: UUID) -> RecordingSpeakerEmbeddings? {
+        store.recordingEmbeddings[recordID]
     }
 
     /// Drops embeddings of recordings that were deleted.
@@ -89,7 +100,8 @@ final class SpeakerVoiceProfileService: ObservableObject {
     }
 
     /// Matches the unnamed speakers of one recording against the profiles
-    /// that no speaker of it uses yet. Names the user gave stay untouched.
+    /// that no speaker of it uses yet and the user did not reject for them.
+    /// Names the user gave stay untouched.
     private func suggestNames(inRecordID recordID: UUID) {
         guard premiumAccess(),
               let record = historyService.record(withID: recordID),
@@ -103,7 +115,8 @@ final class SpeakerVoiceProfileService: ObservableObject {
             speakers: embeddings,
             embeddingModel: store.embeddingModel(forRecordID: recordID, revision: transcript.revision),
             speakingTime: transcript.speakingTime(of:),
-            profiles: store.profiles.filter { !usedProfiles.contains($0.id) }
+            profiles: store.profiles.filter { !usedProfiles.contains($0.id) },
+            rejected: { names?.rejectedProfileIDs(for: $0) ?? [] }
         )
         for (speakerID, match) in matches {
             guard let profile = store.profile(withID: match.profileID) else { continue }
@@ -196,10 +209,11 @@ final class SpeakerVoiceProfileService: ObservableObject {
         }
     }
 
-    /// Rejects a recognized name; the profile stays as it is.
+    /// Rejects a recognized name; the profile stays as it is and is not
+    /// suggested for this speaker again.
     func reject(_ speakerID: String, inRecordID recordID: UUID) {
         guard state(of: speakerID, inRecordID: recordID) == .suggestion else { return }
-        historyService.setSpeakerName("", for: speakerID, inRecordID: recordID)
+        historyService.rejectSpeakerSuggestion(for: speakerID, inRecordID: recordID)
     }
 
     /// Replaces the profile's voice with this recording's, when the old one

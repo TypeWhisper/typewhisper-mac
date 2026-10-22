@@ -83,17 +83,22 @@ enum VoiceProfileMatching {
     /// with enough speech, and when the speaker's best profile clearly leads
     /// its second best. Only profiles of the speakers' embedding model count:
     /// another model's vectors aren't comparable, even with the same length.
+    /// - Parameter rejected: Profiles the user rejected for a speaker; they
+    ///   do not count for that speaker.
     static func matches(
         speakers: [String: [Float]],
         embeddingModel: String?,
         speakingTime: (String) -> TimeInterval,
-        profiles: [VoiceProfile]
+        profiles: [VoiceProfile],
+        rejected: (String) -> Set<UUID> = { _ in [] }
     ) -> [String: Match] {
         guard let embeddingModel else { return [:] }
         let profiles = profiles.filter { $0.embeddingModel == embeddingModel }
         var candidates: [(speakerID: String, match: Match)] = []
         for (speakerID, embedding) in speakers where speakingTime(speakerID) >= minimumSpeechSeconds {
+            let rejectedProfiles = rejected(speakerID)
             let scores = profiles
+                .filter { !rejectedProfiles.contains($0.id) }
                 .map { Match(profileID: $0.id, similarity: cosineSimilarity(embedding, $0.embedding)) }
                 .sorted { $0.similarity > $1.similarity }
             guard let best = scores.first, best.similarity >= recognitionThreshold else { continue }

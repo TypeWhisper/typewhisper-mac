@@ -313,4 +313,105 @@ final class SpeakerSyncHistoryTests: XCTestCase {
 
         XCTAssertTrue(offline.userDataSyncHistoryRecords().isEmpty)
     }
+
+    private func names(
+        _ names: [String: String],
+        for revision: UUID,
+        at date: Date
+    ) -> UserDataSyncMutation {
+        var table = SpeakerNameTable(transcriptRevision: revision)
+        for (speakerID, name) in names { table.setName(name, for: speakerID) }
+        return .upsertHistorySpeakers(UserDataSyncHistorySpeakersV1(
+            recordID: recordID,
+            updatedAt: date,
+            transcriptRevision: revision,
+            table: table
+        ))
+    }
+
+    /// Issue #1558: another device that still shows the old transcript renames
+    /// a speaker after this Mac detected speakers again.
+    func testANameForAnOutdatedTranscriptDoesNotReplaceTheCurrentNames() throws {
+        try addPendingRecording()
+        history.storeSpeakerTranscript(transcript, forRecordID: recordID)
+        let rerun = SpeakerTranscript(source: .localDiarizer, segments: transcript.segments)
+        var carried = SpeakerNameTable(transcriptRevision: rerun.revision)
+        carried.setName("Anna", for: "S1")
+        XCTAssertTrue(history.storeSpeakerTranscript(rerun, names: carried, forRecordID: recordID))
+        let namesStamp = try XCTUnwrap(record?.speakerNamesUpdatedAt)
+
+        try history.applyUserDataSyncMutations([
+            names(["S2": "Ben"], for: transcript.revision, at: namesStamp.addingTimeInterval(60)),
+        ])
+
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna")
+        XCTAssertEqual(record?.speakerNamesUpdatedAt, namesStamp, "nothing changed that other devices must learn")
+        let exportedNames = try XCTUnwrap(exported?.speakers)
+        XCTAssertEqual(exportedNames.transcriptRevision, rerun.revision)
+        XCTAssertEqual(exportedNames.names.map(\.displayName), ["Anna"])
+
+        // Should the old transcript win again after all, its names are there.
+        try history.applyUserDataSyncMutations([.upsertHistoryTranscript(UserDataSyncHistoryTranscriptV1(
+            recordID: recordID,
+            updatedAt: namesStamp.addingTimeInterval(120),
+            transcript: transcript
+        ))])
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S2"), "Ben")
+        XCTAssertNil(record?.speakerNames?.displayName(for: "S1"))
+    }
+
+    /// Names can arrive before their transcript; while another transcript is
+    /// current they wait instead of replacing its names.
+    func testNamesForATranscriptStillToArriveWaitWithoutHidingTheCurrentNames() throws {
+        try addPendingRecording()
+        history.storeSpeakerTranscript(transcript, forRecordID: recordID)
+        history.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
+        let date = try XCTUnwrap(record?.speakerNamesUpdatedAt).addingTimeInterval(60)
+        let rerun = SpeakerTranscript(source: .localDiarizer, segments: transcript.segments)
+
+        try history.applyUserDataSyncMutations([
+            names(["S1": "Anna Schmidt", "S2": "Ben"], for: rerun.revision, at: date.addingTimeInterval(5)),
+        ])
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna", "the current transcript keeps its names")
+        XCTAssertEqual(exported?.speakers?.names.map(\.displayName), ["Anna"])
+
+        try history.applyUserDataSyncMutations([.upsertHistoryTranscript(UserDataSyncHistoryTranscriptV1(
+            recordID: recordID,
+            updatedAt: date,
+            transcript: rerun
+        ))])
+        XCTAssertEqual(record?.speakerTranscript?.revision, rerun.revision)
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna Schmidt")
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S2"), "Ben")
+        XCTAssertEqual(record?.speakerNamesUpdatedAt, date.addingTimeInterval(5))
+        XCTAssertEqual(exported?.speakers?.transcriptRevision, rerun.revision)
+        XCTAssertEqual(exported?.speakers?.names.map(\.displayName), ["Anna Schmidt", "Ben"])
+    }
+
+    /// Names for the current transcript replace names of an outdated one,
+    /// even when those were given later.
+    func testNamesForTheCurrentTranscriptReplaceLaterNamesOfAnOutdatedOne() throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        try history.applyUserDataSyncMutations([
+            .upsertHistoryTranscript(UserDataSyncHistoryTranscriptV1(recordID: recordID, updatedAt: start, transcript: transcript)),
+            names(["S1": "Anna"], for: transcript.revision, at: start.addingTimeInterval(120)),
+        ])
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna")
+
+        // A new detection run from before Anna's name wins as the transcript.
+        let rerun = SpeakerTranscript(source: .localDiarizer, segments: transcript.segments)
+        try history.applyUserDataSyncMutations([
+            .upsertHistoryTranscript(UserDataSyncHistoryTranscriptV1(
+                recordID: recordID,
+                updatedAt: start.addingTimeInterval(60),
+                transcript: rerun
+            )),
+            names(["S2": "Ben"], for: rerun.revision, at: start.addingTimeInterval(60)),
+        ])
+
+        XCTAssertEqual(record?.speakerTranscript?.revision, rerun.revision)
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S2"), "Ben")
+        XCTAssertEqual(exported?.speakers?.transcriptRevision, rerun.revision)
+        XCTAssertEqual(exported?.speakers?.names.map(\.displayName), ["Ben"])
+    }
 }

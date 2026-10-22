@@ -96,6 +96,10 @@ final class TranscriptionRecord {
     var speakerTranscriptStateRaw: String?
     var speakerTranscriptData: Data?
     var speakerNamesData: Data?
+    /// Speaker names another device sent for another transcript revision than
+    /// the current one: `[PendingSpeakerNames]` as JSON. They become the names
+    /// if that transcript arrives. Kept on this device only.
+    var pendingSpeakerNamesData: Data?
     /// Transcription timing kept for speaker detection: `[TimedTextEntry]` as JSON.
     var timedTextData: Data?
     var timedTextGranularityRaw: String?
@@ -169,6 +173,12 @@ final class TranscriptionRecord {
             return names
         }
         set { speakerNamesData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+    var pendingSpeakerNames: [PendingSpeakerNames] {
+        get {
+            pendingSpeakerNamesData.flatMap { try? JSONDecoder().decode([PendingSpeakerNames].self, from: $0) } ?? []
+        }
+        set { pendingSpeakerNamesData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue) }
     }
     var timedText: [TimedTextEntry] {
         get { timedTextData.flatMap { try? JSONDecoder().decode([TimedTextEntry].self, from: $0) } ?? [] }

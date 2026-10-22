@@ -917,6 +917,62 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(payload["pipelineSteps"] as? [String], ["Cleanup"])
     }
 
+    /// Issue #1558: editing a speaker paragraph changes `finalText` like any other text edit.
+    @MainActor
+    func testEditingASpeakerParagraphEmitsThePluginSyncEvent() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        var emittedEvents: [TypeWhisperEvent] = []
+        let service = HistoryService(appSupportDirectory: appSupportDirectory) { event in
+            emittedEvents.append(event)
+        }
+        let id = UUID()
+        let transcript = SpeakerTranscript(source: .localDiarizer, segments: [
+            SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 2, speakerID: "S1"),
+            SpeakerTranscriptSegment(text: "Fine.", start: 2, end: 3, speakerID: "S2"),
+        ])
+        XCTAssertTrue(service.addSpeakerRecord(
+            id: id,
+            text: transcript.joinedText,
+            title: "Meeting",
+            source: .recorder,
+            durationSeconds: 3,
+            language: "en",
+            engineUsed: "test",
+            timedText: [],
+            granularity: .segment,
+            transcript: transcript
+        ))
+
+        // A correction that keeps the text leaves `finalText` alone.
+        XCTAssertTrue(service.updateSpeakerTranscript(
+            transcript.merging("S2", into: "S1"),
+            names: nil,
+            forRecordID: id
+        ))
+        XCTAssertTrue(emittedEvents.isEmpty)
+
+        let current = try XCTUnwrap(service.record(withID: id)?.speakerTranscript)
+        XCTAssertTrue(service.updateSpeakerTranscript(
+            current.replacingText(ofSegmentsIn: 0..<1, with: "Good morning, everyone."),
+            names: nil,
+            forRecordID: id,
+            updatesText: true
+        ))
+
+        XCTAssertEqual(emittedEvents.count, 1)
+        guard case .actionCompleted(let event) = try XCTUnwrap(emittedEvents.first) else {
+            return XCTFail("Expected an actionCompleted plugin sync envelope")
+        }
+        XCTAssertEqual(event.actionId, HistoryService.pluginSyncActionID)
+        XCTAssertEqual(event.appName, "Meeting")
+        let data = try XCTUnwrap(event.message.data(using: .utf8))
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(payload["id"] as? String, id.uuidString)
+        XCTAssertEqual(payload["finalText"] as? String, "Good morning, everyone. Fine.")
+        XCTAssertEqual(payload["rawText"] as? String, "Good morning. Fine.")
+    }
+
     @MainActor
     func testAddSearchUniqueDomainsAndPurgeHistory() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

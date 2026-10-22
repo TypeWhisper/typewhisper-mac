@@ -332,6 +332,87 @@ final class SpeakerVoiceProfileServiceTests: XCTestCase {
         XCTAssertEqual(store.profiles.first?.enrolledSeconds, 40)
     }
 
+    /// Issue #1558: enrolling, confirming and relearning suggest names in every
+    /// stored recording again; a rejected profile must stay off that speaker.
+    func testARejectedSuggestionDoesNotComeBackAfterLaterLearning() throws {
+        let first = try addRecording()
+        history.setSpeakerName("Anna", for: "S1", inRecordID: first)
+        service.enroll("S1", inRecordID: first)
+        let anna = try XCTUnwrap(store.profiles.first?.id)
+        let second = try addRecording()
+        XCTAssertEqual(service.state(of: "S1", inRecordID: second), .suggestion)
+        service.reject("S1", inRecordID: second)
+
+        // Enrolling Ben in a third recording suggests names everywhere again.
+        let third = try addRecording()
+        history.setSpeakerName("Ben", for: "S2", inRecordID: third)
+        service.enroll("S2", inRecordID: third)
+        XCTAssertNil(names(second)?.displayName(for: "S1"), "the rejected profile is not suggested again")
+        XCTAssertEqual(names(second)?.displayName(for: "S2"), "Ben", "other profiles are still suggested")
+
+        // Confirming and relearning do not bring it back either.
+        service.confirm("S1", inRecordID: third)
+        XCTAssertEqual(service.state(of: "S1", inRecordID: third), .linked)
+        service.relearn("S1", inRecordID: third)
+        XCTAssertNil(names(second)?.displayName(for: "S1"))
+
+        // A name the user types again is theirs, whatever was rejected.
+        history.setSpeakerName("Anna", for: "S1", profileID: anna, inRecordID: second)
+        XCTAssertEqual(service.state(of: "S1", inRecordID: second), .linked)
+    }
+
+    /// Issue #1558: a correction that splits a speaker's speech evenly keeps no
+    /// voice for it; undoing the correction must bring that voice back.
+    func testUndoingACorrectionRestoresTheVoicesItDropped() throws {
+        let id = UUID()
+        try SpeakerAudioWriter.writeAAC(
+            samples: [Float](repeating: 0, count: 16_000),
+            to: history.speakerAudioFileURL(forRecordID: id)
+        )
+        let transcript = SpeakerTranscript(source: .localDiarizer, segments: [
+            SpeakerTranscriptSegment(text: "First.", start: 0, end: 40, speakerID: "S1"),
+            SpeakerTranscriptSegment(text: "Second one two three four.", start: 40, end: 70, speakerID: "S2"),
+            SpeakerTranscriptSegment(text: "Third.", start: 70, end: 80, speakerID: "S3"),
+        ])
+        XCTAssertTrue(history.addSpeakerRecord(
+            id: id,
+            text: transcript.joinedText,
+            title: "Meeting",
+            source: .recorder,
+            durationSeconds: 80,
+            language: "en",
+            engineUsed: "test",
+            timedText: [],
+            granularity: .segment,
+            transcript: transcript
+        ))
+        let voices: [String: [Float]] = ["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0, 0, 1]]
+        service.recordVoices(voices, model: "model-a", of: transcript, recordID: id)
+        let model = SpeakerWorkspaceModel(recordID: id, historyService: history, voices: service)
+        let undoManager = UndoManager()
+        undoManager.groupsByEvent = false
+
+        // The second half of S2's turn goes to S3: neither keeps most of S2's speech.
+        undoManager.beginUndoGrouping()
+        model.split(at: 55, to: "S3", undoManager: undoManager)
+        undoManager.endUndoGrouping()
+        let split = try XCTUnwrap(model.transcript)
+        XCTAssertEqual(split.segments.map(\.speakerID), ["S1", "S2", "S3", "S3"])
+        XCTAssertNil(store.embeddings(forRecordID: id, revision: split.revision)["S2"])
+
+        undoManager.undo()
+        let restored = try XCTUnwrap(model.transcript)
+        XCTAssertEqual(restored, transcript)
+        XCTAssertTrue(store.hasCurrentEmbeddings(recordID: id, transcript: restored))
+        XCTAssertEqual(store.embeddings(forRecordID: id, revision: restored.revision), voices)
+
+        // Redo applies the correction again, as it was.
+        undoManager.redo()
+        XCTAssertEqual(model.transcript, split)
+        XCTAssertTrue(store.hasCurrentEmbeddings(recordID: id, transcript: split))
+        XCTAssertEqual(store.embeddings(forRecordID: id, revision: split.revision), ["S1": [1, 0, 0], "S3": [0, 0, 1]])
+    }
+
     func testANewProfileIsSuggestedInEarlierRecordingsWithoutOverwritingNames() throws {
         let earlier = try addRecording()
         let named = try addRecording()

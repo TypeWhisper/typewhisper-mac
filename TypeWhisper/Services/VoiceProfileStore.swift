@@ -233,18 +233,31 @@ final class VoiceProfileStore: ObservableObject {
     }
 
     /// Moves embeddings along when turns were moved or speakers merged.
-    func transcriptCorrected(recordID id: UUID, from old: SpeakerTranscript, to new: SpeakerTranscript) {
+    /// - Parameter saved: The embeddings stored for `new` before, when an undo
+    ///   restores it. Moving along loses the voice of a speaker whose speech
+    ///   went to several speakers in equal parts; the saved state still has it.
+    func transcriptCorrected(
+        recordID id: UUID,
+        from old: SpeakerTranscript,
+        to new: SpeakerTranscript,
+        restoring saved: RecordingSpeakerEmbeddings? = nil
+    ) {
         guard var stored = recordings[id], stored.transcriptRevision == old.revision,
               stored.transcriptVersion == nil || stored.transcriptVersion == old.automationVersion else { return }
-        let originalSources = stored.sourceSpeakerIDs ?? Dictionary(uniqueKeysWithValues: stored.embeddings.keys.map { ($0, [$0]) })
-        var movedSources: [String: Set<String>] = [:]
-        for (oldID, newID) in VoiceProfileMatching.correctedSpeakerContributors(from: old, to: new) {
-            guard stored.embeddings[oldID] != nil else { continue }
-            movedSources[newID, default: []].formUnion(originalSources[oldID] ?? [])
+        if let saved, saved.transcriptRevision == new.revision, saved.transcriptVersion == new.automationVersion {
+            stored = saved
+        } else {
+            let originalSources = stored.sourceSpeakerIDs
+                ?? Dictionary(uniqueKeysWithValues: stored.embeddings.keys.map { ($0, [$0]) })
+            var movedSources: [String: Set<String>] = [:]
+            for (oldID, newID) in VoiceProfileMatching.correctedSpeakerContributors(from: old, to: new) {
+                guard stored.embeddings[oldID] != nil else { continue }
+                movedSources[newID, default: []].formUnion(originalSources[oldID] ?? [])
+            }
+            stored.embeddings = VoiceProfileMatching.correctedEmbeddings(stored.embeddings, from: old, to: new)
+            stored.sourceSpeakerIDs = movedSources.mapValues { $0.sorted() }
+            stored.transcriptVersion = new.automationVersion
         }
-        stored.embeddings = VoiceProfileMatching.correctedEmbeddings(stored.embeddings, from: old, to: new)
-        stored.sourceSpeakerIDs = movedSources.mapValues { $0.sorted() }
-        stored.transcriptVersion = new.automationVersion
         var nextRecordings = recordings
         nextRecordings[id] = stored
         do {
