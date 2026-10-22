@@ -169,6 +169,7 @@ extension ServiceContainer {
             )
             // Shows the export choices for dictations and Recorder transcripts (#1083).
             UserDefaults.standard.set(true, forKey: "plugin.com.typewhisper.obsidian.autoExportEnabled")
+            UserDefaults.standard.set(true, forKey: "plugin.com.typewhisper.obsidian.exportDictations")
             UserDefaults.standard.set(true, forKey: "plugin.com.typewhisper.obsidian.exportRecordings")
         case "com.typewhisper.mcp-client":
             let configuration: [String: Any] = [

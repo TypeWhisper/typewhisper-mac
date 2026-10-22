@@ -1086,6 +1086,34 @@
           }
         }
       }
+    },
+    "In daily note mode, Live Sync only updates the notes of Recorder transcripts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Tagesnotiz-Modus aktualisiert Live-Sync nur die Notizen von Recorder-Transkripten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En el modo de nota diaria, la sincronización en vivo solo actualiza las notas de las transcripciones de la grabadora."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デイリーノートモードでは、ライブ同期はレコーダーの文字起こしのノートのみを更新します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在每日笔记模式下，实时同步只会更新录音器转录的笔记。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -257,9 +257,10 @@ final class ObsidianPluginTests: XCTestCase {
             ruleName: nil
         )))
         let recordingID = UUID()
-        func ready(_ text: String) -> TypeWhisperEvent {
+        func ready(_ text: String, at completedAt: Date = Date()) -> TypeWhisperEvent {
             .recorderTranscriptReady(RecorderTranscriptReadyPayload(
                 recordingID: recordingID,
+                completedAt: completedAt,
                 text: text,
                 audioFilePath: audioURL.path,
                 transcriptFilePath: recordingsURL.appendingPathComponent("2026-10-22 11-44 Weekly sync.txt").path,
@@ -284,6 +285,11 @@ final class ObsidianPluginTests: XCTestCase {
         let updatedNote = try String(contentsOf: updated[0], encoding: .utf8)
         XCTAssertTrue(updatedNote.contains("Second take"))
         XCTAssertFalse(updatedNote.contains("First take"))
+
+        // A completion that arrives late but is older leaves the newer note alone.
+        try "---\ntitle: \"Weekly sync\"\n---\n\nStale take\n".write(to: markdownURL, atomically: true, encoding: .utf8)
+        await eventBus.emit(ready("Stale take", at: Date(timeIntervalSinceNow: -3600)))
+        XCTAssertTrue(try String(contentsOf: updated[0], encoding: .utf8).contains("Second take"))
     }
 
     func testWorkflowActionLiveSyncPersistsMappingWithoutDuplicateAutoExport() async throws {

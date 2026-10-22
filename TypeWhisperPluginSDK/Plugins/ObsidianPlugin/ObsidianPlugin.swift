@@ -884,6 +884,8 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         do {
             try recorderNotes.withLock { notes in
                 let key = payload.recordingID.uuidString
+                // Events can arrive out of order; an older transcript never replaces a newer one.
+                if let existing = notes[key], existing.completedAt > payload.completedAt { return }
                 if _liveSyncEnabled, let existing = notes[key],
                    isInsideConfiguredVault(existing.path),
                    FileManager.default.fileExists(atPath: existing.path) {
@@ -1265,14 +1267,19 @@ private struct ObsidianSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .disabled(dailyNoteEnabled)
+                    // In daily note mode it still updates the separate notes of recordings.
+                    .disabled(dailyNoteEnabled && !(autoExportEnabled && exportRecordings))
                     .onChange(of: liveSyncEnabled) { _, newValue in
                         plugin._liveSyncEnabled = newValue
                         plugin.saveSetting(newValue, forKey: "liveSyncEnabled")
                         plugin.updateAutoExportSubscription()
                     }
 
-                    if dailyNoteEnabled {
+                    if dailyNoteEnabled && autoExportEnabled && exportRecordings {
+                        Text("In daily note mode, Live Sync only updates the notes of Recorder transcripts.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if dailyNoteEnabled {
                         Text("Live Sync is available for individual notes only.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
