@@ -782,7 +782,26 @@ curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"
       "completed_at": 1791100000.123456,
       "text": "Meeting notes from the recording.",
       "audio_file": "/Users/alex/Documents/TypeWhisper Recordings/Meeting.m4a",
-      "transcript_file": "/Users/alex/Documents/TypeWhisper Recordings/Meeting.txt"
+      "transcript_file": "/Users/alex/Documents/TypeWhisper Recordings/Meeting.txt",
+      "recorded_at": 1791098200.5,
+      "duration_seconds": 1795.2,
+      "calendar_event": {
+        "title": "Weekly sync",
+        "start": 1791098100,
+        "end": 1791099900,
+        "attendees": [
+          { "name": "Alex", "email": "alex@example.com", "status": "accepted", "is_current_user": true },
+          { "name": "Kim", "email": "kim@example.com", "status": "tentative", "is_current_user": false }
+        ]
+      },
+      "speaker_state": "ready",
+      "speakers": [
+        { "id": "S1", "name": "Me", "is_me": true },
+        { "id": "S2", "name": "Speaker 2", "suggested_name": "Kim", "is_me": false }
+      ],
+      "speaker_segments": [
+        { "start": 0.4, "end": 3.1, "speaker": "S1", "text": "Meeting notes from the recording." }
+      ]
     }
   ]
 }
@@ -792,9 +811,13 @@ curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"
 
 Each successful retranscription keeps the `recording_id`, assigns a new `completion_id`, and replaces the previous result. This is a list of the latest saved results, not a revision history. Failed attempts leave the last successful result available. `markdown_file` is included only when a Markdown transcript was saved and still exists; currently that applies to calendar recordings with meeting metadata. Audio and transcript paths refer to existing files.
 
+`recorded_at` is when the recording started and `duration_seconds` its length; both are absent when the audio file does not tell. `calendar_event` is present for recordings started from the calendar, with `title`, `start` and `end` in Unix seconds, `location`, `organizer` and `attendees`.
+
+Recordings with speaker detection carry `speaker_state` (`pending`, `ready` or `failed`) and, once speakers were found, `speakers` and `speaker_segments` in the shape `GET /v1/history` uses. `is_me` marks the speaker heard on the microphone, the user of this Mac; its `name` is the localized name for yourself until you rename it. The speakers come from the recording's History record, so renaming a speaker there shows up in the next response. A recording transcribed again keeps its History record and the speakers found for it.
+
 Completion receipts are saved alongside recordings as `<audio filename>.transcript-ready.json`. A separate `<audio filename>.recording-id.json` preserves the recording ID if the receipt is damaged, so retranscription can repair it without changing the ID. Both files are committed with the transcript and removed when the recording is deleted in TypeWhisper. Existing recordings become available here after their next successful transcription. Recordings without a saved transcript are omitted. The endpoint uses the same API token as the other private routes.
 
-The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
+The Plugin SDK emits **`recorderTranscriptReady`** after the transcript and receipt have been saved. When the recording gets speaker detection, the event waits until detection has finished and carries `speaker_state` and the speakers, so it arrives later than the transcript files; the next recording is transcribed meanwhile. If TypeWhisper quits before detection finishes, the event is not sent. It does not emit the dictation `transcriptionCompleted` event or run Recorder Workflows. Event delivery is best effort while TypeWhisper and the plugin are running; use the API to catch up on missed completions.
 
 In **Webhook Notifications**, enable **Also send completed Recorder transcripts** for each destination that should receive this event. The JSON body has the same fields as an entry above. Webhook retries keep the same `completion_id`.
 

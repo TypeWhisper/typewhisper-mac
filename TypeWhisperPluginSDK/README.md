@@ -512,9 +512,13 @@ func activate(host: HostServices) {
 `transcriptionCompleted`, so existing dictation subscribers do not receive meetings.
 Subscribe only with an explicit Recorder opt-in. The payload contains the saved text,
 stable `recordingID`, per-save `completionID`, `completedAt`, `audioFilePath`,
-`transcriptFilePath`, and an optional `markdownFilePath`. It is emitted after a
-successful save, including retranscription, regardless of live-preview settings.
-Its JSON uses snake_case keys, `source: "recorder"`, and Unix seconds for `completed_at`.
+`transcriptFilePath`, and an optional `markdownFilePath`, plus `recordedAt`,
+`durationSeconds` and, for calendar recordings, `calendarEvent` when known. It is
+emitted after a successful save, including retranscription, regardless of
+live-preview settings. With speaker detection it waits until detection has finished
+and carries `speakerState`, `speakers` (`isMe` marks the microphone speaker) and
+`speakerSegments`. Its JSON uses snake_case keys, `source: "recorder"`, and Unix
+seconds for `completed_at`, `recorded_at` and the calendar times.
 Delivery is best effort; `/v1/recorder/recordings?since=...` provides the latest durable
 completion per recording for catch-up. Retain the subscription ID and unsubscribe
 when deactivating your plugin.

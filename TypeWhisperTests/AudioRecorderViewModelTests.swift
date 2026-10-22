@@ -280,6 +280,46 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(inputs.first?.recorderRecordingID, events.first?.recordingID)
     }
 
+    /// Issue #887: with speaker detection the completion waits for the speakers,
+    /// so a receiver gets one delivery that tells who said what.
+    func testRecorderCompletionWaitsForSpeakerDetection() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Ship it. Agreed."))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: try makeDefaults(), modelManager: modelManager)
+        viewModel.detectSpeakers = true
+        viewModel.speakerRecordIntake = { _ in UUID() }
+        var detection: CheckedContinuation<Void, Never>?
+        var waited: [Bool] = []
+        viewModel.addingRecorderSpeakers = { payload, waits in
+            waited.append(waits)
+            await withCheckedContinuation { detection = $0 }
+            var payload = payload
+            payload.speakerState = "ready"
+            payload.speakers = [RecorderSpeaker(id: "S1", name: "Me", isMe: true)]
+            return payload
+        }
+        var events: [RecorderTranscriptReadyPayload] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            guard case .recorderTranscriptReady(let payload) = event else { return }
+            events.append(payload)
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        _ = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        try await waitUntil("the completion waits for the speakers") { detection != nil }
+
+        XCTAssertEqual(waited, [true])
+        XCTAssertTrue(events.isEmpty, "The completion must not go out before speaker detection")
+        detection?.resume()
+        try await waitUntil("the completion is emitted") { events.count == 1 }
+        XCTAssertEqual(events.first?.text, "Ship it. Agreed.")
+        XCTAssertEqual(events.first?.speakerState, "ready")
+        XCTAssertEqual(events.first?.speakers?.first?.isMe, true)
+    }
+
     /// Issue #1558: a recording transcribed while Detect Speakers was off has a
     /// `.txt` but no speaker record; transcribing it again must add one.
     func testTranscribingAgainAddsTheSpeakerRecordARecordingDoesNotHaveYet() async throws {
