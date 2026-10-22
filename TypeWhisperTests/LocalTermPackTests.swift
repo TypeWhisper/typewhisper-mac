@@ -413,6 +413,25 @@ final class LocalTermPackDictionaryTests: XCTestCase {
         XCTAssertTrue(fixture.service.entries.isEmpty)
     }
 
+    func testDictionaryImportOfATermPackFileAddsItAsALocalPack() throws {
+        let fixture = try makeFixture()
+
+        fixture.viewModel.importDictionary(data: LocalTermPackFileTests.packJSON())
+
+        XCTAssertNil(fixture.viewModel.error)
+        XCTAssertNil(fixture.viewModel.localTermPackImportError)
+        XCTAssertNotNil(fixture.viewModel.importMessage)
+        XCTAssertEqual(fixture.viewModel.visibleLocalPacks.map(\.id), ["team-terms"])
+        XCTAssertEqual(fixture.viewModel.filterTab, .termPacks)
+        XCTAssertTrue(fixture.service.entries.isEmpty)
+
+        // Other JSON objects are still not a dictionary.
+        fixture.viewModel.importDictionary(data: Data("{\"name\": \"Not a pack\"}".utf8))
+
+        XCTAssertEqual(fixture.viewModel.error, DictionaryImportError.invalidFormat.localizedDescription)
+        XCTAssertEqual(fixture.store.packs.count, 1)
+    }
+
     func testImportingTheSameIDAgainAsksFirstAndUpdatesAnActivePack() throws {
         let fixture = try makeFixture()
         fixture.viewModel.importLocalTermPack(data: LocalTermPackFileTests.packJSON(terms: "[\"Alpha\", \"Beta\"]", corrections: nil))

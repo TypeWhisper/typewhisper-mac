@@ -863,7 +863,16 @@ class DictionaryViewModel: ObservableObject {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let data = try Data(contentsOf: url)
+            importDictionary(data: try Data(contentsOf: url))
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Adds the entries of a dictionary export. A term pack file picked here is imported as a
+    /// local pack instead, and the Term Packs tab opens to show it.
+    func importDictionary(data: Data) {
+        do {
             let parsed = try DictionaryExporter.parseJSON(data)
             guard !parsed.isEmpty else {
                 error = String(localized: "The file contains no dictionary entries.")
@@ -880,9 +889,16 @@ class DictionaryViewModel: ObservableObject {
             } else {
                 importMessage = String(localized: "\(result.imported) entries imported.")
             }
+        } catch DictionaryImportError.invalidFormat where isLocalTermPackFile(data) {
+            filterTab = .termPacks
+            importLocalTermPack(data: data)
         } catch {
             self.error = error.localizedDescription
         }
+    }
+
+    private func isLocalTermPackFile(_ data: Data) -> Bool {
+        supportsLocalTermPacks && (try? LocalTermPackFile.decode(data)) != nil
     }
 
     // MARK: - Term Packs
