@@ -19,7 +19,7 @@ private struct DictumControlSurface: ViewModifier {
             .font(.system(size: kind == .smallButton ? 12 : 13))
             .foregroundStyle(DictumTheme.textPrimary)
             .padding(.leading, kind == .smallButton ? 9 : 10)
-            .padding(.trailing, kind == .smallButton ? 9 : 6)
+            .padding(.trailing, 9)
             .frame(height: 24)
             .background {
                 RoundedRectangle(cornerRadius: kind == .smallButton ? 5 : 6)
@@ -43,27 +43,24 @@ struct DictumPopup<Selection: Hashable, Options: View>: View {
     @ViewBuilder let options: () -> Options
 
     var body: some View {
-        Menu {
-            Picker(selection: $selection, content: options) {
-                Text(title, tableName: tableName)
-            }
-            .pickerStyle(.inline).labelsHidden()
-        } label: {
-            value
+        Picker(selection: $selection, content: options) {
+            Text(title, tableName: tableName)
         }
-        .menuStyle(.borderlessButton).menuIndicator(.hidden)
-        .padding(.trailing, 20)
+        .pickerStyle(.menu).labelsHidden()
+        .buttonStyle(.borderless).tint(.primary)
+        .modifier(DictumControlSurface(kind: .popup))
         .overlay(alignment: .trailing) {
             Image(systemName: "chevron.up.chevron.down")
                 .font(.system(size: 8, weight: .semibold))
                 .foregroundStyle(DictumTheme.textPrimary.opacity(0.55))
                 .frame(width: 14, height: 14)
+                .frame(width: 20, height: 14, alignment: .trailing)
+                .background(DictumTheme.control)
+                .padding(.trailing, 6)
                 .accessibilityHidden(true)
                 .allowsHitTesting(false)
         }
-        .modifier(DictumControlSurface(kind: .popup))
         .fixedSize()
-        .accessibilityLabel(Text(title, tableName: tableName))
         .accessibilityValue(value)
     }
 }
