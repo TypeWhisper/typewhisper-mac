@@ -9,6 +9,12 @@
             "value": "%@ löschen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ bearbeiten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar %@"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "%@ aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehlgeschlagen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con errores"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "Erfolgreich"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correcto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -113,6 +143,12 @@
     },
     "No rules configured.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay reglas configuradas."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -141,6 +177,12 @@
             "value": "Aktiv für alle Transkriptionen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activo para todas las transcripciones."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Füge ein Skript hinzu, um transkribierten Text per Shell-Befehl zu verarbeiten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega un script para procesar el texto transcrito mediante comandos de shell."
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Beispiel hinzufügen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar ejemplo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skript hinzufügen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar script"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Abbrechen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Befehl"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comando"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Fertig"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Skript bearbeiten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar script"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Ausführungsprotokoll"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registro de ejecución"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -337,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Allgemein"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         },
         "ja": {
@@ -361,6 +457,12 @@
             "value": "Name"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +483,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Profile konfiguriert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay perfiles configurados."
           }
         },
         "ja": {
@@ -405,6 +513,12 @@
             "value": "Keine Skripte"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay scripts"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -425,6 +539,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nur aktiv für ausgewählte Profile."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo activo para los perfiles seleccionados."
           }
         },
         "ja": {
@@ -449,6 +569,12 @@
             "value": "Profile"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfiles"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -469,6 +595,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -493,6 +625,12 @@
             "value": "Skript-Runner"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ejecutor de scripts"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -513,6 +651,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Text wird über stdin übergeben. Ergebnis über stdout zurückgeben."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El texto se pasa por stdin. Devuelve el resultado por stdout."
           }
         },
         "ja": {
@@ -538,6 +682,12 @@
             "value": "Auch für fertige Recorder-Transkripte ausführen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ejecutar también para las transcripciones terminadas de la grabadora"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -561,6 +711,12 @@
             "value": "Aufnahmen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabaciones"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -582,6 +738,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird nach dem Speichern ausgeführt, auch bei erneuter Transkription. Erhält das Transkript über stdin und Dateipfade über Umgebungsvariablen. Die Ausgabe verändert das gespeicherte Transkript nicht. Unabhängig von Regelfiltern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se ejecuta después de guardar, también al volver a transcribir. Recibe la transcripción por stdin y las rutas de archivo mediante variables de entorno. La salida no cambia la transcripción guardada. Es independiente de los filtros de reglas."
           }
         },
         "ja": {

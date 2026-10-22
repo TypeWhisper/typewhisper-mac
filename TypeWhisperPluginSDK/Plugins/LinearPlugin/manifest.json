@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.linear",
     "name": "Linear",
-    "version": "1.0.16",
+    "version": "1.0.17",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
     "descriptions": {
         "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key.",
+        "es": "Crea incidencias de Linear a partir de texto transcrito o procesado. Requiere una clave de API de Linear.",
         "ja": "文字起こし済みまたは処理済みのテキストからLinearのIssueを作成します。Linear APIキーが必要です。"
     },
     "category": "action",

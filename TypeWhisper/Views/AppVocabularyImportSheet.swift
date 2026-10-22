@@ -68,7 +68,8 @@ struct AppVocabularyImportSheet: View {
                                     "Import \(row.entry.original)",
                                     de: "\(row.entry.original) importieren",
                                     ja: "\(row.entry.original)を読み込む",
-                                    zh: "导入\(row.entry.original)"
+                                    zh: "导入\(row.entry.original)",
+                                    es: "Importar \(row.entry.original)"
                                 ))
                             }.width(50)
                             TableColumn(String(localized: "Type")) { row in

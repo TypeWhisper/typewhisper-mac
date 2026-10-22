@@ -9,6 +9,12 @@
             "value": "Eigenes Anhangsformat"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato de anexado personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dateiname der Tagesnotiz"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de archivo de la nota diaria"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Du formatierst gesprochene Diktate als übersichtliche, Obsidian-kompatible Markdown-Notizen. Gliedere den Text mit passenden Überschriften, Aufzählungen und Absätzen. Korrigiere die Grammatik und entferne Füllwörter, ohne die ursprüngliche Bedeutung zu verändern. Gib nur das formatierte Markdown aus, ohne Erklärungen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eres un asistente que convierte un dictado hablado en una nota Markdown limpia y compatible con Obsidian. Estructura el texto con encabezados, viñetas y párrafos adecuados. Corrige la gramática y elimina las muletillas sin cambiar el significado original. Devuelve solo el Markdown con formato, sin explicaciones."
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +85,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Metadaten (Datum, App, Sprache, Tags) zu jeder Notiz hinzufügen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega metadatos (fecha, app, idioma, etiquetas) a cada nota."
           }
         },
         "ja": {
@@ -91,6 +115,12 @@
             "value": "Alle Transkriptionen an eine einzelne Tagesdatei anhängen, statt einzelne Notizen zu erstellen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega todas las transcripciones a un único archivo diario en lugar de crear notas individuales."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -111,6 +141,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anhangsformat:"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato de anexado:"
           }
         },
         "ja": {
@@ -135,6 +171,12 @@
             "value": "Auto-Export"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportación automática"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -155,6 +197,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jede Transkription automatisch in Obsidian speichern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda automáticamente cada transcripción en Obsidian."
           }
         },
         "ja": {
@@ -179,6 +227,12 @@
             "value": "Durchsuchen ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explorar..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -199,6 +253,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anweisung kopieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar instrucción"
           }
         },
         "ja": {
@@ -223,6 +283,12 @@
             "value": "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Save to Obsidian\"."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea un flujo de trabajo personalizado, pega esto en Instrucción y configura el destino de la acción como \"Save to Obsidian\"."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +309,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aufzählung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista con viñetas"
           }
         },
         "ja": {
@@ -267,6 +339,12 @@
             "value": "Benutzerdefiniert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -287,6 +365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tagesnotiz-Modus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de nota diaria"
           }
         },
         "ja": {
@@ -311,6 +395,12 @@
             "value": "Erkannte Vaults"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bóvedas detectadas"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -331,6 +421,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dateiorganisation"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Organización de archivos"
           }
         },
         "ja": {
@@ -355,6 +451,12 @@
             "value": "Dateiname:"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre de archivo:"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -375,6 +477,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einfach anhängen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anexar sin formato"
           }
         },
         "ja": {
@@ -399,6 +507,12 @@
             "value": "Exportierte Einzelnotizen aktuell halten, wenn ihr Transkript in TypeWhisper bearbeitet wird. Externe Änderungen in Obsidian können überschrieben werden."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mantiene actualizadas las notas individuales exportadas cuando su transcripción se edita en TypeWhisper. Los cambios hechos fuera, en Obsidian, pueden sobrescribirse."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -419,6 +533,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verlaufsänderungen live synchronisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sincronizar en vivo los cambios del historial"
           }
         },
         "ja": {
@@ -443,6 +563,12 @@
             "value": "Live-Sync ist nur für einzelne Notizen verfügbar."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La sincronización en vivo solo está disponible para notas individuales."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -463,6 +589,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notizvorlage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plantilla de nota"
           }
         },
         "ja": {
@@ -487,6 +619,12 @@
             "value": "Kein Vault ausgewählt"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna bóveda seleccionada"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -507,6 +645,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcadores: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
         },
         "ja": {
@@ -531,6 +675,12 @@
             "value": "Platzhalter: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcadores: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -551,6 +701,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Platzhalter: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Marcadores: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
           }
         },
         "ja": {
@@ -575,6 +731,12 @@
             "value": "Vorschau: %@.md"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa: %@.md"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -595,6 +757,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workflow-Anweisung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instrucción del flujo de trabajo"
           }
         },
         "ja": {
@@ -619,6 +787,12 @@
             "value": "Vault auswählen ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seleccionar bóveda..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -639,6 +813,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wähle deinen Obsidian-Vault-Ordner"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecciona la carpeta de tu bóveda de Obsidian"
           }
         },
         "ja": {
@@ -663,6 +843,12 @@
             "value": "Unterordner:"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Subcarpeta:"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -683,6 +869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tags:"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etiquetas:"
           }
         },
         "ja": {
@@ -707,6 +899,12 @@
             "value": "Zeitstempelabschnitt"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sección con marca de tiempo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -727,6 +925,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vault"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bóveda"
           }
         },
         "ja": {
@@ -751,6 +955,12 @@
             "value": "YAML-Frontmatter"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frontmatter YAML"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -771,6 +981,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "TypeWhisper hat keinen Zugriff mehr auf diesen Vault. Wähle ihn mit „Durchsuchen ...“ erneut aus."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper ya no tiene acceso a esta bóveda. Vuelve a elegirla con Explorar."
           }
         },
         "ja": {

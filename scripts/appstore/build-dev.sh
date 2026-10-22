@@ -11,7 +11,7 @@
 #
 # Usage:
 #   scripts/appstore/build-dev.sh [--run] [--clean] [--reset-permissions]
-#                                 [--language en|de|ja|zh-Hans] [--install-plugin <id>]...
+#                                 [--language en|de|ja|zh-Hans|es] [--install-plugin <id>]...
 #   scripts/appstore/build-dev.sh --relaunch [--reset-permissions] [--language ...]
 #   scripts/appstore/build-dev.sh --check
 #

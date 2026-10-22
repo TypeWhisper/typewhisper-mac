@@ -190,7 +190,8 @@ private struct VoiceProfileRow: View {
                             "Rename \(profile.name)",
                             de: "\(profile.name) umbenennen",
                             ja: "\(profile.name)の名前を変更",
-                            zh: "重命名\(profile.name)"
+                            zh: "重命名\(profile.name)",
+                            es: "Renombrar \(profile.name)"
                         ))
                     Text(String.localizedStringWithFormat(
                         String(localized: "premium.window.speakers.profiles.learnedFormat"),
@@ -223,7 +224,8 @@ private struct VoiceProfileRow: View {
                     "Delete Voice Profile of \(profile.name)",
                     de: "Sprecherprofil von \(profile.name) löschen",
                     ja: "\(profile.name)の声のプロフィールを削除",
-                    zh: "删除\(profile.name)的声音档案"
+                    zh: "删除\(profile.name)的声音档案",
+                    es: "Eliminar el perfil de voz de \(profile.name)"
                 ))
             }
 
@@ -255,7 +257,8 @@ private struct VoiceProfileRow: View {
                             "Open \(appearance.title)",
                             de: "\(appearance.title) öffnen",
                             ja: "\(appearance.title)を開く",
-                            zh: "打开\(appearance.title)"
+                            zh: "打开\(appearance.title)",
+                            es: "Abrir \(appearance.title)"
                         ))
                     }
                     .font(.caption)

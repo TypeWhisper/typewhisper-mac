@@ -9,6 +9,12 @@
             "value": "„Modell automatisch entladen“ steht auf „Sofort“."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden & Aktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "%@ laden und aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehler"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "GigaAM (Russisch)"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GigaAM (ruso)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar token de Hugging Face"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Hugging-Face-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Ungültiger HuggingFace-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace no válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargado"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "%@ wird geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird bei Bedarf geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung und läuft auf der CPU. Erkennt nur Russisch, daher werden Aufnahmen in anderen Sprachen als Russisch transkribiert."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconocimiento de voz en ruso local con GigaAM v3 de Sber. Añade puntuación y mayúsculas y se ejecuta en la CPU. Solo reconoce ruso, así que las grabaciones en otros idiomas se transcriben como ruso."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Optional. Erhöht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional. Aumenta los límites de descarga. Gratis en huggingface.co/settings/tokens"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -337,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         },
         "ja": {
@@ -361,6 +457,12 @@
             "value": "Hugging-Face-Token entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +483,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -405,6 +513,12 @@
             "value": "Hugging-Face-Token speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -425,6 +539,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar token de Hugging Face"
           }
         },
         "ja": {
@@ -449,6 +569,12 @@
             "value": "Deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -469,6 +595,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ deaktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
           }
         },
         "ja": {
@@ -493,6 +625,12 @@
             "value": "Gültiger HuggingFace-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -513,6 +651,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token wird geprüft..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando el token..."
           }
         },
         "ja": {

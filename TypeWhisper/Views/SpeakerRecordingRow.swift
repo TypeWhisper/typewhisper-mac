@@ -145,7 +145,8 @@ struct SpeakerRecordingRow: View {
                 "Step \(step) of 2: \(stepTitle)",
                 de: "Schritt \(step) von 2: \(stepTitle)",
                 ja: "ステップ \(step)/2: \(stepTitle)",
-                zh: "第 \(step) 步，共 2 步：\(stepTitle)"
+                zh: "第 \(step) 步，共 2 步：\(stepTitle)",
+                es: "Paso \(step) de 2: \(stepTitle)"
             )]
             if let fraction {
                 let overall = (Double(step - 1) + min(max(fraction, 0), 1)) / 2
@@ -426,7 +427,8 @@ struct SpeakerPersonCard: View {
                             "Rename \(profile.name)",
                             de: "\(profile.name) umbenennen",
                             ja: "\(profile.name)の名前を変更",
-                            zh: "重命名\(profile.name)"
+                            zh: "重命名\(profile.name)",
+                            es: "Renombrar \(profile.name)"
                         ))
                     Text(String.localizedStringWithFormat(
                         String(localized: "premium.window.speakers.profiles.learnedFormat"),
@@ -459,7 +461,8 @@ struct SpeakerPersonCard: View {
                     "Delete Voice Profile of \(profile.name)",
                     de: "Sprecherprofil von \(profile.name) löschen",
                     ja: "\(profile.name)の声のプロフィールを削除",
-                    zh: "删除\(profile.name)的声音档案"
+                    zh: "删除\(profile.name)的声音档案",
+                    es: "Eliminar el perfil de voz de \(profile.name)"
                 ))
             }
 

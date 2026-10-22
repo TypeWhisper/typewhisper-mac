@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.cerebras",
     "name": "Cerebras",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
     "descriptions": {
         "de": "Ultra-schnelle LLM-Inferenz über die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key.",
+        "es": "Inferencia de LLM ultrarrápida con la API de Cerebras. Hasta 3000 tokens por segundo. Requiere una clave de API.",
         "ja": "Cerebras APIによる超高速LLM推論です。最大3,000トークン/秒に対応し、APIキーが必要です。"
     },
     "category": "llm",

@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos LLM"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Stimmen aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar voces"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Eigene Stimmen-ID"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ID de voz personalizado"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Ungültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Niedrige Latenz"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Baja latencia"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Textnormalisierung"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Normalización del texto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -337,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "TTS-Stimme"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz TTS"
           }
         },
         "ja": {
@@ -361,6 +457,12 @@
             "value": "Gültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +483,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird überprüft ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
           }
         },
         "ja": {

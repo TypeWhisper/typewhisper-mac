@@ -662,13 +662,15 @@ struct PluginSettingsView: View {
             return localizedAppText(
                 "\(installed) installed · \(updates) updates · \(available) available",
                 de: "\(installed) installiert · \(updates) Updates · \(available) verfügbar",
-                ja: "\(installed)件インストール済み · \(updates)件の更新 · \(available)件利用可能"
+                ja: "\(installed)件インストール済み · \(updates)件の更新 · \(available)件利用可能",
+                es: "\(installed) instalados · \(updates) actualizaciones · \(available) disponibles"
             )
         }
         return localizedAppText(
             "\(installed) installed · \(available) available",
             de: "\(installed) installiert · \(available) verfügbar",
-            ja: "\(installed)件インストール済み · \(available)件利用可能"
+            ja: "\(installed)件インストール済み · \(available)件利用可能",
+            es: "\(installed) instalados · \(available) disponibles"
         )
     }
 
@@ -1489,7 +1491,7 @@ struct PluginSettingsView: View {
             return category.badgeTitle
         }
 
-        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能")
+        return localizedAppText("\(selected.count) functions", de: "\(selected.count) Funktionen", ja: "\(selected.count)件の機能", es: "\(selected.count) funciones")
     }
 
     /// Checked while no function is selected. Choosing it clears the selection;
@@ -1664,7 +1666,8 @@ struct PluginSettingsView: View {
             "\(name) installed",
             de: "\(name) installiert",
             ja: "\(name)をインストールしました",
-            zh: "已安装\(name)"
+            zh: "已安装\(name)",
+            es: "\(name) instalado"
         ))
         SettingsNavigationCoordinator.shared.navigate(to: .installedPlugin(pluginId: pluginId))
     }
@@ -1854,11 +1857,11 @@ private extension Array where Element: Hashable {
 
 /// "Version 1.2.0" instead of "v1.2.0", which VoiceOver reads letter by letter.
 private func pluginVersionAccessibilityLabel(_ version: String) -> String {
-    localizedAppText("Version \(version)", de: "Version \(version)", ja: "バージョン \(version)", zh: "版本 \(version)")
+    localizedAppText("Version \(version)", de: "Version \(version)", ja: "バージョン \(version)", zh: "版本 \(version)", es: "Versión \(version)")
 }
 
 private func pluginAuthorAccessibilityLabel(_ author: String) -> String {
-    localizedAppText("by \(author)", de: "von \(author)", ja: "作成者: \(author)", zh: "作者：\(author)")
+    localizedAppText("by \(author)", de: "von \(author)", ja: "作成者: \(author)", zh: "作者：\(author)", es: "de \(author)")
 }
 
 private struct IntegrationEmptyState: View {
@@ -2340,7 +2343,8 @@ private struct DownloadedPluginModelRow: View {
                         "Removing \(model.displayName)",
                         de: "\(model.displayName) wird entfernt",
                         ja: "\(model.displayName)を削除中",
-                        zh: "正在移除\(model.displayName)"
+                        zh: "正在移除\(model.displayName)",
+                        es: "Quitando \(model.displayName)"
                     ))
             } else {
                 Button {
@@ -2468,7 +2472,8 @@ private struct AvailablePluginRow: View {
                         "Open details for \(plugin.name)",
                         de: "Details für \(plugin.name) öffnen",
                         ja: "\(plugin.name)の詳細を開く",
-                        zh: "打开“\(plugin.name)”的详细信息"
+                        zh: "打开“\(plugin.name)”的详细信息",
+                        es: "Abrir los detalles de \(plugin.name)"
                     ))
                 }
             }
@@ -2497,7 +2502,8 @@ private struct AvailablePluginRow: View {
             "Retry installing \(plugin.name)",
             de: "Installation von \(plugin.name) erneut versuchen",
             ja: "\(plugin.name)のインストールを再試行",
-            zh: "重试安装\(plugin.name)"
+            zh: "重试安装\(plugin.name)",
+            es: "Reintentar la instalación de \(plugin.name)"
         )
     }
 }
@@ -2615,7 +2621,8 @@ private struct PluginInstallStateView: View {
                 "Installing \(name)",
                 de: "\(name) wird installiert",
                 ja: "\(name)をインストール中",
-                zh: "正在安装\(name)"
+                zh: "正在安装\(name)",
+                es: "Instalando \(name)"
             ))
         case .restartRequired:
             HStack(spacing: 6) {

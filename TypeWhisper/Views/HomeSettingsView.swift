@@ -405,7 +405,8 @@ struct HomeSettingsView: View {
                     "Press \(primaryHotkeyLabel) in any app to begin.",
                     de: "Drücke \(primaryHotkeyLabel) in einer beliebigen App, um zu beginnen.",
                     ja: "任意のアプリで\(primaryHotkeyLabel)を押して開始します。",
-                    zh: "在任意应用中按 \(primaryHotkeyLabel) 开始。"
+                    zh: "在任意应用中按 \(primaryHotkeyLabel) 开始。",
+                    es: "Presiona \(primaryHotkeyLabel) en cualquier app para empezar."
                 ))
                 .accessibilityAddTraits(.isStaticText)
             }

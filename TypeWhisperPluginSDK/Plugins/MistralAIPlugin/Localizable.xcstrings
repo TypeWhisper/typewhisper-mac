@@ -9,6 +9,12 @@
             "value": "API-Schlüssel speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "API-Schlüssel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -75,6 +93,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -91,6 +115,12 @@
     },
     "API Key": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -113,6 +143,12 @@
     },
     "Applies to workflow (LLM) processing only.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo se aplica al procesamiento de flujos de trabajo (LLM)."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +171,12 @@
     },
     "Cloud API integration for Mistral LLMs and Voxtral STT.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integración de API en la nube para los LLM de Mistral y Voxtral STT."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -201,6 +255,12 @@
     },
     "Invalid API Key": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -223,6 +283,12 @@
     },
     "LLM Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -251,6 +317,12 @@
             "value": "Mistral AI"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral AI"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -261,6 +333,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -283,6 +361,12 @@
     },
     "Remove": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -305,6 +389,12 @@
     },
     "Save": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -327,6 +417,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -349,6 +445,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -371,6 +473,12 @@
     },
     "Transcription Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo de transcripción"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -393,6 +501,12 @@
     },
     "Valid API Key": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -415,6 +529,12 @@
     },
     "Validating...": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -437,6 +557,12 @@
     },
     "e.g. LFztgP5WA...": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "p. ej. LFztgP5WA..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

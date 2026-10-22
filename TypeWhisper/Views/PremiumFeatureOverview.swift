@@ -26,6 +26,12 @@ enum PremiumCorrectionExamples {
                 ("在次", "再次"),
             ]
         }
+        if language.hasPrefix("es") {
+            return [
+                ("nesecito", "necesito"),
+                ("haiga", "haya"),
+            ]
+        }
 
         return [
             ("teh", "the"),
@@ -383,7 +389,8 @@ enum PairedDevicesPremiumCopy {
             "\(count) paired",
             de: "\(count) gekoppelt",
             ja: "\(count) 台ペアリング済み",
-            zh: "已配对 \(count) 台"
+            zh: "已配对 \(count) 台",
+            es: "\(count) vinculados"
         )
     }
 }
@@ -1224,7 +1231,8 @@ struct PremiumCorrectionExampleRow: View {
             "\(before), corrected to \(after)",
             de: "\(before), korrigiert zu \(after)",
             ja: "\(before) を \(after) に修正",
-            zh: "\(before) 更正为 \(after)"
+            zh: "\(before) 更正为 \(after)",
+            es: "\(before), corregido a \(after)"
         ))
     }
 }

@@ -144,7 +144,8 @@ private extension RemoteLinkSettingsView {
                 "Visible as “\(viewModel.computerName)”",
                 de: "Sichtbar als „\(viewModel.computerName)“",
                 ja: "「\(viewModel.computerName)」として表示中",
-                zh: "显示为“\(viewModel.computerName)”"
+                zh: "显示为“\(viewModel.computerName)”",
+                es: "Visible como “\(viewModel.computerName)”"
             )
         }
         if viewModel.isRunning {
@@ -182,7 +183,8 @@ private struct RemoteLinkDeviceRow: View {
                     "Remove \(device.name)",
                     de: "\(device.name) entfernen",
                     ja: "\(device.name) を削除",
-                    zh: "移除 \(device.name)"
+                    zh: "移除 \(device.name)",
+                    es: "Quitar \(device.name)"
                 ))
         }
     }
@@ -190,10 +192,10 @@ private struct RemoteLinkDeviceRow: View {
     private var lastUsedText: String {
         guard let lastSeenAt = device.lastSeenAt else {
             let paired = device.pairedAt.formatted(date: .abbreviated, time: .omitted)
-            return localizedAppText("Paired \(paired)", de: "Gekoppelt am \(paired)", ja: "\(paired) にペアリング", zh: "配对于 \(paired)")
+            return localizedAppText("Paired \(paired)", de: "Gekoppelt am \(paired)", ja: "\(paired) にペアリング", zh: "配对于 \(paired)", es: "Vinculado: \(paired)")
         }
         let used = lastSeenAt.formatted(.relative(presentation: .named))
-        return localizedAppText("Last used \(used)", de: "Zuletzt verwendet \(used)", ja: "最終使用: \(used)", zh: "上次使用：\(used)")
+        return localizedAppText("Last used \(used)", de: "Zuletzt verwendet \(used)", ja: "最終使用: \(used)", zh: "上次使用：\(used)", es: "Último uso: \(used)")
     }
 }
 
@@ -242,17 +244,18 @@ private struct RemoteLinkPairingSheet: View {
             "“\(request.deviceName)” wants to pair with this Mac.",
             de: "„\(request.deviceName)“ möchte sich mit diesem Mac koppeln.",
             ja: "「\(request.deviceName)」がこの Mac とのペアリングを求めています。",
-            zh: "“\(request.deviceName)”想要与这台 Mac 配对。"
+            zh: "“\(request.deviceName)”想要与这台 Mac 配对。",
+            es: "“\(request.deviceName)” quiere vincularse con este Mac."
         )
     }
 
     static func spokenCode(_ code: String) -> String {
         let digits = code.map(String.init).joined(separator: " ")
-        return localizedAppText("Code \(digits)", de: "Code \(digits)", ja: "コード \(digits)", zh: "代码 \(digits)")
+        return localizedAppText("Code \(digits)", de: "Code \(digits)", ja: "コード \(digits)", zh: "代码 \(digits)", es: "Código \(digits)")
     }
 
     static func pairedText(_ name: String) -> String {
-        localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。")
+        localizedAppText("Paired with “\(name)”.", de: "Mit „\(name)“ gekoppelt.", ja: "「\(name)」とペアリングしました。", zh: "已与“\(name)”配对。", es: "Vinculado con “\(name)”.")
     }
 
     static var failedText: String {
@@ -280,7 +283,8 @@ private struct RemoteLinkPairingSheet: View {
                     "On your iPhone or iPad, open TypeWhisper, go to Settings → Mac and choose “\(viewModel.computerName)”.",
                     de: "Öffne TypeWhisper auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
                     ja: "iPhone または iPad で TypeWhisper を開き、設定 → Mac で「\(viewModel.computerName)」を選択してください。",
-                    zh: "在 iPhone 或 iPad 上打开 TypeWhisper，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。"
+                    zh: "在 iPhone 或 iPad 上打开 TypeWhisper，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。",
+                    es: "En tu iPhone o iPad, abre TypeWhisper, ve a Ajustes → Mac y elige “\(viewModel.computerName)”."
                 ))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

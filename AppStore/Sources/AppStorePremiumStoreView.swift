@@ -232,7 +232,8 @@ struct AppStorePremiumStoreView: View {
                 let date = expiresAt.formatted(date: .abbreviated, time: .omitted)
                 return localizedAppText(
                     "Your monthly subscription unlocks all Premium features. Current period until \(date).",
-                    de: "Dein Monatsabo schaltet alle Premium-Funktionen frei. Aktueller Zeitraum bis \(date)."
+                    de: "Dein Monatsabo schaltet alle Premium-Funktionen frei. Aktueller Zeitraum bis \(date).",
+                    es: "Tu suscripción mensual desbloquea todas las funciones Premium. Periodo actual hasta: \(date)."
                 )
             }
             return localizedAppText(
@@ -254,12 +255,14 @@ struct AppStorePremiumStoreView: View {
         if let trial = store.monthlyTrialOffer {
             return localizedAppText(
                 "Try Free for \(trial.durationText)",
-                de: "\(trial.durationText) kostenlos testen"
+                de: "\(trial.durationText) kostenlos testen",
+                es: "Prueba gratis durante \(trial.durationText)"
             )
         }
         return localizedAppText(
             "Subscribe for \(product.displayPrice) per Month",
-            de: "Für \(product.displayPrice) pro Monat abonnieren"
+            de: "Für \(product.displayPrice) pro Monat abonnieren",
+            es: "Suscríbete por \(product.displayPrice) al mes"
         )
     }
 
@@ -269,12 +272,14 @@ struct AppStorePremiumStoreView: View {
         if let trial = store.monthlyTrialOffer {
             renewal = localizedAppText(
                 "\(trial.durationText) free, then \(price) per month. Renews automatically until canceled.",
-                de: "\(trial.durationText) kostenlos, danach \(price) pro Monat. Verlängert sich automatisch, bis du kündigst."
+                de: "\(trial.durationText) kostenlos, danach \(price) pro Monat. Verlängert sich automatisch, bis du kündigst.",
+                es: "\(trial.durationText) gratis y luego \(price) al mes. Se renueva automáticamente hasta que la canceles."
             )
         } else {
             renewal = localizedAppText(
                 "One month. Renews automatically for \(price) per month until canceled.",
-                de: "Ein Monat. Verlängert sich automatisch für \(price) pro Monat, bis du kündigst."
+                de: "Ein Monat. Verlängert sich automatisch für \(price) pro Monat, bis du kündigst.",
+                es: "Un mes. Se renueva automáticamente por \(price) al mes hasta que la canceles."
             )
         }
         let cancellation = localizedAppText(
@@ -287,7 +292,8 @@ struct AppStorePremiumStoreView: View {
     private func lifetimePurchaseTitle(_ product: Product) -> String {
         localizedAppText(
             "Buy Lifetime for \(product.displayPrice)",
-            de: "Lifetime für \(product.displayPrice) kaufen"
+            de: "Lifetime für \(product.displayPrice) kaufen",
+            es: "Comprar acceso vitalicio por \(product.displayPrice)"
         )
     }
 

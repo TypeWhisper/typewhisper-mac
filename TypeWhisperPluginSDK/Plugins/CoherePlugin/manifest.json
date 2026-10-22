@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.cohere",
     "name": "Cohere",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
     "descriptions": {
         "de": "Cloud-Transkription über die Cohere Transcribe API. Beste Genauigkeit für 14 Sprachen. Erfordert API-Key.",
+        "es": "Transcripción en la nube con la API de Cohere Transcribe. Precisión de vanguardia en 14 idiomas. Requiere una clave de API.",
         "ja": "Cohere Transcribe APIによるクラウド文字起こしです。14言語で高精度に対応し、APIキーが必要です。"
     },
     "category": "transcription",

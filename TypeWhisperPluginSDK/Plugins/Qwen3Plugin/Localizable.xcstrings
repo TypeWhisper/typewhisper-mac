@@ -9,6 +9,12 @@
             "value": "%@ laden und aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehler"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Hugging-Face-Token ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "%@ laden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargado"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "%@ wird geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar token de Hugging Face"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Hugging-Face-Token speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar token de Hugging Face"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "%@ deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "32-GB-Qualität"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad para 32 GB"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "8-GB-Tipp"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opción para 8 GB"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein Token ist nur für private oder zugangsbeschränkte Modelle nötig. Es wird für diesen Import verwendet und nicht gespeichert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo se necesita un token para modelos privados o de acceso restringido. Se usa para esta importación y no se guarda."
           }
         },
         "ja": {
@@ -318,6 +402,12 @@
             "value": "Füge ein mit diesem Plugin kompatibles Spracherkennungsmodell hinzu. Das Modell wird vor Abschluss des Imports geprüft und geladen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega un modelo compatible con este plugin. El modelo se comprueba y se carga antes de que termine la importación."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -338,6 +428,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "„Modell automatisch entladen“ steht auf „Sofort“."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
           }
         },
         "ja": {
@@ -362,6 +458,12 @@
             "value": "Beste Vorgabe"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mejor opción predeterminada"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -382,6 +484,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Beste Vorgabe für die meisten Macs mit 16 GB+."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La mejor opción predeterminada para la mayoría de los Mac con 16 GB o más."
           }
         },
         "ja": {
@@ -406,6 +514,12 @@
             "value": "Canary braucht eine konkrete Ausgangssprache. Wähle für Sophea Griechisch oder Englisch in den Diktateinstellungen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Canary necesita un idioma de origen explícito. Elige griego o inglés para Sophea en los ajustes de Dictado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -426,6 +540,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abbrechen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
           }
         },
         "ja": {
@@ -450,6 +570,12 @@
             "value": "Wird abgebrochen …"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelando…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -470,6 +596,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modellkompatibilität wird geprüft …"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprobando la compatibilidad del modelo…"
           }
         },
         "ja": {
@@ -494,6 +626,12 @@
             "value": "Ordner auswählen …"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elegir carpeta…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -514,6 +652,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. TypeWhisper erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige la carpeta que contiene config.json, los archivos del tokenizador y los pesos. TypeWhisper guarda su propia copia; tus archivos originales no se modifican."
           }
         },
         "ja": {
@@ -538,6 +682,12 @@
             "value": "Fertig"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -558,6 +708,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden & Aktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar"
           }
         },
         "ja": {
@@ -582,6 +738,12 @@
             "value": "Schnell / 8 GB"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rápido / 8 GB"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -602,6 +764,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schnelle Wahl für 8-GB-Macs und einfache Diktate."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opción rápida para Mac con 8 GB y dictados sencillos."
           }
         },
         "ja": {
@@ -626,6 +794,12 @@
             "value": "Kleines Modell mit höherer Präzision, wenn 0.6B-Qualität wichtiger ist."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo pequeño de mayor precisión cuando importa la calidad del 0.6B."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -646,6 +820,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qualitätswahl für Macs mit 32 GB+."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opción de mayor calidad para Mac con 32 GB o más."
           }
         },
         "ja": {
@@ -670,6 +850,12 @@
             "value": "Hugging-Face-Modell-URL"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL del modelo de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -690,6 +876,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token (optional)"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face (opcional)"
           }
         },
         "ja": {
@@ -714,6 +906,12 @@
             "value": "HuggingFace Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -734,6 +932,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar"
           }
         },
         "ja": {
@@ -758,6 +962,12 @@
             "value": "Modell importieren …"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar modelo…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -778,6 +988,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spracherkennungsmodell importieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar modelo de voz"
           }
         },
         "ja": {
@@ -802,6 +1018,12 @@
             "value": "Importiert und geladen: %@"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importado y cargado: %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -822,6 +1044,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Importiertes Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo importado"
           }
         },
         "ja": {
@@ -846,6 +1074,12 @@
             "value": "Importieren und Laden mit %@ …"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importando y cargando con %@…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -866,6 +1100,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ungültiger HuggingFace-Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace no válido"
           }
         },
         "ja": {
@@ -890,6 +1130,12 @@
             "value": "Größtes unquantisiertes Modell; für Validierung mit maximaler Wiedergabetreue."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo sin cuantizar más grande; úsalo para validar con la máxima fidelidad."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -910,6 +1156,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar"
           }
         },
         "ja": {
@@ -934,6 +1186,12 @@
             "value": "Wird bei Bedarf geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -954,6 +1212,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lokaler Ordner"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carpeta local"
           }
         },
         "ja": {
@@ -978,6 +1242,12 @@
             "value": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Schlüssel nötig."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz a texto local con Qwen3-ASR y MLX en Apple Silicon. 30 idiomas más dialectos del chino, no necesita clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -998,6 +1268,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mittelweg, wenn das 6-bit-Standardmodell knapp im Speicher wird."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Término medio si el modelo predeterminado de 6 bits ocupa demasiada memoria."
           }
         },
         "ja": {
@@ -1022,6 +1298,12 @@
             "value": "Modell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1038,6 +1320,12 @@
     },
     "No folder selected": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguna carpeta seleccionada"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1066,6 +1354,12 @@
             "value": "Optional. Erhöht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional. Aumenta los límites de descarga. Gratis en huggingface.co/settings/tokens"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1086,6 +1380,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Qualität / 32 GB"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad / 32 GB"
           }
         },
         "ja": {
@@ -1110,6 +1410,12 @@
             "value": "Schnellauswahl"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selección rápida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1130,6 +1436,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Empfohlen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recomendado"
           }
         },
         "ja": {
@@ -1154,6 +1466,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1174,6 +1492,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -1198,6 +1522,12 @@
             "value": "Etwas mehr Präzision als 4-bit bei ähnlichem Speicherbedarf."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algo más de precisión que el de 4 bits con un uso de memoria similar."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1220,6 +1550,12 @@
             "value": "Kleinste 1.7B-Option; nutze sie, wenn 6-bit zu schwer ist."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La opción 1.7B más pequeña; úsala cuando el de 6 bits sea demasiado pesado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1240,6 +1576,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kleinster Download; nutze es, wenn Speicher wichtiger als Qualität ist."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La descarga más pequeña; úsala cuando la memoria importe más que la calidad."
           }
         },
         "ja": {
@@ -1265,6 +1607,12 @@
             "value": "Quelle"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Origen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1286,6 +1634,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diese Modellarchitektur wird von diesem Plugin nicht unterstützt. Öffne zum Importieren die Einstellungen eines kompatiblen Plugins."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este plugin no admite esta arquitectura de modelo. Abre los ajustes de un plugin compatible para importarlo."
           }
         },
         "ja": {
@@ -1310,6 +1664,12 @@
             "value": "Deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1330,6 +1690,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Unquantisiertes kleines Modell; nützlich für Vergleich oder Validierung."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo pequeño sin cuantizar; útil para comparar o validar."
           }
         },
         "ja": {
@@ -1354,6 +1720,12 @@
             "value": "Gültiger HuggingFace-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1376,6 +1748,12 @@
             "value": "Token wird geprüft..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando el token..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1396,6 +1774,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Du kannst die Engine in den Diktateinstellungen auswählen und das Modell unter Integrationen verwalten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puedes seleccionar el motor en los ajustes de Dictado y gestionar el modelo en Integraciones."
           }
         },
         "ja": {

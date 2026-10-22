@@ -12,7 +12,17 @@ func preferredAppLanguageCode() -> String {
     return Locale.current.language.languageCode?.identifier ?? "en"
 }
 
-func localizedAppText(_ english: String, de german: String, ja japanese: String? = nil, zh chinese: String? = nil) -> String {
+/// Returns the text for the app language. German comes from the call site; Japanese,
+/// Chinese and Spanish come from the call site when given, otherwise from the string
+/// catalog entry whose key is the English text. Text with interpolated values can't be
+/// found in the catalog that way, so those call sites pass their translations inline.
+func localizedAppText(
+    _ english: String,
+    de german: String,
+    ja japanese: String? = nil,
+    zh chinese: String? = nil,
+    es spanish: String? = nil
+) -> String {
     let language = preferredAppLanguageCode()
     if language.hasPrefix("de") {
         return german
@@ -32,6 +42,17 @@ func localizedAppText(_ english: String, de german: String, ja japanese: String?
     if language.hasPrefix("zh") {
         if let chinese {
             return chinese
+        }
+
+        let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)
+        if localized != english {
+            return localized
+        }
+    }
+
+    if language.hasPrefix("es") {
+        if let spanish {
+            return spanish
         }
 
         let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)

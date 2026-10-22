@@ -50,6 +50,7 @@ final class AccessibilityPermissionPaneTests: XCTestCase {
             "de": "Gerätesteuerung und Datenzugriff",
             "ja": "デバイスの制御とデータへのアクセス",
             "zh-Hans": "设备控制和数据访问",
+            "es": "Control de dispositivos y acceso a datos",
         ]
 
         for (language, name) in expected {

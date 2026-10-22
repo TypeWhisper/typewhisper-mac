@@ -9,6 +9,12 @@
             "value": "Aktiv"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehler"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Sprachen suchen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar idiomas"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ auswählen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seleccionar %@"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "%@ deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktiv: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activo: %@"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Sprachmodell wird heruntergeladen ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando el modelo de idioma..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verfügbare Sprachen werden geladen ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando los idiomas disponibles..."
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Gerätebasierte Spracherkennung über Apples Speech-Framework mit Streaming-Unterstützung. Wähle unten ein Sprachmodell - es kann jeweils nur eines aktiv sein."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconocimiento de voz en el dispositivo con el framework Speech de Apple y transcripción en tiempo real. Selecciona abajo un modelo de idioma; solo puede haber uno activo a la vez."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sprachen suchen ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buscar idiomas..."
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Auswählen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seleccionar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deaktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Wird bei Bedarf geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "„Modell automatisch entladen“ steht auf „Sofort“."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
           }
         },
         "ja": {

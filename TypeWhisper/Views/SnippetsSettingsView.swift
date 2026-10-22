@@ -176,7 +176,8 @@ private struct SnippetCardView: View {
             "\(trigger), expands to \(replacement)",
             de: "\(trigger), wird zu \(replacement)",
             ja: "\(trigger)を\(replacement)に展開",
-            zh: "\(trigger)，展开为\(replacement)"
+            zh: "\(trigger)，展开为\(replacement)",
+            es: "\(trigger), se expande a \(replacement)"
         )
         if snippet.caseSensitive {
             summary += ", " + String(localized: "Case sensitive")
@@ -336,7 +337,8 @@ private struct PlaceholderTag: View {
                 "Insert \(title) placeholder",
                 de: "Platzhalter „\(title)“ einfügen",
                 ja: "\(title)のプレースホルダを挿入",
-                zh: "插入\(title)占位符"
+                zh: "插入\(title)占位符",
+                es: "Insertar el marcador \(title)"
             ))
             .accessibilityHint(placeholder)
 

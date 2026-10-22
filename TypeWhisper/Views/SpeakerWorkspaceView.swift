@@ -720,7 +720,8 @@ private struct SpeakerInspectorRow: View {
                     "More Actions for \(model.name(of: speakerID))",
                     de: "Weitere Aktionen für \(model.name(of: speakerID))",
                     ja: "\(model.name(of: speakerID))のその他の操作",
-                    zh: "\(model.name(of: speakerID))的更多操作"
+                    zh: "\(model.name(of: speakerID))的更多操作",
+                    es: "Más acciones para \(model.name(of: speakerID))"
                 ))
             }
             .font(.caption.monospacedDigit())
@@ -1249,7 +1250,8 @@ private struct SpeakerTimeline: View {
                     "\(elapsed) elapsed",
                     de: "\(elapsed) abgespielt",
                     ja: "経過 \(elapsed)",
-                    zh: "已播放 \(elapsed)"
+                    zh: "已播放 \(elapsed)",
+                    es: "\(elapsed) transcurrido"
                 ))
             SpeakerScrubber(model: model, playback: playback, time: clock.time)
             Text("-" + remaining)
@@ -1258,7 +1260,8 @@ private struct SpeakerTimeline: View {
                     "\(remaining) remaining",
                     de: "Noch \(remaining)",
                     ja: "残り \(remaining)",
-                    zh: "剩余 \(remaining)"
+                    zh: "剩余 \(remaining)",
+                    es: "\(remaining) restante"
                 ))
         }
         .font(.caption2.monospacedDigit())
@@ -1372,7 +1375,8 @@ private struct SpeakerScrubber: View {
             "\(stamp) of \(total)",
             de: "\(stamp) von \(total)",
             ja: "\(total)中 \(stamp)",
-            zh: "\(stamp)/\(total)"
+            zh: "\(stamp)/\(total)",
+            es: "\(stamp) de \(total)"
         )
         guard let turn = SpeakerTranscriptPresentation.spokenTurn(in: model.turns, at: time) else { return position }
         return position + ", " + model.name(of: turn.speakerID)

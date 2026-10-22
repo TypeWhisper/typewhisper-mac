@@ -9,6 +9,12 @@
             "value": "Tastenkürzel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Borrar atajo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -25,6 +31,12 @@
     },
     "Background opacity": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opacidad del fondo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -47,6 +59,12 @@
     },
     "Height": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -69,6 +87,12 @@
     },
     "Lower values keep more of the app behind the transcript visible.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con valores más bajos se ve más de la app que hay detrás de la transcripción."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -91,6 +115,12 @@
     },
     "Width": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ancho"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -113,6 +143,12 @@
     },
     "Window size": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tamaño de la ventana"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -141,6 +177,12 @@
             "value": "Automatisch bei Aufnahme öffnen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir automáticamente al grabar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Neuer Text"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Texto nuevo"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Schriftgrösse"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tamaño de letra"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tastenkombination drücken..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Presiona una combinación de teclas..."
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Aufnehmen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabar atajo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkript-Fenster mit einem Tastenkürzel ein- oder ausblenden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestra u oculta la ventana de transcripción con un atajo de teclado."
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Transkript-Fenster automatisch bei Aufnahmestart anzeigen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muestra la ventana de transcripción automáticamente cuando empieza la grabación."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tastenkürzel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Atajo para mostrar u ocultar"
           }
         },
         "ja": {

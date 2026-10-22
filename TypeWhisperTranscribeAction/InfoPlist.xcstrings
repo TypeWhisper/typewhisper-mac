@@ -17,6 +17,12 @@
             "value" : "Transcribe with TypeWhisper"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcribir con TypeWhisper"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -45,6 +51,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transcribe with TypeWhisper"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transcribir con TypeWhisper"
           }
         },
         "ja" : {

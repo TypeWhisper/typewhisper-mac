@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "API-Schlüssel sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "Wandle gesprochene Diktate in strukturierte Linear-Issues um. Extrahiere: 1) einen prägnanten Titel mit höchstens 100 Zeichen, 2) eine ausführliche Beschreibung in Markdown, 3) die Priorität (1=Dringend, 2=Hoch, 3=Mittel, 4=Niedrig), aus dem Kontext abgeleitet, standardmäßig 3. Antworte NUR mit gültigem JSON: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eres un asistente que convierte un dictado hablado en una incidencia estructurada de Linear. Extrae: 1) un título conciso (máx. 100 caracteres), 2) una descripción detallada en Markdown, 3) la prioridad (1=Urgente, 2=Alta, 3=Media, 4=Baja), deducida del contexto, 3 de forma predeterminada. Responde SOLO con JSON válido: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -111,6 +141,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
           }
         },
         "ja": {
@@ -135,6 +171,12 @@
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -155,6 +197,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Anweisung kopieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copiar instrucción"
           }
         },
         "ja": {
@@ -179,6 +227,12 @@
             "value": "Erstelle einen eigenen Workflow, füge dies in Anweisung ein und setze das Action-Ziel auf \"Create Linear Issue\"."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea un flujo de trabajo personalizado, pega esto en Instrucción y configura el destino de la acción como \"Create Linear Issue\"."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -199,6 +253,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erstelle einen persönlichen API-Schlüssel unter linear.app/settings/api"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Crea una clave de API personal en linear.app/settings/api"
           }
         },
         "ja": {
@@ -223,6 +283,12 @@
             "value": "Standardwerte"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valores predeterminados"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +309,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ungültiger API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
           }
         },
         "ja": {
@@ -267,6 +339,12 @@
             "value": "Labels"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etiquetas"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -287,6 +365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Projekte & Labels werden geladen ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando proyectos y etiquetas..."
           }
         },
         "ja": {
@@ -311,6 +395,12 @@
             "value": "Teams werden geladen ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando equipos..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -331,6 +421,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguno"
           }
         },
         "ja": {
@@ -355,6 +451,12 @@
             "value": "Projekt"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proyecto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -375,6 +477,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workflow-Anweisung"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instrucción del flujo de trabajo"
           }
         },
         "ja": {
@@ -399,6 +507,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -419,6 +533,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -443,6 +563,12 @@
             "value": "Team auswählen ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seleccionar equipo..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -463,6 +589,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Team"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Equipo"
           }
         },
         "ja": {
@@ -487,6 +619,12 @@
             "value": "Gültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -507,6 +645,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird überprüft ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
           }
         },
         "ja": {

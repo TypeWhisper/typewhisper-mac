@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gigaam",
     "name": "GigaAM",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -12,6 +12,7 @@
     "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization. Russian only.",
     "descriptions": {
         "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung. Nur Russisch.",
+        "es": "Voz a texto local en ruso con GigaAM v3 de Sber. Añade puntuación y mayúsculas. Solo ruso.",
         "ja": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付けます。ロシア語専用です。"
     },
     "category": "transcription",

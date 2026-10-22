@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gladia",
     "name": "Gladia",
-    "version": "1.0.11",
+    "version": "1.0.12",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
     "descriptions": {
         "de": "Cloud-Transkription über die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming.",
+        "es": "Transcripción en la nube con la API Solaria de Gladia y streaming en tiempo real por WebSocket.",
         "ja": "Gladia Solaria APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応します。"
     },
     "category": "transcription",

@@ -9,6 +9,12 @@
             "value": "%@ löschen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ bearbeiten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar %@"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "%@ aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fehlgeschlagen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Con errores"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "Erfolgreich"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Correcto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Füge einen Webhook hinzu, um Transkriptionsdaten an externe Dienste zu senden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega un webhook para enviar datos de transcripción a servicios externos."
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Webhook hinzufügen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar webhook"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Alle Transkriptionen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Todas las transcripciones"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Abbrechen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zustellprotokoll"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registro de envíos"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Fertig"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhook bearbeiten"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Editar webhook"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Allgemein"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Methode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Método"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Name"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -337,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Webhooks"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay webhooks"
           }
         },
         "ja": {
@@ -361,6 +457,12 @@
             "value": "Keine Workflows konfiguriert."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No hay flujos de trabajo configurados."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +483,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht mehr verfügbar"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ya no está disponible"
           }
         },
         "ja": {
@@ -405,6 +513,12 @@
             "value": "Sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -425,6 +539,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wähle mindestens einen Workflow aus."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecciona al menos un flujo de trabajo."
           }
         },
         "ja": {
@@ -449,6 +569,12 @@
             "value": "Ausgewählte Workflows"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flujos de trabajo seleccionados"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -469,6 +595,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhook senden für"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar webhook para"
           }
         },
         "ja": {
@@ -493,6 +625,12 @@
             "value": "Der Webhook wird nach jeder Transkription gesendet, auch wenn kein Workflow verwendet wird."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El webhook se envía después de cada transcripción, incluidas las transcripciones sin flujo de trabajo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -515,6 +653,12 @@
             "value": "Der Webhook wird nur für die ausgewählten Workflows gesendet."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El webhook solo se envía para los flujos de trabajo seleccionados."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -532,6 +676,12 @@
     "URL": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "URL"
@@ -559,6 +709,12 @@
             "value": "Webhook-Benachrichtigungen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notificaciones por webhook"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -581,6 +737,12 @@
             "value": "Workflows"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flujos de trabajo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -601,6 +763,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workflows: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Flujos de trabajo: %@"
           }
         },
         "ja": {
@@ -626,6 +794,12 @@
             "value": "Auch fertige Recorder-Transkripte senden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar también las transcripciones terminadas de la grabadora"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -649,6 +823,12 @@
             "value": "Aufnahmen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grabaciones"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -670,6 +850,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sendet gespeicherte Transkripte manueller, Kalender- und API-Aufnahmen, auch nach erneuter Transkription. Unabhängig von Workflow-Filtern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Envía las transcripciones guardadas de las grabaciones manuales, del calendario y de la API, también al volver a transcribir. Es independiente de los filtros de flujos de trabajo."
           }
         },
         "ja": {

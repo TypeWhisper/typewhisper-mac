@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos LLM"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "API-Schlüssel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wörterbuchbegriffe senden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enviar los términos del diccionario"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Standardmäßig aus, weil Groq mit Wörterbuchbegriffen Teile eines Diktats auslassen kann. Wörterbuchkorrekturen nach der Transkription gelten in jedem Fall."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado de forma predeterminada porque los términos del diccionario pueden hacer que Groq omita partes de un dictado. Las correcciones del diccionario después de la transcripción se aplican en cualquier caso."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ungültiger API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Modell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gültiger API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Wird überprüft ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -333,6 +423,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +451,12 @@
     },
     "LLM Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -377,6 +479,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -399,6 +507,12 @@
     },
     "Refresh": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -421,6 +535,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -443,6 +563,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -465,6 +591,12 @@
     },
     "Transcription Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo de transcripción"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -487,6 +619,12 @@
     },
     "Using default models. Press Refresh to fetch all available models.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se están usando los modelos predeterminados. Presiona Actualizar para obtener todos los modelos disponibles."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

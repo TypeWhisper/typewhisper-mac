@@ -27,7 +27,7 @@ final class MCPClientPluginTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: url))
 
         XCTAssertEqual(manifest.id, "com.typewhisper.mcp-client")
-        XCTAssertEqual(manifest.version, "0.2.3")
+        XCTAssertEqual(manifest.version, "0.2.4")
         XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")

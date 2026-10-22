@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.gemini",
     "name": "Gemini",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "LLM provider and cloud speech transcription via Google Gemini API. Requires API key.",
     "descriptions": {
         "de": "LLM-Anbieter und Cloud-Spracherkennung über die Google Gemini API. Erfordert API-Key.",
+        "es": "Proveedor de LLM y transcripción de voz en la nube con la API de Google Gemini. Requiere una clave de API.",
         "ja": "Google Gemini APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
     },
     "category": "transcription",

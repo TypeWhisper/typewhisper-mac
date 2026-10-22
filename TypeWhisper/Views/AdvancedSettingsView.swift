@@ -659,7 +659,8 @@ struct AdvancedSettingsView: View {
                             "Show \(companionAppTitle)",
                             de: "Anzeigen: \(companionAppTitle)",
                             ja: "\(companionAppTitle)を表示",
-                            zh: "显示\(companionAppTitle)"
+                            zh: "显示\(companionAppTitle)",
+                            es: "Mostrar \(companionAppTitle)"
                         ))
 
                         SettingsInfoButton(text: localizedAppText(
@@ -748,7 +749,8 @@ struct AdvancedSettingsView: View {
             "Learn More about \(title)",
             de: "Mehr erfahren: \(title)",
             ja: "\(title)の詳細を見る",
-            zh: "进一步了解\(title)"
+            zh: "进一步了解\(title)",
+            es: "Más información sobre \(title)"
         )
     }
 
@@ -830,7 +832,8 @@ struct AdvancedSettingsView: View {
             "Copy \(name) command",
             de: "Befehl „\(name)“ kopieren",
             ja: "「\(name)」のコマンドをコピー",
-            zh: "复制“\(name)”命令"
+            zh: "复制“\(name)”命令",
+            es: "Copiar el comando \(name)"
         )
     }
 
@@ -1193,7 +1196,8 @@ struct SettingsInfoButton: View {
             "More information about \(topic)",
             de: "Weitere Informationen zu \(topic)",
             ja: "\(topic)の詳細情報",
-            zh: "关于“\(topic)”的更多信息"
+            zh: "关于“\(topic)”的更多信息",
+            es: "Más información sobre \(topic)"
         )
     }
 }

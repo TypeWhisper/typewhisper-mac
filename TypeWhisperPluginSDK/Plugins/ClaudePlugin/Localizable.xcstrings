@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "API-Schlüssel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -113,6 +143,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +171,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -207,6 +261,12 @@
             "value": "API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +287,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
           }
         },
         "ja": {
@@ -251,6 +317,12 @@
             "value": "Ungültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -271,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zuletzt aktualisiert: %@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Última actualización: %@"
           }
         },
         "ja": {
@@ -295,6 +373,12 @@
             "value": "LLM-Modell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -315,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos"
           }
         },
         "ja": {
@@ -339,6 +429,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -359,6 +455,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -383,6 +485,12 @@
             "value": "Modelle konnten nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron actualizar los modelos. Comprueba tu conexión y vuelve a intentarlo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -403,6 +511,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gültiger API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
           }
         },
         "ja": {
@@ -427,6 +541,12 @@
             "value": "Standardmodelle werden verwendet. Aktualisieren, um die vollständige Liste zu laden."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se están usando los modelos predeterminados. Actualiza para obtener la lista completa."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -449,6 +569,12 @@
             "value": "Wird überprüft ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -465,6 +591,12 @@
     },
     "Couldn't verify the API key": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo verificar la clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -487,6 +619,12 @@
     },
     "Advanced": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avanzado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -509,6 +647,12 @@
     },
     "Reasoning Effort": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esfuerzo de razonamiento"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -531,6 +675,12 @@
     },
     "Low": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bajo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -553,6 +703,12 @@
     },
     "Medium": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medio"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -575,6 +731,12 @@
     },
     "High": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -597,6 +759,12 @@
     },
     "X High": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muy alto"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -619,6 +787,12 @@
     },
     "Maximum": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -641,6 +815,12 @@
     },
     "Controls how much thinking time the model spends before answering.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controla cuánto tiempo de razonamiento dedica el modelo antes de responder."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -663,6 +843,12 @@
     },
     "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica cuando un flujo de trabajo deja el esfuerzo en Predeterminado del proveedor. Los niveles más altos son más lentos y usan más tokens de salida."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -685,6 +871,12 @@
     },
     "The selected model doesn't support reasoning effort.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo seleccionado no admite el esfuerzo de razonamiento."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -707,6 +899,12 @@
     },
     "Model Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -729,6 +927,12 @@
     },
     "Model Default (%@)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del modelo (%@)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -751,6 +955,12 @@
     },
     "%@ isn't available for this model, so requests use the model default.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ no está disponible para este modelo, así que las solicitudes usan el valor predeterminado del modelo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -773,6 +983,12 @@
     },
     "Custom temperature is ignored for this model or while a reasoning effort is set.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La temperatura personalizada se ignora con este modelo o cuando hay un esfuerzo de razonamiento configurado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -795,6 +1011,12 @@
     },
     "Prompt Caching": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caché de prompts"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -817,6 +1039,12 @@
     },
     "Off": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desactivado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -839,6 +1067,12 @@
     },
     "5 minutes": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 minutos"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -861,6 +1095,12 @@
     },
     "1 hour": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 hora"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -883,6 +1123,12 @@
     },
     "Reuses the system prompt across requests within this time, so repeated requests cost less. Only prompts of at least 512 to 4,096 tokens (depending on the model) are cached. Writing the cache costs 1.25× (5 minutes) or 2× (1 hour), reading it a tenth or less. Changing the model or reasoning effort starts a new cache.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reutiliza el prompt del sistema en las solicitudes durante este tiempo, para que las solicitudes repetidas cuesten menos. Solo se guardan en caché los prompts de al menos 512 a 4096 tokens (según el modelo). Escribir en la caché cuesta 1,25× (5 minutos) o 2× (1 hora), y leerla, una décima parte o menos. Cambiar el modelo o el esfuerzo de razonamiento inicia una caché nueva."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -905,6 +1151,12 @@
     },
     "Last Request": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Última solicitud"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -927,6 +1179,12 @@
     },
     "Cache: %lld read, %lld written · Input: %lld · Output: %lld tokens": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Caché: %lld leídos, %lld escritos · Entrada: %lld · Salida: %lld tokens"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -949,6 +1207,12 @@
     },
     "Retry declined requests on a fallback model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar las solicitudes rechazadas con un modelo de respaldo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -971,6 +1235,12 @@
     },
     "Applies to Claude Opus 5.5, Opus 5, Sonnet 5.5 and Fable 5.1. If Anthropic's safety checks decline a request, a fallback model answers it in the same call, billed at that model's rates.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se aplica a Claude Opus 5.5, Opus 5, Sonnet 5.5 y Fable 5.1. Si los controles de seguridad de Anthropic rechazan una solicitud, un modelo de respaldo la responde en la misma llamada, con las tarifas de ese modelo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -993,6 +1263,12 @@
     },
     "%@ (fallback after %@ declined)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ (respaldo tras el rechazo de %2$@)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

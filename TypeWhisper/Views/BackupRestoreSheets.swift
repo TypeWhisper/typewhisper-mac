@@ -265,7 +265,7 @@ private struct BackupCategoryRow: View {
     private var itemCountText: String {
         count == 1
             ? localizedAppText("1 item", de: "1 Eintrag", ja: "1件", zh: "1 项")
-            : localizedAppText("\(count) items", de: "\(count) Einträge", ja: "\(count)件", zh: "\(count) 项")
+            : localizedAppText("\(count) items", de: "\(count) Einträge", ja: "\(count)件", zh: "\(count) 项", es: "\(count) elementos")
     }
 }
 
