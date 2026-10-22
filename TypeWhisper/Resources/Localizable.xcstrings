@@ -20689,6 +20689,12 @@
             "value" : "Lokale Pakete"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paquetes locales"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -20709,6 +20715,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deine eigenen Pakete aus einer JSON-Datei im Format der Community-Pakete. Sie bleiben auf diesem Mac und werden von TypeWhisper nicht geprüft, synchronisiert oder aktualisiert; um ein Paket zu ändern, importierst du die bearbeitete Datei erneut. Community-Pakete stammen aus dem geprüften TypeWhisper-Verzeichnis."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tus propios paquetes desde un archivo JSON en el formato de los paquetes de la comunidad. Se quedan en este Mac y TypeWhisper no los revisa, sincroniza ni actualiza; para cambiar un paquete, importa el archivo editado. Los paquetes de la comunidad vienen del registro revisado de TypeWhisper."
           }
         },
         "ja" : {
@@ -20733,6 +20745,12 @@
             "value" : "Noch keine lokalen Pakete importiert."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Todavía no has importado paquetes locales."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -20753,6 +20771,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Begriff-Paket importieren..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importar paquete de términos..."
           }
         },
         "ja" : {
@@ -20777,6 +20801,12 @@
             "value" : "Begriff-Paket-JSON-Datei zum Importieren auswählen."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selecciona un archivo JSON de paquete de términos para importarlo."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -20799,6 +20829,12 @@
             "value" : "Weitere Aktionen für %@"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Más acciones para %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -20819,6 +20855,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Entfernen..."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar..."
           }
         },
         "ja" : {
@@ -27873,6 +27915,12 @@
             "value" : "Begriff-Paket konnte nicht importiert werden"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo importar el paquete de términos"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -27893,6 +27941,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„%@“ wurde importiert, und seine Wörterbuch-Einträge wurden aktualisiert."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se importó “%@” y se actualizaron sus entradas del diccionario."
           }
         },
         "ja" : {
@@ -27917,6 +27971,12 @@
             "value" : "„%@“ wurde zu den lokalen Paketen hinzugefügt. Schalte es ein, um seine Einträge zum Wörterbuch hinzuzufügen."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” se agregó a Paquetes locales. Actívalo para agregar sus entradas al diccionario."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -27937,6 +27997,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„%@“ ersetzen?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Reemplazar “%@”?"
           }
         },
         "ja" : {
@@ -27961,6 +28027,12 @@
             "value" : "Ein lokales Paket mit der ID „%@“ ist bereits importiert. Die Datei ersetzt seinen Namen, seine Begriffe und Korrekturen. Ist das Paket eingeschaltet, werden seine Wörterbuch-Einträge aktualisiert."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ya hay un paquete local importado con el id “%@”. El archivo reemplaza su nombre, sus términos y sus correcciones. Si el paquete está activado, se actualizan sus entradas del diccionario."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -27981,6 +28053,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„%@“ entfernen?"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "¿Quitar “%@”?"
           }
         },
         "ja" : {
@@ -28005,6 +28083,12 @@
             "value" : "Das Paket wird von diesem Mac gelöscht, und die Einträge, die es hinzugefügt hat, werden aus dem Wörterbuch entfernt. Du kannst die Datei später erneut importieren."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El paquete se elimina de este Mac y las entradas que agregó se quitan del diccionario. Puedes volver a importar el archivo más tarde."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28025,6 +28109,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Begriff-Paket konnte nicht gespeichert werden. %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo guardar el paquete de términos. %@"
           }
         },
         "ja" : {
@@ -28049,6 +28139,12 @@
             "value" : "Das Begriff-Paket konnte nicht exportiert werden. %@"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo exportar el paquete de términos. %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28069,6 +28165,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Begriff-Paket konnte nicht entfernt werden. %@"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo quitar el paquete de términos. %@"
           }
         },
         "ja" : {
@@ -39724,6 +39826,12 @@
             "value" : "TypeWhisper quit before the transcript was finished."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper se cerró antes de que la transcripción estuviera lista."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -41318,6 +41426,12 @@
             "value" : "Transcription Queue"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cola de transcripción"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -41346,6 +41460,12 @@
             "value" : "Waiting"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En espera"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -41372,6 +41492,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "The live preview starts when the transcripts above are done."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La vista previa en vivo empieza cuando terminen las transcripciones de arriba."
           }
         },
         "ja" : {
@@ -48017,6 +48143,12 @@
             "value" : "Die Datei konnte nicht gelesen werden."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No se pudo leer el archivo."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48037,6 +48169,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Datei ist größer als 2 MB und damit zu groß für ein Begriff-Paket."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo ocupa más de 2 MB, demasiado para un paquete de términos."
           }
         },
         "ja" : {
@@ -48061,6 +48199,12 @@
             "value" : "Die Datei enthält kein gültiges JSON."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo no es un JSON válido."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48081,6 +48225,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Datei enthält eine Liste statt eines Begriff-Pakets. Einen Wörterbuch-Export importierst du mit „Importieren...“ im Aktionsmenü des Wörterbuchs."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo contiene una lista en lugar de un paquete de términos. Para importar una exportación del diccionario, usa Importar... en el menú de acciones del diccionario."
           }
         },
         "ja" : {
@@ -48105,6 +48255,12 @@
             "value" : "Die Datei ist kein Begriff-Paket. Ein Begriff-Paket ist ein JSON-Objekt mit einer ID, einem Namen, Metadaten und Begriffen oder Korrekturen."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El archivo no es un paquete de términos. Un paquete de términos es un objeto JSON con un id, un nombre, metadatos y términos o correcciones."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48125,6 +48281,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Pflichtfeld „%@“ fehlt oder ist leer."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Falta el campo obligatorio “%@” o está vacío."
           }
         },
         "ja" : {
@@ -48149,6 +48311,12 @@
             "value" : "Das Feld „%@“ hat das falsche Format."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El campo “%@” tiene un formato incorrecto."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48169,6 +48337,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die ID „%@“ ist ungültig. Verwende Kleinbuchstaben, Ziffern und Bindestriche, zum Beispiel „my-team-terms“."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El id “%@” no es válido. Usa letras minúsculas, números y guiones, por ejemplo “my-team-terms”."
           }
         },
         "ja" : {
@@ -48193,6 +48367,12 @@
             "value" : "Die Version „%@“ ist ungültig. Verwende durch Punkte getrennte Zahlen, zum Beispiel „1.0.0“."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La versión “%@” no es válida. Usa números separados por puntos, por ejemplo “1.0.0”."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48213,6 +48393,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Begriff %lld ist leer oder kein Text."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El término %lld está vacío o no es texto."
           }
         },
         "ja" : {
@@ -48237,6 +48423,12 @@
             "value" : "Der Begriff „%@“ kommt mehrfach vor."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El término “%@” aparece más de una vez."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48257,6 +48449,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Korrektur %lld braucht einen Original- und einen Ersatztext."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La corrección %lld necesita un texto original y uno de reemplazo."
           }
         },
         "ja" : {
@@ -48281,6 +48479,12 @@
             "value" : "Für „%@“ gibt es mehr als eine Korrektur."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hay más de una corrección para “%@”."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48301,6 +48505,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Das Begriff-Paket „%@“ enthält keine Begriffe oder Korrekturen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El paquete de términos “%@” no tiene términos ni correcciones."
           }
         },
         "ja" : {
@@ -48325,6 +48535,12 @@
             "value" : "Die ID „%@“ gehört zu einem integrierten Begriff-Paket. Ändere die ID in der Datei und importiere sie erneut."
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El id “%@” pertenece a un paquete de términos integrado. Cambia el id en el archivo y vuelve a importarlo."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -48345,6 +48561,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die ID „%@“ gehört zu einem Community-Begriff-Paket. Ändere die ID in der Datei und importiere sie erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "El id “%@” pertenece a un paquete de términos de la comunidad. Cambia el id en el archivo y vuelve a importarlo."
           }
         },
         "ja" : {
@@ -62974,6 +63196,12 @@
             "value" : "Transkriptionsmodell"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo de transcripción"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -62994,6 +63222,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Transkriptionsmodell wählen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elegir modelo de transcripción"
           }
         },
         "ja" : {
@@ -63018,6 +63252,12 @@
             "value" : "Gilt ab dem nächsten Diktat"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplica al próximo dictado"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -63038,6 +63278,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Klicke während eines Diktats auf das Modell, um das Modell für das nächste Diktat zu wählen."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Durante un dictado, haz clic en el modelo para elegir el modelo del próximo dictado."
           }
         },
         "ja" : {
@@ -63062,6 +63308,12 @@
             "value" : "Nächstes Diktat: %@"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Próximo dictado: %@"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -63082,6 +63334,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%@ (nächstes Diktat)"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (próximo dictado)"
           }
         },
         "ja" : {

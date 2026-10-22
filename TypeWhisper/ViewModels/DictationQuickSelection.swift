@@ -520,7 +520,7 @@ enum IndicatorModelMenu {
             if !group.setupRequiredOptions.isEmpty {
                 let count = group.setupRequiredOptions.count
                 entries.append(.moreModels(
-                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))"),
+                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))"),
                     options: group.setupRequiredOptions.map(option)
                 ))
             }

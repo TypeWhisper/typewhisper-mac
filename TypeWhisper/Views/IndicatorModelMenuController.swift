@@ -277,7 +277,7 @@ final class IndicatorModelMenuController: NSObject, ObservableObject, NSMenuDele
         case .apply(let title):
             pendingSwitch = nil
             quickSelection.selectModel(choice)
-            announce(localizedAppText("Model: \(title)", de: "Modell: \(title)"))
+            announce(localizedAppText("Model: \(title)", de: "Modell: \(title)", es: "Modelo: \(title)"))
         }
     }
 
