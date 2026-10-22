@@ -8637,6 +8637,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 ? expectation(description: "Queued dictation started") : nil
             let failure = NSError(domain: "WorkflowFeedbackTest", code: 1,
                                   userInfo: [NSLocalizedDescriptionKey: "Workflow failed"])
+            let correctionPresenter = LastDictationCorrectionPresenterSpy()
             var context: DictationContext? = Self.makeDictationContext(
                 appSupportDirectory: directory,
                 workflowTextProcessingService: WorkflowTextProcessingService(
@@ -8648,7 +8649,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                         return "Processed selection"
                     },
                     appleTranslator: nil
-                )
+                ),
+                lastDictationCorrectionPresenter: correctionPresenter
             )
             defer {
                 releaseContinuation.finish()
@@ -8694,6 +8696,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             viewModel.dismissActionFeedback()
             XCTAssertEqual(viewModel.state, .inserting, scenario)
             XCTAssertEqual(viewModel.actionFeedbackMessage, "Delayed workflow...", scenario)
+            // The editor would take the keyboard focus the workflow result is pasted into.
+            viewModel.triggerCorrectLastDictation()
+            XCTAssertFalse(correctionPresenter.isEditorVisible, scenario)
+            XCTAssertEqual(correctionPresenter.notices, [LastDictationCorrectionCopy.busyNotice], scenario)
             if scenario == "queuedDictation" {
                 services.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
                 for _ in 0..<10 { await Task.yield() }
@@ -9872,6 +9878,337 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
     }
 
+    // MARK: Silence stop for toggle dictations (#1023)
+
+    /// What the silence-stop tests observe from a dictation context.
+    private final class SilenceStopProbe {
+        var stopPolicies: [String] = []
+        var announcements: [String] = []
+    }
+
+    /// F14, F15 and F16. Each press in a test uses its own key, so the duplicate filter
+    /// for presses within 0.12 s cannot drop one.
+    private static let silenceStopStartHotkey = silenceStopHotkey(keyCode: 0x6B)
+    private static let silenceStopStopHotkey = silenceStopHotkey(keyCode: 0x71)
+    private static let silenceStopRestartHotkey = silenceStopHotkey(keyCode: 0x6A)
+
+    private static func silenceStopHotkey(keyCode: UInt16) -> UnifiedHotkey {
+        UnifiedHotkey(keyCode: keyCode, modifierFlags: NSEvent.ModifierFlags.function.rawValue, isFn: false)
+    }
+
+    /// RMS 0.05, like speech close to the microphone.
+    private static func silenceStopSpeech(seconds: TimeInterval) -> [Float] {
+        silenceStopSamples(seconds: seconds, level: 0.05)
+    }
+
+    /// RMS 0.002, a quiet room below the speech floor. Not digital silence, so the
+    /// silent-microphone warning stays out of the way.
+    private static func silenceStopQuiet(seconds: TimeInterval) -> [Float] {
+        silenceStopSamples(seconds: seconds, level: 0.002)
+    }
+
+    private static func silenceStopSamples(seconds: TimeInterval, level: Float) -> [Float] {
+        let count = Int((seconds * AudioRecordingService.targetSampleRate).rounded())
+        return (0..<count).map { $0.isMultiple(of: 2) ? level : -level }
+    }
+
+    /// The text an announcement speaks in the current app language.
+    @MainActor
+    private static func silenceStopAnnouncementText(
+        _ announce: (AccessibilityAnnouncementService) -> Void
+    ) -> String? {
+        let probe = SilenceStopProbe()
+        let service = AccessibilityAnnouncementService()
+        service.isVoiceOverEnabled = { true }
+        service.post = { message, _ in
+            probe.announcements.append(message)
+        }
+        announce(service)
+        return probe.announcements.last
+    }
+
+    /// A dictation context whose silence watch is polled by hand, with a one-second silence stop.
+    @MainActor
+    private static func makeSilenceStopContext(
+        appSupportDirectory: URL,
+        silenceStopEnabled: Bool,
+        probe: SilenceStopProbe
+    ) -> DictationContext {
+        let announcementService = AccessibilityAnnouncementService()
+        announcementService.isVoiceOverEnabled = { true }
+        announcementService.post = { message, _ in
+            probe.announcements.append(message)
+        }
+        let context = makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            accessibilityAnnouncementService: announcementService
+        )
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { policy in
+            probe.stopPolicies.append(policy.logDescription)
+            return []
+        }
+        let viewModel = context.dictationViewModel
+        viewModel.testingSetSilenceEndpointPollInterval(.seconds(3_600))
+        viewModel.toggleSilenceStopDuration = 1
+        viewModel.toggleSilenceStopEnabled = silenceStopEnabled
+        return context
+    }
+
+    /// Presses a shortcut of `slot`, and releases it unless it stays held.
+    @MainActor
+    private static func pressSilenceStopHotkey(
+        _ hotkey: UnifiedHotkey,
+        slot: HotkeySlotType,
+        in context: DictationContext,
+        release: Bool = true
+    ) {
+        context.hotkeyService.setHotkeyForTesting(hotkey, for: slot)
+        context.hotkeyService.processCarbonHotkeyForTesting(slotType: slot, hotkey: hotkey, isPressed: true)
+        if release {
+            context.hotkeyService.processCarbonHotkeyForTesting(slotType: slot, hotkey: hotkey, isPressed: false)
+        }
+    }
+
+    /// Presses a dictation shortcut and waits until the recording runs with a live input.
+    @MainActor
+    private static func startSilenceStopDictation(
+        _ context: DictationContext,
+        slot: HotkeySlotType,
+        hotkey: UnifiedHotkey = silenceStopStartHotkey,
+        releaseAfterPress: Bool
+    ) async throws {
+        let viewModel = context.dictationViewModel
+        pressSilenceStopHotkey(hotkey, slot: slot, in: context, release: releaseAfterPress)
+        // A press during the feedback of the previous dictation starts once that feedback ends.
+        for _ in 0..<300 {
+            if viewModel.state == .recording { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await viewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(viewModel.state, .recording)
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        XCTAssertTrue(viewModel.isRecordingInputReady)
+    }
+
+    /// Keeps the silence-stop settings these tests change out of the other tests.
+    private static func restoreSilenceStopDefaults() {
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration)
+    }
+
+    @MainActor
+    func testToggleDictationStopsAfterSilenceThroughTheRegularStop() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: true,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        XCTAssertEqual(context.hotkeyService.currentMode, .toggle)
+        let sessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+
+        // Quiet before the first words never stops the recording.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+
+        // A pause shorter than the silence duration only brings up the countdown.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.silenceStopCountdownSeconds, 1)
+        XCTAssertNotNil(viewModel.silenceStopWarningMessage)
+        XCTAssertEqual(viewModel.indicatorWarningMessage, viewModel.silenceStopWarningMessage)
+
+        // Speaking again hides the countdown and restarts the silence.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.3))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.indicatorWarningMessage)
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.9))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertTrue(probe.stopPolicies.isEmpty)
+
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.1))
+        viewModel.testingPollSilenceEndpoint()
+
+        // The same stop as a second press of the shortcut, with its own announcement.
+        XCTAssertEqual(viewModel.state, .processing)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertNil(context.hotkeyService.currentMode, "The next press of the shortcut starts a new dictation")
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStoppedAfterSilence() }
+        )
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+        XCTAssertEqual(probe.stopPolicies, [AudioRecordingService.StopPolicy.finalizeShortSpeech().logDescription])
+    }
+
+    @MainActor
+    func testToggleDictationKeepsRecordingWhenSilenceStopIsOff() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: false,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID, "Nothing watches the recording")
+
+        context.audioRecordingService.testingProcessConvertedSamples(
+            Self.silenceStopSpeech(seconds: 1) + Self.silenceStopQuiet(seconds: 10)
+        )
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertTrue(probe.stopPolicies.isEmpty)
+
+        let sessionID = viewModel.apiStopRecording()
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
+        )
+        await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+    }
+
+    @MainActor
+    func testPushToTalkAndHybridHoldNeverStopOnSilence() async throws {
+        for slot in [HotkeySlotType.pushToTalk, .hybrid] {
+            let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+            var dictationContext: DictationContext?
+            defer {
+                dictationContext = nil
+                TestSupport.remove(appSupportDirectory)
+                Self.restoreSilenceStopDefaults()
+            }
+            let probe = SilenceStopProbe()
+            dictationContext = Self.makeSilenceStopContext(
+                appSupportDirectory: appSupportDirectory,
+                silenceStopEnabled: true,
+                probe: probe
+            )
+            let context = try XCTUnwrap(dictationContext)
+            let viewModel = context.dictationViewModel
+
+            // The shortcut stays held.
+            try await Self.startSilenceStopDictation(context, slot: slot, releaseAfterPress: false)
+            XCTAssertEqual(context.hotkeyService.currentMode, .pushToTalk, "\(slot)")
+
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+            viewModel.testingPollSilenceEndpoint()
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 0.5))
+            viewModel.testingPollSilenceEndpoint()
+            XCTAssertNil(viewModel.silenceStopCountdownSeconds, "\(slot): no countdown while held")
+            context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 5))
+            viewModel.testingPollSilenceEndpoint()
+
+            XCTAssertEqual(viewModel.state, .recording, "\(slot)")
+            XCTAssertTrue(probe.stopPolicies.isEmpty, "\(slot)")
+            XCTAssertEqual(context.hotkeyService.currentMode, .pushToTalk, "\(slot)")
+
+            let sessionID = viewModel.apiStopRecording()
+            await Self.waitForDictationSessionToFinish(viewModel, id: sessionID)
+        }
+    }
+
+    @MainActor
+    func testLateSilenceReportForAStoppedDictationDoesNotStopTheNextOne() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSilenceStopDefaults()
+        }
+        let probe = SilenceStopProbe()
+        dictationContext = Self.makeSilenceStopContext(
+            appSupportDirectory: appSupportDirectory,
+            silenceStopEnabled: true,
+            probe: probe
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+
+        try await Self.startSilenceStopDictation(context, slot: .toggle, releaseAfterPress: true)
+        let firstSessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+        context.audioRecordingService.testingProcessConvertedSamples(
+            Self.silenceStopSpeech(seconds: 0.5) + Self.silenceStopQuiet(seconds: 0.5)
+        )
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.silenceStopCountdownSeconds, 1)
+
+        // The user stops by hand while the silence watch counts down.
+        Self.pressSilenceStopHotkey(Self.silenceStopStopHotkey, slot: .toggle, in: context)
+        XCTAssertEqual(viewModel.state, .processing)
+        XCTAssertNil(viewModel.silenceStopCountdownSeconds)
+        XCTAssertNil(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertEqual(
+            probe.announcements.last,
+            Self.silenceStopAnnouncementText { $0.announceRecordingStopped() }
+        )
+        // The watch of the stopped dictation reports late; it does not stop anything twice.
+        viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
+        await Self.waitForDictationSessionToFinish(viewModel, id: firstSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 1)
+
+        try await Self.startSilenceStopDictation(
+            context,
+            slot: .toggle,
+            hotkey: Self.silenceStopRestartHotkey,
+            releaseAfterPress: true
+        )
+        let secondSessionID = try XCTUnwrap(viewModel.testingSilenceEndpointSessionID)
+        XCTAssertNotEqual(secondSessionID, firstSessionID)
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopSpeech(seconds: 0.5))
+        viewModel.testingPollSilenceEndpoint()
+
+        // A poll and an endpoint report of the first dictation arrive during the second one.
+        viewModel.testingPollSilenceEndpoint(sessionID: firstSessionID)
+        viewModel.testingReportSilenceEndpoint(sessionID: firstSessionID)
+        XCTAssertEqual(viewModel.state, .recording)
+        XCTAssertEqual(viewModel.testingSilenceEndpointSessionID, secondSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 1)
+
+        // The second dictation still stops on its own silence.
+        context.audioRecordingService.testingProcessConvertedSamples(Self.silenceStopQuiet(seconds: 1))
+        viewModel.testingPollSilenceEndpoint()
+        XCTAssertEqual(viewModel.state, .processing)
+        await Self.waitForDictationSessionToFinish(viewModel, id: secondSessionID)
+        XCTAssertEqual(probe.stopPolicies.count, 2)
+    }
+
     @MainActor
     func testApiStartRecording_ignoresLegacyBundleProfileBeforeDeferredMetadataCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -10246,6 +10583,102 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.text, "Ready to send press enter.")
         XCTAssertEqual(returnCount, 1)
+    }
+
+    /// Correct Last Dictation edits the dictation that was just inserted: History, the API
+    /// session, Read Back and the clipboard follow the correction, and the target app is not
+    /// changed again. A new recording closes the editor, which has the keyboard focus.
+    @MainActor
+    func testCorrectLastDictationUpdatesHistorySessionAndClipboard() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(directory)
+        }
+        let presenter = LastDictationCorrectionPresenterSpy()
+        let context = Self.makeDictationContext(
+            appSupportDirectory: directory,
+            lastDictationCorrectionPresenter: presenter
+        )
+        MockTranscriptionPlugin.setResponseText("Deploy it to Kubernetis today")
+
+        let insertionPasteboard = NSPasteboard.withUniqueName()
+        let clipboard = NSPasteboard.withUniqueName()
+        var pasteCount = 0
+        context.textInsertionService.pasteboardProvider = { insertionPasteboard }
+        context.dictationViewModel.pasteboardProvider = { clipboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {
+            pasteCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        XCTAssertFalse(context.dictationViewModel.canCorrectLastDictation)
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        await context.dictationViewModel.testingWaitForPostInsertionPersistence()
+        let inserted = try XCTUnwrap(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.transcription?.text
+        )
+        XCTAssertTrue(inserted.contains("Kubernetis"), inserted)
+        XCTAssertEqual(context.historyService.record(withID: sessionID)?.finalText, inserted)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertTrue(context.dictationViewModel.canCorrectLastDictation)
+
+        context.dictationViewModel.triggerCorrectLastDictation()
+        let target = try XCTUnwrap(presenter.shownTargets.first)
+        XCTAssertEqual(target.id, sessionID)
+        XCTAssertEqual(target.finalText, inserted)
+
+        let corrected = inserted.replacingOccurrences(of: "Kubernetis", with: "Kubernetes")
+        presenter.confirm(corrected)
+
+        XCTAssertEqual(context.historyService.record(withID: sessionID)?.finalText, corrected)
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.transcription?.text,
+            corrected
+        )
+        XCTAssertEqual(context.dictationViewModel.lastTranscribedText, corrected)
+        XCTAssertEqual(context.recentTranscriptionStore.sessionEntries.first?.finalText, corrected)
+        XCTAssertEqual(clipboard.string(forType: .string), corrected)
+        XCTAssertEqual(pasteCount, 1, "The text in the target app is not changed")
+        // This context has no Commercial license, so the correction does not reach the Dictionary.
+        XCTAssertEqual(presenter.confirmations.first?.learning, .requiresLicense)
+        XCTAssertEqual(context.dictionaryService.correctionsCount, 0)
+
+        context.dictationViewModel.triggerCorrectLastDictation()
+        XCTAssertTrue(presenter.isEditorVisible)
+        let nextSessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertFalse(presenter.isEditorVisible, "A recording closes the editor")
+        presenter.confirm("Late text from the closed editor")
+        XCTAssertEqual(context.historyService.record(withID: sessionID)?.finalText, corrected)
+        XCTAssertEqual(clipboard.string(forType: .string), corrected)
+
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: nextSessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        await context.dictationViewModel.testingWaitForPostInsertionPersistence()
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: nextSessionID)?.status, .completed)
     }
 
     @MainActor
@@ -10943,6 +11376,278 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteExcludedFromAlwaysWorkflowSkipsItOnceTheURLResolves() async throws {
+        let ruleName = try await alwaysWorkflowDictationRuleName(
+            trigger: .global(websites: ["example.com"]),
+            resolvedURL: "https://docs.example.com/chat"
+        )
+
+        XCTAssertNil(ruleName)
+    }
+
+    @MainActor
+    func testAlwaysWorkflowWithWebsiteExclusionsStillRunsOnOtherWebsites() async throws {
+        let ruleName = try await alwaysWorkflowDictationRuleName(
+            trigger: .global(websites: ["example.com"]),
+            resolvedURL: "https://other.example/chat"
+        )
+
+        XCTAssertEqual(ruleName, "Always Dictation")
+    }
+
+    @MainActor
+    func testAlwaysWorkflowWebsiteExclusionsDoNotDelayAnAppWorkflow() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://docs.example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Dictation",
+            template: .dictation,
+            trigger: .global(websites: ["example.com"]),
+            output: WorkflowOutput(autoEnterMode: .never),
+            sortOrder: 0
+        )
+        _ = context.workflowService.addWorkflow(
+            name: "Chrome Dictation",
+            template: .dictation,
+            trigger: .app("com.google.Chrome"),
+            output: WorkflowOutput(autoEnterMode: .never),
+            sortOrder: 1
+        )
+        var completedRuleNames: [String?] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .transcriptionCompleted(let payload) = event {
+                completedRuleNames.append(payload.ruleName)
+            }
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = { pasted.fulfill() }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Chrome Dictation")
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // The app workflow wins wherever the Always workflow is excluded, so the blocked
+        // lookup cannot delay the insertion.
+        await fulfillment(of: [pasted], timeout: 2)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+
+        urlGate.signal()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(completedRuleNames, ["Chrome Dictation"])
+    }
+
+    @MainActor
+    func testWebsiteExcludedFromAlwaysSubmitWorkflowIsCheckedBeforeRecording() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let firstLookupCompleted = LockedFlag()
+        // The lookup before recording blocks; the check after audio starts sees the same tab.
+        let resolver = BrowserURLResolver { _, _ in
+            if !firstLookupCompleted.value {
+                urlRequested.fulfill()
+                urlGate.wait()
+                firstLookupCompleted.set()
+            }
+            return BrowserResolution(url: URL(string: "https://docs.example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Submit",
+            template: .dictation,
+            trigger: .global(websites: ["example.com"]),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        // An unreadable field: the paste cannot be verified, so no Insert offer keeps the indicator busy.
+        let unreadableElement = AXUIElementCreateSystemWide()
+        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.hotkeyService.externalKeySuppressionAvailableOverride = true
+        context.hotkeyService.secureInputEnabledProvider = { false }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        // The website can still exclude the Always workflow, so it is checked before audio starts.
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+
+        urlGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertNil(context.dictationViewModel.activeRuleName)
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+
+        XCTAssertEqual(context.dictationViewModel.apiStopRecording(), sessionID)
+        for _ in 0..<160 {
+            if context.dictationViewModel.state == .idle { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(returnCount, 0)
+    }
+
+    /// Dictates in Chrome with one Always workflow while the browser URL lookup is held, and
+    /// returns the workflow name that the completed dictation reports.
+    @MainActor
+    private func alwaysWorkflowDictationRuleName(
+        trigger: WorkflowTrigger,
+        resolvedURL: String
+    ) async throws -> String? {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: resolvedURL), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Dictation",
+            template: .dictation,
+            trigger: trigger,
+            output: WorkflowOutput(autoEnterMode: .never)
+        )
+        var completedRuleNames: [String?] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .transcriptionCompleted(let payload) = event {
+                completedRuleNames.append(payload.ruleName)
+            }
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var urlReleased = false
+        let pastedBeforeURL = expectation(description: "Text pasted before URL resolution")
+        pastedBeforeURL.isInverted = true
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            if !urlReleased {
+                pastedBeforeURL.fulfill()
+            }
+            pasted.fulfill()
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        // Until the website is known, the Always workflow applies.
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Always Dictation")
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // A website exclusion can still change the workflow, so insertion waits for the URL.
+        await fulfillment(of: [pastedBeforeURL], timeout: 0.3)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+
+        urlReleased = true
+        urlGate.signal()
+        await fulfillment(of: [pasted], timeout: 2)
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(completedRuleNames.count, 1)
+        return completedRuleNames.first ?? nil
+    }
+
+    @MainActor
     func testWebsiteSubmitPreparationWebsiteMatch() async throws {
         try await assertWebsiteSubmitPreparation(scenario: "website")
     }
@@ -11569,6 +12274,93 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
         // The verified Insert counts as the dictation's successful insertion.
         XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+    }
+
+    /// Correcting a dictation while the indicator still offers to insert it updates the offer,
+    /// so Insert pastes the corrected text.
+    @MainActor
+    func testCorrectingAnUndeliveredDictationUpdatesTheInsertOffer() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled]
+        let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
+            TestSupport.remove(appSupportDirectory)
+        }
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+
+        let presenter = LastDictationCorrectionPresenterSpy()
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            lastDictationCorrectionPresenter: presenter
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.preserveClipboard = false
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let insertionPasteboard = NSPasteboard.withUniqueName()
+        let clipboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        var isTextFieldFocused = false
+        var pastedTexts: [String] = []
+        context.textInsertionService.pasteboardProvider = { insertionPasteboard }
+        viewModel.pasteboardProvider = { clipboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Finder", "com.apple.finder", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
+        context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
+        context.textInsertionService.focusedTextElementOverride = { isTextFieldFocused ? element : nil }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            // The focused field is empty until Insert pastes into it.
+            let value = isTextFieldFocused && pastedTexts.count > 1 ? (pastedTexts.last ?? "") : ""
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+        context.textInsertionService.pasteSimulatorOverride = {
+            pastedTexts.append(insertionPasteboard.string(forType: .string) ?? "")
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        let insertTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Insert")
+        let insertedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text inserted")
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if viewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               viewModel.actionFeedbackActionTitle == insertTitle {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        await viewModel.testingWaitForPostInsertionPersistence()
+        XCTAssertEqual(pastedTexts, ["transcribed"])
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+
+        viewModel.triggerCorrectLastDictation()
+        XCTAssertEqual(presenter.shownTargets.first?.id, sessionID)
+        presenter.confirm("transcribed and corrected")
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle, "The offer stays")
+
+        isTextFieldFocused = true
+        viewModel.performActionFeedbackAction()
+        for _ in 0..<80 {
+            if viewModel.actionFeedbackMessage == insertedMessage {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
+        XCTAssertEqual(pastedTexts, ["transcribed", "transcribed and corrected"])
     }
 
     @MainActor
@@ -14824,7 +15616,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         licenseService: LicenseService? = nil,
         workflowTextProcessingService: WorkflowTextProcessingService? = nil,
         transcriptionDeadline: TimeInterval? = nil,
-        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
+        accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil,
+        lastDictationCorrectionPresenter: (any LastDictationCorrectionPresenting)? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -14957,7 +15750,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             mediaPlaybackService: mediaPlaybackService,
             transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
                 { _ in deadline }
-            }
+            },
+            lastDictationCorrectionPresenter: lastDictationCorrectionPresenter
         )
         dictationViewModel.soundFeedbackEnabled = false
         dictationViewModel.spokenFeedbackEnabled = false
@@ -22694,6 +23488,29 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(callbackCount, 1)
         XCTAssertEqual(startCount, 0)
         XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testCorrectLastDictationHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(commandShiftCHotkey(), for: .correctLastDictation)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onCorrectLastDictation = { callbackCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x08, keyDown: true, flags: [.maskCommand, .maskShift])
+        let keyUp = try makeKeyboardEvent(keyCode: 0x08, keyDown: false, flags: [.maskCommand, .maskShift])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        _ = service.processEventForTesting(keyUp, source: .monitor)
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+        XCTAssertFalse(HotkeySlotType.correctLastDictation.startsDictation)
     }
 
     @MainActor

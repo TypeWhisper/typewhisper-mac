@@ -21,6 +21,8 @@ struct SpeakersView: View {
     }
 
     @ObservedObject private var viewModel = ServiceContainer.shared.speakerTranscriptionViewModel
+    // Names the default engine in the engine menu and follows its changes.
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var coordinator = ServiceContainer.shared.speakerTranscriptCoordinator
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var license = ServiceContainer.shared.licenseService
@@ -230,7 +232,8 @@ struct SpeakersView: View {
     private var engineMenu: some View {
         Menu {
             Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                Text(String(localized: "Default Engine")).tag(nil as String?)
+                Text(DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName))
+                    .tag(nil as String?)
                 Divider()
                 ForEach(viewModel.availableEngines, id: \.providerId) { engine in
                     Text(engine.providerDisplayName)
@@ -240,8 +243,15 @@ struct SpeakersView: View {
             }
             .pickerStyle(.inline)
             .labelsHidden()
+
+            Divider()
+
+            Button(DefaultEngineChoice.changeTitle) {
+                DefaultEngineChoice.openDictationSettings()
+            }
+            .accessibilityHint(DefaultEngineChoice.changeAccessibilityHint)
         } label: {
-            Text(verbatim: "\(String(localized: "Engine")): \(viewModel.resolvedEngine?.providerDisplayName ?? String(localized: "Default Engine"))")
+            Text(verbatim: "\(String(localized: "Engine")): \(viewModel.resolvedEngine?.providerDisplayName ?? DefaultEngineChoice.title(engineName: nil))")
         }
         .menuStyle(.borderlessButton)
         .controlSize(.small)

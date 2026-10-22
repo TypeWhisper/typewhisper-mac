@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.openrouter",
     "name": "OpenRouter",
-    "version": "1.1.11",
+    "version": "1.2.0",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Access OpenRouter speech-to-text models and 300+ LLMs from OpenAI, Anthropic, Meta, Google and more. Shows model pricing and account balance. Requires API key.",
     "descriptions": {
         "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und über 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key.",
+        "es": "Accede a los modelos de voz a texto de OpenRouter y a más de 300 LLM de OpenAI, Anthropic, Meta, Google y más. Muestra los precios de los modelos y el saldo de la cuenta. Requiere una clave de API.",
         "ja": "OpenAI、Anthropic、Meta、GoogleなどのOpenRouter音声認識モデルと300以上のLLMにアクセスできます。モデル料金とアカウント残高を表示し、APIキーが必要です。"
     },
     "category": "transcription",

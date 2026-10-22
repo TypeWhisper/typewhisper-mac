@@ -140,7 +140,8 @@ struct AudioRecorderView: View {
                             "Warning: \(warning)",
                             de: "Warnung: \(warning)",
                             ja: "警告: \(warning)",
-                            zh: "警告：\(warning)"
+                            zh: "警告：\(warning)",
+                            es: "Advertencia: \(warning)"
                         ))
                 }
             }
@@ -157,6 +158,20 @@ struct AudioRecorderView: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityLabel(String(localized: "recorder.transcribing"))
+                }
+            }
+
+            // Transcripts of stopped recordings, made one at a time in the background
+            if !viewModel.pendingTranscriptions.isEmpty {
+                Section(String(localized: "recorder.transcriptionQueue")) {
+                    ForEach(viewModel.pendingTranscriptions) { pending in
+                        PendingTranscriptionRow(pending: pending)
+                    }
+                    if viewModel.isLivePreviewWaiting {
+                        Text(String(localized: "recorder.livePreviewWaitsForQueue"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
@@ -233,7 +248,8 @@ struct AudioRecorderView: View {
 
                 let engines = pluginManager.transcriptionEngines
                 Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                    Text(String(localized: "recorder.useDictationDefaultEngine")).tag(nil as String?)
+                    Text(DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName))
+                        .tag(nil as String?)
                     Divider()
                     ForEach(engines, id: \.providerId) { engine in
                         enginePickerLabel(for: engine)
@@ -242,6 +258,11 @@ struct AudioRecorderView: View {
                     }
                 }
                 .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if viewModel.engineChoice == nil {
+                    DefaultEngineSettingsLink()
+                        .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+                }
 
                 if let notice = transcriptionAuthNotice(for: engines) {
                     Label(notice, systemImage: "key")
@@ -306,7 +327,10 @@ struct AudioRecorderView: View {
 
                 if viewModel.livePreviewEnabled {
                     if let engine = viewModel.resolvedEngine,
-                       !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
+                       !modelManager.supportsLiveTranscriptionSession(
+                           engineOverrideId: engine.providerId,
+                           cloudModelOverride: viewModel.availableSelectedModel
+                       ) {
                         Label(
                             String(localized: "recorder.livePreviewLightweightHint"),
                             systemImage: "info.circle"
@@ -336,6 +360,13 @@ struct AudioRecorderView: View {
                 modelManager.restoreProviderSelection()
                 viewModel.reconcileSelectionWithAvailablePlugins()
             }
+
+            RecorderFolderSettingsSection(
+                store: ServiceContainer.shared.recorderFolderStore,
+                isLocked: isEditingLocked || viewModel.retranscribingRecordingURL != nil,
+                watchFolderPath: { ServiceContainer.shared.watchFolderViewModel.watchFolderPath },
+                onFoldersChanged: { viewModel.loadRecordings() }
+            )
 
             // Recordings list
             Section {
@@ -458,7 +489,8 @@ private struct LevelMeterRow: View {
             "\(label) input level",
             de: "Eingangspegel \(label)",
             ja: "\(label)の入力レベル",
-            zh: "\(label)输入电平"
+            zh: "\(label)输入电平",
+            es: "Nivel de entrada de \(label)"
         ))
         .accessibilityValue(accessibilityLevelValue)
         .accessibilityAddTraits(.updatesFrequently)
@@ -494,6 +526,53 @@ private struct LevelMeterRow: View {
     }
 }
 
+// MARK: - Pending Transcription Row
+
+private struct PendingTranscriptionRow: View {
+    let pending: AudioRecorderViewModel.PendingTranscription
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                switch pending.status {
+                case .transcribing:
+                    ProgressView()
+                        .controlSize(.small)
+                case .waiting:
+                    Image(systemName: "clock")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 18)
+            .accessibilityHidden(true)
+
+            Text(pending.fileName)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer()
+
+            Text(recorderTranscriptionStatusTitle(pending.status, hasTranscript: false))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The status shown for a recording whose transcript is not saved yet.
+private func recorderTranscriptionStatusTitle(
+    _ status: AudioRecorderViewModel.PendingTranscription.Status,
+    hasTranscript: Bool
+) -> String {
+    switch status {
+    case .transcribing:
+        hasTranscript ? String(localized: "recorder.retranscribing") : String(localized: "recorder.transcribing")
+    case .waiting:
+        String(localized: "recorder.transcriptionWaiting")
+    }
+}
+
 // MARK: - Recording Row
 
 private struct RecordingRow: View {
@@ -501,6 +580,11 @@ private struct RecordingRow: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
     @State private var showTranscript = false
     @State private var showRetranscriptionConfirmation = false
+
+    /// The transcript is being made, or waits in the queue.
+    private var transcriptionStatus: AudioRecorderViewModel.PendingTranscription.Status? {
+        viewModel.transcriptionStatus(for: item)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -517,7 +601,8 @@ private struct RecordingRow: View {
                                 "Duration \(recorderSpokenDuration(item.duration))",
                                 de: "Dauer \(recorderSpokenDuration(item.duration))",
                                 ja: "長さ \(recorderSpokenDuration(item.duration))",
-                                zh: "时长 \(recorderSpokenDuration(item.duration))"
+                                zh: "时长 \(recorderSpokenDuration(item.duration))",
+                                es: "Duración \(recorderSpokenDuration(item.duration))"
                             ))
                         Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
                         if item.transcript != nil {
@@ -550,13 +635,15 @@ private struct RecordingRow: View {
                                 "Hide transcript of \(item.fileName)",
                                 de: "Transkript von \(item.fileName) ausblenden",
                                 ja: "\(item.fileName)の文字起こしを非表示",
-                                zh: "隐藏\(item.fileName)的转录"
+                                zh: "隐藏\(item.fileName)的转录",
+                                es: "Ocultar la transcripción de \(item.fileName)"
                             )
                             : localizedAppText(
                                 "Show transcript of \(item.fileName)",
                                 de: "Transkript von \(item.fileName) anzeigen",
                                 ja: "\(item.fileName)の文字起こしを表示",
-                                zh: "显示\(item.fileName)的转录"
+                                zh: "显示\(item.fileName)的转录",
+                                es: "Mostrar la transcripción de \(item.fileName)"
                             ))
 
                         Button {
@@ -571,29 +658,36 @@ private struct RecordingRow: View {
                             "Copy transcript of \(item.fileName)",
                             de: "Transkript von \(item.fileName) kopieren",
                             ja: "\(item.fileName)の文字起こしをコピー",
-                            zh: "复制\(item.fileName)的转录"
+                            zh: "复制\(item.fileName)的转录",
+                            es: "Copiar la transcripción de \(item.fileName)"
                         ))
                         .accessibilityIdentifier("recorder.recording.copyTranscript")
                     }
 
-                    if viewModel.isRetranscribing(item) {
+                    if let transcriptionStatus {
+                        let statusTitle = recorderTranscriptionStatusTitle(
+                            transcriptionStatus,
+                            hasTranscript: item.transcript != nil
+                        )
                         HStack(spacing: 5) {
-                            ProgressView()
-                                .controlSize(.small)
+                            if transcriptionStatus == .waiting {
+                                Image(systemName: "clock")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
                             if item.transcript == nil {
-                                Text(String(localized: "recorder.transcribing"))
+                                Text(statusTitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
                         }
-                        .help(item.transcript == nil
-                            ? String(localized: "recorder.transcribing")
-                            : String(localized: "recorder.retranscribing"))
+                        .help(statusTitle)
                         .accessibilityElement(children: .ignore)
                         .accessibilityAddTraits(.isStaticText)
-                        .accessibilityLabel(item.transcript == nil
-                            ? String(localized: "recorder.transcribing")
-                            : String(localized: "recorder.retranscribing"))
+                        .accessibilityLabel(statusTitle)
                     } else if item.transcript == nil {
                         Button {
                             requestTranscription()
@@ -619,7 +713,8 @@ private struct RecordingRow: View {
                             "Re-transcribe \(item.fileName)",
                             de: "\(item.fileName) erneut transkribieren",
                             ja: "\(item.fileName)を再文字起こし",
-                            zh: "重新转录\(item.fileName)"
+                            zh: "重新转录\(item.fileName)",
+                            es: "Volver a transcribir \(item.fileName)"
                         ))
                     }
 
@@ -635,7 +730,8 @@ private struct RecordingRow: View {
                         "Show \(item.fileName) in Finder",
                         de: "\(item.fileName) im Finder anzeigen",
                         ja: "\(item.fileName)をFinderで表示",
-                        zh: "在访达中显示\(item.fileName)"
+                        zh: "在访达中显示\(item.fileName)",
+                        es: "Mostrar \(item.fileName) en el Finder"
                     ))
 
                     Button(role: .destructive) {
@@ -645,12 +741,14 @@ private struct RecordingRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.delete"))
-                    .disabled(viewModel.isRetranscribing(item))
+                    // The recording keeps its files until its transcript is done.
+                    .disabled(transcriptionStatus != nil)
                     .accessibilityLabel(localizedAppText(
                         "Delete \(item.fileName)",
                         de: "\(item.fileName) löschen",
                         ja: "\(item.fileName)を削除",
-                        zh: "删除\(item.fileName)"
+                        zh: "删除\(item.fileName)",
+                        es: "Eliminar \(item.fileName)"
                     ))
                 }
             }
@@ -707,7 +805,7 @@ private struct RecordingRow: View {
             Button(String(localized: "recorder.delete"), role: .destructive) {
                 viewModel.deleteRecording(item)
             }
-            .disabled(viewModel.isRetranscribing(item))
+            .disabled(transcriptionStatus != nil)
         }
         .confirmationDialog(
             String(localized: "recorder.retranscribeConfirmation.title"),

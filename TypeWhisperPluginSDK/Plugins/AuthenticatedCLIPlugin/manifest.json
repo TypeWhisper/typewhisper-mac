@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.authenticated-cli",
     "name": "Authenticated Provider CLIs",
-    "version": "1.1.2",
+    "version": "1.1.3",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Use existing signed-in Codex, Claude, OpenCode, and Antigravity CLIs as LLM providers without separate API keys.",
     "descriptions": {
         "de": "Bereits angemeldete Codex-, Claude-, OpenCode- und Antigravity-CLIs ohne separate API-Keys als LLM-Anbieter verwenden.",
+        "es": "Usa las CLI de Codex, Claude, OpenCode y Antigravity en las que ya iniciaste sesión como proveedores de LLM, sin claves de API aparte.",
         "ja": "サインイン済みのCodex、Claude、OpenCode、Antigravity CLIを、別のAPIキーなしでLLMプロバイダーとして使用します。"
     },
     "category": "llm",

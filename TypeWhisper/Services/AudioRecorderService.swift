@@ -680,22 +680,36 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     static let recordingsDirectoryName = "TypeWhisper Recordings"
     static let finalizationChunkFrameCount: AVAudioFrameCount = 8_192
 
+    /// The Recorder folder the user chose. Without a store, recordings go to the default folder.
+    let folderStore: RecorderFolderStore?
+
     init(
         inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
-        inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory()
+        inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
+        folderStore: RecorderFolderStore? = nil
     ) {
         self.micInputActivationGuard = inputActivationGuard
         self.micBluetoothInputRouteStabilizer = bluetoothInputRouteStabilizer
         self.micInputCaptureFactory = inputCaptureFactory
+        self.folderStore = folderStore
     }
 
+    /// The folder new recordings are saved to.
     var recordingsDirectory: URL {
         if let recordingsDirectoryOverride {
             return recordingsDirectoryOverride
         }
-        return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent(Self.recordingsDirectoryName)
+        return folderStore?.destinationForNewRecordings() ?? RecorderFolderStore.defaultDirectory
+    }
+
+    /// The folders the Recorder lists recordings from: the folder new recordings go to, then
+    /// earlier folders whose recordings stay where they were saved.
+    var recordingsDirectories: [URL] {
+        if let recordingsDirectoryOverride {
+            return [recordingsDirectoryOverride]
+        }
+        return folderStore?.listedFolders() ?? [RecorderFolderStore.defaultDirectory]
     }
 
     // MARK: - Transcription Buffer Access
@@ -981,34 +995,60 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     }
 
     func finalizeRecording(_ stoppedRecording: StoppedRecording) async -> URL? {
-        var completedURL = stoppedRecording.finalOutputURL
-
-        if stoppedRecording.usesFinalizationOverride,
-           let stopRecordingOverride,
-           let finalURL = completedURL {
+        var completedURL: URL?
+        if let finalURL = stoppedRecording.finalOutputURL {
             do {
-                completedURL = try await stopRecordingOverride(finalURL)
-            } catch {
-                logger.error("Failed to finalize recording with override: \(error.localizedDescription)")
-                cleanupTempFile(finalURL)
-                completedURL = nil
-            }
-        } else if let finalURL = completedURL {
-            do {
-                try await Task.detached(priority: .userInitiated) {
-                    try self.finalizeOutputFile(stoppedRecording)
-                }.value
+                completedURL = try await writeFinalRecording(stoppedRecording, to: finalURL)
             } catch {
                 logger.error("Failed to finalize recording: \(error.localizedDescription)")
                 cleanupTempFile(finalURL)
-                completedURL = nil
+                completedURL = await writeFinalRecordingToFallbackFolder(stoppedRecording, after: finalURL)
             }
+        }
+        if let completedURL {
+            folderStore?.noteRecordingSaved(at: completedURL)
         }
 
         cleanupTempFile(stoppedRecording.micTempURL)
         cleanupTempFile(stoppedRecording.systemTempURL)
 
         return completedURL
+    }
+
+    private func writeFinalRecording(_ stoppedRecording: StoppedRecording, to url: URL) async throws -> URL? {
+        if stoppedRecording.usesFinalizationOverride, let stopRecordingOverride {
+            return try await stopRecordingOverride(url)
+        }
+        try await Task.detached(priority: .userInitiated) {
+            try self.finalizeOutputFile(stoppedRecording, to: url)
+        }.value
+        return url
+    }
+
+    /// Saves the recording to the default folder when its own folder failed, for example because
+    /// its disk was disconnected during the recording, so that the recording is not lost.
+    private func writeFinalRecordingToFallbackFolder(
+        _ stoppedRecording: StoppedRecording,
+        after failedURL: URL
+    ) async -> URL? {
+        guard let directory = folderStore?.fallbackDirectory(
+            afterFailureIn: failedURL.deletingLastPathComponent()
+        ) else { return nil }
+        let fallbackURL = CalendarMeetingRecordingFilename.availableURL(
+            in: directory,
+            preferredBaseName: failedURL.deletingPathExtension().lastPathComponent,
+            fileExtension: failedURL.pathExtension
+        )
+        do {
+            try createDirectoryIfNeeded(directory)
+            let url = try await writeFinalRecording(stoppedRecording, to: fallbackURL)
+            logger.info("Saved the recording to the default Recorder folder instead")
+            return url
+        } catch {
+            logger.error("Failed to save the recording to the default folder: \(error.localizedDescription)")
+            cleanupTempFile(fallbackURL)
+            return nil
+        }
     }
 
     // MARK: - Microphone Recording
@@ -1596,9 +1636,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Helpers
 
-    private func finalizeOutputFile(_ stoppedRecording: StoppedRecording) throws {
-        guard let finalURL = stoppedRecording.finalOutputURL else { return }
-
+    private func finalizeOutputFile(_ stoppedRecording: StoppedRecording, to finalURL: URL) throws {
         if let micURL = stoppedRecording.micTempURL,
            let systemURL = stoppedRecording.systemTempURL {
             try mixAudioFiles(

@@ -103,6 +103,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case recorderToggle
     case undoLastDictation
     case restoreRawTranscript
+    case correctLastDictation
 
     var defaultsKey: String {
         switch self {
@@ -116,6 +117,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkey
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
+        case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkey
         }
     }
 
@@ -131,6 +133,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
         case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkeys
         case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
+        case .correctLastDictation: return UserDefaultsKeys.correctLastDictationHotkeys
         }
     }
 }
@@ -143,7 +146,7 @@ extension HotkeySlotType {
         case .hybrid, .pushToTalk, .toggle:
             true
         case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
-             .undoLastDictation, .restoreRawTranscript:
+             .undoLastDictation, .restoreRawTranscript, .correctLastDictation:
             false
         }
     }
@@ -229,6 +232,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onRecorderToggle: (() -> Void)?
     var onUndoLastDictation: (() -> Void)?
     var onRestoreRawTranscript: (() -> Void)?
+    var onCorrectLastDictation: (() -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
@@ -250,6 +254,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         get { cancellationAvailable.withLock { $0 } }
         set { cancellationAvailable.withLock { $0 = newValue } }
     }
+    // Set while the dictation indicator's model menu is open (#1351).
+    private let indicatorMenuOpen = OSAllocatedUnfairLock(initialState: false)
+    var isIndicatorMenuOpen: Bool {
+        get { indicatorMenuOpen.withLock { $0 } }
+        set { indicatorMenuOpen.withLock { $0 = newValue } }
+    }
+    private static let indicatorMenuKeyCodes: Set<UInt16> = [0x35, 0x24, 0x4C, 0x7B, 0x7C, 0x7D, 0x7E]
     // Accessed by the event tap and NSEvent monitors on the main run loop.
     private var isEscapeKeySuppressed = false
     var onPushToTalkInterruption: (() -> Void)?
@@ -1936,6 +1947,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 #endif
     }
 
+    /// Escape, Return and the arrow keys navigate the indicator's open model menu, so they
+    /// reach the menu instead of cancelling, submitting or interrupting the dictation.
+    /// The release of a press that started before the menu opened still ends as it began.
+    private func passesToIndicatorMenu(_ event: NSEvent) -> Bool {
+        guard isIndicatorMenuOpen,
+              event.type == .keyDown || event.type == .keyUp,
+              Self.indicatorMenuKeyCodes.contains(event.keyCode) else {
+            return false
+        }
+        guard event.type == .keyUp else { return true }
+        if event.keyCode == Self.escapeKeyCode {
+            return !isEscapeKeySuppressed
+        }
+        return !suppressedSubmitKeyCodes.contains(event.keyCode)
+    }
+
     // MARK: - NSEvent Fallback
 
     @discardableResult
@@ -1945,6 +1972,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         if event.type == .keyDown || event.type == .keyUp, event.modifierFlags.contains(.command),
            event.cgEvent?.getIntegerValueField(.eventSourceUserData)
             == TextInsertionService.simulatedClipboardShortcutEventMarker {
+            return false
+        }
+        if passesToIndicatorMenu(event) {
             return false
         }
         if event.type == .keyDown || event.type == .keyUp, Self.returnKeyCodes.contains(event.keyCode) {
@@ -3059,6 +3089,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onRestoreRawTranscript?()
             return
         }
+        if slotType == .correctLastDictation {
+            onCorrectLastDictation?()
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -3142,6 +3176,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .undoLastDictation:
             break // handled on keyDown only
         case .restoreRawTranscript:
+            break // handled on keyDown only
+        case .correctLastDictation:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only

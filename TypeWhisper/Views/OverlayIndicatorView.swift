@@ -234,6 +234,7 @@ struct OverlayIndicatorView: View {
                 || presentation.actionFeedbackMessage != nil ? .contain : .combine
         )
         .accessibilityLabel(accessibilityLabel)
+        .indicatorModelMenuAccessibilityAction(isAvailable: presentation.offersModelMenu)
     }
 
     private func expandTranscriptPreviewIfNeeded() {

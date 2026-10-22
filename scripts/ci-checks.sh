@@ -34,4 +34,7 @@ python3 scripts/assemble_community_plugin_registry.py
 log "checking localization completeness"
 python3 scripts/check_localization_completeness.py
 
+log "checking Spanish for localizedAppText calls"
+python3 scripts/check_localized_app_text.py
+
 log "checks complete"

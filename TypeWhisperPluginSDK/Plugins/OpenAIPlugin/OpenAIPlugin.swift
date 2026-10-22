@@ -56,6 +56,11 @@ enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sendable {
             return "Maximum"
         }
     }
+
+    /// The level's name for the host's effort pickers.
+    var localizedName: String {
+        String(localized: String.LocalizationValue(localizedKey), bundle: OpenAIPlugin.localizationBundle)
+    }
 }
 
 enum OpenAIPluginError: LocalizedError {
@@ -544,6 +549,8 @@ struct OpenAIResponsesClient: Sendable {
 
         switch httpResponse.statusCode {
         case 200:
+            // Reported before parsing: a reply without text still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
             return try Self.parseResponse(data)
         case 401:
             throw PluginChatError.invalidApiKey
@@ -1768,6 +1775,8 @@ final class OpenAIPlugin: NSObject,
     LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
+    LLMEffortControllableProvider,
+    LLMModelSelectable,
     TTSProviderPlugin,
     PluginAuthRoleStatusProviding,
     @unchecked Sendable
@@ -2405,7 +2414,8 @@ final class OpenAIPlugin: NSObject,
             systemPrompt: systemPrompt,
             userText: userText,
             model: model,
-            temperatureDirective: .inheritProviderSetting
+            temperatureDirective: .inheritProviderSetting,
+            effort: nil
         )
     }
 
@@ -2415,8 +2425,72 @@ final class OpenAIPlugin: NSObject,
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
-        let reasoningEffort = Self.effectiveReasoningEffort(_reasoningEffort, for: modelId)?.rawValue
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: nil
+        )
+    }
+
+    // MARK: - LLMEffortControllableProvider
+
+    // The plugin adopts only the effort protocol, not the temperature one: a
+    // workflow temperature can't take effect for ChatGPT Login or most GPT-5
+    // models (#987), so requests keep the plugin's temperature setting.
+
+    /// A nil effort (the host's "Provider Default") uses the Reasoning Effort
+    /// setting, or the model's default when the model doesn't offer it.
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        effort: String?
+    ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+    }
+
+    /// The levels the model takes; empty for models without reasoning effort,
+    /// so the host shows no effort picker for them.
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        Self.supportedReasoningEfforts(for: resolvedLLMModelId(model)).map {
+            PluginLLMEffortInfo(id: $0.rawValue, displayName: $0.localizedName)
+        }
+    }
+
+    /// What a request without an explicit effort uses, for the host's
+    /// "Provider Default" label.
+    func defaultEffortId(for model: String?) -> String? {
+        Self.effectiveReasoningEffort(_reasoningEffort, for: resolvedLLMModelId(model))?.rawValue
+    }
+
+    /// The model a workflow or fallback entry on "Provider Default" uses.
+    @objc var preferredModelId: String? { _selectedLLMModelId }
+
+    private func resolvedLLMModelId(_ model: String?) -> String {
+        model ?? _selectedLLMModelId ?? supportedModels.first?.id ?? Self.fallbackLLMModels[0].id
+    }
+
+    private func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
+        let modelId = resolvedLLMModelId(model)
+        let reasoningEffort = Self.requestReasoningEffort(
+            effort,
+            preferred: _reasoningEffort,
+            for: modelId
+        )?.rawValue
 
         switch _authMode {
         case .apiKey:
@@ -2453,7 +2527,12 @@ final class OpenAIPlugin: NSObject,
             #if APPSTORE
             throw PluginChatError.notConfigured
             #else
-            return try await processWithChatGPT(systemPrompt: systemPrompt, userText: userText, model: modelId)
+            return try await processWithChatGPT(
+                systemPrompt: systemPrompt,
+                userText: userText,
+                model: modelId,
+                reasoningEffort: reasoningEffort
+            )
             #endif
         }
     }
@@ -2471,8 +2550,12 @@ final class OpenAIPlugin: NSObject,
     fileprivate var llmTemperatureValue: Double { _llmTemperatureValue }
 
     fileprivate func setReasoningEffort(_ effort: OpenAIReasoningEffort) {
+        // The settings view writes the loaded value back when it appears.
+        guard _reasoningEffort != effort else { return }
         _reasoningEffort = effort
         host?.setUserDefault(effort.rawValue, forKey: Self.storageKeys.reasoningEffort)
+        // The host labels its "Provider Default" effort with defaultEffortId(for:).
+        host?.notifyCapabilitiesChanged()
     }
 
     fileprivate func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
@@ -3013,7 +3096,12 @@ final class OpenAIPlugin: NSObject,
         return refreshed.access_token
     }
 
-    private func processWithChatGPT(systemPrompt: String, userText: String, model: String) async throws -> String {
+    private func processWithChatGPT(
+        systemPrompt: String,
+        userText: String,
+        model: String,
+        reasoningEffort: String?
+    ) async throws -> String {
         let accessToken = try await validOAuthAccessToken()
         let endpoint = URL(string: OpenAIOAuthConfig.codexAPIEndpoint)!
 
@@ -3040,8 +3128,8 @@ final class OpenAIPlugin: NSObject,
         ]
 
         var mutableRequestBody = requestBody
-        if let reasoningEffort = Self.effectiveReasoningEffort(_reasoningEffort, for: model) {
-            mutableRequestBody["reasoning"] = ["effort": reasoningEffort.rawValue]
+        if let reasoningEffort {
+            mutableRequestBody["reasoning"] = ["effort": reasoningEffort]
         }
 
         var request = URLRequest(url: endpoint)
@@ -3299,6 +3387,30 @@ final class OpenAIPlugin: NSObject,
             return preferred
         }
         return defaultReasoningEffort(for: modelID)
+    }
+
+    /// The effort a request sends: a workflow's effort when the model takes it,
+    /// otherwise the Reasoning Effort setting as `effectiveReasoningEffort`
+    /// resolves it. Nil for models without reasoning effort.
+    nonisolated static func requestReasoningEffort(
+        _ requested: String?,
+        preferred: OpenAIReasoningEffort,
+        for modelID: String
+    ) -> OpenAIReasoningEffort? {
+        if let requested = requested?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let effort = OpenAIReasoningEffort(rawValue: requested),
+           supportedReasoningEfforts(for: modelID).contains(effort) {
+            return effort
+        }
+        return effectiveReasoningEffort(preferred, for: modelID)
+    }
+
+    nonisolated static var localizationBundle: Bundle {
+#if SWIFT_PACKAGE
+        .module
+#else
+        Bundle(for: OpenAIPlugin.self)
+#endif
     }
 
     nonisolated static func usesResponsesAPI(for modelID: String) -> Bool {
@@ -3842,6 +3954,10 @@ private struct OpenAISettingsView: View {
                     }
 
                     Text("Controls how much thinking time the model spends before answering.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Text("Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

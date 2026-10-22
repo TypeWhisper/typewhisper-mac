@@ -1006,6 +1006,13 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffortCo
             throw PluginChatError.apiError(message)
         }
 
+        // Reported before the reply is read: refused, cut-off and unreadable replies still used tokens.
+        if let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] {
+            for usage in Self.usageReports(from: json) {
+                PluginLLMUsageReporting.report(usage)
+            }
+        }
+
         guard let decoded = try? JSONDecoder().decode(ClaudeMessagesResponse.self, from: data) else {
             let summary = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             let message = "Couldn't read Claude's reply (\(data.count) bytes). "
@@ -1045,6 +1052,21 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMTemperatureAndEffortCo
         } catch {
             Self.logger.error("Messages reply rejected")
             throw error
+        }
+    }
+
+    /// The usage to report for one Messages response. With the refusal
+    /// fallback, top-level `usage` counts only the model that answered, while
+    /// `usage.iterations` lists every model that ran, the declined ones included.
+    nonisolated static func usageReports(from response: [String: Any]) -> [PluginLLMUsage] {
+        let iterations = (response["usage"] as? [String: Any])?["iterations"] as? [[String: Any]] ?? []
+        guard !iterations.isEmpty else {
+            return PluginLLMUsage.anthropicMessages(from: response).map { [$0] } ?? []
+        }
+        return iterations.compactMap { iteration in
+            var attempt: [String: Any] = ["usage": iteration]
+            attempt["model"] = iteration["model"]
+            return PluginLLMUsage.anthropicMessages(from: attempt)
         }
     }
 

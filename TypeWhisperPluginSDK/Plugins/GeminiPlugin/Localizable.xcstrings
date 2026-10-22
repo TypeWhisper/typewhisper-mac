@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "LLM-Modelle aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriptionsmodelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos de transcripción"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Schlüssel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -201,6 +255,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -223,6 +283,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -251,6 +317,12 @@
             "value": "API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -271,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
           }
         },
         "ja": {
@@ -295,6 +373,12 @@
             "value": "Ungültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -315,6 +399,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
           }
         },
         "ja": {
@@ -339,6 +429,12 @@
             "value": "Transkriptionsmodell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo de transcripción"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -359,6 +455,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         },
         "ja": {
@@ -383,6 +485,12 @@
             "value": "Sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -403,6 +511,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gültiger API-Schlüssel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
           }
         },
         "ja": {
@@ -427,6 +541,12 @@
             "value": "Aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -447,6 +567,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standard-Modelle werden verwendet. Klicke auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se están usando los modelos predeterminados. Presiona Actualizar para obtener todos los modelos disponibles."
           }
         },
         "ja": {
@@ -471,6 +597,12 @@
             "value": "Bis der Gemini-Katalog verfügbar ist, werden die integrierten Transkriptionsmodelle verwendet."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se usan los modelos de transcripción integrados hasta que el catálogo de Gemini esté disponible."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -491,6 +623,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird überprüft ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
           }
         },
         "ja": {
@@ -515,6 +653,12 @@
             "value": "Transkriptionsmodus"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de transcripción"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -535,6 +679,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wortgetreu"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Literal"
           }
         },
         "ja": {
@@ -559,6 +709,12 @@
             "value": "Smart"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inteligente"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -579,6 +735,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wortgetreu behält Füllwörter, Wiederholungen und Selbstkorrekturen bei. Smart bereinigt und formatiert den Text."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Literal conserva las muletillas, las repeticiones y las autocorrecciones. Inteligente limpia el texto y le da formato."
           }
         },
         "ja": {

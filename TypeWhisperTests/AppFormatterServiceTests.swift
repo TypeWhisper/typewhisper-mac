@@ -209,6 +209,16 @@ final class AppFormatterServiceTests: XCTestCase {
             ),
             "plaintext"
         )
+        for chromeChannel in ["com.google.Chrome.beta", "com.google.Chrome.dev"] {
+            XCTAssertEqual(
+                WorkflowOutputFormatResolver.resolvedFormat(
+                    storedFormat: "auto",
+                    bundleIdentifier: chromeChannel,
+                    url: "https://docs.google.com/document/d/abc/edit"
+                ),
+                "rtf"
+            )
+        }
         XCTAssertNil(
             WorkflowOutputFormatResolver.resolvedFormat(
                 storedFormat: nil,

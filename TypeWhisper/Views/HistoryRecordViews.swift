@@ -361,6 +361,12 @@ struct HistoryRecordDetailView: View {
                         spokenValue: record.language.map { localizedAppLanguageName(for: $0) }
                     )
                     metadataRow(String(localized: "Engine"), record.modelUsed ?? record.engineUsed)
+                    if let llmUsage = record.llmUsage {
+                        metadataRow(String(localized: "LLM"), HistoryLLMUsageText.providers(llmUsage))
+                        if let tokens = HistoryLLMUsageText.tokens(llmUsage) {
+                            metadataRow(String(localized: "history.llmUsage.tokens"), tokens)
+                        }
+                    }
                     metadataRow(String(localized: "Words"), record.wordsCount.formatted())
                     metadataRow(String(localized: "Origin"), record.originPlatformRaw)
                 }
@@ -541,14 +547,16 @@ struct HistoryRecordDetailView: View {
                     "(Removed: \(text))",
                     de: "(Entfernt: \(text))",
                     ja: "（削除: \(text)）",
-                    zh: "（已删除：\(text)）"
+                    zh: "（已删除：\(text)）",
+                    es: "(Eliminado: \(text))"
                 )
             case .added(let text):
                 localizedAppText(
                     "(Added: \(text))",
                     de: "(Hinzugefügt: \(text))",
                     ja: "（追加: \(text)）",
-                    zh: "（已添加：\(text)）"
+                    zh: "（已添加：\(text)）",
+                    es: "(Agregado: \(text))"
                 )
             }
         }
@@ -635,7 +643,44 @@ enum HistoryAccessibilityText {
             "Duration \(spoken)",
             de: "Dauer \(spoken)",
             ja: "長さ \(spoken)",
-            zh: "时长 \(spoken)"
+            zh: "时长 \(spoken)",
+            es: "Duración \(spoken)"
         )
+    }
+}
+
+/// An entry's LLM usage in the History details.
+enum HistoryLLMUsageText {
+    /// One line per provider and model, such as "Claude · claude-sonnet-4-5".
+    static func providers(_ usage: HistoryLLMUsage) -> String {
+        usage.entries.map { entry in
+            let model = entry.model?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return [entry.displayProviderName, model?.isEmpty == false ? model : nil]
+                .compactMap { $0 }
+                .joined(separator: " · ")
+        }
+        .joined(separator: "\n")
+    }
+
+    /// "1,234 input · 256 output · 3 requests": the reported totals, and the
+    /// number of requests when there was more than one. Nil when no request
+    /// reported token counts.
+    static func tokens(_ usage: HistoryLLMUsage, locale: Locale = .current) -> String? {
+        guard usage.hasTokenCounts else { return nil }
+        let number = IntegerFormatStyle<Int>.number.locale(locale)
+        var parts: [String] = []
+        if let input = usage.inputTokens {
+            parts.append(String(format: String(localized: "history.llmUsage.input"), input.formatted(number)))
+        }
+        if let output = usage.outputTokens {
+            parts.append(String(format: String(localized: "history.llmUsage.output"), output.formatted(number)))
+        }
+        if usage.requestCount > 1 {
+            parts.append(String(
+                format: String(localized: "history.llmUsage.requests"),
+                usage.requestCount.formatted(number)
+            ))
+        }
+        return parts.joined(separator: " · ")
     }
 }

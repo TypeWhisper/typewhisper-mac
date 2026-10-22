@@ -9,6 +9,12 @@
             "value": "%@ laden und aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ wird heruntergeladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando %@"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Fehler"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar token de Hugging Face"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "Hugging-Face-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ laden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar %@"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar token de Hugging Face"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "%@ erneut versuchen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Download des CTC-Modells erneut versuchen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar la descarga del modelo CTC"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Hugging-Face-Token speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar token de Hugging Face"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "%@ deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -290,12 +368,24 @@
     "Preparing model": {
       "localizations": {
         "de": { "stringUnit": { "state": "translated", "value": "Modell wird vorbereitet" } },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando el modelo"
+          }
+        },
         "ja": { "stringUnit": { "state": "translated", "value": "モデルを準備中" } },
         "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在准备模型" } }
       }
     },
     "Load": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -324,6 +414,12 @@
             "value": "CTC-Modell (~100 MB) - wird automatisch beim ersten Gebrauch geladen, oder:"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo CTC (~100 MB): se descarga automáticamente la primera vez que se usa, o:"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -344,6 +440,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden & Aktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar"
           }
         },
         "ja": {
@@ -368,6 +470,12 @@
             "value": "Jetzt herunterladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar ahora"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -388,6 +496,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fertig"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
           }
         },
         "ja": {
@@ -412,6 +526,12 @@
             "value": "CTC-Modell wird heruntergeladen..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando el modelo CTC..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -432,6 +552,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Vokabel-Boosting aktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activar Vocabulary Boosting"
           }
         },
         "ja": {
@@ -456,6 +582,12 @@
             "value": "Verbessert die Erkennung von Fachbegriffen aus dem Wörterbuch mittels eines sekundären CTC-Modells."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mejora el reconocimiento de los términos personalizados de tu diccionario con un modelo CTC secundario."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -476,6 +608,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Face Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
           }
         },
         "ja": {
@@ -500,6 +638,12 @@
             "value": "Ungültiger Hugging Face Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face no válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -520,6 +664,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modellversion"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión del modelo"
           }
         },
         "ja": {
@@ -544,6 +694,12 @@
             "value": "NVIDIA Parakeet TDT V2 - extrem schnell auf Apple Silicon. Nur Englisch, höchster Recall. Kein API-Schlüssel nötig."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT V2: extremadamente rápido en Apple Silicon. Solo inglés, la mayor exhaustividad. No necesita clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -566,6 +722,12 @@
             "value": "NVIDIA Parakeet TDT - extrem schnell auf Apple Silicon. 25 europäische Sprachen, kein API-Schlüssel nötig."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT: extremadamente rápido en Apple Silicon. 25 idiomas europeos, no necesita clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -580,12 +742,46 @@
         }
       }
     },
+    "NVIDIA Nemotron 3.5 ASR Streaming - streams as you speak, so the text is ready when you stop. 28 languages, no API key required." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming - transkribiert schon beim Sprechen, damit der Text beim Stoppen fertig ist. 28 Sprachen, kein API-Schlüssel nötig."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming: transcribe mientras hablas, así que el texto está listo cuando te detienes. 28 idiomas, no necesita clave de API."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming - 話している間に文字起こしするため、停止した時点でテキストが完成しています。28言語、APIキー不要。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NVIDIA Nemotron 3.5 ASR Streaming - 边说边转写，停止时文字即已就绪。支持 28 种语言，无需 API 密钥。"
+          }
+        }
+      }
+    },
     "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Optional. Erhöht die Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional. Aumenta los límites de descarga. Gratis en huggingface.co/settings/tokens"
           }
         },
         "ja": {
@@ -610,6 +806,12 @@
             "value": "Bereit - %lld Begriffe geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo: %lld términos cargados"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -630,6 +832,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bereit - Begriffe in Wörterbuch-Einstellungen hinzufügen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo: agrega términos en los ajustes del diccionario"
           }
         },
         "ja": {
@@ -654,6 +862,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -674,6 +888,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erneut versuchen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar"
           }
         },
         "ja": {
@@ -698,6 +918,12 @@
             "value": "Speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -718,6 +944,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Deaktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
           }
         },
         "ja": {
@@ -742,6 +974,12 @@
             "value": "Gültiger Hugging Face Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -762,6 +1000,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token wird geprüft..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando el token..."
           }
         },
         "ja": {
@@ -786,6 +1030,12 @@
             "value": "Vokabel-Boosting"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vocabulary Boosting"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -806,6 +1056,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fluid Speech Mini von FluidVoice, basiert auf NVIDIA Parakeet TDT 0.6B v3 und Moondream Parakeet Ultra. Kleinster Download, nur Englisch, kein API-Schlüssel nötig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fluid Speech Mini de FluidVoice, basado en NVIDIA Parakeet TDT 0.6B v3 y Moondream Parakeet Ultra. La descarga más pequeña, solo inglés, no necesita clave de API."
           }
         },
         "ja": {
@@ -830,6 +1086,12 @@
             "value": "Moondream Parakeet Ultra - weitertrainiertes Parakeet TDT v3 mit höherer Genauigkeit. 25 europäische Sprachen, kein API-Schlüssel nötig."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moondream Parakeet Ultra: Parakeet TDT v3 entrenado aún más para lograr mayor precisión. 25 idiomas europeos, no necesita clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -850,6 +1112,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird bei Bedarf geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
           }
         },
         "ja": {
@@ -874,6 +1142,12 @@
             "value": "„Modell automatisch entladen“ steht auf „Sofort“."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -894,6 +1168,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Parakeet erkennt deine Begriffe mit Vokabel-Boosting besser (ca. 100 MB Download)."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parakeet reconoce mejor tus términos con Vocabulary Boosting (descarga de unos 100 MB)."
           }
         },
         "ja": {

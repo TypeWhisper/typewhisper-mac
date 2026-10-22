@@ -56,6 +56,12 @@ struct TargetAppCorrectionLearningResult: Equatable, Sendable {
     let correctionObservation: TargetAppCorrectionObservation?
 }
 
+/// Result of learning from a correction the user confirmed in TypeWhisper itself.
+struct ConfirmedCorrectionLearningResult: Equatable, Sendable {
+    let outcome: TargetAppCorrectionLearningOutcome
+    let learnedCorrections: [LearnedDictionaryCorrection]
+}
+
 private func targetAppCorrectionCommitSignal(forKeyCode keyCode: UInt16) -> TargetAppCorrectionCommitSignal? {
     switch keyCode {
     case 0x24:
@@ -456,14 +462,47 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             )
         }
 
+        let learning = learnConfidentSuggestions(suggestions)
+        return completeAttempt(
+            id: id,
+            outcome: learning.outcome,
+            commitSignal: commitSignal,
+            learnedCorrections: learning.learnedCorrections,
+            correctionObservation: correctionObservation
+        )
+    }
+
+    /// Learns from a correction the user confirmed in TypeWhisper's own editor, such as
+    /// Correct Last Dictation. The rules are the ones for edits after insertion: only a single
+    /// replaced word is learned, the repeat count applies, and existing corrections are never
+    /// overwritten. The insertion tracking and its latest attempt stay untouched.
+    func learnFromConfirmedCorrection(
+        originalText: String,
+        correctedText: String
+    ) -> ConfirmedCorrectionLearningResult {
+        let original = originalText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let corrected = correctedText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty, original != corrected else {
+            return ConfirmedCorrectionLearningResult(outcome: .noEdit, learnedCorrections: [])
+        }
+
+        let suggestions = highConfidenceCorrectionSuggestions(
+            insertedText: original,
+            baselineText: original,
+            editedText: corrected
+        )
+        guard !suggestions.isEmpty else {
+            return ConfirmedCorrectionLearningResult(outcome: .ambiguousEdit, learnedCorrections: [])
+        }
+        return learnConfidentSuggestions(suggestions)
+    }
+
+    private func learnConfidentSuggestions(
+        _ suggestions: [CorrectionSuggestion]
+    ) -> ConfirmedCorrectionLearningResult {
         let suggestions = suggestions.filter(hasEnoughObservations)
         guard !suggestions.isEmpty else {
-            return completeAttempt(
-                id: id,
-                outcome: .awaitingRepeat,
-                commitSignal: commitSignal,
-                correctionObservation: correctionObservation
-            )
+            return ConfirmedCorrectionLearningResult(outcome: .awaitingRepeat, learnedCorrections: [])
         }
 
         let dictionaryResult = learnCorrections(suggestions)
@@ -480,12 +519,9 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         } else {
             outcome = .failed
         }
-        return completeAttempt(
-            id: id,
+        return ConfirmedCorrectionLearningResult(
             outcome: outcome,
-            commitSignal: commitSignal,
-            learnedCorrections: dictionaryResult.learnedCorrections,
-            correctionObservation: correctionObservation
+            learnedCorrections: dictionaryResult.learnedCorrections
         )
     }
 

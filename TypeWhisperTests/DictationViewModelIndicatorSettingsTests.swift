@@ -1064,11 +1064,12 @@ final class MenuBarGroupingTests: XCTestCase {
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
+            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
+             .correctLastDictation]
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
-            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
+            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription, .correctLastDictation]
         )
     }
 }
@@ -2498,6 +2499,32 @@ final class LanguageLocalizationTests: XCTestCase {
 
         UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
         XCTAssertEqual(localizedAppLanguageName(for: "multi"), "Mehrsprachig")
+    }
+
+    func testLocalizedAppTextFindsSpanishInTheCatalogOrInline() throws {
+        UserDefaults.standard.set("es", forKey: UserDefaultsKeys.preferredAppLanguage)
+
+        // Plain English text is looked up in the catalog like Japanese and Chinese.
+        let catalogSpanish = try TestSupport.localizedCatalogValue(for: "Multilingual", language: "es")
+        XCTAssertNotEqual(catalogSpanish, "Multilingual")
+        XCTAssertEqual(localizedAppLanguageName(for: "multi"), catalogSpanish)
+
+        // Text with interpolated values can't be found that way and carries its Spanish inline.
+        let count = 3
+        XCTAssertEqual(
+            localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))"),
+            "Más modelos (3)"
+        )
+        XCTAssertEqual(
+            localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))"),
+            "More Models (3)"
+        )
+
+        UserDefaults.standard.set("de", forKey: UserDefaultsKeys.preferredAppLanguage)
+        XCTAssertEqual(
+            localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))"),
+            "Weitere Modelle (3)"
+        )
     }
 
     func testLanguageSearchTermsIncludeDeepgramMultilingualAliases() {

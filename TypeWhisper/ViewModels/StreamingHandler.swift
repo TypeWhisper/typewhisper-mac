@@ -43,8 +43,6 @@ final class StreamingHandler: @unchecked Sendable {
     private static let fallbackPollInterval: Duration = .seconds(3)
     private static let fallbackPreviewWindowDuration: TimeInterval = 10
     private static let livePreviewSampleRate: Double = 16_000
-    private static let livePreviewAnalysisFrameDuration: TimeInterval = 0.1
-    private static let livePreviewSpeechRMSFloor: Float = 0.004
     private static let livePreviewSustainedSilenceDuration: TimeInterval = 1.4
     /// Speech a live session may receive without new text before a final result that
     /// adds no text counts as a session that stopped transcribing.
@@ -651,7 +649,7 @@ final class StreamingHandler: @unchecked Sendable {
             return LivePreviewAudioActivity(duration: 0, containsSpeech: false, speechDuration: 0, trailingQuietDuration: 0)
         }
 
-        let frameSize = max(1, Int(livePreviewSampleRate * livePreviewAnalysisFrameDuration))
+        let frameSize = DictationSpeechActivity.frameSampleCount
         let duration = Double(samples.count) / livePreviewSampleRate
         var containsSpeech = false
         var speechDuration: TimeInterval = 0
@@ -661,10 +659,9 @@ final class StreamingHandler: @unchecked Sendable {
         while offset < samples.count {
             let end = min(samples.count, offset + frameSize)
             let frame = samples[offset..<end]
-            let rms = sqrt(frame.reduce(Float(0)) { $0 + $1 * $1 } / Float(frame.count))
             let frameDuration = Double(end - offset) / livePreviewSampleRate
 
-            if rms >= livePreviewSpeechRMSFloor {
+            if DictationSpeechActivity.frameContainsSpeech(frame) {
                 containsSpeech = true
                 speechDuration += frameDuration
                 trailingQuietDuration = 0

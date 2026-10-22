@@ -454,14 +454,16 @@ final class FileTranscriptionViewModel: ObservableObject {
             "Transcription complete: \(done) of \(total) files",
             de: "Transkription abgeschlossen: \(done) von \(total) Dateien",
             ja: "文字起こし完了: \(total)件中\(done)件のファイル",
-            zh: "转录完成：\(total) 个文件中的 \(done) 个"
+            zh: "转录完成：\(total) 个文件中的 \(done) 个",
+            es: "Transcripción completada: \(done) de \(total) archivos"
         )
         if failed > 0 {
             message += ", " + localizedAppText(
                 "\(failed) failed",
                 de: "\(failed) fehlgeschlagen",
                 ja: "\(failed)件失敗",
-                zh: "\(failed) 个失败"
+                zh: "\(failed) 个失败",
+                es: "\(failed) con errores"
             )
         }
         accessibilityAnnouncementService?.announce(message)

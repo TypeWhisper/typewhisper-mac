@@ -9,6 +9,12 @@
             "value": "Laden von %@ abbrechen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar la carga de %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zwischengespeichertes Modell %@ löschen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar el modelo en caché %@"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "%@ laden und aktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ wird heruntergeladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando %@"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "Fehler"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "%@ laden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargado"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "%@ wird geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar %@"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Hugging-Face-Token entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar token de Hugging Face"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "%@ trotzdem versuchen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probar %@ de todos modos"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -295,6 +373,12 @@
             "value": "%@ deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -311,6 +395,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -333,6 +423,12 @@
     },
     "Creative": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Creativo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +451,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -377,6 +479,12 @@
     },
     "Generation": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generación"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -399,6 +507,12 @@
     },
     "Load": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -421,6 +535,12 @@
     },
     "Precise": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preciso"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -443,6 +563,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -465,6 +591,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -493,6 +625,12 @@
             "value": "Verwendet die integrierte Standardtemperatur des Modells."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa la temperatura predeterminada integrada del modelo."
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -513,6 +651,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden & Aktivieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar"
           }
         },
         "ja": {
@@ -537,6 +681,12 @@
             "value": "Abbrechen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -557,6 +707,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zwischengespeichertes Modell löschen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar el modelo en caché"
           }
         },
         "ja": {
@@ -581,6 +737,12 @@
             "value": "Der Download des Modells von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhöhen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se agotó el tiempo de espera al descargar el modelo de Hugging Face. Vuelve a intentarlo. Agregar un token de HuggingFace opcional en este plugin también puede aumentar los límites de descarga."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -601,6 +763,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Download von %1$@ ist bei %2$@ stehen geblieben, da fünf Minuten lang keine weiteren Bytes empfangen wurden. Versuche es erneut. Wenn das Problem bestehen bleibt, lösche das zwischengespeicherte Modell und lade es erneut herunter."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La descarga de %1$@ se detuvo en %2$@ porque no se recibieron más bytes durante cinco minutos. Vuelve a intentarlo. Si el problema continúa, elimina el modelo en caché y vuelve a descargarlo."
           }
         },
         "ja": {
@@ -625,6 +793,12 @@
             "value": "Die Vorbereitung von %1$@ hat nach 15 Minuten das Zeitlimit erreicht (letzter Downloadfortschritt: %2$@). Das heruntergeladene Modell wurde beibehalten; versuche erneut, es zu laden."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se agotó el tiempo de preparación de %1$@ después de 15 minutos (último progreso de descarga: %2$@). El modelo descargado se conservó; vuelve a intentar cargarlo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -645,6 +819,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der heruntergeladene Modellcache scheint unvollständig oder inkompatibel zu sein. Lösche das zwischengespeicherte Modell und lade es erneut herunter."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La caché del modelo descargado parece incompleta o incompatible. Elimina el modelo en caché y vuelve a descargarlo."
           }
         },
         "ja": {
@@ -669,6 +849,12 @@
             "value": "HuggingFace Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -689,6 +875,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Lade zuerst ein lokales Modell in den Integrationen, bevor du es für Prompts verwendest."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Carga un modelo local en Integraciones antes de usarlo para prompts."
           }
         },
         "ja": {
@@ -713,6 +905,12 @@
             "value": "Lokales LLM auf Apple Silicon mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Schlüssel erforderlich."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM local en Apple Silicon con modelos Gemma 4, Qwen3.5 y LFM2.5. No necesita clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -733,6 +931,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
           }
         },
         "ja": {
@@ -757,6 +961,12 @@
             "value": "Ungültiger HuggingFace-Token"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace no válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -777,6 +987,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Experimentell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimental"
           }
         },
         "ja": {
@@ -801,6 +1017,12 @@
             "value": "Experimentell. Du kannst es auf eigene Gefahr ausprobieren."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimental. Puedes probarlo bajo tu propia responsabilidad."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -821,6 +1043,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Experimentell. Braucht weniger Arbeitsspeicher als Gemma 4, übersetzt und strukturiert Text aber weniger zuverlässig."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimental. Usa menos memoria que Gemma 4, pero traduce y reestructura el texto con menos fiabilidad."
           }
         },
         "ja": {
@@ -845,6 +1073,12 @@
             "value": "Experimentell. Denkt vor der Antwort nach, daher dauern Ergebnisse einige Sekunden. LFM Open License: Kommerzielle Nutzung ist nur unter 10 Mio. USD Jahresumsatz kostenlos."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimental. Razona antes de responder, así que los resultados tardan varios segundos. LFM Open License: el uso comercial solo es gratuito con ingresos anuales inferiores a 10 millones de USD."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -865,6 +1099,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gültiger HuggingFace-Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de HuggingFace válido"
           }
         },
         "ja": {
@@ -889,6 +1129,12 @@
             "value": "Token wird geprüft..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando el token..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -909,6 +1155,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optional. Erhöht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional. Aumenta los límites de descarga. Gratis en huggingface.co/settings/tokens"
           }
         },
         "ja": {
@@ -933,6 +1185,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -953,6 +1211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -977,6 +1241,12 @@
             "value": "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Kleinere Modelle brauchen weniger Arbeitsspeicher, befolgen Anweisungen aber weniger zuverlässig. Größere Varianten können je nach Hardware fehlschlagen."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se recomiendan los modelos Gemma 4 E2B/E4B de 4 bits. Los modelos más pequeños necesitan menos memoria, pero siguen las instrucciones con menos fiabilidad. Las variantes más grandes pueden fallar según el hardware."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -997,6 +1267,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Trotzdem versuchen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probar de todos modos"
           }
         },
         "ja": {
@@ -1021,6 +1297,12 @@
             "value": "Deaktivieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1043,6 +1325,12 @@
             "value": "Wird bei Bedarf geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1063,6 +1351,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "„Modell automatisch entladen“ steht auf „Sofort“."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
           }
         },
         "ja": {

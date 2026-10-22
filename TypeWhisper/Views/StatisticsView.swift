@@ -428,7 +428,8 @@ struct StatisticsView: View {
                 "\(dayName): no dictations",
                 de: "\(dayName): keine Diktate",
                 ja: "\(dayName): 文字起こしなし",
-                zh: "\(dayName)：无听写"
+                zh: "\(dayName)：无听写",
+                es: "\(dayName): sin dictados"
             )
         }
         return "\(dayName): " + activeHours.joined(separator: "; ")

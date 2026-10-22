@@ -3,6 +3,12 @@
   "strings": {
     "audiocpp_server with a confucius4_r2t2 model in streaming mode.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server con un modelo confucius4_r2t2 en modo de transmisión en tiempo real."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -25,6 +31,12 @@
     },
     "Audio is streamed as 16 kHz PCM only to the audio.cpp server configured here.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El audio se transmite como PCM a 16 kHz solo al servidor audio.cpp configurado aquí."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -47,6 +59,12 @@
     },
     "Connected": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -69,6 +87,12 @@
     },
     "Model ID": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ID del modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -91,6 +115,12 @@
     },
     "Save": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -113,6 +143,12 @@
     },
     "Server URL": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL del servidor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +171,12 @@
     },
     "Test Connection": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probar conexión"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "The \"id\" of the model entry in the server config.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El \"id\" de la entrada del modelo en la configuración del servidor."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "%@ (recommended)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (recomendado)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -201,6 +255,12 @@
     },
     "audiocpp_server %@ is running on 127.0.0.1:%@.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ se está ejecutando en 127.0.0.1:%@."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -223,6 +283,12 @@
     },
     "audiocpp_server %@ starts with the first dictation and restarts if it stops.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ se inicia con el primer dictado y se reinicia si se detiene."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -245,6 +311,12 @@
     },
     "Built-in": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integrado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -267,6 +339,12 @@
     },
     "Cancel": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -289,6 +367,12 @@
     },
     "Delete": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -311,6 +395,12 @@
     },
     "Delete the downloaded model?": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Eliminar el modelo descargado?"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -333,6 +423,12 @@
     },
     "Download": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +451,12 @@
     },
     "Full precision, largest": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Precisión completa, el más grande"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -377,6 +479,12 @@
     },
     "Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -399,6 +507,12 @@
     },
     "Model license": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licencia del modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -421,6 +535,12 @@
     },
     "Near full quality, by davidxifeng": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Calidad casi completa, de davidxifeng"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -443,6 +563,12 @@
     },
     "Own server": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor propio"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -465,6 +591,12 @@
     },
     "Server": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Servidor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -487,6 +619,12 @@
     },
     "Show in Finder": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar en el Finder"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -509,6 +647,12 @@
     },
     "Smallest and fastest, community quant by Nairod785": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El más pequeño y rápido, cuantización de la comunidad de Nairod785"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -531,6 +675,12 @@
     },
     "The model weights are licensed by NetEase Youdao under the Confucius4-R2T2 Model Use License, which is downloaded with each model (LICENSE, LICENSE_zh, NOTICE). By downloading you accept it. The server is audio.cpp, Apache-2.0.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NetEase Youdao licencia los pesos del modelo bajo la Confucius4-R2T2 Model Use License, que se descarga con cada modelo (LICENSE, LICENSE_zh, NOTICE). Al descargarlo, la aceptas. El servidor es audio.cpp, con licencia Apache-2.0."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -553,6 +703,12 @@
     },
     "audiocpp_server %@ is not installed yet.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ todavía no está instalado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

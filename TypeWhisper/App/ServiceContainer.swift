@@ -83,6 +83,7 @@ final class ServiceContainer: ObservableObject {
     let pluginManager: PluginManager
     let pluginRegistryService: PluginRegistryService
     let termPackRegistryService: TermPackRegistryService
+    let localTermPackStore: LocalTermPackStore
     let widgetDataService: WidgetDataService
     let memoryService: MemoryService
     let appFormatterService: AppFormatterService
@@ -91,6 +92,7 @@ final class ServiceContainer: ObservableObject {
     let punctuationStrategyResolver: PunctuationStrategyResolver
     let punctuationVerificationService: PunctuationVerificationService
     let audioRecorderService: AudioRecorderService
+    let recorderFolderStore: RecorderFolderStore
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
     let speechFeedbackService: SpeechFeedbackService
@@ -196,6 +198,10 @@ final class ServiceContainer: ObservableObject {
         pluginManager = PluginManager()
         pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
+        localTermPackStore = LocalTermPackStore(
+            directory: AppConstants.appSupportDirectory
+                .appendingPathComponent(LocalTermPackStore.directoryName, isDirectory: true)
+        )
         widgetDataService = WidgetDataService(
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
@@ -206,8 +212,10 @@ final class ServiceContainer: ObservableObject {
         punctuationRulesLoader = PunctuationRulesLoader()
         punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: dictationPunctuationProfileStore)
         punctuationVerificationService = PunctuationVerificationService(rulesLoader: punctuationRulesLoader)
+        recorderFolderStore = RecorderFolderStore()
         audioRecorderService = AudioRecorderService(
-            inputActivationGuard: inputActivationGuard
+            inputActivationGuard: inputActivationGuard,
+            folderStore: recorderFolderStore
         )
         promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
@@ -498,6 +506,7 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             licenseService: licenseService,
             termPackRegistryService: termPackRegistryService,
+            localTermPackStore: localTermPackStore,
             selectedTranscriptionEngine: { [modelManagerService] in
                 modelManagerService.selectedProviderId.flatMap {
                     PluginManager.shared?.transcriptionEngine(for: $0)

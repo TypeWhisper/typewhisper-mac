@@ -31,6 +31,9 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
     var processingStateRaw: String?
     var processingFailureCategory: String?
     var processingFailureMessage: String?
+    /// The LLM requests behind this version's text (`HistoryLLMUsage` as JSON).
+    /// Nil for versions saved before this existed.
+    var llmUsageData: Data?
 
     static func capture(_ record: TranscriptionRecord, provenance: Self? = nil) -> Self {
         Self(
@@ -54,7 +57,8 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
             speakerWordsAreFromSecondPass: record.speakerWordsAreFromSecondPass,
             processingStateRaw: record.processingStateRaw,
             processingFailureCategory: record.processingFailureCategory,
-            processingFailureMessage: record.processingFailureMessage
+            processingFailureMessage: record.processingFailureMessage,
+            llmUsageData: record.llmUsageData
         )
     }
 
@@ -77,6 +81,7 @@ struct HistoryTranscriptionVersion: Codable, Equatable, Identifiable, Sendable {
         record.processingStateRaw = processingStateRaw ?? RecordingProcessingState.ready.rawValue
         record.processingFailureCategory = processingFailureCategory
         record.processingFailureMessage = processingFailureMessage
+        record.llmUsageData = llmUsageData
     }
 
     func matchesContent(of record: TranscriptionRecord) -> Bool {

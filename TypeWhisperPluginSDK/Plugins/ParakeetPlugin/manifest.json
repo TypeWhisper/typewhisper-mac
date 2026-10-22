@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.parakeet",
     "name": "Parakeet",
-    "version": "1.5.0",
+    "version": "1.6.0",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -12,6 +12,7 @@
     "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
     "descriptions": {
         "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen.",
+        "es": "Voz a texto local con NVIDIA Parakeet TDT. Rápido y preciso, 25 idiomas.",
         "ja": "NVIDIA Parakeet TDTによるローカル音声認識です。高速かつ高精度で、25言語に対応します。"
     },
     "category": "transcription",

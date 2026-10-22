@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.vercel-ai-gateway",
     "name": "Vercel AI Gateway",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Access speech-to-text models and hundreds of LLMs from OpenAI, Anthropic, Google, xAI and more through Vercel AI Gateway with a single API key. Shows model pricing and credit balance.",
     "descriptions": {
         "de": "Zugriff auf Spracherkennungsmodelle und Hunderte LLMs von OpenAI, Anthropic, Google, xAI und mehr über Vercel AI Gateway mit einem einzigen API-Schlüssel. Zeigt Modellpreise und Guthaben.",
+        "es": "Accede a modelos de voz a texto y a cientos de LLM de OpenAI, Anthropic, Google, xAI y más a través de Vercel AI Gateway con una sola clave de API. Muestra los precios de los modelos y el saldo de créditos.",
         "ja": "Vercel AI Gateway経由で、OpenAI、Anthropic、Google、xAIなどの音声認識モデルと数百のLLMに1つのAPIキーでアクセスできます。モデル料金とクレジット残高を表示します。"
     },
     "category": "transcription",

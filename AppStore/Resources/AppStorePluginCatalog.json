@@ -216,6 +216,22 @@
       "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg"
     },
     {
+      "id": "com.typewhisper.gigaam",
+      "bundleName": "GigaAMPlugin.bundle",
+      "name": "GigaAM",
+      "author": "TypeWhisper",
+      "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization. Russian only.",
+      "descriptions": {
+        "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung. Nur Russisch.",
+        "ja": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付けます。ロシア語専用です。"
+      },
+      "category": "transcription",
+      "iconSystemName": "waveform.badge.mic",
+      "locality": "local",
+      "detailsURL": "https://www.typewhisper.com/addons/gigaam/",
+      "iconURL": "https://www.typewhisper.com/brand-logos/sber/logo.svg"
+    },
+    {
       "id": "com.typewhisper.gladia",
       "bundleName": "GladiaPlugin.bundle",
       "name": "Gladia",
@@ -238,7 +254,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
       "descriptions": {
-        "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
+        "de": "Cloud-Transkription über Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schlüssel. Zerlegt längere Aufnahmen automatisch in mehrere Recognize-Requests.",
+        "ja": "サービスアカウントJSONキーを使うGoogle Cloud Speech-to-Textのクラウド文字起こしです。長時間録音は音声を分割して複数の認識リクエストで処理します。"
       },
       "category": "transcription",
       "iconSystemName": "globe.badge.chevron.backward",
@@ -275,7 +292,8 @@
       "author": "TypeWhisper",
       "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
       "descriptions": {
-        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key."
+        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key.",
+        "ja": "文字起こし済みまたは処理済みのテキストからLinearのIssueを作成します。Linear APIキーが必要です。"
       },
       "category": "action",
       "iconSystemName": "list.bullet.rectangle",
@@ -291,7 +309,8 @@
       "author": "TypeWhisper",
       "description": "Show a floating live transcript window during recording.",
       "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme.",
+        "ja": "録音中の文字起こしを、他のウィンドウに重ねて表示します。"
       },
       "category": "utility",
       "iconSystemName": "text.bubble",
@@ -336,7 +355,8 @@
       "author": "TypeWhisper",
       "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
       "descriptions": {
-        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key nötig.",
+        "ja": "メモリをMac内のJSONファイルに保存し、文字で検索できます。完全オフラインで使え、APIキーは不要です。"
       },
       "category": "memory",
       "iconSystemName": "doc.text",
@@ -350,7 +370,8 @@
       "author": "TypeWhisper",
       "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
       "descriptions": {
-        "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
+        "de": "Speichert und durchsucht Erinnerungen über die OpenAI Vector Store API mit semantischen Embeddings.",
+        "ja": "OpenAI Vector Store APIとセマンティック埋め込みを使ってメモリを保存・検索します。"
       },
       "category": "memory",
       "iconSystemName": "brain",
@@ -620,7 +641,8 @@
       "author": "TypeWhisper",
       "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
       "descriptions": {
-        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
+        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden.",
+        "ja": "Supertonic 3 ONNXモデルによる実験的なローカル音声合成です。モデルアセットのダウンロード前にOpenRAIL-Mモデルライセンスへの同意が必要です。"
       },
       "category": "tts",
       "categories": [
@@ -639,7 +661,8 @@
       "author": "TypeWhisper",
       "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
       "descriptions": {
-        "de": "Text-zu-Sprache ueber die integrierten macOS-AVSpeechSynthesizer-Stimmen fuer gesprochenes Feedback."
+        "de": "Text-zu-Sprache über die integrierten macOS-AVSpeechSynthesizer-Stimmen für gesprochenes Feedback.",
+        "ja": "macOS標準の音声（AVSpeechSynthesizer）で、文字起こし結果などを読み上げます。"
       },
       "category": "tts",
       "iconSystemName": "speaker.wave.2.fill",

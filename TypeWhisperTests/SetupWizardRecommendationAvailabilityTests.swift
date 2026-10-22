@@ -69,7 +69,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            readyLocalProviderId: nil,
             appleSpeechAvailable: true
         )
 
@@ -80,7 +80,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: "groq",
             selectedEngineReady: true,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -91,7 +91,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: SetupWizardAppleSpeechFallback.providerId,
             selectedEngineReady: true,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -102,7 +102,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -113,7 +113,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            readyLocalProviderId: nil,
             appleSpeechAvailable: false
         )
 
@@ -287,6 +287,76 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         )
 
         XCTAssertEqual(state, .setupRequired)
+    }
+
+    func testOfflineShowsThatADownloadIsNeeded() {
+        // Without the plugin, or with the plugin but without the model it would load.
+        for (isInstalled, modelIsDownloaded) in [(false, false), (true, false), (false, true)] {
+            let state = SetupWizardRecommendationAvailability.resolve(
+                manifestId: "com.typewhisper.whisperkit",
+                isInstalled: isInstalled,
+                isReady: false,
+                registryPlugin: makeRegistryPlugin(id: "com.typewhisper.whisperkit"),
+                installState: nil,
+                fetchState: .loaded,
+                modelIsDownloaded: modelIsDownloaded,
+                isOffline: true,
+                architecture: "arm64"
+            )
+
+            XCTAssertEqual(state, .unavailable(.offline), "installed: \(isInstalled), downloaded: \(modelIsDownloaded)")
+            XCTAssertFalse(state.allowsActivation, "installed: \(isInstalled), downloaded: \(modelIsDownloaded)")
+        }
+    }
+
+    func testOfflineActivatesAnInstalledEngineWhoseModelIsDownloaded() {
+        let state = SetupWizardRecommendationAvailability.resolve(
+            manifestId: "com.typewhisper.whisperkit",
+            isInstalled: true,
+            isReady: false,
+            registryPlugin: nil,
+            installState: nil,
+            fetchState: .error("offline"),
+            modelIsDownloaded: true,
+            isOffline: true,
+            architecture: "arm64"
+        )
+
+        XCTAssertEqual(state, .setupRequired)
+        XCTAssertTrue(state.allowsActivation)
+    }
+
+    func testCardCanBePressedOnlyToSelectActivateOrInstall() {
+        let pressable: [SetupWizardRecommendationAvailability] = [.ready, .setupRequired, .installAvailable]
+        let notPressable: [SetupWizardRecommendationAvailability] = [
+            .installState(.downloading(0.42)),
+            .installState(.restartRequired),
+            .loading,
+            .unavailable(.offline),
+            .unavailable(.marketplaceUnavailable),
+        ]
+
+        for availability in pressable {
+            XCTAssertTrue(availability.allowsActivation, "\(availability)")
+        }
+        for availability in notPressable {
+            XCTAssertFalse(availability.allowsActivation, "\(availability)")
+        }
+    }
+
+    func testOfflineKeepsAReadyEngineReady() {
+        let state = SetupWizardRecommendationAvailability.resolve(
+            manifestId: "com.typewhisper.parakeet",
+            isInstalled: true,
+            isReady: true,
+            registryPlugin: nil,
+            installState: nil,
+            fetchState: .error("offline"),
+            isOffline: true,
+            architecture: "arm64"
+        )
+
+        XCTAssertEqual(state, .ready)
     }
 
     func testErrorInstallStateTakesPrecedenceForCompatibleArchitecture() {

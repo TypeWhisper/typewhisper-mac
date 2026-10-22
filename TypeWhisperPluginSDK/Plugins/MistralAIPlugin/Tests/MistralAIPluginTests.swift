@@ -333,6 +333,42 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertEqual(instruction?.contains(" it."), false)
     }
 
+    // MARK: - Usage reporting
+
+    func testProcessReportsTheChatUsage() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"""
+        {"model":"mistral-small-latest","choices":[{"message":{"content":"ok"}}],
+         "usage":{"prompt_tokens":88,"completion_tokens":7,"total_tokens":95}}
+        """#)
+
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 88, outputTokens: 7, model: "mistral-small-latest")])
+    }
+
+    func testProcessWithoutUsageReportsNothing() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"{"choices":[{"message":{"content":"ok"}}]}"#)
+
+        XCTAssertEqual(reports, [])
+    }
+
+    /// Runs one chat request answered with `body` and returns the usage reported meanwhile.
+    private static func processCollectingUsage(body: String) async throws -> [PluginLLMUsage] {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)),
+            ])
+        }
+        let collector = PluginLLMUsageCollector()
+        let output = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+        }
+        XCTAssertEqual(output, "ok")
+        return collector.reports
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,

@@ -1234,6 +1234,73 @@ final class ClaudePluginTests: XCTestCase {
         XCTAssertTrue(message.contains("refusal fallback"), message)
     }
 
+    // MARK: - Usage reporting
+
+    func testProcessReportsTheUsageIncludingPromptCacheTokens() async throws {
+        let body = #"""
+        {"model":"claude-opus-5-5","content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn",
+         "usage":{"input_tokens":12,"cache_read_input_tokens":1600,"cache_creation_input_tokens":300,"output_tokens":40}}
+        """#
+        let (reply, reports) = try await Self.processCollectingUsage(body: body, model: "claude-opus-5-5")
+
+        XCTAssertEqual(reply, "ok")
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 1912, outputTokens: 40, model: "claude-opus-5-5")])
+    }
+
+    func testProcessReportsNothingWhenTheReplyHasNoUsage() async throws {
+        let body = #"{"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}"#
+        let (reply, reports) = try await Self.processCollectingUsage(body: body)
+
+        XCTAssertEqual(reply, "ok")
+        XCTAssertEqual(reports, [])
+    }
+
+    func testCutOffReplyStillReportsItsUsage() async throws {
+        let body = #"""
+        {"model":"claude-sonnet-4-6","content":[{"type":"text","text":"half a sen"}],"stop_reason":"max_tokens",
+         "usage":{"input_tokens":20,"output_tokens":16000}}
+        """#
+        let (reply, reports) = try await Self.processCollectingUsage(body: body)
+
+        XCTAssertNil(reply, "a cut-off reply must still fail")
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 20, outputTokens: 16000, model: "claude-sonnet-4-6")])
+    }
+
+    func testRefusedReplyStillReportsItsUsage() async throws {
+        let body = #"""
+        {"model":"claude-opus-5-5","content":[],"stop_reason":"refusal",
+         "stop_details":{"type":"refusal","category":"bio","explanation":"This request may enable harm"},
+         "usage":{"input_tokens":535,"output_tokens":0}}
+        """#
+        let (reply, reports) = try await Self.processCollectingUsage(body: body, model: "claude-opus-5-5")
+
+        XCTAssertNil(reply, "a refused reply must still fail")
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 535, outputTokens: 0, model: "claude-opus-5-5")])
+    }
+
+    func testRefusalFallbackReportsEveryModelThatRan() async throws {
+        // Top-level usage covers only the model that answered; the iterations list both attempts.
+        let body = #"""
+        {"model":"claude-opus-4-8","stop_reason":"end_turn","content":[
+            {"type":"fallback","from":{"model":"claude-opus-5-5"},"to":{"model":"claude-opus-4-8"}},
+            {"type":"text","text":"Fixed text."}
+        ],"usage":{"input_tokens":412,"output_tokens":264,"cache_read_input_tokens":0,"cache_creation_input_tokens":0,
+         "iterations":[
+            {"type":"message","model":"claude-opus-5-5","input_tokens":535,"output_tokens":0,
+             "cache_read_input_tokens":0,"cache_creation_input_tokens":0},
+            {"type":"fallback_message","model":"claude-opus-4-8","input_tokens":412,"output_tokens":264,
+             "cache_read_input_tokens":0,"cache_creation_input_tokens":0}
+         ]}}
+        """#
+        let (reply, reports) = try await Self.processCollectingUsage(body: body, model: "claude-opus-5-5")
+
+        XCTAssertEqual(reply, "Fixed text.")
+        XCTAssertEqual(reports, [
+            PluginLLMUsage(inputTokens: 535, outputTokens: 0, model: "claude-opus-5-5"),
+            PluginLLMUsage(inputTokens: 412, outputTokens: 264, model: "claude-opus-4-8"),
+        ])
+    }
+
     // MARK: - Helpers
 
     private static func waitForRefreshWaiterCount(_ expectedCount: Int, plugin: ClaudePlugin) async {
@@ -1367,6 +1434,29 @@ final class ClaudePluginTests: XCTestCase {
         } catch {
             return error
         }
+    }
+
+    /// Runs one Messages request answered with `body` and returns the reply
+    /// (nil when the request failed) and the usage reported meanwhile.
+    private static func processCollectingUsage(
+        body: String,
+        model: String = "claude-sonnet-4-6"
+    ) async throws -> (reply: String?, reports: [PluginLLMUsage]) {
+        let host = try PluginTestHostServices()
+        let plugin = ClaudePlugin()
+        plugin.activate(host: host) // no key on host → no background model refresh
+        plugin.setApiKey("claude-key")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), httpResponse(url: messagesURL, statusCode: 200)),
+            ])
+        }
+        let collector = PluginLLMUsageCollector()
+        let reply = try? await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await plugin.process(systemPrompt: "sys", userText: "hi", model: model)
+        }
+        return (reply, collector.reports)
     }
 
     private static func apiErrorMessage(_ error: Error, file: StaticString = #filePath, line: UInt = #line) -> String {

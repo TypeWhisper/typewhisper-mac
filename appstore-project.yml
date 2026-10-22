@@ -39,6 +39,9 @@ packages:
   SwiftTransformers:
     url: https://github.com/huggingface/swift-transformers.git
     exactVersion: 1.3.4
+  SwiftHuggingFace:
+    url: https://github.com/huggingface/swift-huggingface.git
+    exactVersion: 0.10.1
   ONNXRuntime:
     url: https://github.com/microsoft/onnxruntime-swift-package-manager.git
     exactVersion: 1.24.2
@@ -118,6 +121,10 @@ targets:
       - package: TypeWhisperPluginSDK
         product: TypeWhisperPluginSDK
         embed: true
+      # Embedded for the ONNX plugins; the app itself does not link it.
+      - target: TypeWhisperONNXRuntime
+        embed: true
+        link: false
       - target: TypeWhisperWidgetExtension
         embed: true
       - target: TypeWhisperTranscribeAction
@@ -231,6 +238,10 @@ targets:
         copy:
           destination: plugins
       - target: LocalLLMPlugin
+        embed: true
+        copy:
+          destination: plugins
+      - target: GigaAMPlugin
         embed: true
         copy:
           destination: plugins
@@ -476,13 +487,57 @@ targets:
     settings:
       base:
         EXCLUDED_ARCHS: x86_64
+  # One ONNX Runtime for the ONNX plugins (GigaAM, Supertonic). The package
+  # ships the runtime as a static library, so every plugin linking it would
+  # carry its own copy (about 32 MB) and register the same Objective-C classes
+  # again. This framework links it once. The app embeds it without linking it,
+  # so it is loaded together with the first installed ONNX plugin. Without
+  # sources it gets no autolinking, hence the system libraries in OTHER_LDFLAGS.
+  TypeWhisperONNXRuntime:
+    type: framework
+    platform: macOS
+    dependencies:
+      - package: ONNXRuntime
+        product: onnxruntime
+    settings:
+      base:
+        PRODUCT_NAME: TypeWhisperONNXRuntime
+        PRODUCT_BUNDLE_IDENTIFIER: com.typewhisper.onnxruntime
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        DEFINES_MODULE: NO
+        SKIP_INSTALL: YES
+        EXCLUDED_ARCHS: x86_64
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        OTHER_LDFLAGS: [-framework, Foundation, -framework, CoreFoundation, -lobjc]
+  # The ONNX plugins link TypeWhisperONNXRuntime. The package dependency is not
+  # linked; it only provides the OnnxRuntimeBindings module to the compiler.
+  GigaAMPlugin:
+    templates: [AppStorePlugin]
+    templateAttributes:
+      bundleId: com.typewhisper.gigaam
+    dependencies:
+      - target: TypeWhisperONNXRuntime
+        embed: false
+      - package: ONNXRuntime
+        product: onnxruntime
+        link: false
+      - package: SwiftHuggingFace
+        product: HuggingFace
+    settings:
+      base:
+        EXCLUDED_ARCHS: x86_64
   SupertonicPlugin:
     templates: [AppStorePlugin]
     templateAttributes:
       bundleId: com.typewhisper.tts.supertonic
     dependencies:
+      - target: TypeWhisperONNXRuntime
+        embed: false
       - package: ONNXRuntime
         product: onnxruntime
+        link: false
     settings:
       base:
         EXCLUDED_ARCHS: x86_64

@@ -170,7 +170,8 @@ final class DictationViewModel: ObservableObject {
             let primaryDescription = primaryError.localizedDescription
             return localizedAppText(
                 "Primary transcription failed: \(primaryDescription). Recovery fallback failed: \(fallbackDescription)",
-                de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
+                de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)",
+                es: "Falló la transcripción principal: \(primaryDescription). Falló el respaldo de recuperación: \(fallbackDescription)"
             )
         }
     }
@@ -185,7 +186,8 @@ final class DictationViewModel: ObservableObject {
             let rounded = Int(seconds.rounded())
             return localizedAppText(
                 "Transcription timed out after \(rounded) seconds.",
-                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten."
+                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten.",
+                es: "Se agotó el tiempo de espera de la transcripción después de \(rounded) segundos."
             )
         }
     }
@@ -275,6 +277,16 @@ final class DictationViewModel: ObservableObject {
         let completion: DictationInsertionCompletion
 
         func with(reason: Reason) -> UndeliveredTranscript {
+            UndeliveredTranscript(
+                text: text,
+                rawTranscript: rawTranscript,
+                outputFormat: outputFormat,
+                reason: reason,
+                completion: completion
+            )
+        }
+
+        func with(text: String) -> UndeliveredTranscript {
             UndeliveredTranscript(
                 text: text,
                 rawTranscript: rawTranscript,
@@ -375,6 +387,27 @@ final class DictationViewModel: ObservableObject {
     @Published var spokenFeedbackEnabled: Bool {
         didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
     }
+    /// Ends a toggle-mode dictation after sustained silence once speech was heard (#1023).
+    @Published var toggleSilenceStopEnabled: Bool {
+        didSet {
+            Self.persistToggleSilenceStopEnabled(toggleSilenceStopEnabled)
+            // Turning it off also ends the watch and the countdown of a running recording.
+            if !toggleSilenceStopEnabled {
+                stopSilenceEndpointMonitor()
+            }
+        }
+    }
+    /// Seconds of silence after speech that end a toggle dictation. Applies from the next recording.
+    @Published var toggleSilenceStopDuration: TimeInterval {
+        didSet {
+            let clampedDuration = DictationSilenceEndpointDetector.clampedSilenceDuration(toggleSilenceStopDuration)
+            // Assigning inside didSet does not run didSet again, so persist here in both cases.
+            if clampedDuration != toggleSilenceStopDuration {
+                toggleSilenceStopDuration = clampedDuration
+            }
+            Self.persistToggleSilenceStopDuration(clampedDuration)
+        }
+    }
     @Published private(set) var lastTranscribedText: String?
     @Published private(set) var lastTranscriptionLanguage: String?
     /// Updated only by the completed text-insertion path, never by indicator feedback.
@@ -390,6 +423,7 @@ final class DictationViewModel: ObservableObject {
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
     var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
+    var correctLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .correctLastDictation) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -399,6 +433,8 @@ final class DictationViewModel: ObservableObject {
     /// The running recording has delivered only digital silence so far: a muted microphone
     /// or a dead input stream. Shown while recording instead of only after the stop (#1606).
     @Published private(set) var isRecordingInputSilent = false
+    /// Whole seconds until silence ends the toggle recording, nil outside that countdown (#1023).
+    @Published private(set) var silenceStopCountdownSeconds: Int?
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
@@ -508,9 +544,39 @@ final class DictationViewModel: ObservableObject {
         )
     }()
 
+    private let lastDictationCorrectionPresenter: any LastDictationCorrectionPresenting
+    /// Correct Last Dictation (issue #1020): edits the latest dictation inside TypeWhisper,
+    /// learns from the edit and copies the result. The text in the target app stays as inserted.
+    private(set) lazy var lastDictationCorrectionHandler: LastDictationCorrectionHandler = {
+        let learningService = targetAppCorrectionLearningService
+        let handler = LastDictationCorrectionHandler(
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
+            presenter: lastDictationCorrectionPresenter,
+            learningAvailability: { [weak self] in
+                self?.lastDictationCorrectionLearningAvailability ?? .notOffered
+            },
+            learnCorrection: { originalText, correctedText in
+                learningService.learnFromConfirmedCorrection(
+                    originalText: originalText,
+                    correctedText: correctedText
+                )
+            },
+            pasteboardProvider: { [weak self] in
+                self?.pasteboardProvider() ?? .general
+            },
+            accessibilityAnnouncementService: accessibilityAnnouncementService
+        )
+        handler.onCorrectionApplied = { [weak self] id, correctedText in
+            self?.reflectCorrectedLastDictation(id: id, correctedText: correctedText)
+        }
+        return handler
+    }()
+
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
     private var recordingStartTime: Date?
+    private let silenceEndpointMonitor: DictationSilenceEndpointMonitor
     private let streamingHandler: StreamingHandler
     private let promptPaletteHandler: PromptPaletteHandler
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
@@ -622,6 +688,14 @@ final class DictationViewModel: ObservableObject {
         return String(localized: "No sound from the microphone. Is it muted?")
     }
 
+    /// Countdown before silence ends a toggle recording. Text, not only an indicator color,
+    /// says that the recording is about to stop and how to keep it going.
+    var silenceStopWarningMessage: String? {
+        guard state == .recording, !isStopInFlight, let seconds = silenceStopCountdownSeconds else { return nil }
+        let remaining = Self.formattedSilenceDuration(TimeInterval(seconds))
+        return String(localized: "Stopping in \(remaining). Keep talking to continue.")
+    }
+
     var rejectedShortcutWarningMessage: String? {
         guard let rejectedShortcutWarning, rejectedShortcutWarning.state == state else { return nil }
         return rejectedShortcutWarning.message
@@ -629,8 +703,12 @@ final class DictationViewModel: ObservableObject {
 
     /// Shown by the indicator in place of its regular status. The Esc confirmation comes
     /// first, since it expires; a silent microphone is shown again once the others are gone.
+    /// The silence countdown cannot coincide with a silent microphone, which has no speech.
     var indicatorWarningMessage: String? {
-        cancelWarningMessage ?? rejectedShortcutWarningMessage ?? silentInputWarningMessage
+        cancelWarningMessage
+            ?? rejectedShortcutWarningMessage
+            ?? silenceStopWarningMessage
+            ?? silentInputWarningMessage
     }
 
     init(
@@ -666,7 +744,8 @@ final class DictationViewModel: ObservableObject {
         recoveryFallbackRunner: RecoveryFallbackRunner? = nil,
         recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider? = nil,
         primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil,
-        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil
+        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil,
+        lastDictationCorrectionPresenter: (any LastDictationCorrectionPresenting)? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -755,6 +834,9 @@ final class DictationViewModel: ObservableObject {
                 audioRecordingService?.totalBufferDuration ?? 0
             }
         )
+        self.silenceEndpointMonitor = DictationSilenceEndpointMonitor { [weak audioRecordingService] offset in
+            audioRecordingService?.getBufferDelta(since: offset) ?? ([], offset)
+        }
         self.promptPaletteHandler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
             workflowService: workflowService,
@@ -770,6 +852,8 @@ final class DictationViewModel: ObservableObject {
             historyService: historyService,
             recentTranscriptionStore: recentTranscriptionStore
         )
+        self.lastDictationCorrectionPresenter = lastDictationCorrectionPresenter
+            ?? LastDictationCorrectionPanelController()
         self.settingsHandler = DictationSettingsHandler(
             hotkeyService: hotkeyService,
             audioRecordingService: audioRecordingService,
@@ -791,6 +875,8 @@ final class DictationViewModel: ObservableObject {
         self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
+        self.toggleSilenceStopEnabled = Self.loadToggleSilenceStopEnabled()
+        self.toggleSilenceStopDuration = Self.loadToggleSilenceStopDuration()
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -832,6 +918,12 @@ final class DictationViewModel: ObservableObject {
         }
         audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] uptimeNanoseconds in
             self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
+        }
+        silenceEndpointMonitor.onPhaseChange = { [weak self] sessionID, phase in
+            self?.handleSilenceEndpointPhase(phase, sessionID: sessionID)
+        }
+        silenceEndpointMonitor.onEndpoint = { [weak self] sessionID in
+            self?.handleSilenceEndpoint(sessionID: sessionID)
         }
 
         promptPaletteHandler.onWorkflowProcessingChanged = { [weak self] isProcessing in
@@ -985,6 +1077,41 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistMicrophoneBoostEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+    }
+
+    nonisolated static func loadToggleSilenceStopEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+    }
+
+    nonisolated static func persistToggleSilenceStopEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: UserDefaultsKeys.toggleDictationSilenceStopEnabled)
+    }
+
+    /// A stored value outside the offered range, or not a number, falls back into it.
+    nonisolated static func loadToggleSilenceStopDuration(defaults: UserDefaults = .standard) -> TimeInterval {
+        DictationSilenceEndpointDetector.clampedSilenceDuration(
+            defaults.object(forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration) as? Double
+        )
+    }
+
+    nonisolated static func persistToggleSilenceStopDuration(_ duration: TimeInterval, defaults: UserDefaults = .standard) {
+        defaults.set(duration, forKey: UserDefaultsKeys.toggleDictationSilenceStopDuration)
+    }
+
+    /// "3 seconds" or "2.5 seconds" in the app language, with its plural form.
+    nonisolated static func formattedSilenceDuration(
+        _ seconds: TimeInterval,
+        locale: Locale = Locale(identifier: preferredAppLanguageCode())
+    ) -> String {
+        let isWholeSecond = seconds.rounded() == seconds
+        return Duration.milliseconds(Int64((seconds * 1000).rounded())).formatted(
+            .units(
+                allowed: [.seconds],
+                width: .wide,
+                fractionalPart: isWholeSecond ? .hide : .show(length: 1)
+            )
+            .locale(locale)
+        )
     }
 
     nonisolated static func indicatorTranscriptPreviewFontSize(for style: IndicatorStyle, offset: Int) -> CGFloat {
@@ -1142,6 +1269,26 @@ final class DictationViewModel: ObservableObject {
         updateRecordingInputSilence()
     }
 
+    /// Tests pass a long interval and step the silence watch with `testingPollSilenceEndpoint`.
+    func testingSetSilenceEndpointPollInterval(_ interval: Duration) {
+        silenceEndpointMonitor.pollInterval = interval
+    }
+
+    var testingSilenceEndpointSessionID: UUID? {
+        silenceEndpointMonitor.monitoredSessionID
+    }
+
+    /// One poll of the silence watch for `sessionID`, by default the watched session.
+    func testingPollSilenceEndpoint(sessionID: UUID? = nil) {
+        guard let sessionID = sessionID ?? silenceEndpointMonitor.monitoredSessionID else { return }
+        silenceEndpointMonitor.poll(sessionID: sessionID)
+    }
+
+    /// Delivers an endpoint report as the watch would, including a late one for an old session.
+    func testingReportSilenceEndpoint(sessionID: UUID) {
+        handleSilenceEndpoint(sessionID: sessionID)
+    }
+
     func testingWaitForPostInsertionPersistence() async {
         await postInsertionPersistenceTask?.value
     }
@@ -1163,6 +1310,10 @@ final class DictationViewModel: ObservableObject {
         isRecordingInputReady = true
         state = .recording
         self.partialText = partialText
+        // Shows the countdown before a silence stop (#1023) for screenshots of that state.
+        if ProcessInfo.processInfo.arguments.contains("--screenshot-silence-stop-countdown") {
+            silenceStopCountdownSeconds = 2
+        }
     }
 #endif
 
@@ -1225,7 +1376,8 @@ final class DictationViewModel: ObservableObject {
         let transcriptionID: UUID
         let timestamp: Date
         let rawText: String
-        let finalText: String
+        /// Changed by Correct Last Dictation when the dictation is corrected before it was persisted.
+        var finalText: String
         let appName: String?
         let appBundleIdentifier: String?
         var appURL: String?
@@ -1241,6 +1393,7 @@ final class DictationViewModel: ObservableObject {
         let historyClearGeneration: Int
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
+        let llmUsage: HistoryLLMUsage?
         /// Set when `.transcriptionCompleted` went out before persistence, so it is emitted once.
         var completionEventEmitted = false
     }
@@ -1364,6 +1517,7 @@ final class DictationViewModel: ObservableObject {
                 modelUsed: dictation.modelUsed,
                 audioFileName: historyAudioFileName,
                 pipelineSteps: dictation.pipelineSteps,
+                llmUsage: dictation.llmUsage,
                 capturedInClearGeneration: dictation.historyClearGeneration
             )
         }
@@ -2054,13 +2208,13 @@ final class DictationViewModel: ObservableObject {
         }
 
         let resolveWebsiteBeforeRecording = WorkflowAutoEnterMode.duringDictation.isAvailable
-            && initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
+            && initialForcedWorkflow == nil && (workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   workflow.output.autoEnterMode == .duringDictation || effectiveAutoEnterMode == .duringDictation,
                   let trigger = workflow.trigger, !trigger.websitePatterns.isEmpty else { return false }
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(initialActiveApp.bundleId ?? "")
-        }
+        } || websiteExclusionCanChangeSubmit(bundleIdentifier: initialActiveApp.bundleId))
         if resolveWebsiteBeforeRecording {
             state = .processing
             processingPhase = localizedAppText("Checking website…", de: "Website wird geprüft …")
@@ -2216,6 +2370,8 @@ final class DictationViewModel: ObservableObject {
         lastDictationError = nil
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
+        // The editor has the keyboard focus, so the new dictation would be inserted into it.
+        lastDictationCorrectionHandler.cancel()
         modelManager.cancelAutoUnloadTimer()
         state = .recording
         partialText = ""
@@ -2272,6 +2428,7 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = false
         recordingStartTime = Date()
         startRecordingTimer()
+        startSilenceEndpointMonitorIfNeeded(sessionID: sessionID)
 
         let contextStartTimestamp = CFAbsoluteTimeGetCurrent()
         // Match the rule after the audio engine is live. When live-field insertion
@@ -2455,8 +2612,17 @@ final class DictationViewModel: ObservableObject {
                 return nil
             }
 
-            if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
-                logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
+            let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL)
+            // The Always workflow matched while the URL was unknown. A website it excludes
+            // leaves no match, so the recording continues without a workflow.
+            let websiteExcludesAlwaysWorkflow = workflowMatch == nil
+                && activeWorkflowMatch?.kind == .globalFallback
+            if workflowMatch != nil || websiteExcludesAlwaysWorkflow {
+                if let workflowMatch {
+                    logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
+                } else {
+                    logger.info("URL resolution: the website is excluded from the Always workflow")
+                }
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
                 prewarmDictationModel()
                 let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
@@ -2596,8 +2762,10 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    /// Whether the website can still change the workflow in this app: a website workflow can
+    /// match here, or the matched Always workflow excludes websites.
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
-        workflowService.workflows.contains { workflow in
+        let websiteWorkflowCanMatch = workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   let trigger = workflow.trigger,
                   !trigger.websitePatterns.isEmpty else {
@@ -2606,6 +2774,25 @@ final class DictationViewModel: ObservableObject {
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(bundleIdentifier ?? "")
         }
+        return websiteWorkflowCanMatch || matchedAlwaysWorkflowExcludesWebsites(inApp: bundleIdentifier)
+    }
+
+    /// Whether the current match is an Always workflow that the website can still exclude.
+    /// Exclusions never matter when an app or website workflow matched instead.
+    private func matchedAlwaysWorkflowExcludesWebsites(inApp bundleIdentifier: String?) -> Bool {
+        guard let match = activeWorkflowMatch, match.kind == .globalFallback else { return false }
+        return match.workflow.trigger?.dependsOnWebsite(inApp: bundleIdentifier) == true
+    }
+
+    /// Whether a website that the matched Always workflow excludes changes submitting during
+    /// dictation: that workflow submits, or another Always workflow that can take over does.
+    private func websiteExclusionCanChangeSubmit(bundleIdentifier: String?) -> Bool {
+        matchedAlwaysWorkflowExcludesWebsites(inApp: bundleIdentifier)
+            && workflowService.workflows.contains { workflow in
+                workflow.isEnabled
+                    && workflow.trigger?.kind == .global
+                    && workflow.output.autoEnterMode == .duringDictation
+            }
     }
 
     private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
@@ -2616,8 +2803,26 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var shouldTrackTargetAppCorrectionLearning: Bool {
-        (licenseService?.hasCommercialLicense ?? false) &&
-            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        correctionLearningAvailability == .available
+    }
+
+    /// Learning from corrections needs a Commercial license and the setting turned on. The same
+    /// gate applies to edits after insertion and to Correct Last Dictation.
+    private var correctionLearningAvailability: CorrectionLearningAvailability {
+        guard licenseService?.hasCommercialLicense ?? false else { return .requiresLicense }
+        return UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+            ? .available
+            : .turnedOff
+    }
+
+    /// The App Store edition does not offer learning from corrections (see
+    /// `PremiumFeatureID.editionFeatures`), so Correct Last Dictation only corrects and copies there.
+    private var lastDictationCorrectionLearningAvailability: CorrectionLearningAvailability {
+        #if APPSTORE
+        .notOffered
+        #else
+        correctionLearningAvailability
+        #endif
     }
 
     private var effectiveNumberNormalizationOverride: Bool? {
@@ -2681,7 +2886,9 @@ final class DictationViewModel: ObservableObject {
         return false
     }
 
-    private func stopDictation(submitRequested: Bool = false) {
+    /// `stoppedAfterSilence` marks the silence stop of a toggle dictation, which takes the same
+    /// path as a second press of the shortcut and only announces its own reason.
+    private func stopDictation(submitRequested: Bool = false, stoppedAfterSilence: Bool = false) {
         if state == .processing, recordingStartTask != nil, !isStopInFlight {
             cancelCurrentOperation()
             return
@@ -2695,6 +2902,7 @@ final class DictationViewModel: ObservableObject {
             return
         }
         isStopInFlight = true
+        stopSilenceEndpointMonitor()
         let stopUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         updateLatencyTrace(sessionID: activeDictationSessionID) { $0.stopUptimeNanoseconds = stopUptimeNanoseconds }
         let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
@@ -2710,7 +2918,11 @@ final class DictationViewModel: ObservableObject {
         // A push-to-talk recording interrupted by other keys is discarded without
         // transcription; its discard banner is announced instead.
         if pendingPushToTalkDiscardMessage == nil {
-            accessibilityAnnouncementService.announceRecordingStopped()
+            if stoppedAfterSilence {
+                accessibilityAnnouncementService.announceRecordingStoppedAfterSilence()
+            } else {
+                accessibilityAnnouncementService.announceRecordingStopped()
+            }
         }
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
@@ -2940,6 +3152,8 @@ final class DictationViewModel: ObservableObject {
         let accessibilityObservationLease = targetAppAccessibilityObservationLease
         // Incremental results are only valid for a final text from the same live session.
         let incrementalPostProcessing = usedLiveSessionResult ? incrementalWorkflowPostProcessing : nil
+        // Segments sent while recording used tokens even when the final text cannot reuse them.
+        let incrementalLLMUsage = incrementalWorkflowPostProcessing?.usage
         if !usedLiveSessionResult {
             incrementalWorkflowPostProcessing?.cancel()
         }
@@ -3096,22 +3310,28 @@ final class DictationViewModel: ObservableObject {
                     configuredLanguageCandidates: languageCandidates,
                     detectedLanguage: result.detectedLanguage
                 )
-                let ppResult = try await postProcessingPipeline.process(
-                    text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
-                    outputFormat: resolvedOutputFormat,
-                    llmStepName: llmStepName,
-                    normalizeNumbers: self.effectiveNumberNormalizationOverride,
-                    llmFailureFallbackText: actionPluginId == nil ? text : nil,
-                    // Snippet and correction usage counters are saved after insertion.
-                    deferUsageCountSaves: true
-                )
+                // Every LLM request of this dictation, including fallbacks, retries and segments.
+                let llmUsage = LLMUsageLedger()
+                let ppResult = try await LLMUsageLedger.$current.withValue(llmUsage) {
+                    try await postProcessingPipeline.process(
+                        text: text, context: ppContext, dictationContext: dictationContext, llmHandler: llmHandler,
+                        outputFormat: resolvedOutputFormat,
+                        llmStepName: llmStepName,
+                        normalizeNumbers: self.effectiveNumberNormalizationOverride,
+                        llmFailureFallbackText: actionPluginId == nil ? text : nil,
+                        // Snippet and correction usage counters are saved after insertion.
+                        deferUsageCountSaves: true
+                    )
+                }
+                llmUsage.merge(incrementalLLMUsage)
                 text = ppResult.text
                 let postProcessingFallback = ppResult.fallback
                 if let postProcessingFallback {
                     errorLogService.addEntry(
                         message: localizedAppText(
                             "\(postProcessingFallback.failedStep) post-processing failed. Raw transcription fallback selected. \(postProcessingFallback.reason)",
-                            de: "\(postProcessingFallback.failedStep)-Nachbearbeitung fehlgeschlagen. Rohtext-Fallback ausgewählt. \(postProcessingFallback.reason)"
+                            de: "\(postProcessingFallback.failedStep)-Nachbearbeitung fehlgeschlagen. Rohtext-Fallback ausgewählt. \(postProcessingFallback.reason)",
+                            es: "Falló el posprocesamiento de \(postProcessingFallback.failedStep). Se eligió el respaldo con la transcripción sin procesar. \(postProcessingFallback.reason)"
                         ),
                         category: "prompt"
                     )
@@ -3439,7 +3659,8 @@ final class DictationViewModel: ObservableObject {
                         historyEnabled: UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true,
                         historyClearGeneration: historyService.clearGeneration,
                         audioSamples: audioSamplesForHistory,
-                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps
+                        pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps,
+                        llmUsage: llmUsage.usage
                     ),
                     pendingURLResolution: activeApp.url == nil ? pendingURLResolution : nil
                 )
@@ -3518,7 +3739,9 @@ final class DictationViewModel: ObservableObject {
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
-        return plugin is any LiveTranscriptionCapablePlugin
+        // A model without live sessions previewed in batches; its preview never becomes the transcript.
+        let modelId = modelManager.effectiveModelOverride(streamingParams.cloudModelOverride)
+        return plugin.liveTranscriptionPlugin(forModelId: modelId) != nil
     }
 
     private func transcribeFinalAudio(
@@ -4045,6 +4268,7 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = false
         activeDictationSessionID = nil
         pendingPushToTalkDiscardMessage = nil
+        stopSilenceEndpointMonitor()
         clearRecordingStartCueState()
         clearCancelWarning()
         state = .idle
@@ -4423,7 +4647,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func engineSupportsPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
-        if engine is any LiveTranscriptionCapablePlugin, engine.supportsStreaming { return true }
+        if engine.liveTranscriptionPlugin(forModelId: nil) != nil, engine.supportsStreaming { return true }
         let allowsFallback = (engine as? any TranscriptPreviewFallbackPolicyProviding)?
             .allowsTranscriptPreviewFallback ?? true
         return allowsFallback
@@ -4521,7 +4745,8 @@ final class DictationViewModel: ObservableObject {
                 base = localizedAppText(
                     "This workflow applies because \(appDescriptor) was detected together with \(domain).",
                     de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde.",
-                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。"
+                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。",
+                    es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor) junto con \(domain)."
                 )
             } else {
                 base = localizedAppText(
@@ -4535,7 +4760,8 @@ final class DictationViewModel: ObservableObject {
                 base = localizedAppText(
                     "This workflow applies because \(domain) was detected.",
                     de: "Dieser Workflow greift, weil \(domain) erkannt wurde.",
-                    ja: "\(domain) が検出されたため、このワークフローが適用されます。"
+                    ja: "\(domain) が検出されたため、このワークフローが適用されます。",
+                    es: "Este flujo de trabajo se aplica porque se detectó \(domain)."
                 )
             } else {
                 base = localizedAppText(
@@ -4548,7 +4774,8 @@ final class DictationViewModel: ObservableObject {
             base = localizedAppText(
                 "This workflow applies because \(appDescriptor) was detected.",
                 de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde.",
-                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。"
+                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。",
+                es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor)."
             )
         case .globalFallback:
             base = localizedAppText(
@@ -4729,6 +4956,9 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
+        // A replacement session of the same recording keeps counting the tokens
+        // the replaced one already used.
+        let earlierLLMUsage = incrementalWorkflowPostProcessing?.usage
         cancelIncrementalWorkflowPostProcessing()
         guard let configuration else { return }
 
@@ -4740,7 +4970,8 @@ final class DictationViewModel: ObservableObject {
             prepareInput: configuration.prepareInput,
             processor: { segment in
                 try await workflowProcessor.process(request: request, text: segment)
-            }
+            },
+            usage: earlierLLMUsage ?? LLMUsageLedger()
         )
         logger.info("Incremental workflow post-processing armed for this recording localProvider=\(configuration.policy.isLocalProvider, privacy: .public)")
     }
@@ -4886,7 +5117,24 @@ final class DictationViewModel: ObservableObject {
         pasteboard.setString(text, forType: .string)
     }
 
+    /// True when Correct Last Dictation has a dictation to open.
+    var canCorrectLastDictation: Bool {
+        lastDictationCorrectionHandler.latestTarget() != nil
+    }
+
+    /// Opens the Correct Last Dictation editor, or closes it when it is already open.
+    func triggerCorrectLastDictation() {
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
+        // A running workflow or Insert also shows the inserting state, and its paste would land
+        // in the editor, which takes the keyboard focus.
+        let isPasting = isProcessingStandaloneWorkflow || isInsertingUndeliveredTranscript
+        lastDictationCorrectionHandler.toggle(currentState: isPasting ? .processing : state)
+    }
+
     func pasteLastTranscription() {
+        // The editor would otherwise receive the paste meant for the focused app.
+        lastDictationCorrectionHandler.cancel()
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
         // The undelivered-transcript feedback keeps the state busy, so insert its transcript here.
@@ -4970,15 +5218,38 @@ final class DictationViewModel: ObservableObject {
         if let record = historyService.record(withID: id) {
             historyService.updateRecord(record, finalText: rawText)
         }
-        if let session = dictationSessions[id], session.status == .completed,
-           var transcription = session.transcription {
-            transcription.text = rawText
-            transcription.wordsCount = rawText.split(whereSeparator: \.isWhitespace).count
-            storeDictationSession(DictationSessionSnapshot(
-                id: session.id, status: session.status, transcription: transcription, error: session.error
-            ))
-        }
+        updateCompletedDictationSessionText(id: id, text: rawText)
         lastTranscribedText = rawText
+    }
+
+    /// Keeps this session's copies of a dictation in step with a correction from Correct Last
+    /// Dictation. The handler has updated History and the recent transcriptions already; the
+    /// text in the target app stays as it was inserted.
+    private func reflectCorrectedLastDictation(id: UUID, correctedText: String) {
+        // Not persisted yet: the history record is written with the corrected text.
+        if let index = pendingPostInsertionDictationIndex(id: id) {
+            pendingPostInsertionDictations[index].finalText = correctedText
+        }
+        updateCompletedDictationSessionText(id: id, text: correctedText)
+        // A pending Insert offer for this dictation inserts the corrected text.
+        if case .insertUndeliveredTranscript(let transcript)? = actionFeedbackAction,
+           transcript.completion.id == id {
+            actionFeedbackAction = .insertUndeliveredTranscript(transcript.with(text: correctedText))
+        }
+        // Read Back follows the corrected text, unless a newer dictation has finished since.
+        if recentTranscriptionStore.sessionEntries.first?.id == id {
+            lastTranscribedText = correctedText
+        }
+    }
+
+    private func updateCompletedDictationSessionText(id: UUID, text: String) {
+        guard let session = dictationSessions[id], session.status == .completed,
+              var transcription = session.transcription else { return }
+        transcription.text = text
+        transcription.wordsCount = text.split(whereSeparator: \.isWhitespace).count
+        storeDictationSession(DictationSessionSnapshot(
+            id: session.id, status: session.status, transcription: transcription, error: session.error
+        ))
     }
 
     var canRecoverLastRecording: Bool {
@@ -4997,11 +5268,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerWorkflowPalette() {
+        lastDictationCorrectionHandler.cancel()
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
     }
 
     func processWorkflowHotkeyText(workflowId: UUID) {
+        lastDictationCorrectionHandler.cancel()
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.hide()
         guard let workflow = workflowService.workflow(id: workflowId) else { return }
@@ -5013,6 +5286,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerRecentTranscriptionsPalette() {
+        lastDictationCorrectionHandler.cancel()
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.triggerSelection(currentState: state)
     }
@@ -5411,6 +5685,59 @@ final class DictationViewModel: ObservableObject {
         recordingTimer = nil
         recordingDuration = 0
         isRecordingInputSilent = false
+        stopSilenceEndpointMonitor()
+    }
+
+    /// Watches a hotkey dictation for trailing silence while the setting is on. Only a
+    /// toggle-mode session stops on it; a hybrid press can still become one after the start.
+    private func startSilenceEndpointMonitorIfNeeded(sessionID: UUID) {
+        stopSilenceEndpointMonitor()
+        // Sessions started without a shortcut, such as API requests, never become toggle sessions.
+        guard toggleSilenceStopEnabled, hotkeyService.currentMode != nil else { return }
+        silenceEndpointMonitor.start(sessionID: sessionID, silenceDuration: toggleSilenceStopDuration)
+    }
+
+    private func stopSilenceEndpointMonitor() {
+        silenceEndpointMonitor.stop()
+        silenceStopCountdownSeconds = nil
+    }
+
+    /// Push-to-talk and holding the hybrid shortcut never stop on silence.
+    private var appliesToggleSilenceStop: Bool {
+        toggleSilenceStopEnabled && hotkeyService.currentMode == .toggle
+    }
+
+    private func handleSilenceEndpointPhase(_ phase: DictationSilenceEndpointDetector.Phase, sessionID: UUID) {
+        guard sessionID == activeDictationSessionID else { return }
+        var countdownSeconds: Int?
+        if case .stopping(let remaining) = phase,
+           state == .recording,
+           !isStopInFlight,
+           appliesToggleSilenceStop {
+            countdownSeconds = DictationSilenceEndpointDetector.countdownSeconds(for: remaining)
+        }
+        if silenceStopCountdownSeconds != countdownSeconds {
+            silenceStopCountdownSeconds = countdownSeconds
+        }
+    }
+
+    /// Ends a toggle dictation whose trailing silence reached the configured duration, through
+    /// the same stop as a second press of the shortcut: transcription, workflows, insertion,
+    /// history and recovery stay the same. A report for another session, a recording that is
+    /// already stopping, another mode or a setting turned off in the meantime does nothing.
+    private func handleSilenceEndpoint(sessionID: UUID) {
+        guard sessionID == activeDictationSessionID else { return }
+        silenceStopCountdownSeconds = nil
+        guard state == .recording,
+              !isStopInFlight,
+              isRecordingInputReady,
+              appliesToggleSilenceStop else { return }
+        logger.info(
+            "Silence endpoint reached, stopping toggle dictation: silenceSeconds=\(String(format: "%.1f", self.toggleSilenceStopDuration), privacy: .public)"
+        )
+        // The shortcut no longer counts as active, so its next press starts a new dictation.
+        hotkeyService.cancelDictation()
+        stopDictation(stoppedAfterSilence: true)
     }
 
     private func updateRecordingInputSilence() {

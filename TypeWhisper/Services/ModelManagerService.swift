@@ -359,6 +359,42 @@ final class ModelManagerService: ObservableObject {
         return PluginManager.shared.transcriptionEngine(for: providerId)?.providerDisplayName
     }
 
+    /// The saved default engine while dictation cannot use it.
+    struct UnavailableSavedEngine: Equatable {
+        let providerId: String
+        /// Nil while the engine's plugin is not loaded, as during an update.
+        let displayName: String?
+    }
+
+    /// The engine that file transcription, Recovery, the Recorder, watch folders and
+    /// the Speakers page use when they have no engine of their own: the engine
+    /// dictation uses right now. That is a temporary fallback while the saved engine
+    /// is unavailable (#1533), and the enforced engine under managed settings.
+    /// Nil while that engine cannot start a transcription, as when the saved engine
+    /// stays selected without a downloaded model and no other engine can stand in.
+    /// An engine that is still loading its model counts as available.
+    var defaultEngine: TranscriptionEnginePlugin? {
+        guard let manager = PluginManager.shared,
+              let providerId = effectiveEngineId(nil),
+              let engine = manager.transcriptionEngine(for: providerId),
+              transcriptionReadinessError(providerId: providerId) == nil else { return nil }
+        return engine
+    }
+
+    /// The saved default engine while dictation runs on a temporary fallback or on no
+    /// engine because the saved one is unavailable (#1533). Nil while dictation uses
+    /// the saved engine, when none is saved, and while managed settings decide.
+    var unavailableSavedEngine: UnavailableSavedEngine? {
+        guard PluginManager.shared?.enforcedTranscriptionResolution == nil,
+              let savedProviderId = UserDefaults.standard.string(forKey: providerKey),
+              !savedProviderId.isEmpty,
+              savedProviderId != selectedProviderId else { return nil }
+        return UnavailableSavedEngine(
+            providerId: savedProviderId,
+            displayName: PluginManager.shared?.transcriptionEngine(for: savedProviderId)?.providerDisplayName
+        )
+    }
+
     var selectedModelId: String? {
         guard let providerId = selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }
@@ -507,6 +543,18 @@ final class ModelManagerService: ObservableObject {
         }
     }
 
+    /// Starts loading `modelId`, downloading it when needed, without waiting for the
+    /// load and without selecting the engine, unlike `loadModel(_:modelId:)`. Callers that
+    /// show progress follow the plugin's settings activity. Returns false when the plugin
+    /// cannot load a model on request.
+    @discardableResult
+    func startModelLoad(_ modelId: String, of engine: TranscriptionEnginePlugin) -> Bool {
+        let selector = NSSelectorFromString("triggerRestoreModelForModel:")
+        guard let object = engine as? NSObject, object.responds(to: selector) else { return false }
+        _ = object.perform(selector, with: modelId as NSString)
+        return true
+    }
+
     @discardableResult
     func unloadModel(_ providerId: String) throws -> String? {
         guard let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
@@ -554,12 +602,12 @@ final class ModelManagerService: ObservableObject {
         return plugin.supportsStreaming
     }
 
-    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil) -> Bool {
+    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
-        return plugin is LiveTranscriptionCapablePlugin
+        return plugin.liveTranscriptionPlugin(forModelId: effectiveModelOverride(cloudModelOverride)) != nil
     }
 
     func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
@@ -583,8 +631,8 @@ final class ModelManagerService: ObservableObject {
         guard let policy = plugin as? any TranscriptPreviewFallbackPolicyProviding else {
             return true
         }
-        guard plugin is any LiveTranscriptionCapablePlugin else {
-            // Keep batch-only engines' policy checks free of model-load side effects.
+        guard plugin.liveTranscriptionPlugin(forModelId: cloudModelOverride) != nil else {
+            // Keep batch-only engines' and models' policy checks free of model-load side effects.
             return policy.allowsTranscriptPreviewFallback
         }
 
@@ -599,7 +647,7 @@ final class ModelManagerService: ObservableObject {
     /// live session, so dictation should stream even when no transcript preview is shown.
     func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
-              PluginManager.shared.transcriptionEngine(for: providerId) is any LiveTranscriptionCapablePlugin,
+              PluginManager.shared.transcriptionEngine(for: providerId)?.liveTranscriptionPlugin(forModelId: nil) != nil,
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
             return false
         }
@@ -634,12 +682,20 @@ final class ModelManagerService: ObservableObject {
     /// as available. An engine a bundle exposes next to its main one has its
     /// models managed by that bundle, unless it manages them itself.
     func lacksDownloadedModel(_ engine: TranscriptionEnginePlugin) -> Bool {
-        guard !engine.isConfigured,
-              let modelManager = (engine as? any PluginDownloadedModelManaging)
-                  ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
-                      as? any PluginDownloadedModelManaging)
-        else { return false }
+        guard !engine.isConfigured, let modelManager = downloadedModelManager(for: engine) else { return false }
         return modelManager.downloadedModels.isEmpty
+    }
+
+    /// Models of the engine whose files are on disk, as its plugin reports them. Empty
+    /// when the plugin does not report downloaded models.
+    func downloadedModelIds(of engine: TranscriptionEnginePlugin) -> Set<String> {
+        Set(downloadedModelManager(for: engine)?.downloadedModels.map(\.id) ?? [])
+    }
+
+    private func downloadedModelManager(for engine: TranscriptionEnginePlugin) -> (any PluginDownloadedModelManaging)? {
+        (engine as? any PluginDownloadedModelManaging)
+            ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
+                as? any PluginDownloadedModelManaging)
     }
 
     func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
@@ -1018,7 +1074,8 @@ final class ModelManagerService: ObservableObject {
         // against the model that will actually transcribe.
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
-        guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
+        // Preparation selected the model that transcribes, so nil asks about that model.
+        guard let livePlugin = plugin.liveTranscriptionPlugin(forModelId: nil) else {
             restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
             return nil
         }

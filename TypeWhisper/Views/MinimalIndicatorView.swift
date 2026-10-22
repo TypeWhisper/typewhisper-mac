@@ -22,6 +22,7 @@ struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var dotPulse = false
@@ -74,6 +75,13 @@ struct MinimalIndicatorView: View {
             }
             let estimatedTextWidth = CGFloat(min(name.count, 18)) * 7
             return min(max(96, estimatedTextWidth + 44), 190)
+        case .model:
+            guard !presentation.isRecorder else { return idleWidth }
+            let chipWidth = NotchIndicatorLayout.modelChipWidth(
+                for: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName),
+                sizing: sizing
+            )
+            return min(max(96, chipWidth + 44), 220)
         }
     }
 
@@ -169,6 +177,7 @@ struct MinimalIndicatorView: View {
                     || presentation.actionFeedbackMessage != nil ? .contain : .combine
             )
             .accessibilityLabel(accessibilityLabel)
+            .indicatorModelMenuAccessibilityAction(isAvailable: presentation.offersModelMenu)
         }
 
     private var accessibilityLabel: String {

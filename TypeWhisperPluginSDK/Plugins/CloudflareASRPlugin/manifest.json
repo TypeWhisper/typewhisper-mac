@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.cloudflare-asr",
     "name": "Cloudflare ASR",
-    "version": "1.0.9",
+    "version": "1.0.10",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -15,6 +15,7 @@
     "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/",
     "descriptions": {
         "de": "OpenAI-kompatible Transkription über einen Cloudflare-Tunnel mit Service-Token-Authentifizierung. Zugangsdaten werden im macOS-Schlüsselbund gespeichert.",
+        "es": "Transcripción compatible con OpenAI a través de un túnel de Cloudflare con autenticación por token de servicio. Las credenciales se guardan en el llavero de macOS.",
         "ja": "サービストークン認証付きのCloudflareトンネル経由でOpenAI互換の文字起こしを行います。認証情報はmacOSキーチェーンに保存されます。"
     }
 }

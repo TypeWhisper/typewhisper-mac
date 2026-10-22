@@ -84,6 +84,7 @@ final class DictionaryService: ObservableObject {
     #if DEBUG
     private var trainingSaveOverride: (() throws -> Void)?
     var updateEntrySaveOverride: (() throws -> Void)?
+    var deleteEntriesSaveOverride: (() throws -> Void)?
 
     func setTrainingSaveOverrideForTesting(_ override: (() throws -> Void)?) {
         trainingSaveOverride = override
@@ -495,6 +496,9 @@ final class DictionaryService: ObservableObject {
         }
 
         do {
+            #if DEBUG
+            try deleteEntriesSaveOverride?()
+            #endif
             try context.save()
             loadEntries()
         } catch {

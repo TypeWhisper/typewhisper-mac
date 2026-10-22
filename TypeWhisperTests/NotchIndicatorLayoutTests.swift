@@ -103,4 +103,39 @@ final class NotchIndicatorLayoutTests: XCTestCase {
     func testContainerWidthTranscriptUsesMinimumTranscriptWidth() {
         XCTAssertEqual(NotchIndicatorLayout.containerWidth(closedWidth: 305, mode: .transcript), 400)
     }
+
+    func testModelContentWidensTheClosedNotchUpToTheChipLimit() {
+        let width: (String) -> CGFloat = { title in
+            NotchIndicatorLayout.recordingContentWidth(
+                .model,
+                recordingDuration: 0,
+                activeRuleName: nil,
+                modelTitle: title
+            )
+        }
+        let short = width("Nova-3")
+        let long = width(String(repeating: "Whisper Large v3 Turbo ", count: 4))
+        XCTAssertGreaterThan(short, 0)
+        XCTAssertGreaterThan(long, short)
+        XCTAssertEqual(long, NotchIndicatorLayout.modelChipMaxWidth)
+
+        let closed: (NotchIndicatorContent) -> CGFloat = { right in
+            NotchIndicatorLayout.recordingClosedWidth(
+                hasNotch: true,
+                notchWidth: 180,
+                leftContent: .timer,
+                rightContent: right,
+                recordingDuration: 0,
+                activeRuleName: nil,
+                modelTitle: "Parakeet TDT v3"
+            )
+        }
+        XCTAssertGreaterThan(closed(.model), closed(.none))
+    }
+
+    func testRecorderShowsNoModelContent() {
+        XCTAssertEqual(NotchIndicatorContent.model.shown(isRecorder: true), NotchIndicatorContent.none)
+        XCTAssertEqual(NotchIndicatorContent.model.shown(isRecorder: false), NotchIndicatorContent.model)
+        XCTAssertEqual(NotchIndicatorContent.timer.shown(isRecorder: true), NotchIndicatorContent.timer)
+    }
 }

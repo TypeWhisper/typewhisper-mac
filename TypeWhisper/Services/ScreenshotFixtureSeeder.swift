@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import Foundation
 import TypeWhisperPluginSDK
@@ -27,12 +28,22 @@ extension ServiceContainer {
             variant.hasPremiumAccess,
             forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled
         )
-        if ["indicator-settings", "indicator"].contains(AppConstants.screenshotState) {
+        if ["indicator-settings", "indicator", "indicator-model-menu"].contains(AppConstants.screenshotState) {
             dictationViewModel.prepareScreenshotIndicatorFixture()
         }
+        if AppConstants.screenshotState == "recorder-queue" {
+            audioRecorderViewModel.prepareScreenshotQueueFixture()
+        }
+        seedScreenshotRecorderFolders(state: AppConstants.screenshotState)
 
-        seedScreenshotHistory(content.history, languageCode: language.rawValue)
+        if AppConstants.screenshotState != "correct-last-dictation-empty" {
+            seedScreenshotHistory(content.history, languageCode: language.rawValue)
+        }
+        if AppConstants.screenshotState?.hasPrefix("correct-last-dictation") == true {
+            prepareScreenshotLastDictationCorrection()
+        }
         usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
+        seedScreenshotFileTranscriptionQueue(languageCode: language.rawValue)
 
         dictionaryService.addEntries(
             content.terms.map {
@@ -63,7 +74,8 @@ extension ServiceContainer {
 
         seedScreenshotPluginRegistry()
         seedScreenshotTermPacks()
-        DictionaryViewModel.shared.filterTab = AppConstants.screenshotState == "dictionary-term-packs"
+        seedScreenshotLocalTermPacks()
+        DictionaryViewModel.shared.filterTab = Self.termPackScreenshotStates.contains(AppConstants.screenshotState ?? "")
             ? .termPacks
             : .all
         pluginManager.setRuleNamesProvider { [weak self] in
@@ -81,6 +93,70 @@ extension ServiceContainer {
 
         statisticsViewModel.refresh()
         homeViewModel.refresh()
+    }
+
+    /// Every screenshot run starts with the default Recorder folder, because runs share their
+    /// preferences. In "recorder-folders", new recordings go to `~/Recordings`, and the default
+    /// folder holds an earlier recording and stays listed. "recorder-folder-unavailable" removes
+    /// `~/Recordings` again, as when its disk is disconnected.
+    private func seedScreenshotRecorderFolders(state: String?) {
+        for key in [
+            UserDefaultsKeys.recorderFolderBookmark,
+            UserDefaultsKeys.recorderFolderPath,
+            UserDefaultsKeys.recorderEarlierFolders,
+        ] {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+        // The Recorder listed its recordings at launch, before the folders were reset or seeded.
+        defer { audioRecorderViewModel.loadRecordings() }
+
+        let chosenFolderIsGone = state == "recorder-folder-unavailable"
+        // The fixture writes into the home folder, so only into a screenshot run's own home.
+        guard state == "recorder-folders" || chosenFolderIsGone,
+              ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"] != nil else { return }
+        let fileManager = FileManager.default
+        let chosenFolder = fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Recordings", isDirectory: true)
+        let referenceDate = AppConstants.screenshotFixtureReferenceDate
+        do {
+            try writeScreenshotRecording(
+                baseName: CalendarMeetingRecordingFilename.preferredBaseName(
+                    title: "Team Sync",
+                    date: referenceDate.addingTimeInterval(-6 * 86_400)
+                ),
+                in: recorderFolderStore.defaultDirectory,
+                seconds: 42,
+                createdAt: referenceDate.addingTimeInterval(-6 * 86_400)
+            )
+            try fileManager.createDirectory(at: chosenFolder, withIntermediateDirectories: true)
+            try writeScreenshotRecording(
+                baseName: CalendarMeetingRecordingFilename.preferredBaseName(title: "", date: referenceDate),
+                in: chosenFolder,
+                seconds: 95,
+                createdAt: referenceDate
+            )
+            try recorderFolderStore.chooseFolder(chosenFolder)
+            if chosenFolderIsGone {
+                try fileManager.removeItem(at: chosenFolder)
+                recorderFolderStore.refreshAvailability()
+            }
+        } catch {
+            fputs("Could not seed the Recorder folder screenshot fixture: \(error)\n", stderr)
+        }
+    }
+
+    private func writeScreenshotRecording(baseName: String, in folder: URL, seconds: Int, createdAt: Date) throws {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(baseName).appendingPathExtension("wav")
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(seconds * 16_000)) else {
+            return
+        }
+        buffer.frameLength = buffer.frameCapacity
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            try file.write(from: buffer)
+        }
+        try FileManager.default.setAttributes([.creationDate: createdAt], ofItemAtPath: url.path)
     }
 
     private func seedScreenshotPluginSettings(language: ScreenshotFixtureLanguage) {
@@ -136,6 +212,26 @@ extension ServiceContainer {
             )
             try? file.data.write(to: destination, options: .atomic)
         }
+    }
+
+    /// Correct Last Dictation copies the corrected text, which must not replace the clipboard
+    /// of the Mac the screenshots are taken on. The newest dictation was post-processed, so
+    /// the editor also shows its original transcript.
+    private func prepareScreenshotLastDictationCorrection() {
+        let clipboard = NSPasteboard(name: NSPasteboard.Name("com.typewhisper.screenshots.clipboard"))
+        dictationViewModel.pasteboardProvider = { clipboard }
+        guard AppConstants.screenshotState == "correct-last-dictation" else { return }
+        _ = historyService.addRecord(
+            timestamp: Date().addingTimeInterval(-120),
+            rawText: "please deploy the release build to kubernetis after the review",
+            finalText: "Please deploy the release build to Kubernetis after the review.",
+            appName: "Slack",
+            appBundleIdentifier: "com.tinyspeck.slackmacgap",
+            durationSeconds: 4.5,
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "Parakeet TDT 0.6B v3"
+        )
     }
 
     private func seedScreenshotHistory(
@@ -211,6 +307,16 @@ extension ServiceContainer {
 
         if AppConstants.screenshotState == "history",
            let selectedRecord = historyService.allRecords().first(where: { $0.processingState == .ready }) {
+            // Listed under Details, which stays collapsed in the default capture.
+            selectedRecord.llmUsage = HistoryLLMUsage(entries: [
+                HistoryLLMUsage.Entry(
+                    providerId: "Claude",
+                    providerName: "Claude",
+                    model: "claude-haiku-4-5",
+                    inputTokens: 1_284,
+                    outputTokens: 18
+                ),
+            ])
             historyViewModel.requestRecordSelection([selectedRecord.id])
         }
         if AppConstants.screenshotState == "history-speakers" {
@@ -333,6 +439,24 @@ extension ServiceContainer {
         )
         voices.enroll("S1", inRecordID: recordID)
         historyViewModel.requestRecordSelection([recordID])
+    }
+
+    /// A file waiting in the File Transcription queue, so the page shows the
+    /// engine and model pickers that only appear next to queued files.
+    private func seedScreenshotFileTranscriptionQueue(languageCode: String) {
+        guard AppConstants.screenshotState == "file-transcription-queue" else { return }
+        let url = AppConstants.appSupportDirectory
+            .appendingPathComponent("ScreenshotMedia", isDirectory: true)
+            .appendingPathComponent(languageCode == "de" ? "Wochenplanung.m4a" : "Weekly planning.m4a")
+        try? FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        let samples = (0..<Int(12 * SpeakerAudioWriter.sampleRate)).map {
+            Float(sin(Double($0) * 0.06)) * 0.05
+        }
+        guard (try? SpeakerAudioWriter.writeAAC(samples: samples, to: url)) != nil else { return }
+        fileTranscriptionViewModel.addFiles([url])
     }
 
     private func seedScreenshotPluginRegistry() {
@@ -528,6 +652,65 @@ extension ServiceContainer {
         ]
         termPackRegistryService.fetchState = .loaded
     }
+
+    private static let localTermPackScreenshotStates: Set<String> = [
+        "dictionary-local-term-packs",
+        "dictionary-local-term-pack-error",
+        "dictionary-local-term-pack-replace",
+    ]
+
+    private static let termPackScreenshotStates = localTermPackScreenshotStates.union(["dictionary-term-packs"])
+
+    /// An imported local pack that is turned on. The error state adds a rejected import, the
+    /// replace state an import of an edited file with the same id.
+    private func seedScreenshotLocalTermPacks() {
+        guard let state = AppConstants.screenshotState,
+              Self.localTermPackScreenshotStates.contains(state) else { return }
+
+        let file = LocalTermPackFile(
+            id: "acme-team-terms",
+            name: "Acme Team Terms",
+            description: "Product names and internal tools of the Acme team.",
+            icon: "person.3",
+            version: "1.0.0",
+            author: "Acme Docs Team",
+            terms: ["Acme Cloud", "Roadrunner", "QuickShip", "Coyote API"],
+            corrections: [TermPackCorrection(original: "quick ship", replacement: "QuickShip", caseSensitive: false)],
+            names: ["de": "Acme-Teambegriffe", "ja": "Acme チーム用語", "zh": "Acme 团队词汇"],
+            descriptions: [
+                "de": "Produktnamen und interne Tools des Acme-Teams.",
+                "ja": "Acme チームの製品名と社内ツールです。",
+                "zh": "Acme 团队的产品名称和内部工具。",
+            ]
+        )
+        try? localTermPackStore.save(file)
+        DictionaryViewModel.shared.activatePack(file.termPack)
+
+        switch state {
+        case "dictionary-local-term-pack-error":
+            // A real import of a file that reuses a built-in pack's ID.
+            let rejected = #"{"id": "web-dev", "name": "My Web Terms", "description": "Web words", "icon": "globe", "version": "1.0.0", "author": "Acme Docs Team", "terms": ["Remix"]}"#
+            DictionaryViewModel.shared.importLocalTermPack(data: Data(rejected.utf8))
+        case "dictionary-local-term-pack-replace":
+            let edited = LocalTermPackFile(
+                id: file.id,
+                name: file.name,
+                description: file.description,
+                icon: file.icon,
+                version: "1.1.0",
+                author: file.author,
+                terms: file.terms + ["Anvil"],
+                corrections: file.corrections,
+                names: file.names,
+                descriptions: file.descriptions
+            )
+            if let data = try? edited.encodedData() {
+                DictionaryViewModel.shared.importLocalTermPack(data: data)
+            }
+        default:
+            break
+        }
+    }
 }
 
 /// Example data for add-on settings windows that would otherwise open empty.
@@ -710,6 +893,7 @@ private enum ScreenshotFixtureLanguage: String {
     case german = "de"
     case japanese = "ja"
     case simplifiedChinese = "zh-Hans"
+    case spanish = "es"
 
     static var current: ScreenshotFixtureLanguage {
         let preferred = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
@@ -719,6 +903,7 @@ private enum ScreenshotFixtureLanguage: String {
         if normalized.hasPrefix("de") { return .german }
         if normalized.hasPrefix("ja") { return .japanese }
         if normalized.hasPrefix("zh") { return .simplifiedChinese }
+        if normalized.hasPrefix("es") { return .spanish }
         return .english
     }
 
@@ -732,6 +917,8 @@ private enum ScreenshotFixtureLanguage: String {
             [("チームカレンダー", "Google Workspace"), ("個人用カレンダー", "iCloud")]
         case .simplifiedChinese:
             [("团队日历", "Google Workspace"), ("个人日历", "iCloud")]
+        case .spanish:
+            [("Calendario del equipo", "Google Workspace"), ("Calendario personal", "iCloud")]
         }
 
         return [
@@ -863,6 +1050,35 @@ private enum ScreenshotFixtureLanguage: String {
                     .init(name: "润色听写", template: .cleanedText, trigger: .global(), instruction: "保持表达直接，并保留产品名称。"),
                     .init(name: "会议记录", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "提取决定事项、负责人和后续步骤。"),
                     .init(name: "翻译成英语", template: .translation, trigger: .manual(), instruction: "自然地翻译成英语。"),
+                ]
+            )
+
+        case .spanish:
+            ScreenshotFixtureContent(
+                history: [
+                    .init(appName: "Notas", bundleIdentifier: "com.apple.Notes", text: "Termina las notas de la versión y revisa todas las capturas localizadas antes de publicarlas."),
+                    .init(appName: "Mail", bundleIdentifier: "com.apple.mail", text: "Envía al equipo el resumen actualizado del lanzamiento antes de la revisión de mañana."),
+                    .init(appName: "Safari", bundleIdentifier: "com.apple.Safari", text: "Compara la página del producto en todos los idiomas compatibles y reúne los últimos comentarios."),
+                    .init(appName: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", text: "Ejecuta las pruebas de macOS y confirma que la compilación final no tiene advertencias."),
+                    .init(appName: "Slack", bundleIdentifier: "com.tinyspeck.slackmacgap", text: "La versión candidata está lista. Avisa si algo debería bloquear el lanzamiento."),
+                    .init(appName: "Pages", bundleIdentifier: "com.apple.iWork.Pages", text: "Convierte las notas de la reunión en un resumen breve con responsables y próximos pasos."),
+                    .init(appName: "Terminal", bundleIdentifier: "com.apple.Terminal", text: "Crea el archivo final, verifica su firma y anota la suma de comprobación."),
+                ],
+                terms: ["TypeWhisper", "Fastlane", "SwiftUI", "App Store Connect", "versión candidata"],
+                corrections: [
+                    .init(original: "Type Whisper", replacement: "TypeWhisper"),
+                    .init(original: "fast lane", replacement: "Fastlane"),
+                    .init(original: "swift UI", replacement: "SwiftUI"),
+                ],
+                snippets: [
+                    .init(trigger: "/gracias", replacement: "Gracias por los comentarios detallados. Los reviso hoy mismo."),
+                    .init(trigger: "/reunion", replacement: "Notas de la reunión del {date}:\n\n- Decisión\n- Responsable\n- Próximo paso"),
+                    .init(trigger: "/version", replacement: "La versión candidata está lista para la revisión final."),
+                ],
+                workflows: [
+                    .init(name: "Pulir dictado", template: .cleanedText, trigger: .global(), instruction: "Mantén un tono directo y conserva los nombres de productos."),
+                    .init(name: "Notas de reunión", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "Extrae decisiones, responsables y próximos pasos."),
+                    .init(name: "Traducir al inglés", template: .translation, trigger: .manual(), instruction: "Traduce al inglés de forma natural."),
                 ]
             )
         }

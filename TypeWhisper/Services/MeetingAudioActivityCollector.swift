@@ -56,12 +56,15 @@ enum NativeMeetingAudioProcessRegistry {
             return app
         }
         guard let executablePath = executablePath(),
-              let appURL = outermostAppBundleURL(containing: executablePath),
-              let app = Bundle(url: appURL)?.bundleIdentifier,
+              let app = outermostAppBundleIdentifier(containing: executablePath),
               appBundleIdentifiers.contains(app) else {
             return nil
         }
         return app
+    }
+
+    nonisolated static func outermostAppBundleIdentifier(containing executablePath: String) -> String? {
+        outermostAppBundleURL(containing: executablePath).flatMap { Bundle(url: $0)?.bundleIdentifier }
     }
 
     nonisolated static func outermostAppBundleURL(containing executablePath: String) -> URL? {
@@ -411,7 +414,12 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
             return bundleIdentifier
         }
         if let browserBundleIdentifier = BrowserAudioProcessAttribution
-            .canonicalBrowserBundleIdentifier(for: bundleIdentifier) {
+            .canonicalBrowserBundleIdentifier(
+                for: bundleIdentifier,
+                hostAppBundleIdentifier: executablePath().flatMap(
+                    NativeMeetingAudioProcessRegistry.outermostAppBundleIdentifier(containing:)
+                )
+            ) {
             return browserBundleIdentifier
         }
         return NativeMeetingAudioProcessRegistry.appBundleIdentifier(

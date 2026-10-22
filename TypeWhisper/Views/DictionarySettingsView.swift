@@ -17,14 +17,16 @@ private func dictionaryCorrectionAccessibilityText(original: String, replacement
             "\(original), removed",
             de: "\(original), wird entfernt",
             ja: "\(original)、削除",
-            zh: "\(original)，删除"
+            zh: "\(original)，删除",
+            es: "\(original), se elimina"
         )
     }
     return localizedAppText(
         "\(original), replaced with \(replacement)",
         de: "\(original), ersetzt durch \(replacement)",
         ja: "\(original)を\(replacement)に置き換え",
-        zh: "\(original)，替换为\(replacement)"
+        zh: "\(original)，替换为\(replacement)",
+        es: "\(original), reemplazado por \(replacement)"
     )
 }
 
@@ -34,7 +36,8 @@ private func dictionaryBoostingAccessibilityText(label: String, value: String) -
         "Boosting: \(setting)",
         de: "Boosting: \(setting)",
         ja: "認識の優先度調整: \(setting)",
-        zh: "增强：\(setting)"
+        zh: "增强：\(setting)",
+        es: "Refuerzo: \(setting)"
     )
 }
 
@@ -182,6 +185,52 @@ struct DictionarySettingsView: View {
             if let request = viewModel.pendingResetRequest {
                 Text(resetConfirmationMessage(for: request))
             }
+        }
+        .alert(String(localized: "Could Not Import Term Pack"), isPresented: Binding(
+            get: { viewModel.localTermPackImportError != nil },
+            set: { if !$0 { viewModel.clearLocalTermPackImportError() } }
+        )) {
+            Button(String(localized: "OK")) { viewModel.clearLocalTermPackImportError() }
+        } message: {
+            Text(viewModel.localTermPackImportError ?? "")
+        }
+        .alert(
+            String(localized: "Replace “\(viewModel.pendingLocalTermPackReplacement?.existingName ?? "")”?"),
+            isPresented: Binding(
+                get: { viewModel.pendingLocalTermPackReplacement != nil },
+                set: { if !$0 { viewModel.cancelLocalTermPackReplacement() } }
+            )
+        ) {
+            if viewModel.pendingLocalTermPackReplacement != nil {
+                Button(String(localized: "Replace"), role: .destructive) {
+                    viewModel.confirmLocalTermPackReplacement()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelLocalTermPackReplacement()
+            }
+        } message: {
+            if let replacement = viewModel.pendingLocalTermPackReplacement {
+                Text(String(localized: "A local pack with the id “\(replacement.id)” is already imported. The file replaces its name, terms and corrections. If the pack is on, its dictionary entries are updated."))
+            }
+        }
+        .alert(
+            String(localized: "Remove “\(viewModel.pendingLocalTermPackRemoval?.name ?? "")”?"),
+            isPresented: Binding(
+                get: { viewModel.pendingLocalTermPackRemoval != nil },
+                set: { if !$0 { viewModel.cancelLocalTermPackRemoval() } }
+            )
+        ) {
+            if viewModel.pendingLocalTermPackRemoval != nil {
+                Button(String(localized: "Remove"), role: .destructive) {
+                    viewModel.confirmLocalTermPackRemoval()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelLocalTermPackRemoval()
+            }
+        } message: {
+            Text(String(localized: "The pack is deleted from this Mac, and the entries it added are removed from the dictionary. You can import the file again later."))
         }
     }
 
@@ -383,17 +432,20 @@ struct DictionarySettingsView: View {
         case .clearAutoLearnedCorrections:
             return localizedAppText(
                 "This deletes \(request.autoLearnedCorrectionCount) auto-learned corrections. Manual entries and term packs remain unchanged. This cannot be undone.",
-                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                es: "Esto elimina \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Las entradas manuales y los paquetes de términos no cambian. Esta acción no se puede deshacer."
             )
         case .resetCustomDictionary:
             return localizedAppText(
                 "This deletes \(request.termCount) custom terms, \(request.manualCorrectionCount) manual corrections, and \(request.autoLearnedCorrectionCount) auto-learned corrections. \(request.activePackCount) active term packs and their entries remain unchanged. This cannot be undone.",
-                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                es: "Esto elimina \(request.termCount) términos personalizados, \(request.manualCorrectionCount) correcciones manuales y \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Los \(request.activePackCount) paquetes de términos activos y sus entradas no cambian. Esta acción no se puede deshacer."
             )
         case .deactivateAllTermPacks:
             return localizedAppText(
                 "This deactivates \(request.activePackCount) term packs and removes \(request.termCount) pack terms and \(request.correctionCount) pack corrections. Custom and auto-learned entries remain unchanged.",
-                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert."
+                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert.",
+                es: "Esto desactiva \(request.activePackCount) paquetes de términos y quita \(request.termCount) términos y \(request.correctionCount) correcciones de los paquetes. Las entradas personalizadas y las aprendidas automáticamente no cambian."
             )
         }
     }
@@ -564,9 +616,59 @@ struct DictionarySettingsView: View {
 
                 // Community Packs
                 communityPacksSection
+
+                // Local Packs
+                if viewModel.supportsLocalTermPacks {
+                    localPacksSection
+                }
             }
             .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
+        }
+    }
+
+    @ViewBuilder
+    private var localPacksSection: some View {
+        Section {
+            Text(String(localized: "Your own packs from a JSON file in the community pack format. They stay on this Mac and are not reviewed, synced or updated by TypeWhisper; import an edited file to change a pack. Community packs come from the reviewed TypeWhisper registry."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.bottom, 4)
+
+            if viewModel.visibleLocalPacks.isEmpty {
+                HStack {
+                    Spacer()
+                    Text(String(localized: "No local packs imported yet."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.vertical, 12)
+            } else {
+                ForEach(viewModel.visibleLocalPacks) { pack in
+                    TermPackCardView(pack: pack, viewModel: viewModel)
+                }
+            }
+        } header: {
+            HStack {
+                Text(String(localized: "Local Packs"))
+                    .font(.callout)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                    .accessibilityAddTraits(.isHeader)
+
+                Spacer()
+
+                Button {
+                    viewModel.importLocalTermPackFromFile()
+                } label: {
+                    Label(String(localized: "Import Term Pack..."), systemImage: "square.and.arrow.down")
+                }
+                .controlSize(.small)
+            }
+            .padding(.top, 16)
+            .padding(.bottom, 4)
         }
     }
 
@@ -709,21 +811,24 @@ private struct DictionaryTrainingSheet: View {
                             "Engine: \(snapshot.engineName)",
                             de: "Engine: \(snapshot.engineName)",
                             ja: "エンジン: \(snapshot.engineName)",
-                            zh: "引擎：\(snapshot.engineName)"
+                            zh: "引擎：\(snapshot.engineName)",
+                            es: "Motor: \(snapshot.engineName)"
                         ))
                     Label(snapshot.modelName, systemImage: "shippingbox")
                         .accessibilityLabel(localizedAppText(
                             "Model: \(snapshot.modelName)",
                             de: "Modell: \(snapshot.modelName)",
                             ja: "モデル: \(snapshot.modelName)",
-                            zh: "模型：\(snapshot.modelName)"
+                            zh: "模型：\(snapshot.modelName)",
+                            es: "Modelo: \(snapshot.modelName)"
                         ))
                     Label(languageName, systemImage: "globe")
                         .accessibilityLabel(localizedAppText(
                             "Language: \(languageName)",
                             de: "Sprache: \(languageName)",
                             ja: "言語: \(languageName)",
-                            zh: "语言：\(languageName)"
+                            zh: "语言：\(languageName)",
+                            es: "Idioma: \(languageName)"
                         ))
                 }
                 .font(.caption)
@@ -910,7 +1015,8 @@ private struct DictionaryTrainingSheet: View {
             .labelsHidden()
             .accessibilityLabel(localizedAppText(
                 "Include \(candidate.original) as a correction",
-                de: "\(candidate.original) als Korrektur einschließen"
+                de: "\(candidate.original) als Korrektur einschließen",
+                es: "Incluir \(candidate.original) como corrección"
             ))
             .disabled(candidate.disposition != .available)
 
@@ -946,7 +1052,8 @@ private struct DictionaryTrainingSheet: View {
             if let snapshot = service.engineSnapshot {
                 Text(localizedAppText(
                     "Candidates were produced by \(snapshot.engineName) / \(snapshot.modelName). Corrections remain global.",
-                    de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global."
+                    de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global.",
+                    es: "Los candidatos los generó \(snapshot.engineName) / \(snapshot.modelName). Las correcciones siguen siendo globales."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1016,7 +1123,8 @@ private struct DictionaryTrainingSheet: View {
             : localizedAppText("The target word already existed.", de: "Das Zielwort war bereits vorhanden.")
         return termText + " " + localizedAppText(
             "Added \(summary.addedCorrections.count) corrections, skipped \(summary.duplicateCorrections.count) duplicates and \(summary.conflictingCorrections.count) conflicts.",
-            de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen."
+            de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen.",
+            es: "Se agregaron \(summary.addedCorrections.count) correcciones; se omitieron \(summary.duplicateCorrections.count) duplicados y \(summary.conflictingCorrections.count) conflictos."
         )
     }
 
@@ -1078,7 +1186,7 @@ private struct DictionaryTrainingSheet: View {
                 .foregroundStyle(.secondary)
         case .conflict(let replacement):
             Label(
-                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)"),
+                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)", es: "Conflicto: \(replacement)"),
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.orange)
@@ -1325,10 +1433,19 @@ private struct TermPackCardView: View {
         isActivated && viewModel.hasUpdate(for: pack)
     }
 
+    private var localConflict: LocalTermPackConflict? {
+        viewModel.localPackConflict(for: pack)
+    }
+
+    /// Local pack files may name a symbol this macOS version does not have.
+    private var iconName: String {
+        NSImage(systemSymbolName: pack.icon, accessibilityDescription: nil) == nil ? "shippingbox" : pack.icon
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
-                Image(systemName: pack.icon)
+                Image(systemName: iconName)
                     .font(.title3)
                     .foregroundStyle(isActivated ? Color.accentColor : .secondary)
                     .frame(width: 28)
@@ -1357,7 +1474,7 @@ private struct TermPackCardView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
 
-                        if pack.source == .community, let author = pack.author {
+                        if pack.source != .builtIn, let author = pack.author {
                             Text("-")
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
@@ -1366,6 +1483,17 @@ private struct TermPackCardView: View {
                                 .font(.caption)
                                 .foregroundStyle(.tertiary)
                         }
+                    }
+
+                    if let localConflict {
+                        Label(
+                            localConflict.error(forID: pack.id).localizedDescription,
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -1383,12 +1511,26 @@ private struct TermPackCardView: View {
                     .buttonStyle(.bordered)
                 }
 
+                if pack.source == .local {
+                    Menu {
+                        localPackActions
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .accessibilityLabel(String(localized: "More actions for \(pack.name)"))
+                }
+
                 Toggle("", isOn: Binding(
                     get: { isActivated },
                     set: { _ in viewModel.togglePack(pack) }
                 ))
                 .toggleStyle(.switch)
                 .labelsHidden()
+                // A local pack whose ID a registry pack took can still be turned off, not on.
+                .disabled(localConflict != nil && !isActivated)
                 .accessibilityLabel(String(localized: "Enable \(pack.name)"))
 
                 Button {
@@ -1469,6 +1611,21 @@ private struct TermPackCardView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(pack.name)
+    }
+
+    @ViewBuilder
+    private var localPackActions: some View {
+        Button {
+            viewModel.exportLocalTermPackToFile(pack)
+        } label: {
+            Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
+        }
+
+        Button(role: .destructive) {
+            viewModel.requestLocalTermPackRemoval(pack)
+        } label: {
+            Label(String(localized: "Remove..."), systemImage: "trash")
+        }
     }
 }
 
@@ -1641,7 +1798,8 @@ private struct DictionaryCorrectionGroupCardView: View {
 
                     Text(localizedAppText(
                         "\(group.aliases.count) variants",
-                        de: "\(group.aliases.count) Varianten"
+                        de: "\(group.aliases.count) Varianten",
+                        es: "\(group.aliases.count) variantes"
                     ))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -1663,7 +1821,8 @@ private struct DictionaryCorrectionGroupCardView: View {
                 "Add alias for \(group.replacementDisplayText)",
                 de: "Variante für \(group.replacementDisplayText) hinzufügen",
                 ja: "\(group.replacementDisplayText)の別表記を追加",
-                zh: "为\(group.replacementDisplayText)添加变体"
+                zh: "为\(group.replacementDisplayText)添加变体",
+                es: "Agregar variante para \(group.replacementDisplayText)"
             ))
         }
         .padding(.horizontal, 10)

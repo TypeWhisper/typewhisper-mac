@@ -1374,6 +1374,32 @@ public protocol LiveTranscriptionCapablePlugin: TranscriptionEnginePlugin {
     ) async throws -> any LiveTranscriptionSession
 }
 
+/// Optional companion for live-capable engines whose models do not all stream.
+///
+/// TypeWhisper asks with the model a transcription would use before it opens a live
+/// session. For a model that returns false, it treats the engine like one without live
+/// sessions: it previews the recording in batches and transcribes the whole recording
+/// when it stops. Plugins adopting this protocol must declare `"minHostVersion": "1.8.0"`
+/// or later.
+public protocol LiveTranscriptionModelSupportProviding: LiveTranscriptionCapablePlugin {
+    /// Whether `createLiveTranscriptionSession` streams with `modelId`, or with the
+    /// selected model when `modelId` is nil.
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool
+}
+
+public extension TranscriptionEnginePlugin {
+    /// The engine's live-session interface when it streams with `modelId` (nil for the
+    /// selected model), or nil when the engine or that model has no live sessions.
+    func liveTranscriptionPlugin(forModelId modelId: String?) -> (any LiveTranscriptionCapablePlugin)? {
+        guard let livePlugin = self as? any LiveTranscriptionCapablePlugin else { return nil }
+        if let modelSupport = self as? any LiveTranscriptionModelSupportProviding,
+           !modelSupport.supportsLiveTranscriptionSession(forModelId: modelId) {
+            return nil
+        }
+        return livePlugin
+    }
+}
+
 public protocol LanguageHintTranscriptionEnginePlugin: TranscriptionEnginePlugin {
     func transcribe(
         audio: AudioData,

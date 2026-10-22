@@ -1905,8 +1905,13 @@ public struct PluginOpenAIChatHelper: Sendable {
             throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
 
-        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let choices = json["choices"] as? [[String: Any]],
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+        // Reported before the checks below: a reply that is cut off or has no
+        // message still used the tokens.
+        PluginLLMUsageReporting.report(.openAICompatible(from: json))
+        guard let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
               let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")

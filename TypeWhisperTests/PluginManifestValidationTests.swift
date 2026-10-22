@@ -175,14 +175,14 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertTrue(manifest.supportsCapability(.liveDictation))
     }
 
-    func testWhisperKitPlugin130RequiresHost18ForTheTransientModelSelection() throws {
+    func testWhisperKitPlugin131RequiresHost18ForTheTransientModelSelection() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.3.0")
+        XCTAssertEqual(manifest.version, "1.3.1")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
@@ -190,11 +190,11 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testMLXStoragePluginReleasesRequireCompatibleHost() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.13", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.0.4", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.18", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.14", "1.8.0"),
-            ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.4", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.14", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/CanaryPlugin/manifest.json", "1.0.5", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.19", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.15", "1.8.0"),
+            ("TypeWhisperPluginSDK/Plugins/LocalLLMPlugin/manifest.json", "1.0.5", "1.8.0"),
         ]
 
         for (relativePath, expectedVersion, expectedMinHostVersion) in manifestExpectations {
@@ -206,25 +206,25 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testCohereLocalPlugin105RequiresHost18ForTheDownloadPolicy() throws {
+    func testCohereLocalPlugin106RequiresHost18ForTheDownloadPolicy() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.5")
+        XCTAssertEqual(manifest.version, "1.0.6")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testOpenAIPlugin137RequiresCompatibleHost18AndDeclaresCloudHosting() throws {
+    func testOpenAIPlugin140RequiresCompatibleHost18AndDeclaresCloudHosting() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.3.7")
+        XCTAssertEqual(manifest.version, "1.4.0")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
@@ -233,38 +233,38 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
     }
 
-    func testSonioxPlugin1213RequiresCompatibleHost18() throws {
+    func testSonioxPlugin1214RequiresCompatibleHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.2.13")
+        XCTAssertEqual(manifest.version, "1.2.14")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
-    func testMetaPlugin103RequiresCompatibleHost18() throws {
+    func testMetaPlugin110RequiresCompatibleHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/MetaPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.3")
+        XCTAssertEqual(manifest.version, "1.1.0")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
-    func testVercelAIGatewayPlugin105RequiresCompatibleHost18() throws {
+    func testVercelAIGatewayPlugin106RequiresCompatibleHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/VercelAIGatewayPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.5")
+        XCTAssertEqual(manifest.version, "1.0.6")
         XCTAssertEqual(manifest.minHostVersion, "1.8.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
@@ -276,7 +276,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.28")
+        XCTAssertEqual(manifest.version, "1.0.29")
         XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
@@ -895,6 +895,46 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         }
         XCTAssertEqual(engineName, "Mock Local Engine")
         XCTAssertEqual(reason, String(localized: "It has no downloaded model."))
+    }
+
+    func testDefaultEngineIsNoneWhileTheRetainedSavedEngineHasNoModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-local-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        // A downloaded model that is not loaded yet keeps the engine named.
+        XCTAssertFalse(local.isConfigured)
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-local-engine")
+
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+        modelManager.restoreProviderSelection()
+
+        // Dictation keeps the saved engine to report the missing model, but the
+        // pickers that fall back to it must not name an engine that cannot transcribe.
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-local-engine")
+        XCTAssertNil(modelManager.defaultEngine)
+        XCTAssertNil(modelManager.unavailableSavedEngine, "Dictation still uses the saved engine")
+
+        local.download("large")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-local-engine")
     }
 
     func testTranscriptionWithModellessEngineFailsBeforePreparation() async throws {
@@ -3287,6 +3327,115 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         modelManager.restoreProviderSelection()
 
         XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
+    }
+
+    func testDefaultEngineIsTheTemporaryFallbackAndTheSavedEngineIsNamedApart() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        // Features without an engine of their own use the fallback, as dictation does.
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-compatible")
+        XCTAssertEqual(
+            modelManager.unavailableSavedEngine,
+            ModelManagerService.UnavailableSavedEngine(providerId: "mock-switchable", displayName: "Mock Switchable")
+        )
+
+        var changes = 0
+        let observation = modelManager.objectWillChange.sink { changes += 1 }
+        defer { observation.cancel() }
+        switchable.isAvailable = true
+        modelManager.restoreProviderSelection()
+
+        XCTAssertGreaterThan(changes, 0, "Views naming the default engine are told that it changed")
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-switchable")
+        XCTAssertNil(modelManager.unavailableSavedEngine)
+    }
+
+    func testSavedEngineWhosePluginIsGoneIsReportedWithoutAName() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = []
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNil(modelManager.defaultEngine)
+        XCTAssertEqual(
+            modelManager.unavailableSavedEngine,
+            ModelManagerService.UnavailableSavedEngine(providerId: "mock-switchable", displayName: nil)
+        )
+    }
+
+    func testFirstFallbackIsTheSavedEngineSoNothingIsNamedApart() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine(nil)
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        XCTAssertNil(modelManager.unavailableSavedEngine, "Nothing is saved yet")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-compatible")
+        XCTAssertNil(modelManager.unavailableSavedEngine)
+    }
+
+    func testDefaultEngineChoiceNamesTheEngineItUses() {
+        let named = DefaultEngineChoice.title(engineName: "Mock Compatible")
+        let unnamed = DefaultEngineChoice.title(engineName: nil)
+
+        XCTAssertTrue(named.contains("Mock Compatible"))
+        XCTAssertNotEqual(named, unnamed)
+        XCTAssertEqual(DefaultEngineChoice.title(engineName: ""), unnamed)
+    }
+
+    func testUnavailableSavedEngineNoticeNamesTheSavedAndTheFallbackEngine() {
+        let notice = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "Mock Switchable",
+            fallbackEngineName: "Mock Compatible"
+        )
+        let withoutFallback = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "Mock Switchable",
+            fallbackEngineName: nil
+        )
+        let unnamed = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: nil,
+            fallbackEngineName: "Mock Compatible"
+        )
+        let unnamedWithoutFallback = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "",
+            fallbackEngineName: nil
+        )
+
+        XCTAssertTrue(notice.contains("Mock Switchable"))
+        XCTAssertTrue(notice.contains("Mock Compatible"))
+        XCTAssertTrue(withoutFallback.contains("Mock Switchable"))
+        XCTAssertFalse(withoutFallback.contains("Mock Compatible"))
+        XCTAssertFalse(unnamed.contains("Mock Switchable"))
+        XCTAssertTrue(unnamed.contains("Mock Compatible"))
+        XCTAssertFalse(unnamedWithoutFallback.isEmpty)
+        XCTAssertEqual(Set([notice, withoutFallback, unnamed, unnamedWithoutFallback]).count, 4)
     }
 
     func testUpdatingTheSelectedPluginKeepsTheSavedEngine() throws {

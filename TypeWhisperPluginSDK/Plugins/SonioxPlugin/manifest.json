@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.soniox",
     "name": "Soniox",
-    "version": "1.2.13",
+    "version": "1.2.14",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
     "descriptions": {
         "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key.",
+        "es": "Voz a texto y texto a voz en la nube con las API de Soniox, con endpoints regionales. Requiere una clave de API.",
         "ja": "Soniox APIによるクラウド音声認識と音声合成です。リージョン別エンドポイントに対応し、APIキーが必要です。"
     },
     "category": "transcription",

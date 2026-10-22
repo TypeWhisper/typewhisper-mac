@@ -46,16 +46,18 @@ struct SettingsView: View {
         switch AppConstants.screenshotState {
         case "general": return .general
         case "indicator-settings", "appearance": return .appearance
-        case "indicator": return .home
+        case "indicator", "indicator-model-menu": return .home
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
-        case "file-transcription": return .fileTranscription
+        case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
-        case "recorder": return .recorder
+        case "recorder", "recorder-queue", "recorder-folders", "recorder-folder-unavailable": return .recorder
         case "history": return .history
         case "statistics": return .statistics
-        case "dictionary", "dictionary-term-packs": return .dictionary
+        case "dictionary", "dictionary-term-packs", "dictionary-local-term-packs", "dictionary-local-term-pack-error",
+             "dictionary-local-term-pack-replace":
+            return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
         case "premium": return .premium
@@ -271,7 +273,7 @@ struct SettingsView: View {
         switch tab {
         case .home:
             #if DEBUG
-            if AppConstants.screenshotState == "indicator" {
+            if ["indicator", "indicator-model-menu"].contains(AppConstants.screenshotState) {
                 ScreenshotIndicatorShowcaseView()
             } else {
                 HomeSettingsView()
@@ -842,7 +844,8 @@ private struct SettingsSidebarRow: View {
                 "\(badge) updates",
                 de: "\(badge) Updates",
                 ja: "\(badge)件の更新",
-                zh: "\(badge) 个更新"
+                zh: "\(badge) 个更新",
+                es: "\(badge) actualizaciones"
             ))
         }
         return parts.joined(separator: ", ")
@@ -959,6 +962,26 @@ struct RecordingSettingsView: View {
             .map { modelManager.transcriptionAuthStatus(for: $0) }
             .first { !$0.isAvailable }?
             .unavailableReason
+    }
+
+    /// The picker shows the engine dictation uses right now. While that is a
+    /// temporary fallback, this names the saved default engine (#1549).
+    private var unavailableSavedEngineNotice: String? {
+        guard let savedEngine = modelManager.unavailableSavedEngine else { return nil }
+        return DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: savedEngine.displayName,
+            fallbackEngineName: modelManager.defaultEngine?.providerDisplayName
+        )
+    }
+
+    /// Also shown when no engine is left, so the saved choice is still named.
+    @ViewBuilder
+    private var unavailableSavedEngineLabel: some View {
+        if let notice = unavailableSavedEngineNotice {
+            Label(notice, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
     }
 
     @ViewBuilder
@@ -1119,7 +1142,8 @@ struct RecordingSettingsView: View {
                 "Remove \(deviceName)",
                 de: "\(deviceName) entfernen",
                 ja: "\(deviceName)を削除",
-                zh: "移除\(deviceName)"
+                zh: "移除\(deviceName)",
+                es: "Quitar \(deviceName)"
             ))
         }
         .padding(.vertical, 3)
@@ -1155,7 +1179,8 @@ struct RecordingSettingsView: View {
             "Priority \(index + 1) of \(audioDevice.inputDevicePriorityList.count)",
             de: "Priorität \(index + 1) von \(audioDevice.inputDevicePriorityList.count)",
             ja: "優先順位 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
-            zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)"
+            zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
+            es: "Prioridad \(index + 1) de \(audioDevice.inputDevicePriorityList.count)"
         )
         guard !isAvailable else { return position }
         return "\(position), \(String(localized: "Disconnected"))"
@@ -1202,6 +1227,8 @@ struct RecordingSettingsView: View {
                 if engines.isEmpty {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
+
+                    unavailableSavedEngineLabel
                 } else {
                     // Shows the engine dictation uses right now, which can be a
                     // temporary fallback; only a choice made here is saved (#1533).
@@ -1228,6 +1255,8 @@ struct RecordingSettingsView: View {
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
                     }
+
+                    unavailableSavedEngineLabel
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")
@@ -1360,6 +1389,21 @@ struct RecordingSettingsView: View {
                         }
                     }
                 }
+            }
+
+                Section(String(localized: "Toggle Mode")) {
+                Toggle(
+                    String(localized: "Stop recording after silence"),
+                    isOn: $dictation.toggleSilenceStopEnabled
+                )
+
+                if dictation.toggleSilenceStopEnabled {
+                    SilenceDurationField(duration: $dictation.toggleSilenceStopDuration)
+                }
+
+                Text(String(localized: "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
                 Section(String(localized: "Sound")) {
@@ -1528,6 +1572,66 @@ struct RecordingSettingsView: View {
 
 }
 
+// MARK: - Silence Duration
+
+/// Seconds of silence that end a toggle dictation (#1023), typed as a number. The value
+/// applies on Return or when the field loses focus; anything outside 1 to 10 seconds is
+/// clamped, and text without a number restores the saved value.
+private struct SilenceDurationField: View {
+    @Binding var duration: TimeInterval
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    private var locale: Locale {
+        Locale(identifier: preferredAppLanguageCode())
+    }
+
+    var body: some View {
+        LabeledContent(String(localized: "Silence duration")) {
+            HStack(spacing: 6) {
+                TextField(String(localized: "Silence duration"), text: $text)
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 56)
+                    .focused($isFocused)
+                    .onSubmit(commit)
+                    .accessibilityHint(String(localized: "Seconds, from 1 to 10"))
+                Text(String(localized: "seconds"))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .onAppear {
+            text = DictationSilenceDurationInput.text(for: duration, locale: locale)
+        }
+        .onChange(of: text) { _, newValue in
+            let filtered = DictationSilenceDurationInput.filtered(newValue)
+            if filtered != newValue {
+                text = filtered
+            }
+        }
+        .onChange(of: isFocused) { _, focused in
+            if !focused {
+                commit()
+            }
+        }
+        .onChange(of: duration) { _, newValue in
+            guard !isFocused else { return }
+            text = DictationSilenceDurationInput.text(for: newValue, locale: locale)
+        }
+        .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        if let value = DictationSilenceDurationInput.duration(from: text), value != duration {
+            duration = value
+        }
+        text = DictationSilenceDurationInput.text(for: duration, locale: locale)
+    }
+}
+
 // MARK: - Sound Event Picker
 
 private struct SoundEventPicker: View {
@@ -1588,7 +1692,8 @@ private struct SoundEventPicker: View {
                 "Preview sound for \(event.displayName)",
                 de: "Sound für „\(event.displayName)“ abspielen",
                 ja: "「\(event.displayName)」の音を再生",
-                zh: "预览“\(event.displayName)”的声音"
+                zh: "预览“\(event.displayName)”的声音",
+                es: "Escuchar el sonido de \(event.displayName)"
             ))
 
             Button {
@@ -1602,7 +1707,8 @@ private struct SoundEventPicker: View {
                 "Add custom sound for \(event.displayName)",
                 de: "Eigenen Sound für „\(event.displayName)“ hinzufügen",
                 ja: "「\(event.displayName)」にカスタム音を追加",
-                zh: "为“\(event.displayName)”添加自定义声音"
+                zh: "为“\(event.displayName)”添加自定义声音",
+                es: "Agregar un sonido personalizado para \(event.displayName)"
             ))
         }
     }

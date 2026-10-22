@@ -152,6 +152,40 @@ final class XAIPluginTests: XCTestCase {
         XCTAssertEqual(manifest.requiresAPIKey, true)
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
+
+    func testResponsesRequestReportsItsUsage() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"""
+        {"model":"grok-4.3","output_text":"Cleaned transcript",
+         "usage":{"input_tokens":143,"output_tokens":27,"total_tokens":170}}
+        """#)
+
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 143, outputTokens: 27, model: "grok-4.3")])
+    }
+
+    func testResponsesRequestWithoutUsageReportsNothing() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"{"output_text":"Cleaned transcript"}"#)
+
+        XCTAssertEqual(reports, [])
+    }
+
+    /// Runs one Responses request answered with `body` and returns the usage reported meanwhile.
+    private static func processCollectingUsage(body: String) async throws -> [PluginLLMUsage] {
+        let session = MockXAIHTTPSession(body: Data(body.utf8))
+        PluginHTTPClient.configureForTesting { _ in session }
+        defer { PluginHTTPClient.resetTestingHooks() }
+
+        let collector = PluginLLMUsageCollector()
+        let result = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await XAIResponsesClient(apiKey: "xai_test").process(
+                systemPrompt: "Clean up.",
+                userText: "cleaned transcript",
+                model: "grok-4.3"
+            )
+        }
+        XCTAssertEqual(result, "Cleaned transcript")
+        XCTAssertEqual(session.requests.map { $0.url?.absoluteString }, ["https://api.x.ai/v1/responses"])
+        return collector.reports
+    }
 }
 
 private final class FinishCounter: @unchecked Sendable {

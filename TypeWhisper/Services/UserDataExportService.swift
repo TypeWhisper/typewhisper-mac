@@ -9,8 +9,9 @@ import UniformTypeIdentifiers
 ///
 /// Deliberately not listed: `~/Library/Application Support/FluidAudio`
 /// (Parakeet models shared with other apps), recorder output in
-/// `~/Documents/TypeWhisper Recordings` (user files), a user-chosen cloud sync
-/// folder, and the iCloud Drive package (both reach other devices).
+/// `~/Documents/TypeWhisper Recordings` or the Recorder folder the user chose
+/// (user files), a user-chosen cloud sync folder, and the iCloud Drive package
+/// (both reach other devices).
 struct UserDataLocations: Sendable {
     /// Prefix for every file and folder this app variant creates in the
     /// per-user temporary directory: API uploads, recorder tracks, import
@@ -93,17 +94,20 @@ enum UserDataExportService {
             case .archiveFailed(let status):
                 return localizedAppText(
                     "The ZIP archive could not be created (ditto exit code \(status)).",
-                    de: "Das ZIP-Archiv konnte nicht erstellt werden (ditto-Exit-Code \(status))."
+                    de: "Das ZIP-Archiv konnte nicht erstellt werden (ditto-Exit-Code \(status)).",
+                    es: "No se pudo crear el archivo ZIP (código de salida de ditto: \(status))."
                 )
             case .unreadableDirectory(let path):
                 return localizedAppText(
                     "The folder \(path) could not be read.",
-                    de: "Der Ordner \(path) konnte nicht gelesen werden."
+                    de: "Der Ordner \(path) konnte nicht gelesen werden.",
+                    es: "No se pudo leer la carpeta \(path)."
                 )
             case .databaseSnapshotFailed(let name):
                 return localizedAppText(
                     "The database \(name) could not be copied.",
-                    de: "Die Datenbank \(name) konnte nicht kopiert werden."
+                    de: "Die Datenbank \(name) konnte nicht kopiert werden.",
+                    es: "No se pudo copiar la base de datos \(name)."
                 )
             }
         }

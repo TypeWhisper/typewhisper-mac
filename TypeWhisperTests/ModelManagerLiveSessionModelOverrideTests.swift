@@ -364,6 +364,56 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.explicitRequests, ["alpha"])
     }
 
+    func testModelWithoutLiveSessionsGetsNoLiveSessionFromAnEngineWhoseOtherModelStreams() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = ModelDependentLiveTranscriptionPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        XCTAssertFalse(modelManager.supportsLiveTranscriptionSession())
+        XCTAssertTrue(modelManager.supportsLiveTranscriptionSession(cloudModelOverride: "streaming"))
+
+        let batchHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .auto,
+            task: .transcribe,
+            onProgress: { _ in true }
+        )
+        XCTAssertNil(batchHandle, "The batch model previews in batches")
+        XCTAssertEqual(plugin.openedSessions, 0)
+
+        let streamingHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "streaming",
+            onProgress: { _ in true }
+        )
+        let handle = try XCTUnwrap(streamingHandle)
+        XCTAssertEqual(plugin.selectedModelId, "streaming")
+        let result = try await modelManager.finishLiveTranscriptionSession(handle, bufferedDuration: 1.0)
+
+        XCTAssertEqual(result.text, "live with streaming")
+        XCTAssertEqual(plugin.openedSessions, 1)
+        XCTAssertEqual(plugin.selectedModelId, "batch")
+    }
+
+    func testPreviewPolicyOfAModelWithoutLiveSessionsIsReadWithoutSwitchingModels() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = ModelDependentLiveTranscriptionPlugin()
+        plugin.allowsTranscriptPreviewFallback = false
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        plugin.selectModel("streaming")
+        plugin.selections.removeAll()
+
+        XCTAssertFalse(modelManager.allowsTranscriptPreviewFallback(cloudModelOverride: "batch"))
+        XCTAssertEqual(plugin.selections, [], "Switching models can reload a local engine")
+        XCTAssertTrue(DictationViewModel.engineSupportsPreview(plugin), "The streaming model streams its preview")
+        plugin.selectModel("batch")
+        XCTAssertFalse(DictationViewModel.engineSupportsPreview(plugin), "The batch model follows the preview policy")
+    }
+
     private func installLivePlugin(
         _ plugin: LiveModelOverrideTranscriptionPlugin,
         appSupportDirectory: URL
@@ -885,6 +935,58 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     ) async throws -> any LiveTranscriptionSession {
         receivedDictionaryHints = dictionaryTermHints
         return LiveModelOverrideSession(modelId: currentModelId)
+    }
+}
+
+/// Streams only with its "streaming" model, like Parakeet with Nemotron.
+private final class ModelDependentLiveTranscriptionPlugin: NSObject, LiveTranscriptionModelSupportProviding, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
+    static var pluginId: String { "com.typewhisper.mock.model-dependent-live" }
+    static var pluginName: String { "Mock Model-Dependent Live" }
+
+    private(set) var selectedModelId: String? = "batch"
+    var selections: [String] = []
+    private(set) var openedSessions = 0
+    var allowsTranscriptPreviewFallback = true
+
+    required override init() {
+        super.init()
+    }
+
+    var providerId: String { "mock-model-dependent-live" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] {
+        [PluginModelInfo(id: "streaming", displayName: "Streaming"), PluginModelInfo(id: "batch", displayName: "Batch")]
+    }
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { true }
+    var supportedLanguages: [String] { ["en"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func selectModel(_ modelId: String) {
+        selections.append(modelId)
+        selectedModelId = modelId
+    }
+
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        (modelId ?? selectedModelId) == "streaming"
+    }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "batch", detectedLanguage: language)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        XCTAssertEqual(selectedModelId, "streaming", "Only the streaming model opens live sessions")
+        openedSessions += 1
+        return LiveModelOverrideSession(modelId: selectedModelId)
     }
 }
 

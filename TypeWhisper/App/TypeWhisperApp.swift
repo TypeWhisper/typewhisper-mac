@@ -1014,6 +1014,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ServiceContainer.shared.hotkeyService.onRestoreRawTranscript = {
             DictationViewModel.shared.restoreRawTranscript()
         }
+        ServiceContainer.shared.hotkeyService.onCorrectLastDictation = {
+            DictationViewModel.shared.triggerCorrectLastDictation()
+        }
         ServiceContainer.shared.hotkeyService.onRecorderToggle = {
             AudioRecorderViewModel.shared.toggleRecording()
         }
@@ -1129,6 +1132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WhatsNewCoordinator.shared?.acknowledgePresentation()
         DictationViewModel._shared?.flushPendingPostInsertionPersistence()
         ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
+        ServiceContainer.shared.audioRecorderViewModel.markPendingTranscriptionsInterrupted()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
         ServiceContainer.shared.snippetService.saveDeferredUsageCounts()
         ServiceContainer.shared.dictionaryService.saveDeferredUsageCounts()
@@ -1175,6 +1179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let activities = [
             container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
             container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
+            // Stopped recordings are transcribed while the Recorder is idle.
+            container.audioRecorderViewModel.$pendingTranscriptions.map { !$0.isEmpty }.eraseToAnyPublisher(),
             container.audioRecorderViewModel.$retranscribingRecordingURL.map { $0 != nil }.eraseToAnyPublisher(),
             container.fileTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
             container.speakerTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
@@ -1189,6 +1195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return container.dictationViewModel.state != .idle
             || container.hotkeyService.isDictationStartPending
             || container.audioRecorderViewModel.state != .idle
+            || !container.audioRecorderViewModel.pendingTranscriptions.isEmpty
             || container.audioRecorderViewModel.retranscribingRecordingURL != nil
             || container.fileTranscriptionViewModel.batchState == .processing
             || container.speakerTranscriptionViewModel.batchState == .processing

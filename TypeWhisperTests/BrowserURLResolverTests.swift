@@ -284,6 +284,72 @@ final class BrowserURLResolverTests: XCTestCase {
         }
     }
 
+    func testBrowserHelperIsAttributedToTheChromeChannelItRunsIn() {
+        // Issue #1700: every Chrome release channel ships `com.google.Chrome.helper`,
+        // so Google Meet audio from Chrome Beta must be attributed by its host app.
+        for channel in [
+            "com.google.Chrome",
+            "com.google.Chrome.beta",
+            "com.google.Chrome.dev",
+            "com.google.Chrome.canary"
+        ] {
+            XCTAssertTrue(SupportedMeetingBrowser.supportsAutomaticURLResolution(channel))
+            for helper in ["com.google.Chrome.helper", "com.google.Chrome.helper.renderer"] {
+                XCTAssertEqual(
+                    BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                        for: helper,
+                        hostAppBundleIdentifier: channel
+                    ),
+                    channel,
+                    "Expected \(helper) in \(channel) to map to \(channel)"
+                )
+            }
+        }
+    }
+
+    func testBrowserHelperAttributionFallsBackToHelperIdentifierWithoutHostApp() {
+        XCTAssertEqual(
+            BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                for: "com.google.Chrome.helper",
+                hostAppBundleIdentifier: nil
+            ),
+            SupportedMeetingBrowser.chrome
+        )
+        XCTAssertEqual(
+            BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                for: SupportedMeetingBrowser.chromeBeta,
+                hostAppBundleIdentifier: "com.example.unrelated"
+            ),
+            SupportedMeetingBrowser.chromeBeta,
+            "A browser's own main process does not depend on its host app"
+        )
+        XCTAssertEqual(
+            BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                for: BrowserAudioProcessAttribution.safariWebKitGPUProcess,
+                hostAppBundleIdentifier: nil
+            ),
+            SupportedMeetingBrowser.safari
+        )
+    }
+
+    func testBrowserHelperInsideUnsupportedAppIsRejected() {
+        for host in ["com.microsoft.edgemac.Beta", "com.example.chromium-shell"] {
+            XCTAssertNil(
+                BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                    for: "com.google.Chrome.helper",
+                    hostAppBundleIdentifier: host
+                ),
+                "Unexpected attribution for a helper inside \(host)"
+            )
+        }
+        XCTAssertNil(
+            BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                for: "com.google.Chrome.updater",
+                hostAppBundleIdentifier: SupportedMeetingBrowser.chromeBeta
+            )
+        )
+    }
+
     func testBrowserAudioProcessAttributionCanonicalizesSafariWebKitGPUProcess() {
         XCTAssertEqual(
             BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
@@ -322,6 +388,9 @@ final class BrowserURLResolverTests: XCTestCase {
         let automatic = [
             SupportedMeetingBrowser.safari,
             SupportedMeetingBrowser.chrome,
+            SupportedMeetingBrowser.chromeBeta,
+            SupportedMeetingBrowser.chromeDev,
+            SupportedMeetingBrowser.chromeCanary,
             SupportedMeetingBrowser.arc,
             SupportedMeetingBrowser.edge,
             SupportedMeetingBrowser.brave,

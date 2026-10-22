@@ -118,6 +118,9 @@ final class TranscriptionRecord {
     /// syncing them as separate components. Epoch 0 means never.
     var speakerTranscriptUpdatedAt: Date = Date(timeIntervalSince1970: 0)
     var speakerNamesUpdatedAt: Date = Date(timeIntervalSince1970: 0)
+    /// The LLM requests behind the text: `HistoryLLMUsage` as JSON. Nil when
+    /// none were recorded, as for every entry made before this existed.
+    var llmUsageData: Data?
 
     var preview: String { String(finalText.prefix(100)) }
     var source: RecordingSource {
@@ -205,6 +208,16 @@ final class TranscriptionRecord {
             return timedTextGranularityRaw.flatMap(TimedTextGranularity.init(rawValue:)) ?? .none
         }
         set { timedTextGranularityRaw = newValue == .none ? nil : newValue.rawValue }
+    }
+
+    /// The LLM requests behind the text; nil without any, including when the
+    /// text was made without an LLM.
+    var llmUsage: HistoryLLMUsage? {
+        get {
+            guard let usage = HistoryLLMUsage.decode(llmUsageData), !usage.entries.isEmpty else { return nil }
+            return usage
+        }
+        set { llmUsageData = newValue?.encodedData() }
     }
 
     var wasPostProcessed: Bool {

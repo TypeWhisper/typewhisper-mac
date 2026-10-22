@@ -34,6 +34,8 @@
 			<string>en</string>
 			<string>de</string>
 			<string>ja</string>
+			<string>zh-Hans</string>
+			<string>es</string>
 		</array>
 	<key>LSUIElement</key>
 	<true/>

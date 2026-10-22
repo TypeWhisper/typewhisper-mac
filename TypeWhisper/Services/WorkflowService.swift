@@ -254,14 +254,29 @@ final class WorkflowService: ObservableObject {
             }
         }
 
+        // Exclusions only remove an Always workflow from the fallback; the specific
+        // matches above win before they are checked.
         let globalMatches = enabled.filter { workflow in
-            workflow.trigger?.kind == .global
+            guard let trigger = workflow.trigger, trigger.kind == .global else { return false }
+            return !excludes(trigger, bundleIdentifier: bundleId, domain: domain)
         }
         if let result = bestMatch(from: globalMatches, kind: .globalFallback, matchedDomain: nil) {
             return result
         }
 
         return nil
+    }
+
+    /// Whether the active app or website is excluded from an Always trigger. Websites use
+    /// the same domain rules as website triggers, so a domain also excludes its subdomains.
+    private func excludes(_ trigger: WorkflowTrigger, bundleIdentifier: String, domain: String?) -> Bool {
+        if !bundleIdentifier.isEmpty, trigger.excludedAppBundleIdentifiers.contains(bundleIdentifier) {
+            return true
+        }
+        guard let domain else { return false }
+        return trigger.excludedWebsitePatterns.contains { pattern in
+            !pattern.isEmpty && domainMatches(domain, pattern: pattern)
+        }
     }
 
     private func fetchWorkflows() {

@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.script",
     "name": "Script Runner",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
     "descriptions": {
         "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben.",
+        "es": "Posprocesa el texto transcrito con scripts de shell personalizados. El texto se pasa por stdin y el resultado se obtiene por stdout.",
         "ja": "カスタムシェルスクリプトで文字起こしテキストを後処理します。stdinでテキストを渡し、stdoutから結果を受け取ります。"
     },
     "category": "post-processor",

@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.fireworks",
     "name": "Fireworks AI",
-    "version": "1.0.8",
+    "version": "1.0.9",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
     "descriptions": {
         "de": "Cloud-Transkription und LLM über Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key.",
+        "es": "Transcripción y LLM en la nube con Fireworks AI. Transcripción en tiempo real e inferencia rápida; requiere una clave de API.",
         "ja": "Fireworks AIによるクラウド文字起こしとLLMです。ストリーミング文字起こしと高速推論に対応し、APIキーが必要です。"
     },
     "category": "transcription",

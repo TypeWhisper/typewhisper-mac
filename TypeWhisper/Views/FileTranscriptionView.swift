@@ -5,6 +5,8 @@ import TypeWhisperPluginSDK
 struct FileTranscriptionView: View {
     @ObservedObject private var viewModel = FileTranscriptionViewModel.shared
     @ObservedObject private var watchFolder = WatchFolderViewModel.shared
+    // Names the default engine in the pickers and follows its changes.
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
 
     @State private var isDragTargeted = false
     @State private var showFilePicker = false
@@ -103,7 +105,7 @@ struct FileTranscriptionView: View {
 
                 Section(localizedAppText("Watch Folder Transcription", de: "Ordner-Transkription")) {
                     Picker(String(localized: "watchFolder.engine"), selection: $watchFolder.engineChoice) {
-                        Text(String(localized: "watchFolder.engine.default")).tag(nil as String?)
+                        Text(defaultEngineTitle).tag(nil as String?)
                         Divider()
                         ForEach(watchFolder.availableEngines, id: \.providerId) { engine in
                             HStack {
@@ -114,6 +116,10 @@ struct FileTranscriptionView: View {
                                 }
                             }.tag(engine.providerId as String?)
                         }
+                    }
+
+                    if watchFolder.engineChoice == nil {
+                        DefaultEngineSettingsLink()
                     }
 
                     if let engine = watchFolder.resolvedEngine {
@@ -179,7 +185,8 @@ struct FileTranscriptionView: View {
                                     "Processing \(processing)",
                                     de: "\(processing) wird verarbeitet",
                                     ja: "\(processing)を処理中",
-                                    zh: "正在处理\(processing)"
+                                    zh: "正在处理\(processing)",
+                                    es: "Procesando \(processing)"
                                 ))
                         }
                     }
@@ -470,7 +477,8 @@ struct FileTranscriptionView: View {
                 "Copy transcript of \(item.fileName)",
                 de: "Transkript von \(item.fileName) kopieren",
                 ja: "\(item.fileName)の文字起こしをコピー",
-                zh: "复制\(item.fileName)的转录"
+                zh: "复制\(item.fileName)的转录",
+                es: "Copiar la transcripción de \(item.fileName)"
             ))
 
             if let result = item.result, !result.segments.isEmpty {
@@ -489,7 +497,8 @@ struct FileTranscriptionView: View {
                     "Export subtitles for \(item.fileName)",
                     de: "Untertitel für \(item.fileName) exportieren",
                     ja: "\(item.fileName)の字幕を書き出し",
-                    zh: "导出\(item.fileName)的字幕"
+                    zh: "导出\(item.fileName)的字幕",
+                    es: "Exportar subtítulos de \(item.fileName)"
                 ))
             }
         }
@@ -623,7 +632,8 @@ struct FileTranscriptionView: View {
             "\(processed) of \(total) files processed",
             de: "\(processed) von \(total) Dateien verarbeitet",
             ja: "\(total)件中\(processed)件のファイルを処理済み",
-            zh: "已处理 \(processed)/\(total) 个文件"
+            zh: "已处理 \(processed)/\(total) 个文件",
+            es: "\(processed) de \(total) archivos procesados"
         )
     }
 
@@ -640,7 +650,7 @@ struct FileTranscriptionView: View {
     private var fileTranscriptionSettings: some View {
         VStack(alignment: .leading, spacing: 8) {
             Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                Text(String(localized: "Default Engine")).tag(nil as String?)
+                Text(defaultEngineTitle).tag(nil as String?)
                 Divider()
                 ForEach(viewModel.availableEngines, id: \.providerId) { engine in
                     enginePickerLabel(for: engine)
@@ -650,6 +660,10 @@ struct FileTranscriptionView: View {
             }
             .controlSize(.small)
             .disabled(viewModel.batchState == .processing)
+
+            if viewModel.engineChoice == nil {
+                DefaultEngineSettingsLink()
+            }
 
             if let engine = viewModel.resolvedEngine {
                 let models = engine.transcriptionModels
@@ -666,6 +680,10 @@ struct FileTranscriptionView: View {
                 }
             }
         }
+    }
+
+    private var defaultEngineTitle: String {
+        DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName)
     }
 
     private var fileTranscriptionLanguageOptions: [(code: String, name: String)] {

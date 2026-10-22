@@ -220,17 +220,12 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
             return .safari
         case SupportedMeetingBrowser.arc:
             return .arc
-        case SupportedMeetingBrowser.chrome,
-             SupportedMeetingBrowser.chromeCanary,
-             SupportedMeetingBrowser.brave,
-             SupportedMeetingBrowser.edge,
-             SupportedMeetingBrowser.opera,
-             SupportedMeetingBrowser.vivaldi,
-             SupportedMeetingBrowser.chromium,
-             SupportedMeetingBrowser.wavebox:
-            return .chromiumBased
         default:
-            return .notABrowser
+            // Every other supported browser is Chromium-based. Reading the shared
+            // list keeps audio attribution and tab queries in sync.
+            return SupportedMeetingBrowser.supportsAutomaticURLResolution(bundleIdentifier)
+                ? .chromiumBased
+                : .notABrowser
         }
     }
 

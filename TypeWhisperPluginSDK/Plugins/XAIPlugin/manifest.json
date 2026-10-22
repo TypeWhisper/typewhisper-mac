@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.xai",
     "name": "xAI / Grok",
-    "version": "1.0.5",
+    "version": "1.1.0",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
     "descriptions": {
         "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech über xAI-Grok-APIs. Erfordert einen xAI API-Key.",
+        "es": "LLM, voz a texto y texto a voz en la nube con las API de xAI Grok. Requiere una clave de API de xAI.",
         "ja": "xAI Grok APIによるクラウドLLM、音声認識、音声合成です。xAI APIキーが必要です。"
     },
     "category": "transcription",

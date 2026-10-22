@@ -441,6 +441,42 @@ final class MetaPluginTests: XCTestCase {
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
     }
 
+    // MARK: - Usage reporting
+
+    func testProcessReportsTheResponsesUsage() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"""
+        {"model":"muse-spark-1.1","output_text":"Cleaned text",
+         "usage":{"input_tokens":120,"output_tokens":14,"total_tokens":134}}
+        """#)
+
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 120, outputTokens: 14, model: "muse-spark-1.1")])
+    }
+
+    func testProcessWithoutUsageReportsNothing() async throws {
+        let reports = try await Self.processCollectingUsage(body: #"{"output_text":"Cleaned text"}"#)
+
+        XCTAssertEqual(reports, [])
+    }
+
+    /// Runs one Responses request answered with `body` and returns the usage reported meanwhile.
+    private static func processCollectingUsage(body: String) async throws -> [PluginLLMUsage] {
+        let host = try PluginTestHostServices(secrets: ["api-key": "meta-key"])
+        let plugin = MetaPlugin()
+        plugin.activate(host: host)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), httpResponse(url: "https://api.meta.ai/v1/responses", statusCode: 200)),
+            ])
+        }
+        let collector = PluginLLMUsageCollector()
+        let result = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await plugin.process(systemPrompt: "Correct the transcript.", userText: "raw text", model: nil)
+        }
+        XCTAssertEqual(result, "Cleaned text")
+        return collector.reports
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,

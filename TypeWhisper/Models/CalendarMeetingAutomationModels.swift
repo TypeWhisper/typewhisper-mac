@@ -561,6 +561,8 @@ enum SupportedMeetingBrowser {
     static let safari = "com.apple.Safari"
     static let arc = "company.thebrowser.Browser"
     static let chrome = "com.google.Chrome"
+    static let chromeBeta = "com.google.Chrome.beta"
+    static let chromeDev = "com.google.Chrome.dev"
     static let chromeCanary = "com.google.Chrome.canary"
     static let brave = "com.brave.Browser"
     static let edge = "com.microsoft.edgemac"
@@ -574,7 +576,8 @@ enum SupportedMeetingBrowser {
     static let zen = "app.zen-browser.zen"
 
     static let automaticURLBundleIdentifiers: Set<String> = [
-        safari, arc, chrome, chromeCanary, brave, edge, opera, vivaldi, chromium, wavebox
+        safari, arc, chrome, chromeBeta, chromeDev, chromeCanary, brave, edge, opera, vivaldi,
+        chromium, wavebox
     ]
 
     static let reminderOnlyBundleIdentifiers: Set<String> = [
@@ -624,5 +627,28 @@ enum BrowserAudioProcessAttribution {
                     audioProcessBundleIdentifier == browserBundleIdentifier + suffix
                 }
             }
+    }
+
+    /// Chrome Beta, Dev and Canary ship the same `com.google.Chrome.helper`
+    /// identifiers as stable Chrome, so a browser helper belongs to the app
+    /// bundle it runs from. A helper inside an unsupported app is rejected; the
+    /// helper identifier alone decides only when the host app is unknown.
+    static func canonicalBrowserBundleIdentifier(
+        for audioProcessBundleIdentifier: String,
+        hostAppBundleIdentifier: @autoclosure () -> String?
+    ) -> String? {
+        guard let browserBundleIdentifier = canonicalBrowserBundleIdentifier(
+            for: audioProcessBundleIdentifier
+        ) else {
+            return nil
+        }
+        guard browserBundleIdentifier != audioProcessBundleIdentifier,
+              browserBundleIdentifier != SupportedMeetingBrowser.safari,
+              let hostAppBundleIdentifier = hostAppBundleIdentifier() else {
+            return browserBundleIdentifier
+        }
+        return SupportedMeetingBrowser.supportsAutomaticURLResolution(hostAppBundleIdentifier)
+            ? hostAppBundleIdentifier
+            : nil
     }
 }

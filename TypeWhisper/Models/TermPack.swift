@@ -34,25 +34,30 @@ struct TermPack: Identifiable {
     enum Source: String {
         case builtIn
         case community
+        /// Imported from a file by the user; stays on this Mac (`LocalTermPackStore`).
+        case local
     }
 
     var name: String {
-        if source == .community,
+        if source != .builtIn,
            let localizedNames,
            let lang = Locale.current.language.languageCode?.identifier,
            let localized = localizedNames[lang] {
             return localized
         }
+        // A user's own pack name is not a catalog key.
+        if source == .local { return defaultName }
         return String(localized: String.LocalizationValue(defaultName))
     }
 
     var description: String {
-        if source == .community,
+        if source != .builtIn,
            let localizedDescriptions,
            let lang = Locale.current.language.languageCode?.identifier,
            let localized = localizedDescriptions[lang] {
             return localized
         }
+        if source == .local { return defaultDescription }
         return String(localized: String.LocalizationValue(defaultDescription))
     }
 
@@ -80,19 +85,20 @@ struct TermPack: Identifiable {
         self.localizedDescriptions = nil
     }
 
-    /// Community pack init
+    /// Community and local pack init
     init(id: String, name: String, description: String, icon: String,
          terms: [String], corrections: [TermPackCorrection],
          version: String, author: String,
          localizedNames: [String: String]?, localizedDescriptions: [String: String]?,
-         requiresCommercialLicense: Bool = false) {
+         requiresCommercialLicense: Bool = false,
+         source: Source = .community) {
         self.id = id
         self.defaultName = name
         self.defaultDescription = description
         self.icon = icon
         self.terms = terms
         self.corrections = corrections
-        self.source = .community
+        self.source = source
         self.version = version
         self.author = author
         self.requiresCommercialLicense = requiresCommercialLicense

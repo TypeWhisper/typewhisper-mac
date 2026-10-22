@@ -188,6 +188,8 @@ enum HistoryRetranscriptionEnvironment {
                 guard !raw.isEmpty else { throw HistoryRetranscriptionError.emptyResult }
                 var final = dictionary.previewCorrections(to: raw, includeRegex: frozenWorkflow == nil)
                 var steps = final == raw ? [] : ["Corrections"]
+                // The run's own LLM requests; promoting the version makes them the entry's usage.
+                let llmUsage = LLMUsageLedger()
                 if let frozenWorkflow {
                     let beforeWorkflow = final
                     let segmentedRequest = frozenWorkflow.usesSegmentedPostProcessing
@@ -202,30 +204,34 @@ enum HistoryRetranscriptionEnvironment {
                         )
                         let requests = WorkflowRequests()
                         do {
-                            let outcome = try await WorkflowSegmentedPostProcessor(policy: policy).process(
-                                text: beforeWorkflow, incrementalSession: nil, incrementalRequest: nil,
-                                segmentProcessor: { segment in
-                                    try await requests.run {
-                                        try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                            let outcome = try await LLMUsageLedger.$current.withValue(llmUsage) {
+                                try await WorkflowSegmentedPostProcessor(policy: policy).process(
+                                    text: beforeWorkflow, incrementalSession: nil, incrementalRequest: nil,
+                                    segmentProcessor: { segment in
+                                        try await requests.run {
+                                            try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                                        }
+                                    },
+                                    wholeTextProcessor: {
+                                        await requests.waitUntilIdle()
+                                        try Task.checkCancellation()
+                                        return try await workflowProcessor.process(request: segmentedRequest, text: beforeWorkflow)
                                     }
-                                },
-                                wholeTextProcessor: {
-                                    await requests.waitUntilIdle()
-                                    try Task.checkCancellation()
-                                    return try await workflowProcessor.process(request: segmentedRequest, text: beforeWorkflow)
-                                }
-                            )
+                                )
+                            }
                             final = outcome.text
                         } catch {
                             await requests.waitUntilIdle()
                             throw error
                         }
                     } else {
-                        final = try await workflowProcessor.process(
-                            workflow: frozenWorkflow, text: beforeWorkflow,
-                            detectedLanguage: result.detectedLanguage, configuredLanguage: request.language,
-                            resolvedOutputFormat: resolvedOutputFormat
-                        )
+                        final = try await LLMUsageLedger.$current.withValue(llmUsage) {
+                            try await workflowProcessor.process(
+                                workflow: frozenWorkflow, text: beforeWorkflow,
+                                detectedLanguage: result.detectedLanguage, configuredLanguage: request.language,
+                                resolvedOutputFormat: resolvedOutputFormat
+                            )
+                        }
                     }
                     if final != beforeWorkflow { steps.append(frozenWorkflow.name) }
                     let beforeCorrections = final
@@ -243,6 +249,9 @@ enum HistoryRetranscriptionEnvironment {
                     workflowConfiguration: configuration, workflowRecorded: true,
                     pipelineSteps: steps.isEmpty ? nil : String(data: try JSONEncoder().encode(steps), encoding: .utf8)
                 )
+                // Explicitly empty without LLM requests, so promoting this version also
+                // clears the earlier usage on other Macs instead of leaving it unknown.
+                version.llmUsageData = (llmUsage.usage ?? HistoryLLMUsage(entries: [])).encodedData()
                 // Timing belongs to raw STT text. A rewritten result must not display stale alignment.
                 if raw == final {
                     if !result.words.isEmpty { version.speakerWordsData = try JSONEncoder().encode(result.words) }

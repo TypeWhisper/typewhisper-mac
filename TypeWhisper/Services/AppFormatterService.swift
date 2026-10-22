@@ -11,6 +11,8 @@ enum WorkflowOutputFormatResolver {
         "com.apple.Safari",
         "company.thebrowser.Browser",
         "com.google.Chrome",
+        "com.google.Chrome.beta",
+        "com.google.Chrome.dev",
         "com.google.Chrome.canary",
         "com.brave.Browser",
         "com.microsoft.edgemac",

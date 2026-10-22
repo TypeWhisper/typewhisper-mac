@@ -387,3 +387,382 @@ final class DictationQuickSelectionTests: XCTestCase {
         XCTAssertEqual(DictationQuickSelection.modelLabel(engine: nil, model: "Model"), "Model")
     }
 }
+
+/// The model menu of the dictation recording indicator (#1351).
+@MainActor
+final class IndicatorModelMenuTests: XCTestCase {
+    private let whisperKit = DictationQuickSelectionEngine(
+        providerId: "whisperkit",
+        displayName: "WhisperKit",
+        isAuthAvailable: true,
+        isConfigured: true,
+        managesLocalModels: true,
+        selectedModelId: "large",
+        restorableModelId: "large",
+        models: [
+            PluginModelInfo(id: "large", displayName: "Large", downloaded: true, loaded: true),
+            PluginModelInfo(id: "small", displayName: "Small", downloaded: true, loaded: false),
+            PluginModelInfo(id: "turbo", displayName: "Turbo", downloaded: false, loaded: false),
+        ]
+    )
+    private let openAINotSetUp = DictationQuickSelectionEngine(
+        providerId: "openai",
+        displayName: "OpenAI",
+        isAuthAvailable: true,
+        isConfigured: false,
+        managesLocalModels: false,
+        selectedModelId: nil,
+        restorableModelId: nil,
+        models: [PluginModelInfo(id: "whisper-1", displayName: "Whisper")]
+    )
+    private let selection = DictationModelSelectionState(providerId: "whisperkit", modelId: "large")
+    private let large = DictationModelChoice(providerId: "whisperkit", modelId: "large")
+    private let small = DictationModelChoice(providerId: "whisperkit", modelId: "small")
+    private let turbo = DictationModelChoice(providerId: "whisperkit", modelId: "turbo")
+    private let openAI = DictationModelChoice(providerId: "openai", modelId: nil)
+
+    private func snapshot(isLocked: Bool, workflowNote: String? = nil) -> DictationQuickSelectionSnapshot {
+        var snapshot = DictationQuickSelectionSnapshot()
+        snapshot.isLocked = isLocked
+        snapshot.modelWorkflowNote = workflowNote
+        snapshot.modelGroups = DictationQuickSelection.modelGroups(
+            engines: [whisperKit, openAINotSetUp],
+            selectedProviderId: "whisperkit"
+        )
+        return snapshot
+    }
+
+    private func options(in entries: [IndicatorModelMenu.Entry]) -> [IndicatorModelMenu.Option] {
+        entries.flatMap { entry -> [IndicatorModelMenu.Option] in
+            switch entry {
+            case .option(let option): [option]
+            case .moreModels(_, let options): options
+            case .note, .header, .separator, .dictationSettings: []
+            }
+        }
+    }
+
+    private func notes(in entries: [IndicatorModelMenu.Entry]) -> [String] {
+        entries.compactMap { entry in
+            if case .note(let text) = entry { return text }
+            return nil
+        }
+    }
+
+    // MARK: Menu
+
+    func testMenuListsTheMenuBarModelsAndEndsWithDictationSettings() {
+        let entries = IndicatorModelMenu.entries(
+            snapshot: snapshot(isLocked: false),
+            pending: nil,
+            enforcesTranscription: false
+        )
+
+        XCTAssertEqual(entries.first, .header("WhisperKit"))
+        XCTAssertTrue(notes(in: entries).isEmpty, "nothing to explain while no recording runs")
+        let options = options(in: entries)
+        XCTAssertEqual(options.map(\.choice), [large, small, turbo, openAI])
+        XCTAssertEqual(options.filter(\.isSelected).map(\.choice), [large])
+        XCTAssertEqual(options.filter(\.isEnabled).map(\.choice), [large, small])
+        XCTAssertTrue(entries.contains { entry in
+            if case .moreModels(_, let options) = entry { return options.map(\.choice) == [turbo] }
+            return false
+        }, "models that need setup stay in their own submenu, as in the menu bar")
+        guard case .dictationSettings = entries.last else {
+            return XCTFail("the menu ends with the way into the model settings")
+        }
+        XCTAssertEqual(entries[entries.count - 2], .separator)
+    }
+
+    func testMenuSaysThatAChoiceDuringARecordingAppliesToTheNextDictation() {
+        let entries = IndicatorModelMenu.entries(
+            snapshot: snapshot(isLocked: true),
+            pending: nil,
+            enforcesTranscription: false
+        )
+
+        XCTAssertEqual(entries.prefix(2), [.note(IndicatorModelMenu.appliesToNextDictationNote), .separator])
+        XCTAssertEqual(options(in: entries).filter(\.isEnabled).map(\.choice), [large, small])
+    }
+
+    func testMenuNamesTheModelWaitingForTheNextDictation() {
+        let pending = PendingDictationModelSwitch(choice: small, title: "Small", baseline: selection)
+
+        let entries = IndicatorModelMenu.entries(
+            snapshot: snapshot(isLocked: true),
+            pending: pending,
+            enforcesTranscription: false
+        )
+
+        XCTAssertEqual(notes(in: entries), [IndicatorModelMenu.nextDictationNote(modelTitle: "Small")])
+        let options = options(in: entries)
+        XCTAssertEqual(options.first { $0.choice == small }?.title, IndicatorModelMenu.pendingOptionTitle("Small"))
+        XCTAssertEqual(options.filter(\.isSelected).map(\.choice), [large], "the running dictation keeps its model")
+    }
+
+    func testMenuSaysWhenAWorkflowUsesItsOwnModel() {
+        let note = DictationQuickSelection.workflowNote(workflowName: "Mail", summary: "Groq • Whisper Large v3")
+
+        let entries = IndicatorModelMenu.entries(
+            snapshot: snapshot(isLocked: true, workflowNote: note),
+            pending: nil,
+            enforcesTranscription: false
+        )
+
+        XCTAssertEqual(notes(in: entries), [IndicatorModelMenu.appliesToNextDictationNote, note])
+    }
+
+    func testManagedTranscriptionOffersNoModel() {
+        let entries = IndicatorModelMenu.entries(
+            snapshot: snapshot(isLocked: false),
+            pending: nil,
+            enforcesTranscription: true
+        )
+
+        XCTAssertEqual(notes(in: entries).count, 1)
+        XCTAssertTrue(options(in: entries).allSatisfy { !$0.isEnabled })
+        XCTAssertEqual(
+            IndicatorModelMenu.request(
+                choosing: small,
+                snapshot: snapshot(isLocked: false),
+                pending: nil,
+                currentSelection: selection,
+                enforcesTranscription: true
+            ),
+            .ignore
+        )
+    }
+
+    // MARK: Choosing
+
+    func testChoosingAModelWithoutARunningRecordingAppliesItNow() {
+        XCTAssertEqual(
+            IndicatorModelMenu.request(
+                choosing: small,
+                snapshot: snapshot(isLocked: false),
+                pending: nil,
+                currentSelection: selection,
+                enforcesTranscription: false
+            ),
+            .apply(title: "Small")
+        )
+    }
+
+    func testChoosingAModelDuringARecordingWaitsForTheNextDictation() {
+        XCTAssertEqual(
+            IndicatorModelMenu.request(
+                choosing: small,
+                snapshot: snapshot(isLocked: true),
+                pending: nil,
+                currentSelection: selection,
+                enforcesTranscription: false
+            ),
+            .queue(PendingDictationModelSwitch(choice: small, title: "Small", baseline: selection))
+        )
+    }
+
+    func testModelsThatNeedSetupOrAreUnavailableCannotBeChosen() {
+        for choice in [turbo, openAI, DictationModelChoice(providerId: "removed", modelId: "x")] {
+            for isLocked in [false, true] {
+                XCTAssertEqual(
+                    IndicatorModelMenu.request(
+                        choosing: choice,
+                        snapshot: snapshot(isLocked: isLocked),
+                        pending: nil,
+                        currentSelection: selection,
+                        enforcesTranscription: false
+                    ),
+                    .ignore,
+                    "\(choice), locked: \(isLocked)"
+                )
+            }
+        }
+    }
+
+    func testChoosingTheModelInUseChangesNothingButDropsAWaitingSwitch() {
+        let pending = PendingDictationModelSwitch(choice: small, title: "Small", baseline: selection)
+
+        XCTAssertEqual(
+            IndicatorModelMenu.request(
+                choosing: large,
+                snapshot: snapshot(isLocked: true),
+                pending: nil,
+                currentSelection: selection,
+                enforcesTranscription: false
+            ),
+            .ignore
+        )
+        XCTAssertEqual(
+            IndicatorModelMenu.request(
+                choosing: large,
+                snapshot: snapshot(isLocked: true),
+                pending: pending,
+                currentSelection: selection,
+                enforcesTranscription: false
+            ),
+            .cancelPending
+        )
+    }
+
+    // MARK: Waiting switch
+
+    func testWaitingSwitchAppliesOnceNothingTranscribesAnymore() {
+        let pending = PendingDictationModelSwitch(choice: small, title: "Small", baseline: selection)
+
+        XCTAssertEqual(IndicatorModelMenu.resolve(pending, isLocked: true, currentSelection: selection), .wait)
+        XCTAssertEqual(IndicatorModelMenu.resolve(pending, isLocked: false, currentSelection: selection), .apply(small))
+    }
+
+    func testWaitingSwitchIsDroppedWhenTheSelectionChangedElsewhere() {
+        let pending = PendingDictationModelSwitch(choice: small, title: "Small", baseline: selection)
+
+        for changed in [
+            DictationModelSelectionState(providerId: "whisperkit", modelId: "turbo"),
+            DictationModelSelectionState(providerId: "groq", modelId: "whisper-large-v3"),
+            DictationModelSelectionState(providerId: nil, modelId: nil),
+        ] {
+            XCTAssertEqual(IndicatorModelMenu.resolve(pending, isLocked: false, currentSelection: changed), .discard)
+            XCTAssertEqual(IndicatorModelMenu.resolve(pending, isLocked: true, currentSelection: changed), .wait)
+        }
+    }
+
+    // MARK: Workflow overrides
+
+    func testRunningDictationIsDescribedByItsOwnWorkflow() {
+        let hotkeyWorkflow = Workflow(name: "Meeting Notes", template: .dictation, trigger: .manual())
+        let appWorkflow = Workflow(name: "Mail", template: .dictation, trigger: .manual())
+        let workflows = [hotkeyWorkflow, appWorkflow]
+
+        for state: DictationViewModel.State in [.recording, .processing, .inserting] {
+            XCTAssertTrue(
+                DictationQuickSelection.workflowDecidingSelections(
+                    dictationState: state,
+                    activeDictationWorkflowId: hotkeyWorkflow.id,
+                    workflows: workflows,
+                    frontmostAppWorkflow: { appWorkflow }
+                ) === hotkeyWorkflow,
+                "a workflow started with its hotkey decides the running dictation (\(state))"
+            )
+            XCTAssertNil(
+                DictationQuickSelection.workflowDecidingSelections(
+                    dictationState: state,
+                    activeDictationWorkflowId: nil,
+                    workflows: workflows,
+                    frontmostAppWorkflow: { appWorkflow }
+                ),
+                "a dictation without a workflow uses the selected model (\(state))"
+            )
+        }
+        for state: DictationViewModel.State in [.idle, .error("failed")] {
+            XCTAssertTrue(
+                DictationQuickSelection.workflowDecidingSelections(
+                    dictationState: state,
+                    activeDictationWorkflowId: hotkeyWorkflow.id,
+                    workflows: workflows,
+                    frontmostAppWorkflow: { appWorkflow }
+                ) === appWorkflow,
+                "without a running dictation the frontmost app's workflow applies (\(state))"
+            )
+        }
+    }
+
+    // MARK: Indicator
+
+    func testIndicatorTakesThePointerOnlyWhileARecordingOffersAControl() {
+        let dictation = IndicatorPresentationState(source: .dictation, state: .recording)
+        XCTAssertTrue(dictation.tracksPointer(showsModelContent: true))
+        XCTAssertFalse(
+            dictation.tracksPointer(showsModelContent: false),
+            "without the Model content a dictation indicator stays click-through"
+        )
+        XCTAssertTrue(IndicatorPresentationState(source: .recorder, state: .recording).tracksPointer(showsModelContent: false))
+        XCTAssertFalse(IndicatorPresentationState(source: .preview, state: .recording).tracksPointer(showsModelContent: true))
+        for state: DictationViewModel.State in [.idle, .processing, .inserting, .error("failed")] {
+            XCTAssertFalse(
+                IndicatorPresentationState(source: .dictation, state: state).tracksPointer(showsModelContent: true),
+                "\(state)"
+            )
+        }
+    }
+
+    func testModelContentCountsOnlyOnASideTheStyleHas() {
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .notch, left: .model, right: .waveform))
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .overlay, left: .timer, right: .model))
+        XCTAssertTrue(NotchIndicatorContent.showsModel(style: .minimal, left: .timer, right: .model))
+        XCTAssertFalse(
+            NotchIndicatorContent.showsModel(style: .minimal, left: .model, right: .waveform),
+            "the Minimal style has no left side"
+        )
+        XCTAssertFalse(NotchIndicatorContent.showsModel(style: .notch, left: .timer, right: .waveform))
+    }
+
+    func testModelContentTitleFallsBackUntilTheModelNameIsKnown() {
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: nil), "Model")
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: ""), "Model")
+        XCTAssertEqual(IndicatorModelMenu.contentTitle(modelName: "Parakeet TDT v3"), "Parakeet TDT v3")
+    }
+
+    // MARK: Keys while the menu is open
+
+    private func keyEvent(_ keyCode: UInt16, keyDown: Bool) throws -> NSEvent {
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown))
+        event.flags = []
+        return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+
+    func testEscapeClosesTheOpenMenuInsteadOfCancellingTheRecording() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+
+        service.isIndicatorMenuOpen = true
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x35, keyDown: true), source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x35, keyDown: false), source: .monitor))
+        XCTAssertEqual(cancelCount, 0)
+
+        service.isIndicatorMenuOpen = false
+        XCTAssertTrue(service.processEventForTesting(try keyEvent(0x35, keyDown: true), source: .monitor))
+        XCTAssertEqual(cancelCount, 1, "Escape cancels again once the menu is closed")
+    }
+
+    func testReturnChoosesInTheOpenMenuInsteadOfSubmittingTheDictation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let sessionID = UUID()
+        service.submitOnEnterSessionID = sessionID
+        var submitted: [UUID] = []
+        service.onSubmitDictationPressed = { submitted.append($0) }
+
+        service.isIndicatorMenuOpen = true
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x24, keyDown: true), source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x24, keyDown: false), source: .monitor))
+        XCTAssertTrue(submitted.isEmpty)
+
+        service.isIndicatorMenuOpen = false
+        XCTAssertTrue(service.processEventForTesting(try keyEvent(0x24, keyDown: true), source: .monitor))
+        XCTAssertEqual(submitted, [sessionID])
+    }
+
+    func testArrowKeysInTheOpenMenuDoNotInterruptPushToTalk() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.discardPushToTalkRecordingOnExtraKeyPress = true
+        let hotkey = UnifiedHotkey(keyCode: 0x00, modifierFlags: 0, isFn: true)
+        service.setHotkeyForTesting(hotkey, for: .pushToTalk)
+        service.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: true)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        var interruptionCount = 0
+        service.onPushToTalkInterruption = { interruptionCount += 1 }
+
+        service.isIndicatorMenuOpen = true
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x7D, keyDown: true), source: .eventTap))
+        XCTAssertFalse(service.processEventForTesting(try keyEvent(0x7D, keyDown: false), source: .eventTap))
+        XCTAssertEqual(interruptionCount, 0)
+
+        service.isIndicatorMenuOpen = false
+        _ = service.processEventForTesting(try keyEvent(0x7D, keyDown: true), source: .eventTap)
+        XCTAssertEqual(interruptionCount, 1, "other keys still interrupt push-to-talk once the menu is closed")
+    }
+}

@@ -731,7 +731,7 @@ final class ParakeetPluginTests: XCTestCase {
         let plugin = makePlugin()
         XCTAssertEqual(
             plugin.transcriptionModels.map(\.id),
-            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "fluid-speech-mini", "parakeet-tdt-0.6b-v2"]
+            ["parakeet-ultra", "parakeet-tdt-0.6b-v3", "fluid-speech-mini", "parakeet-tdt-0.6b-v2", "nemotron-3.5-asr-streaming-0.6b"]
         )
         XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
         XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
@@ -1217,19 +1217,28 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(plugin.huggingFaceToken, "hf_parakeet_saved")
     }
 
-    func testAllowsTranscriptPreviewFallback() throws {
-        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = ParakeetPlugin()
-
-        XCTAssertTrue(fallbackPolicy.allowsTranscriptPreviewFallback)
+    func testKeepsTheHostDefaultTranscriptPreviewPolicy() throws {
+        // Hosts read a declared policy for a model override by selecting that model, which
+        // reloads Parakeet models; without one they allow the preview, as Parakeet always did.
+        XCTAssertNil(ParakeetPlugin() as Any as? any TranscriptPreviewFallbackPolicyProviding)
     }
 
-    func testUsesBatchFallbackForLivePreview() throws {
+    func testUsesBatchFallbackForLivePreviewExceptWithNemotron() throws {
         let plugin = ParakeetPlugin()
-        let fallbackPolicy: any TranscriptPreviewFallbackPolicyProviding = plugin
 
         XCTAssertTrue(plugin.supportsStreaming)
-        XCTAssertTrue(fallbackPolicy.allowsTranscriptPreviewFallback)
-        XCTAssertNil(plugin as? any LiveTranscriptionCapablePlugin)
+        XCTAssertEqual(plugin.liveTranscriptionProgressMode, .completeSnapshot)
+        for version in ParakeetVersion.allCases {
+            XCTAssertEqual(
+                plugin.supportsLiveTranscriptionSession(forModelId: version.modelDef.id),
+                version == .nemotronStreaming,
+                version.modelDef.id
+            )
+        }
+        XCTAssertFalse(plugin.supportsLiveTranscriptionSession(forModelId: "unknown-model"))
+        // The selected model, Ultra by default, previews in batches.
+        XCTAssertNil(plugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertNotNil(plugin.liveTranscriptionPlugin(forModelId: ParakeetVersion.nemotronStreaming.modelDef.id))
     }
 
     func testSourceProgressMapsProgressFractionToAudioDuration() {
@@ -1717,8 +1726,9 @@ final class ParakeetPluginTests: XCTestCase {
 
     func testRefusedDownloadReportsReasonWithoutDownloadingTheModel() async throws {
         // Models live in the user's FluidAudio cache, so use a version that is not installed there.
-        guard let version = ParakeetVersion.allCases.first(where: {
-            !AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: $0.asrModelVersion), version: $0.asrModelVersion)
+        guard let version = ParakeetVersion.allCases.first(where: { version in
+            guard let asrModelVersion = version.asrModelVersion else { return false }
+            return !AsrModels.modelsExist(at: AsrModels.defaultCacheDirectory(for: asrModelVersion), version: asrModelVersion)
         }) else {
             throw XCTSkip("Every Parakeet version is installed, so loading one downloads nothing")
         }

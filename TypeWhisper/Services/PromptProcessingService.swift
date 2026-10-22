@@ -810,6 +810,13 @@ class PromptProcessingService: ObservableObject {
             do {
                 let result = try await provider.process(systemPrompt: prompt, userText: text)
                 logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
+                // On-device: no token counts, but the provider still made the text.
+                recordLLMRequest(
+                    providerId: Self.appleIntelligenceId,
+                    providerName: displayName(for: Self.appleIntelligenceId),
+                    model: nil,
+                    reports: []
+                )
                 return result
             } catch {
                 logger.error("Prompt provider call failed after \(ContinuousClock.now - providerStart): \(error.localizedDescription)")
@@ -850,23 +857,59 @@ class PromptProcessingService: ObservableObject {
         )
         logger.info("Processing prompt with plugin \(providerId)")
         let providerStart = ContinuousClock.now
+        let usageCollector = PluginLLMUsageCollector()
         do {
             let result = try await withProcessActivityIfNeeded(for: plugin, providerId: providerId) {
-                try await processWithPlugin(
-                    plugin,
-                    prompt: prompt,
-                    text: text,
-                    model: model,
-                    temperatureDirective: temperatureDirective,
-                    effort: effort
-                )
+                try await PluginLLMUsageReporting.$collector.withValue(usageCollector) {
+                    try await processWithPlugin(
+                        plugin,
+                        prompt: prompt,
+                        text: text,
+                        model: model,
+                        temperatureDirective: temperatureDirective,
+                        effort: effort
+                    )
+                }
             }
             logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
+            recordLLMRequest(
+                providerId: providerId,
+                providerName: plugin.llmProviderDisplayName,
+                model: model,
+                reports: usageCollector.reports
+            )
             return result
         } catch {
+            // A failed request still counts when the provider reported the tokens it used,
+            // for example a reply cut off at the output limit.
+            let reports = usageCollector.reports
+            if !reports.isEmpty {
+                recordLLMRequest(
+                    providerId: providerId,
+                    providerName: plugin.llmProviderDisplayName,
+                    model: model,
+                    reports: reports
+                )
+            }
             logger.error("Prompt provider call failed after \(ContinuousClock.now - providerStart): \(error.localizedDescription)")
             throw error
         }
+    }
+
+    /// Adds one provider request to the ledger of the work that installed one,
+    /// such as a dictation. Without a ledger nothing is kept.
+    private func recordLLMRequest(
+        providerId: String,
+        providerName: String?,
+        model: String?,
+        reports: [PluginLLMUsage]
+    ) {
+        LLMUsageLedger.current?.recordRequest(
+            providerId: providerId,
+            providerName: providerName,
+            requestedModel: model,
+            reports: reports
+        )
     }
 
     private func processWithPlugin(

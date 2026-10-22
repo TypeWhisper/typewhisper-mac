@@ -70,7 +70,8 @@ enum AppStoreInputAccess {
         if isAutoPasteEnabled {
             return localizedAppText(
                 "Copied to clipboard. Press ⌘V to paste, or allow TypeWhisper under \u{201C}\(postEventSettingsName)\u{201D} to paste automatically.",
-                de: "In die Zwischenablage kopiert. Füge den Text mit ⌘V ein oder erlaube TypeWhisper unter „\(postEventSettingsName)“, um automatisch einzufügen."
+                de: "In die Zwischenablage kopiert. Füge den Text mit ⌘V ein oder erlaube TypeWhisper unter „\(postEventSettingsName)“, um automatisch einzufügen.",
+                es: "Copiado en el portapapeles. Presiona ⌘V para pegar o permite TypeWhisper en “\(postEventSettingsName)” para pegar automáticamente."
             )
         }
         return localizedAppText(

@@ -176,6 +176,22 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         XCTAssertNotNil(manager.resolveLlmPair(ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.llm", modelId: "unknown")).unavailableReason)
     }
 
+    func testDefaultEngineIsTheEnforcedEngineAndTheSavedOneIsNotNamedApart() {
+        let manager = makeManager()
+        PluginManager.shared = manager
+        defer { manager.applySelectionPolicy(.unmanaged) }
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("cloud-engine")
+
+        manager.applySelectionPolicy(ManagedSelectionPolicy(
+            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.pair.local", modelId: "large")
+        ))
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "local-engine")
+        XCTAssertNil(modelManager.unavailableSavedEngine, "Managed settings decide the engine, not a fallback")
+    }
+
     func testEnforcedPairDecidesTheEngineAndModelAndRestoresTheUsersModel() {
         let manager = makeManager()
         PluginManager.shared = manager

@@ -199,7 +199,8 @@ private struct MyWorkflowsPage: View {
                     localizedAppText(
                         "This removes “\(workflow.name)” from the active workflow list.",
                         de: "Dadurch wird „\(workflow.name)“ aus der aktiven Workflow-Liste entfernt.",
-                        ja: "「\(workflow.name)」を有効なワークフロー一覧から削除します。"
+                        ja: "「\(workflow.name)」を有効なワークフロー一覧から削除します。",
+                        es: "Esto quita “\(workflow.name)” de la lista de flujos de trabajo activos."
                     )
                 )
             }
@@ -602,7 +603,8 @@ private struct LLMFallbackPriorityRow: View {
             "Fallback \(position) of \(count): \(providerName)",
             de: "Fallback \(position) von \(count): \(providerName)",
             ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
-            zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)"
+            zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)",
+            es: "Respaldo \(position) de \(count): \(providerName)"
         )
         var parts = [name, statusText]
         // The list is disabled under an enforced LLM pair; a hint on this container
@@ -810,7 +812,8 @@ private struct LLMFallbackPriorityRow: View {
         }
         return localizedAppText(
             "Provider Default (\(displayName))",
-            de: "Provider-Standard (\(displayName))"
+            de: "Provider-Standard (\(displayName))",
+            es: "Predeterminado del proveedor (\(displayName))"
         )
     }
 
@@ -1136,13 +1139,15 @@ private struct WorkflowRow: View {
                         "Move \(workflow.name) up",
                         de: "\(workflow.name) nach oben bewegen",
                         ja: "\(workflow.name)を上へ移動",
-                        zh: "上移 \(workflow.name)"
+                        zh: "上移 \(workflow.name)",
+                        es: "Subir \(workflow.name)"
                     ),
                     downLabel: localizedAppText(
                         "Move \(workflow.name) down",
                         de: "\(workflow.name) nach unten bewegen",
                         ja: "\(workflow.name)を下へ移動",
-                        zh: "下移 \(workflow.name)"
+                        zh: "下移 \(workflow.name)",
+                        es: "Bajar \(workflow.name)"
                     ),
                     focus: arrowFocus,
                     moveUp: onMoveUp,
@@ -1322,8 +1327,9 @@ private struct WorkflowEditorPage: View {
     @State private var isConfirmingDiscard = false
     @State private var validationMessage: String?
     @State private var isAdvancedExpanded = false
-    @State private var showingAppPicker = false
+    @State private var appPickerTarget: AppPickerTarget?
     @State private var websiteInput = ""
+    @State private var excludedWebsiteInput = ""
     #if APPSTORE
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
     #endif
@@ -1338,6 +1344,14 @@ private struct WorkflowEditorPage: View {
     }
 
     private var isEditing: Bool { workflow != nil }
+
+    /// The app list the app picker edits: the App trigger or the apps an Always trigger excludes.
+    private enum AppPickerTarget: Identifiable {
+        case trigger
+        case exclusions
+
+        var id: Self { self }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1359,10 +1373,12 @@ private struct WorkflowEditorPage: View {
                 .padding(SettingsLayoutMetrics.pagePadding)
             }
         }
-        .sheet(isPresented: $showingAppPicker) {
+        .sheet(item: $appPickerTarget) { target in
             WorkflowAppPickerSheet(
                 installedApps: installedAppsViewModel.installedApps,
-                selectedBundleIdentifiers: $draft.appBundleIdentifiers
+                selectedBundleIdentifiers: target == .trigger
+                    ? $draft.appBundleIdentifiers
+                    : $draft.excludedAppBundleIdentifiers
             )
         }
         .alert(
@@ -1633,7 +1649,8 @@ private struct WorkflowEditorPage: View {
                         localizedAppText(
                             "Unavailable Action Target (\(targetActionPluginId))",
                             de: "Nicht verfügbares Action-Ziel (\(targetActionPluginId))",
-                            ja: "利用できないアクション対象（\(targetActionPluginId)）"
+                            ja: "利用できないアクション対象（\(targetActionPluginId)）",
+                            es: "Destino de acción no disponible (\(targetActionPluginId))"
                         )
                     )
                     .tag(targetActionPluginId as String?)
@@ -2069,7 +2086,8 @@ private struct WorkflowEditorPage: View {
         return localizedAppText(
             "Use Global Fallback List (starts with \(providerName))",
             de: "Globale Fallback-Liste verwenden (beginnt mit \(providerName))",
-            ja: "グローバルフォールバックリストを使用（最初: \(providerName)）"
+            ja: "グローバルフォールバックリストを使用（最初: \(providerName)）",
+            es: "Usar la lista global de respaldos (empieza por \(providerName))"
         )
     }
 
@@ -2087,7 +2105,8 @@ private struct WorkflowEditorPage: View {
         }
         return localizedAppText(
             "Provider Default (\(displayName))",
-            de: "Provider-Standard (\(displayName))"
+            de: "Provider-Standard (\(displayName))",
+            es: "Predeterminado del proveedor (\(displayName))"
         )
     }
 
@@ -2223,27 +2242,40 @@ private struct WorkflowEditorPage: View {
     }
 
     private var appTriggerEditor: some View {
+        appListEditor(
+            bundleIdentifiers: $draft.appBundleIdentifiers,
+            emptyText: localizedAppText("No apps selected yet.", de: "Noch keine Apps ausgewählt."),
+            pickerTarget: .trigger
+        )
+    }
+
+    /// The selected apps with remove buttons and the button that opens the app picker.
+    private func appListEditor(
+        bundleIdentifiers: Binding<[String]>,
+        emptyText: String,
+        pickerTarget: AppPickerTarget
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            if draft.appBundleIdentifiers.isEmpty {
-                Text(localizedAppText("No apps selected yet.", de: "Noch keine Apps ausgewählt."))
+            if bundleIdentifiers.wrappedValue.isEmpty {
+                Text(emptyText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(draft.appBundleIdentifiers, id: \.self) { bundleId in
+                    ForEach(bundleIdentifiers.wrappedValue, id: \.self) { bundleId in
                         WorkflowSelectionRow(
                             title: installedAppName(for: bundleId),
                             subtitle: bundleId,
                             icon: installedAppIcon(for: bundleId)
                         ) {
-                            draft.appBundleIdentifiers.removeAll { $0 == bundleId }
+                            bundleIdentifiers.wrappedValue.removeAll { $0 == bundleId }
                         }
                     }
                 }
             }
 
             Button(localizedAppText("Select Apps…", de: "Apps auswählen…")) {
-                showingAppPicker = true
+                appPickerTarget = pickerTarget
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -2260,7 +2292,30 @@ private struct WorkflowEditorPage: View {
     }
 
     private var websiteTriggerEditor: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        websiteListEditor(
+            patterns: draft.websitePatterns,
+            input: $websiteInput,
+            emptyText: localizedAppText("No websites added yet.", de: "Noch keine Websites hinzugefügt."),
+            rowSubtitle: localizedAppText("Website trigger", de: "Website-Trigger"),
+            fieldLabel: localizedAppText("Website", de: "Website"),
+            add: { draft.addWebsitePattern($0) },
+            remove: { pattern in draft.websitePatterns.removeAll { $0 == pattern } }
+        )
+    }
+
+    /// The added websites with remove buttons, the domain field, and history suggestions.
+    private func websiteListEditor(
+        patterns: [String],
+        input: Binding<String>,
+        emptyText: String,
+        rowSubtitle: String,
+        fieldLabel: String,
+        add: @escaping (String) -> Void,
+        remove: @escaping (String) -> Void
+    ) -> some View {
+        let suggestions = websiteSuggestionStore.suggestions(for: input.wrappedValue, excluding: patterns)
+
+        return VStack(alignment: .leading, spacing: 10) {
             #if APPSTORE
             Text(localizedAppText(
                 "Matches in browsers with the TypeWhisper extension.",
@@ -2270,50 +2325,50 @@ private struct WorkflowEditorPage: View {
             .foregroundStyle(.secondary)
             #endif
 
-            if draft.websitePatterns.isEmpty {
-                Text(localizedAppText("No websites added yet.", de: "Noch keine Websites hinzugefügt."))
+            if patterns.isEmpty {
+                Text(emptyText)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(draft.websitePatterns, id: \.self) { pattern in
+                    ForEach(patterns, id: \.self) { pattern in
                         WorkflowSelectionRow(
                             title: pattern,
-                            subtitle: localizedAppText("Website trigger", de: "Website-Trigger"),
+                            subtitle: rowSubtitle,
                             iconSystemName: "globe"
                         ) {
-                            draft.websitePatterns.removeAll { $0 == pattern }
+                            remove(pattern)
                         }
                     }
                 }
             }
 
             HStack(alignment: .top, spacing: 10) {
-                TextField(String(localized: "docs.github.com"), text: $websiteInput)
+                TextField(String(localized: "docs.github.com"), text: input)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel(localizedAppText("Website", de: "Website"))
+                    .accessibilityLabel(fieldLabel)
                     .onSubmit {
-                        addWebsiteInput()
+                        addWebsite(from: input, add: add)
                     }
 
                 Button(localizedAppText("Add", de: "Hinzufügen")) {
-                    addWebsiteInput()
+                    addWebsite(from: input, add: add)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             }
 
-            if !websiteSuggestions.isEmpty {
+            if !suggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(localizedAppText("Suggested websites", de: "Vorgeschlagene Websites"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
 
                     FlowLayout(spacing: 6) {
-                        ForEach(websiteSuggestions, id: \.self) { domain in
+                        ForEach(suggestions, id: \.self) { domain in
                             Button(domain) {
-                                draft.addWebsitePattern(domain)
-                                websiteInput = ""
+                                add(domain)
+                                input.wrappedValue = ""
                                 validationMessage = nil
                             }
                             .buttonStyle(.plain)
@@ -2406,37 +2461,90 @@ private struct WorkflowEditorPage: View {
     }
 
     private var alwaysTriggerEditor: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "infinity")
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "infinity")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+                    .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(localizedAppText("Always", de: "Immer"))
-                    .font(.subheadline.weight(.medium))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(localizedAppText("Always", de: "Immer"))
+                        .font(.subheadline.weight(.medium))
 
-                Text(
-                    localizedAppText(
-                        "Runs when no app or website workflow matches. Hotkeys stay direct triggers.",
-                        de: "Läuft, wenn kein App- oder Website-Workflow passt. Hotkeys bleiben direkte Trigger."
+                    Text(
+                        localizedAppText(
+                            "Runs when no app or website workflow matches. Hotkeys stay direct triggers.",
+                            de: "Läuft, wenn kein App- oder Website-Workflow passt. Hotkeys bleiben direkte Trigger."
+                        )
                     )
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
 
-            Spacer()
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(workflowsGroupedSurface(cornerRadius: 12))
+            .accessibilityElement(children: .combine)
+
+            alwaysTriggerExclusionsEditor
+
+            Text(localizedAppText(
+                "This workflow does not run in excluded apps and websites. Other matching workflows still do.",
+                de: "In ausgeschlossenen Apps und Websites läuft dieser Workflow nicht. Andere passende Workflows laufen dort weiterhin."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(workflowsGroupedSurface(cornerRadius: 12))
-        .accessibilityElement(children: .combine)
     }
 
-    private var websiteSuggestions: [String] {
-        websiteSuggestionStore.suggestions(for: websiteInput, excluding: draft.websitePatterns)
+    private var alwaysTriggerExclusionsEditor: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            triggerComponentEditor(
+                title: localizedAppText("Exclude apps", de: "Apps ausschließen"),
+                isOn: $draft.isAppExclusionEnabled
+            ) {
+                appListEditor(
+                    bundleIdentifiers: $draft.excludedAppBundleIdentifiers,
+                    emptyText: localizedAppText("No apps excluded yet.", de: "Noch keine Apps ausgeschlossen."),
+                    pickerTarget: .exclusions
+                )
+            }
+
+            // Like the website trigger, this needs browser URLs, which the sandboxed
+            // App Store edition only gets from the browser extension.
+            #if APPSTORE
+            if browserExtensionConnected {
+                Divider()
+                excludedWebsitesComponent
+            }
+            #else
+            Divider()
+            excludedWebsitesComponent
+            #endif
+        }
+        .background(workflowsGroupedSurface(cornerRadius: 12))
+    }
+
+    private var excludedWebsitesComponent: some View {
+        triggerComponentEditor(
+            title: localizedAppText("Exclude websites", de: "Websites ausschließen"),
+            isOn: $draft.isWebsiteExclusionEnabled
+        ) {
+            websiteListEditor(
+                patterns: draft.excludedWebsitePatterns,
+                input: $excludedWebsiteInput,
+                emptyText: localizedAppText("No websites excluded yet.", de: "Noch keine Websites ausgeschlossen."),
+                rowSubtitle: localizedAppText("Excluded website", de: "Ausgeschlossene Website"),
+                fieldLabel: localizedAppText("Website to exclude", de: "Auszuschließende Website"),
+                add: { draft.addExcludedWebsitePattern($0) },
+                remove: { pattern in draft.excludedWebsitePatterns.removeAll { $0 == pattern } }
+            )
+        }
     }
 
     private func save() {
@@ -2500,11 +2608,11 @@ private struct WorkflowEditorPage: View {
         installedAppsViewModel.installedApps.first(where: { $0.id == bundleId })?.icon
     }
 
-    private func addWebsiteInput() {
-        let normalized = workflowNormalizedDomainFromInput(websiteInput)
+    private func addWebsite(from input: Binding<String>, add: (String) -> Void) {
+        let normalized = workflowNormalizedDomainFromInput(input.wrappedValue)
         guard !normalized.isEmpty else { return }
-        draft.addWebsitePattern(normalized)
-        websiteInput = ""
+        add(normalized)
+        input.wrappedValue = ""
         validationMessage = nil
     }
 
@@ -2522,7 +2630,8 @@ private struct WorkflowEditorPage: View {
             presentValidationMessage(localizedAppText(
                 "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                 de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
-                ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
+                ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。",
+                es: "El flujo de trabajo “\(conflictWorkflow.name)” ya usa este atajo de teclado."
             ))
             return
         }
@@ -2531,7 +2640,8 @@ private struct WorkflowEditorPage: View {
             presentValidationMessage(localizedAppText(
                 "This hotkey is already used by the global slot “\(slot.rawValue)”.",
                 de: "Dieser Hotkey wird bereits vom globalen Slot „\(slot.rawValue)“ verwendet.",
-                ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。"
+                ja: "このホットキーはすでにグローバルスロット「\(slot.rawValue)」で使用されています。",
+                es: "El espacio global “\(slot.rawValue)” ya usa este atajo de teclado."
             ))
             return
         }
@@ -3154,6 +3264,12 @@ struct WorkflowDraft {
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
     var hotkeyBehavior: WorkflowHotkeyBehavior
+    /// Exclusions of the Always trigger. Like the automatic trigger components, a list
+    /// is only saved while its checkbox is on.
+    var isAppExclusionEnabled: Bool
+    var isWebsiteExclusionEnabled: Bool
+    var excludedAppBundleIdentifiers: [String]
+    var excludedWebsitePatterns: [String]
     var fineTuning: String
     var inputLanguageSelection: LanguageSelection
     var translationTargetLanguage: String
@@ -3188,6 +3304,10 @@ struct WorkflowDraft {
         self.websitePatterns = []
         self.hotkeys = []
         self.hotkeyBehavior = .startDictation
+        self.isAppExclusionEnabled = false
+        self.isWebsiteExclusionEnabled = false
+        self.excludedAppBundleIdentifiers = []
+        self.excludedWebsitePatterns = []
         self.fineTuning = ""
         self.inputLanguageSelection = .inheritGlobal
         self.translationProcessor = template == .translation ? Self.defaultTranslationProcessor : .llmPrompt
@@ -3252,6 +3372,11 @@ struct WorkflowDraft {
             self.websitePatterns = trigger.websitePatterns
             self.hotkeys = trigger.hotkeys
             self.hotkeyBehavior = trigger.hotkeyBehavior
+            self.excludedAppBundleIdentifiers = trigger.excludedAppBundleIdentifiers
+            self.excludedWebsitePatterns = trigger.excludedWebsitePatterns
+            // Only Always uses exclusions, so other kinds open with them off and drop them on save.
+            self.isAppExclusionEnabled = trigger.kind == .global && !trigger.excludedAppBundleIdentifiers.isEmpty
+            self.isWebsiteExclusionEnabled = trigger.kind == .global && !trigger.excludedWebsitePatterns.isEmpty
 
             switch trigger.kind {
             case .global:
@@ -3278,6 +3403,10 @@ struct WorkflowDraft {
             self.appBundleIdentifiers = []
             self.websitePatterns = []
             self.hotkeys = []
+            self.isAppExclusionEnabled = false
+            self.isWebsiteExclusionEnabled = false
+            self.excludedAppBundleIdentifiers = []
+            self.excludedWebsitePatterns = []
         }
 
         if self.template == .dictation && self.triggerMode == .manual {
@@ -3311,7 +3440,8 @@ struct WorkflowDraft {
         let languageSentence = localizedAppText(
             " Spoken language: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
             de: " Gesprochene Sprache: \(workflowInputLanguageSummary(for: inputLanguageSelection)).",
-            ja: " 話す言語: \(workflowInputLanguageSummary(for: inputLanguageSelection))。"
+            ja: " 話す言語: \(workflowInputLanguageSummary(for: inputLanguageSelection))。",
+            es: " Idioma hablado: \(workflowInputLanguageSummary(for: inputLanguageSelection))."
         )
         let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: targetActionPluginId)
 
@@ -3319,22 +3449,32 @@ struct WorkflowDraft {
             return localizedAppText(
                 "\(resolvedName) is available as \(template.definition.name) from the Workflow Palette.\(languageSentence)\(outputRouteSentence)",
                 de: "\(resolvedName) ist als \(template.definition.name) über die Workflow-Palette verfügbar.\(languageSentence)\(outputRouteSentence)",
-                ja: "\(resolvedName)はワークフローパレットから\(template.definition.name)として利用できます。\(languageSentence)\(outputRouteSentence)"
+                ja: "\(resolvedName)はワークフローパレットから\(template.definition.name)として利用できます。\(languageSentence)\(outputRouteSentence)",
+                es: "\(resolvedName) está disponible como \(template.definition.name) desde la paleta de flujos de trabajo.\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         if triggerMode == .global {
+            let exclusions = workflowExclusionSummary(for: resolvedTrigger())
+            let exclusionSentence = exclusions.isEmpty ? "" : localizedAppText(
+                " \(exclusions).",
+                de: " \(exclusions).",
+                ja: " \(exclusions)。",
+                es: " \(exclusions)."
+            )
             return localizedAppText(
-                "\(resolvedName) runs always as \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
-                de: "\(resolvedName) läuft immer als \(template.definition.name).\(languageSentence)\(outputRouteSentence)",
-                ja: "\(resolvedName)は常に\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)"
+                "\(resolvedName) runs always as \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+                de: "\(resolvedName) läuft immer als \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+                ja: "\(resolvedName)は常に\(template.definition.name)として実行されます。\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+                es: "\(resolvedName) se ejecuta siempre como \(template.definition.name).\(exclusionSentence)\(languageSentence)\(outputRouteSentence)"
             )
         }
 
         return localizedAppText(
             "\(resolvedName) runs as \(template.definition.name) via \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
             de: "\(resolvedName) läuft als \(template.definition.name) über \(triggerReviewText).\(languageSentence)\(outputRouteSentence)",
-            ja: "\(resolvedName)は\(triggerReviewText)により\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)"
+            ja: "\(resolvedName)は\(triggerReviewText)により\(template.definition.name)として実行されます。\(languageSentence)\(outputRouteSentence)",
+            es: "\(resolvedName) se ejecuta como \(template.definition.name) mediante \(triggerReviewText).\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -3465,7 +3605,8 @@ struct WorkflowDraft {
                         return localizedAppText(
                             "This hotkey is already used by workflow “\(conflictWorkflow.name)”.",
                             de: "Dieser Hotkey wird bereits vom Workflow „\(conflictWorkflow.name)“ verwendet.",
-                            ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。"
+                            ja: "このホットキーはすでにワークフロー「\(conflictWorkflow.name)」で使用されています。",
+                            es: "El flujo de trabajo “\(conflictWorkflow.name)” ya usa este atajo de teclado."
                         )
                     }
 
@@ -3473,7 +3614,8 @@ struct WorkflowDraft {
                         return localizedAppText(
                             "This hotkey is already used by the global slot “\(conflictSlot.rawValue)”.",
                             de: "Dieser Hotkey wird bereits vom globalen Slot „\(conflictSlot.rawValue)“ verwendet.",
-                            ja: "このホットキーはすでにグローバルスロット「\(conflictSlot.rawValue)」で使用されています。"
+                            ja: "このホットキーはすでにグローバルスロット「\(conflictSlot.rawValue)」で使用されています。",
+                            es: "El espacio global “\(conflictSlot.rawValue)” ya usa este atajo de teclado."
                         )
                     }
                 }
@@ -3547,7 +3689,10 @@ struct WorkflowDraft {
                 hotkeyBehavior: hotkeyBehavior
             )
         case .global:
-            return .global()
+            return .global(
+                excludingApps: isAppExclusionEnabled ? excludedAppBundleIdentifiers : [],
+                websites: isWebsiteExclusionEnabled ? excludedWebsitePatterns : []
+            )
         case .manual:
             return .manual()
         }
@@ -3651,7 +3796,8 @@ struct WorkflowDraft {
                     parts.append(localizedAppText(
                         "the apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))",
                         de: "die Apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "und"))",
-                        ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "と"))"
+                        ja: "アプリ \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: "と"))",
+                        es: "las apps \(workflowCompactList(appBundleIdentifiers.map(workflowAppDisplayName(for:)), conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
             }
@@ -3663,7 +3809,8 @@ struct WorkflowDraft {
                     parts.append(localizedAppText(
                         "the websites \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))",
                         de: "die Websites \(workflowCompactList(websitePatterns, conjunction: "und"))",
-                        ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: "と"))"
+                        ja: "Webサイト \(workflowCompactList(websitePatterns, conjunction: "と"))",
+                        es: "los sitios web \(workflowCompactList(websitePatterns, conjunction: localizedAppText("and", de: "und")))"
                     ))
                 }
             }
@@ -3681,13 +3828,15 @@ struct WorkflowDraft {
                         parts.append(localizedAppText(
                             "the shortcuts \(shortcuts) to start dictation",
                             de: "die Shortcuts \(shortcuts) zum Starten des Diktats",
-                            ja: "音声入力を開始するショートカット \(shortcuts)"
+                            ja: "音声入力を開始するショートカット \(shortcuts)",
+                            es: "los atajos \(shortcuts) para iniciar el dictado"
                         ))
                     case .processSelectedText:
                         parts.append(localizedAppText(
                             "the shortcuts \(shortcuts) to process selected text",
                             de: "die Shortcuts \(shortcuts) zum Verarbeiten markierten Texts",
-                            ja: "選択テキストを処理するショートカット \(shortcuts)"
+                            ja: "選択テキストを処理するショートカット \(shortcuts)",
+                            es: "los atajos \(shortcuts) para procesar el texto seleccionado"
                         ))
                     }
                 }
@@ -3710,9 +3859,17 @@ struct WorkflowDraft {
     }
 
     mutating func addWebsitePattern(_ value: String) {
+        Self.addNormalizedWebsite(value, to: &websitePatterns)
+    }
+
+    mutating func addExcludedWebsitePattern(_ value: String) {
+        Self.addNormalizedWebsite(value, to: &excludedWebsitePatterns)
+    }
+
+    private static func addNormalizedWebsite(_ value: String, to patterns: inout [String]) {
         let normalized = workflowNormalizedDomainFromInput(value)
-        guard !normalized.isEmpty, !websitePatterns.contains(normalized) else { return }
-        websitePatterns.append(normalized)
+        guard !normalized.isEmpty, !patterns.contains(normalized) else { return }
+        patterns.append(normalized)
     }
 
     func containsEquivalentHotkey(_ hotkey: UnifiedHotkey) -> Bool {
@@ -3773,13 +3930,15 @@ private func workflowSummaryText(for workflow: Workflow) -> String {
                 return localizedAppText(
                     "Apple Translate to \(localizedAppLanguageName(for: targetLanguage))",
                     de: "Apple Translate nach \(localizedAppLanguageName(for: targetLanguage))",
-                    ja: "\(localizedAppLanguageName(for: targetLanguage))へのApple Translate"
+                    ja: "\(localizedAppLanguageName(for: targetLanguage))へのApple Translate",
+                    es: "Apple Translate al \(localizedAppLanguageName(for: targetLanguage))"
                 )
             }
             return localizedAppText(
                 "\(templateName) to \(targetLanguage)",
                 de: "\(templateName) nach \(targetLanguage)",
-                ja: "\(targetLanguage)への\(templateName)"
+                ja: "\(targetLanguage)への\(templateName)",
+                es: "\(templateName) a \(targetLanguage)"
             )
         }
         return templateName
@@ -3821,7 +3980,8 @@ func workflowInputLanguageSummary(for selection: LanguageSelection) -> String {
         return localizedAppText(
             "Auto-detect between \(workflowLanguageNameList(normalizedCodes))",
             de: "Automatische Erkennung zwischen \(workflowLanguageNameList(normalizedCodes))",
-            ja: "\(workflowLanguageNameList(normalizedCodes))間で自動検出"
+            ja: "\(workflowLanguageNameList(normalizedCodes))間で自動検出",
+            es: "Detección automática entre \(workflowLanguageNameList(normalizedCodes))"
         )
     }
 }
@@ -3837,14 +3997,16 @@ private func workflowLanguageNameList(_ codes: [String]) -> String {
         return localizedAppText(
             "\(names[0]) and \(names[1])",
             de: "\(names[0]) und \(names[1])",
-            ja: "\(names[0])と\(names[1])"
+            ja: "\(names[0])と\(names[1])",
+            es: "\(names[0]) y \(names[1])"
         )
     default:
         let allButLast = names.dropLast().joined(separator: ", ")
         return localizedAppText(
             "\(allButLast), and \(names[names.count - 1])",
             de: "\(allButLast) und \(names[names.count - 1])",
-            ja: "\(allButLast)、\(names[names.count - 1])"
+            ja: "\(allButLast)、\(names[names.count - 1])",
+            es: "\(allButLast) y \(names[names.count - 1])"
         )
     }
 }
@@ -3872,10 +4034,26 @@ private func workflowTriggerDetail(for workflow: Workflow) -> String {
     case .manual:
         return localizedAppText("Workflow Palette", de: "Workflow-Palette")
     case .global:
-        return ""
+        return workflowExclusionSummary(for: trigger)
     case .app, .website, .hotkey:
         return workflowTriggerDetailParts(for: trigger).joined(separator: " · ")
     }
+}
+
+/// "Excluded: Messages and github.com" for an Always trigger with exclusions, otherwise empty.
+private func workflowExclusionSummary(for trigger: WorkflowTrigger?) -> String {
+    guard let trigger, trigger.kind == .global else { return "" }
+    let names = trigger.excludedAppBundleIdentifiers.map(workflowAppDisplayName(for:))
+        + trigger.excludedWebsitePatterns
+    let list = workflowCompactList(names)
+    guard !list.isEmpty else { return "" }
+    return localizedAppText(
+        "Excluded: \(list)",
+        de: "Ausgeschlossen: \(list)",
+        ja: "除外: \(list)",
+        zh: "排除：\(list)",
+        es: "Excluidos: \(list)"
+    )
 }
 
 private func workflowTriggerSummaryParts(for trigger: WorkflowTrigger) -> [String] {
@@ -3920,15 +4098,23 @@ private func workflowReviewText(for workflow: Workflow) -> String {
     let languageSentence = localizedAppText(
         ". Spoken language: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
         de: ". Gesprochene Sprache: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
-        ja: "。話す言語: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
+        ja: "。話す言語: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))",
+        es: ". Idioma hablado: \(workflowInputLanguageSummary(for: workflow.inputLanguageSelection))"
     )
     let outputRouteSentence = workflowOutputRouteSentence(targetActionPluginId: workflow.output.targetActionPluginId)
 
     if workflow.trigger?.kind == .global {
+        let exclusionSentence = triggerDetail.isEmpty ? "" : localizedAppText(
+            ". \(triggerDetail)",
+            de: ". \(triggerDetail)",
+            ja: "。\(triggerDetail)",
+            es: ". \(triggerDetail)"
+        )
         return localizedAppText(
-            "\(summary) runs always\(languageSentence)\(outputRouteSentence)",
-            de: "\(summary) läuft immer\(languageSentence)\(outputRouteSentence)",
-            ja: "\(summary)は常に実行されます\(languageSentence)\(outputRouteSentence)"
+            "\(summary) runs always\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+            de: "\(summary) läuft immer\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+            ja: "\(summary)は常に実行されます\(exclusionSentence)\(languageSentence)\(outputRouteSentence)",
+            es: "\(summary) se ejecuta siempre\(exclusionSentence)\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -3936,7 +4122,8 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         return localizedAppText(
             "\(summary) is available from the Workflow Palette\(languageSentence)\(outputRouteSentence)",
             de: "\(summary) ist über die Workflow-Palette verfügbar\(languageSentence)\(outputRouteSentence)",
-            ja: "\(summary)はワークフローパレットから利用できます\(languageSentence)\(outputRouteSentence)"
+            ja: "\(summary)はワークフローパレットから利用できます\(languageSentence)\(outputRouteSentence)",
+            es: "\(summary) está disponible desde la paleta de flujos de trabajo\(languageSentence)\(outputRouteSentence)"
         )
     }
 
@@ -3944,14 +4131,16 @@ private func workflowReviewText(for workflow: Workflow) -> String {
         return localizedAppText(
             "\(summary) via \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
             de: "\(summary) über \(triggerSummary)\(languageSentence)\(outputRouteSentence)",
-            ja: "\(summary)は\(triggerSummary)で実行されます\(languageSentence)\(outputRouteSentence)"
+            ja: "\(summary)は\(triggerSummary)で実行されます\(languageSentence)\(outputRouteSentence)",
+            es: "\(summary) mediante \(triggerSummary)\(languageSentence)\(outputRouteSentence)"
         )
     }
 
     return localizedAppText(
         "\(summary) via \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
         de: "\(summary) über \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)",
-        ja: "\(summary)は\(triggerSummary): \(triggerDetail)で実行されます\(languageSentence)\(outputRouteSentence)"
+        ja: "\(summary)は\(triggerSummary): \(triggerDetail)で実行されます\(languageSentence)\(outputRouteSentence)",
+        es: "\(summary) mediante \(triggerSummary): \(triggerDetail)\(languageSentence)\(outputRouteSentence)"
     )
 }
 

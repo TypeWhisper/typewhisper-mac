@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.speechanalyzer",
     "name": "Apple Speech",
-    "version": "1.0.17",
+    "version": "1.0.18",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "26.0",
@@ -9,6 +9,7 @@
     "description": "On-device speech recognition using Apple's Speech framework. Requires macOS 26+, streaming support.",
     "descriptions": {
         "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung.",
+        "es": "Reconocimiento de voz en el dispositivo con el framework Speech de Apple. Requiere macOS 26 o posterior; admite transcripción en tiempo real.",
         "ja": "Apple Speechフレームワークを使うオンデバイス音声認識です。macOS 26以降が必要で、ストリーミングに対応します。"
     },
     "category": "transcription",

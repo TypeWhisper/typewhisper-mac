@@ -9,6 +9,8 @@ struct SetupWizardView: View {
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var promptProcessingService: PromptProcessingService
+    @ObservedObject private var settings = SettingsViewModel.shared
+    @StateObject private var networkStatus = SetupWizardNetworkStatus()
 
     @State private var currentStep: Int
     @State private var selectedHotkeyMode: HotkeySlotType
@@ -18,8 +20,8 @@ struct SetupWizardView: View {
     @State private var trialAnnouncementTask: Task<Void, Never>?
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
-    @State private var isActivatingParakeet = false
-    @State private var parakeetModelProgress: Double?
+    @State private var activatingEngine: SetupWizardLocalEngine?
+    @State private var activationModelProgress: Double?
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
     @State private var isMovingForward = true
@@ -116,7 +118,8 @@ struct SetupWizardView: View {
             "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)",
-            zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)"
+            zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)",
+            es: "\(currentWizardStep.title). Paso \(currentStep + 1) de \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
         ))
     }
 
@@ -128,7 +131,8 @@ struct SetupWizardView: View {
             "Step \(index) of \(count)",
             de: "Schritt \(index) von \(count)",
             ja: "ステップ \(index)/\(count)",
-            zh: "第 \(index) 步，共 \(count) 步"
+            zh: "第 \(index) 步，共 \(count) 步",
+            es: "Paso \(index) de \(count)"
         )
     }
 
@@ -205,7 +209,8 @@ struct SetupWizardView: View {
             "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)",
-            zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)"
+            zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)",
+            es: "Paso \(step.rawValue + 1) de \(SetupWizardStep.allCases.count), \(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
         .accessibilityAddTraits(step == currentWizardStep ? .isSelected : [])
@@ -797,7 +802,8 @@ struct SetupWizardView: View {
             #if APPSTORE
             let message = localizedAppText(
                 "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
-                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen."
+                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen.",
+                es: "Se configurará \(recommendedName) al continuar. Haz clic en el atajo para grabar otro."
             )
             #else
             let message = localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt.")
@@ -815,7 +821,8 @@ struct SetupWizardView: View {
                 localizedAppText(
                     "\(recommendedName) is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
                     de: "\(recommendedName) wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren.",
-                    ja: "\(recommendedName)はすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。"
+                    ja: "\(recommendedName)はすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。",
+                    es: "\(hotkeyModeTitle(for: slot)) ya usa \(recommendedName). Graba otro atajo para continuar."
                 ),
                 "exclamationmark.triangle.fill",
                 .orange
@@ -832,19 +839,24 @@ struct SetupWizardView: View {
     // MARK: - Engine & AI
 
     private var engineAIStep: some View {
-        VStack(spacing: 10) {
+        // Once per update: the cards below share it instead of rebuilding the input.
+        let recommendation = SetupWizardEngineRecommendation.recommend(for: engineRecommendationInput)
+
+        return VStack(spacing: 10) {
+            spokenLanguageRow
+
             localReadinessCard
 
-            recommendationCard(
-                manifestId: SetupWizardParakeetRecommendation.manifestId,
-                title: String(localized: "Parakeet"),
-                badge: localizedAppText("Recommended", de: "Empfohlen"),
-                description: SetupWizardParakeetRecommendation.description,
-                systemImage: "desktopcomputer",
-                isProminent: true
-            )
+            switch recommendation {
+            case .engine(let choice) where choice.engine != .appleSpeech:
+                recommendationCard(for: choice)
+            case .limitation(let limitation):
+                limitationCard(limitation)
+            case .engine, .pending:
+                EmptyView()
+            }
 
-            appleSpeechCard
+            appleSpeechCard(recommendation: recommendation)
 
             appleIntelligenceCard
 
@@ -866,16 +878,151 @@ struct SetupWizardView: View {
         .padding(.horizontal, 4)
     }
 
-    private var localReadinessCard: some View {
-        let isReady = hasEngineReadyForSetupTest
+    // MARK: Spoken Language
+
+    /// The recommendation follows the language the user dictates in. This is the
+    /// spoken language setting of the Dictation page; the app language is not used.
+    private var spokenLanguageRow: some View {
+        let hint = String(localized: "Also used for dictation. You can change it later on the Dictation page.")
+        let options = spokenLanguageOptions
 
         return HStack(spacing: 10) {
-            Image(systemName: isReady ? "checkmark.circle.fill" : "circle.dashed")
-                .foregroundStyle(isReady ? .green : .secondary)
+            Image(systemName: "globe")
+                .foregroundStyle(.blue)
+                .accessibilityHidden(true)
+            Text(String(localized: "Spoken Language"))
+                .font(.callout.weight(.medium))
+                .accessibilityHidden(true)
+            Spacer()
+            Picker(String(localized: "Spoken Language"), selection: $settings.languageSelection) {
+                Text(localizedAppLanguageName(for: "auto"))
+                    .tag(LanguageSelection.auto)
+                // A mixed selection from the Dictation page stays selectable as it is.
+                if case .hints(let codes) = settings.languageSelection {
+                    Text(Self.languageList(codes))
+                        .tag(settings.languageSelection)
+                }
+                Divider()
+                ForEach(options.featured, id: \.code) { option in
+                    Text(option.name).tag(LanguageSelection.exact(option.code))
+                }
+                Divider()
+                ForEach(options.other, id: \.code) { option in
+                    Text(option.name).tag(LanguageSelection.exact(option.code))
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+            .help(hint)
+            .accessibilityHint(hint)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06)))
+    }
+
+    /// The languages of the local engines and of the Dictation page's picker, plus the
+    /// current selection, with the featured languages first.
+    private var spokenLanguageOptions: (featured: [LocalizedAppLanguageOption], other: [LocalizedAppLanguageOption]) {
+        var codes = Set(settings.availableLanguages.map(\.code))
+        for engine in SetupWizardLocalEngine.offered {
+            codes.formUnion(engine.knownLanguages ?? [])
+        }
+        codes.formUnion(settings.languageSelection.selectedCodes)
+
+        let options = localizedAppLanguageOptions(for: Array(codes))
+        let featured = options
+            .compactMap { option in featuredAppLanguageRank(for: option.code).map { (rank: $0, option: option) } }
+            .sorted { $0.rank < $1.rank }
+            .map(\.option)
+        let featuredCodes = Set(featured.map(\.code))
+        let other = options
+            .filter { !featuredCodes.contains($0.code) }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        return (featured, other)
+    }
+
+    /// "German and English" in the app language.
+    private static func languageList(_ codes: [String]) -> String {
+        let names = codes.map(localizedAppLanguageName(for:))
+        let formatter = ListFormatter()
+        formatter.locale = Locale(identifier: preferredAppLanguageCode())
+        return formatter.string(from: names) ?? names.joined(separator: ", ")
+    }
+
+    private var spokenLanguages: SetupWizardSpokenLanguages {
+        SetupWizardSpokenLanguages(settings.languageSelection)
+    }
+
+    // MARK: Recommendation
+
+    /// Checks on disk which models each engine has downloaded, so the step builds it
+    /// once per update and passes the recommendation on.
+    private var engineRecommendationInput: SetupWizardEngineRecommendationInput {
+        _ = pluginManager.readinessRevision
+        var engines: [SetupWizardLocalEngine: SetupWizardEngineState] = [:]
+        for kind in SetupWizardLocalEngine.offered {
+            let engine = pluginManager.transcriptionEngine(for: kind.providerId)
+            let languages = engine?.supportedLanguages ?? []
+            engines[kind] = SetupWizardEngineState(
+                isInstalled: pluginManager.loadedPlugins.contains { $0.manifest.id == kind.manifestId },
+                isReady: kind == .appleSpeech
+                    ? canUseAppleSpeechFallback
+                    : engine.map(canUseEngineForSetupTest) ?? false,
+                // Apple Speech reports no languages until it has asked the system.
+                reportedLanguages: languages.isEmpty ? nil : languages,
+                modelIds: engine.map { $0.modelCatalog.map(\.id) },
+                selectedModelId: engine?.selectedModelId,
+                downloadedModelIds: engine.map(modelManager.downloadedModelIds(of:)) ?? []
+            )
+        }
+
+        return SetupWizardEngineRecommendationInput(
+            spokenLanguages: spokenLanguages,
+            architecture: RuntimeArchitecture.current,
+            physicalMemory: ProcessInfo.processInfo.physicalMemory,
+            macOSMajorVersion: ProcessInfo.processInfo.operatingSystemVersion.majorVersion,
+            engines: engines,
+            catalog: catalogState,
+            isOffline: networkStatus.isOffline
+        )
+    }
+
+    private var catalogState: SetupWizardCatalogState {
+        switch registryService.fetchState {
+        case .idle, .loading:
+            .loading
+        case .loaded:
+            .loaded(Set(registryService.registry.map(\.id)))
+        case .error:
+            .unavailable
+        }
+    }
+
+    /// Spoken languages the selected engine reports it cannot transcribe. The engine
+    /// stays selected; the readiness line says so instead.
+    private var selectedEngineUnsupportedLanguages: [String] {
+        guard let engine = selectedTranscriptionEngineForSetup else { return [] }
+        return SetupWizardEngineRecommendation.unsupportedLanguages(
+            spokenLanguages,
+            reportedLanguages: engine.supportedLanguages
+        )
+    }
+
+    private var localReadinessCard: some View {
+        let isReady = hasEngineReadyForSetupTest
+        // Matches localReadinessText, which shows the activation instead of the warning.
+        let isUnsupported = activatingEngine == nil && isReady && !selectedEngineUnsupportedLanguages.isEmpty
+        let color: Color = isUnsupported ? .orange : (isReady ? .green : .secondary)
+        let icon = isUnsupported ? "exclamationmark.triangle.fill" : (isReady ? "checkmark.circle.fill" : "circle.dashed")
+
+        return HStack(spacing: 10) {
+            Image(systemName: icon)
+                .foregroundStyle(color)
                 .accessibilityHidden(true)
             Text(localReadinessText)
             .font(.callout.weight(.medium))
-            .foregroundStyle(isReady ? .green : .secondary)
+            .foregroundStyle(color)
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -885,15 +1032,19 @@ struct SetupWizardView: View {
     }
 
     private var localReadinessText: String {
-        if isActivatingParakeet {
-            return localizedAppText("Activating Parakeet for local dictation", de: "Parakeet wird für lokales Diktieren aktiviert")
+        if let activatingEngine {
+            return String(localized: "Activating \(activatingEngine.displayName) for local dictation")
         }
-        if hasEngineReadyForSetupTest {
-            if selectedTranscriptionEngineForSetup?.providerId == SetupWizardAppleSpeechFallback.providerId {
+        if hasEngineReadyForSetupTest, let engine = selectedTranscriptionEngineForSetup {
+            let unsupported = selectedEngineUnsupportedLanguages
+            if !unsupported.isEmpty {
+                return String(localized: "\(engine.providerDisplayName) does not support \(Self.languageList(unsupported)).")
+            }
+            if engine.providerId == SetupWizardAppleSpeechFallback.providerId {
                 return localizedAppText("Apple Speech is ready for local dictation", de: "Apple Speech ist für lokales Diktieren bereit")
             }
-            if selectedTranscriptionEngineForSetup?.providerId == SetupWizardParakeetRecommendation.providerId {
-                return localizedAppText("Parakeet is ready for local dictation", de: "Parakeet ist für lokales Diktieren bereit")
+            if let localEngine = SetupWizardLocalEngine.engine(forProviderId: engine.providerId) {
+                return String(localized: "\(localEngine.displayName) is ready for local dictation")
             }
             return localizedAppText("Ready to use locally", de: "Lokal einsatzbereit")
         }
@@ -907,37 +1058,25 @@ struct SetupWizardView: View {
     }
 
     @ViewBuilder
-    private func recommendationCard(
-        manifestId: String,
-        title: String,
-        badge: String,
-        description: String,
-        systemImage: String,
-        isProminent: Bool = false
-    ) -> some View {
-        let loadedPlugin = pluginManager.loadedPlugins.first { $0.manifest.id == manifestId }
-        let isInstalled = loadedPlugin != nil
-        let engine = loadedPlugin?.instance as? any TranscriptionEnginePlugin
-        let isReady = engine?.isConfigured ?? false
-        let isSelected = engine?.providerId == modelManager.selectedProviderId
+    private func recommendationCard(for choice: SetupWizardEngineChoice) -> some View {
+        let recommended = choice.engine
+        let manifestId = recommended.manifestId
+        let engine = pluginManager.transcriptionEngine(for: recommended.providerId)
+        let isSelected = engine.map { $0.providerId == modelManager.selectedProviderId } ?? false
         let registryPlugin = registryService.registry.first { $0.id == manifestId }
-        let installState = registryService.installStates[manifestId]
         let availability = SetupWizardRecommendationAvailability.resolve(
             manifestId: manifestId,
-            isInstalled: isInstalled,
-            isReady: isReady,
+            isInstalled: pluginManager.loadedPlugins.contains { $0.manifest.id == manifestId },
+            isReady: engine.map(canUseEngineForSetupTest) ?? false,
             registryPlugin: registryPlugin,
-            installState: installState,
-            fetchState: registryService.fetchState
-        )
-        let isInteractive = recommendationCardIsInteractive(
-            manifestId: manifestId,
-            availability: availability,
-            isSelected: isSelected
+            installState: registryService.installStates[manifestId],
+            fetchState: registryService.fetchState,
+            modelIsDownloaded: choice.modelIsDownloaded,
+            isOffline: networkStatus.isOffline
         )
         let card = setupCard(isSelected: isSelected) {
             HStack(spacing: 14) {
-                Image(systemName: systemImage)
+                Image(systemName: "desktopcomputer")
                     .font(.title2)
                     .foregroundStyle(.blue)
                     .frame(width: 36)
@@ -945,18 +1084,18 @@ struct SetupWizardView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Text(title)
+                        Text(recommended.displayName)
                             .font(.headline)
-                        Text(badge)
+                        Text(localizedAppText("Recommended", de: "Empfohlen"))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(Color.blue.opacity(isProminent ? 0.22 : 0.18))
+                            .background(Color.blue.opacity(0.22))
                             .foregroundStyle(.blue)
                             .clipShape(Capsule())
                     }
 
-                    Text(recommendationDescription(fallback: description, availability: availability))
+                    Text(recommendationDescription(for: choice))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -964,30 +1103,21 @@ struct SetupWizardView: View {
 
                 Spacer()
 
-                recommendationStatus(
-                    manifestId: manifestId,
-                    availability: availability,
-                    registryPlugin: registryPlugin,
-                    isSelected: isSelected
-                )
+                recommendationStatus(for: recommended, availability: availability, isSelected: isSelected)
             }
         }
 
-        if isInteractive {
+        if recommendationCardIsInteractive(availability: availability, isSelected: isSelected) {
             // A plain button keeps the card's look but makes it reachable with
             // Tab and pressable with Space and VoiceOver.
             Button {
-                Task { await handleRecommendationCardAction(manifestId: manifestId, registryPlugin: registryPlugin) }
+                Task { await activateRecommendedEngine(choice, registryPlugin: registryPlugin) }
             } label: {
                 card
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityHint(recommendationCardAccessibilityHint(manifestId: manifestId, availability: availability))
-        } else if recommendationCardHasEmbeddedControl(manifestId: manifestId, availability: availability) {
-            card
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel(title)
+            .accessibilityHint(recommendationCardAccessibilityHint(for: recommended, availability: availability))
         } else {
             card
                 .accessibilityElement(children: .combine)
@@ -995,26 +1125,79 @@ struct SetupWizardView: View {
         }
     }
 
-    /// The card shows its own settings button, which must stay a separate control.
-    private func recommendationCardHasEmbeddedControl(
-        manifestId: String,
-        availability: SetupWizardRecommendationAvailability
-    ) -> Bool {
-        availability == .setupRequired && manifestId != SetupWizardParakeetRecommendation.manifestId
+    private func recommendationDescription(for choice: SetupWizardEngineChoice) -> String {
+        let reason: String
+        switch choice.reason {
+        case .supportsLanguages(let codes):
+            reason = String(localized: "Supports \(Self.languageList(codes)).")
+        case .detectsLanguages(let count?) where choice.engine == .parakeet:
+            reason = String(localized: "Recognizes \(count) European languages. For another language, choose it above.")
+        case .detectsLanguages:
+            reason = String(localized: "Detects the spoken language automatically.")
+        }
+
+        let availability = switch choice.availability {
+        case .available:
+            String(localized: "Runs offline with no API key.")
+        case .needsConnection:
+            String(localized: "Connect to the internet to download it.")
+        case .notInCatalog, .catalogUnavailable:
+            localizedAppText(
+                "No compatible download is available for this Mac.",
+                de: "Für diesen Mac ist kein kompatibler Download verfügbar."
+            )
+        }
+        return "\(reason) \(availability)"
+    }
+
+    private func limitationCard(_ limitation: SetupWizardEngineLimitation) -> some View {
+        let title: String
+        let message: String
+        switch limitation {
+        case .noLocalEngine:
+            title = String(localized: "No local engine for this Mac")
+            message = String(localized: "Parakeet, WhisperKit and Qwen3 need Apple Silicon. Apple Speech needs macOS 26.")
+        case .unsupportedLanguages(let codes):
+            title = String(localized: "No local engine for \(Self.languageList(codes))")
+            message = codes.count == 1
+                ? String(localized: "The local engines that run on this Mac don't support this language.")
+                : String(localized: "The local engines that run on this Mac don't support all of these languages.")
+        }
+
+        return setupCard(isSelected: false) {
+            HStack(spacing: 14) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                    .frame(width: 36)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.headline)
+                    Text(message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer()
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private func recommendationStatus(
-        manifestId: String,
+        for recommended: SetupWizardLocalEngine,
         availability: SetupWizardRecommendationAvailability,
-        registryPlugin: RegistryPlugin?,
         isSelected: Bool
     ) -> some View {
-        if manifestId == SetupWizardParakeetRecommendation.manifestId, isActivatingParakeet {
-            if case .downloading(let progress) = registryService.installStates[manifestId] {
+        if activatingEngine == recommended {
+            if case .downloading(let progress) = registryService.installStates[recommended.manifestId] {
                 setupProgressIndicator(progress)
-            } else if let parakeetModelProgress {
-                setupProgressIndicator(parakeetModelProgress)
+            } else if let activationModelProgress {
+                setupProgressIndicator(activationModelProgress)
             } else {
                 ProgressView()
                     .controlSize(.small)
@@ -1023,19 +1206,13 @@ struct SetupWizardView: View {
         } else {
             switch availability {
             case .ready:
-                if manifestId == SetupWizardParakeetRecommendation.manifestId, isSelected {
+                if isSelected {
                     statusPill(localizedAppText("Selected", de: "Ausgewählt"), systemImage: "checkmark.circle.fill", color: .blue)
-                } else if manifestId == SetupWizardParakeetRecommendation.manifestId {
-                    statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
                 } else {
-                    statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
+                    statusPill(localizedAppText("Select", de: "Auswählen"), systemImage: "circle", color: .blue)
                 }
             case .setupRequired:
-                if manifestId == SetupWizardParakeetRecommendation.manifestId {
-                    statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
-                } else {
-                    RecommendationSettingsButton(manifestId: manifestId)
-                }
+                statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
             case .installState(let installState):
                 switch installState {
                 case .downloading(let progress):
@@ -1076,128 +1253,124 @@ struct SetupWizardView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度"))
-        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)"))
+        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)", es: "\(percent) por ciento"))
         .accessibilityAddTraits([.isStaticText, .updatesFrequently])
     }
 
     private func recommendationCardIsInteractive(
-        manifestId: String,
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> Bool {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId, !isSelected else {
-            return false
-        }
-
-        switch availability {
-        case .ready, .setupRequired, .installAvailable:
-            return true
-        default:
-            return false
-        }
+        !isSelected && availability.allowsActivation
     }
 
     private func recommendationCardAccessibilityHint(
-        manifestId: String,
+        for recommended: SetupWizardLocalEngine,
         availability: SetupWizardRecommendationAvailability
     ) -> String {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId else {
-            return ""
-        }
-
+        let name = recommended.displayName
         switch availability {
         case .installAvailable:
-            return localizedAppText("Installs and selects Parakeet.", de: "Installiert und wählt Parakeet aus.")
+            return String(localized: "Installs and selects \(name).")
         case .setupRequired:
-            return localizedAppText("Activates Parakeet.", de: "Aktiviert Parakeet.")
+            return String(localized: "Activates \(name).")
         default:
-            return localizedAppText("Selects Parakeet.", de: "Wählt Parakeet aus.")
+            return String(localized: "Selects \(name).")
         }
     }
 
+    /// Installs the recommended engine if needed, selects it and loads its model,
+    /// downloading the model when the engine has none yet.
     @MainActor
-    private func handleRecommendationCardAction(manifestId: String, registryPlugin: RegistryPlugin?) async {
-        guard manifestId == SetupWizardParakeetRecommendation.manifestId else { return }
-        await activateParakeetForSetup(registryPlugin: registryPlugin)
-    }
+    private func activateRecommendedEngine(_ choice: SetupWizardEngineChoice, registryPlugin: RegistryPlugin?) async {
+        guard activatingEngine == nil else { return }
 
-    @MainActor
-    private func activateParakeetForSetup(registryPlugin: RegistryPlugin? = nil) async {
-        guard !isActivatingParakeet else { return }
-
-        manuallySelectedSetupProviderId = SetupWizardParakeetRecommendation.providerId
-        isActivatingParakeet = true
+        let recommended = choice.engine
+        let providerId = recommended.providerId
+        manuallySelectedSetupProviderId = providerId
+        activatingEngine = recommended
         defer {
-            isActivatingParakeet = false
-            parakeetModelProgress = nil
+            activatingEngine = nil
+            activationModelProgress = nil
         }
 
-        if parakeetEngine == nil {
+        if pluginManager.transcriptionEngine(for: providerId) == nil {
             if let registryPlugin,
                pluginManager.loadedPlugins.first(where: { $0.manifest.id == registryPlugin.id }) == nil {
                 await registryService.downloadAndInstall(registryPlugin)
             }
 
-            if let loaded = pluginManager.loadedPlugins.first(where: { $0.manifest.id == SetupWizardParakeetRecommendation.manifestId }),
+            if let loaded = pluginManager.loadedPlugins.first(where: { $0.manifest.id == recommended.manifestId }),
                !loaded.isEnabled {
-                pluginManager.setPluginEnabled(SetupWizardParakeetRecommendation.manifestId, enabled: true)
+                pluginManager.setPluginEnabled(recommended.manifestId, enabled: true)
             }
         }
 
-        guard let engine = await waitForParakeetEngine() else { return }
+        // An engine chosen while the plugin was installing stays selected.
+        guard let engine = await waitForTranscriptionEngine(providerId),
+              manuallySelectedSetupProviderId == providerId else { return }
 
         modelManager.selectProvider(engine.providerId)
 
-        if !engine.isConfigured {
-            let modelId = engine.selectedModelId
-                ?? SetupWizardParakeetRecommendation.preferredModelId(from: engine.modelCatalog)
-            if let modelId {
-                engine.selectModel(modelId)
-            }
+        // The model chosen in the engine stays unless it lacks the spoken language, which
+        // the card promised; Parakeet's English-only models report only English.
+        let selectedModelFits = SetupWizardEngineRecommendation.unsupportedLanguages(
+            spokenLanguages,
+            reportedLanguages: engine.supportedLanguages
+        ).isEmpty
+        if !engine.isConfigured || !selectedModelFits,
+           let modelId = SetupWizardEngineRecommendation.activationModelId(
+               selectedModelId: engine.selectedModelId,
+               reportedLanguages: engine.supportedLanguages,
+               recommendedModelId: Self.modelToLoad(for: choice, from: engine.modelCatalog),
+               spokenLanguages: spokenLanguages
+           ),
+           !modelManager.startModelLoad(modelId, of: engine) {
+            engine.selectModel(modelId)
         }
 
         // Idle polls time out after 2 minutes; an active model download may take up to 30 minutes.
         var idlePolls = 0
         for _ in 0..<3_600 {
             if Task.isCancelled || engine.isConfigured || idlePolls >= 240 { return }
+            if manuallySelectedSetupProviderId != providerId { return }
             let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
             if activity?.isError == true { return }
-            parakeetModelProgress = activity?.progress
+            activationModelProgress = activity?.progress
             if activity == nil { idlePolls += 1 }
             try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
+    /// The recommended model when the installed plugin offers it, otherwise the
+    /// plugin's own best match.
+    private static func modelToLoad(for choice: SetupWizardEngineChoice, from catalog: [PluginModelInfo]) -> String? {
+        if let modelId = choice.modelId, catalog.isEmpty || catalog.contains(where: { $0.id == modelId }) {
+            return modelId
+        }
+        if choice.engine == .parakeet {
+            return SetupWizardParakeetRecommendation.preferredModelId(from: catalog)
+        }
+        return catalog.first?.id
+    }
+
     @MainActor
-    private func waitForParakeetEngine() async -> TranscriptionEnginePlugin? {
+    private func waitForTranscriptionEngine(_ providerId: String) async -> TranscriptionEnginePlugin? {
         for _ in 0..<40 {
             if Task.isCancelled { return nil }
-            if let parakeetEngine {
-                return parakeetEngine
+            if let engine = pluginManager.transcriptionEngine(for: providerId) {
+                return engine
             }
             try? await Task.sleep(for: .milliseconds(100))
         }
 
-        return parakeetEngine
-    }
-
-    private func recommendationDescription(
-        fallback: String,
-        availability: SetupWizardRecommendationAvailability
-    ) -> String {
-        guard availability == .unavailable(.appleSiliconOnly) else {
-            return fallback
-        }
-
-        return localizedAppText(
-            "Best local quality, but requires Apple Silicon. Intel Macs can use Apple Speech for setup.",
-            de: "Beste lokale Qualität, braucht aber Apple Silicon. Intel-Macs können Apple Speech für das Setup nutzen."
-        )
+        return pluginManager.transcriptionEngine(for: providerId)
     }
 
     @ViewBuilder
-    private var appleSpeechCard: some View {
+    private func appleSpeechCard(recommendation: SetupWizardEngineRecommendation) -> some View {
         let isSelected = modelManager.selectedProviderId == SetupWizardAppleSpeechFallback.providerId
+        let isRecommended = recommendation.choice?.engine == .appleSpeech
         let card = setupCard(isSelected: isSelected) {
             HStack(spacing: 14) {
                 Image(systemName: "waveform.badge.mic")
@@ -1210,16 +1383,18 @@ struct SetupWizardView: View {
                     HStack(spacing: 7) {
                         Text(String(localized: "Apple Speech"))
                             .font(.headline)
-                        Text(localizedAppText("Built-in", de: "Integriert"))
+                        Text(isRecommended
+                            ? localizedAppText("Recommended", de: "Empfohlen")
+                            : localizedAppText("Built-in", de: "Integriert"))
                             .font(.caption2.weight(.semibold))
                             .padding(.horizontal, 7)
                             .padding(.vertical, 3)
-                            .background(Color.blue.opacity(0.18))
+                            .background(Color.blue.opacity(isRecommended ? 0.22 : 0.18))
                             .foregroundStyle(.blue)
                             .clipShape(Capsule())
                     }
 
-                    Text(appleSpeechDescription)
+                    Text(appleSpeechDescription(for: recommendation))
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1248,7 +1423,7 @@ struct SetupWizardView: View {
         }
     }
 
-    private var appleSpeechDescription: String {
+    private func appleSpeechDescription(for recommendation: SetupWizardEngineRecommendation) -> String {
         if isPreparingAppleSpeechFallback {
             return localizedAppText(
                 "Preparing the built-in speech engine for the first dictation test.",
@@ -1256,6 +1431,23 @@ struct SetupWizardView: View {
             )
         }
 
+        let lightweight = String(localized: "Lightweight built-in option with no large local model.")
+        if let appleSpeechEngine, case .specific(let codes) = spokenLanguages {
+            let unsupported = SetupWizardEngineRecommendation.unsupportedLanguages(
+                spokenLanguages,
+                reportedLanguages: appleSpeechEngine.supportedLanguages
+            )
+            if !unsupported.isEmpty {
+                return "\(lightweight) \(String(localized: "Does not support \(Self.languageList(unsupported)) on this Mac."))"
+            }
+            if recommendation.choice?.engine == .appleSpeech {
+                return "\(String(localized: "Supports \(Self.languageList(codes)).")) \(lightweight)"
+            }
+        }
+
+        // The comparison holds where it was measured (English, German, Russian) and is only
+        // shown while Parakeet is the recommendation.
+        guard recommendation.choice?.engine == .parakeet else { return lightweight }
         return localizedAppText(
             "Lightweight built-in option with no large local model. Parakeet gives better quality for daily dictation.",
             de: "Leichte integrierte Option ohne großes lokales Modell. Parakeet liefert bessere Qualität fürs tägliche Diktieren."
@@ -1538,13 +1730,28 @@ struct SetupWizardView: View {
         pluginManager.transcriptionEngine(for: SetupWizardAppleSpeechFallback.providerId)
     }
 
-    private var parakeetEngine: TranscriptionEnginePlugin? {
-        pluginManager.transcriptionEngine(for: SetupWizardParakeetRecommendation.providerId)
+    /// A downloaded local engine, other than Apple Speech, that supports the spoken
+    /// languages: the first in the recommendation order.
+    private var readyLocalProviderId: String? {
+        guard let engine = SetupWizardEngineRecommendation.readyEngine(for: engineRecommendationInput),
+              engine != .appleSpeech else { return nil }
+        return engine.providerId
     }
 
-    private var isParakeetReadyForSetup: Bool {
-        guard let parakeetEngine else { return false }
-        return canUseEngineForSetupTest(parakeetEngine)
+    /// Apple Speech reports the languages the system offers and loads the model of the
+    /// requested one before each transcription. Before it has reported them, it supports
+    /// no specific language yet.
+    private func appleSpeechSupportsSpokenLanguages(_ engine: TranscriptionEnginePlugin?) -> Bool {
+        guard case .specific = spokenLanguages else { return true }
+        guard let engine, !engine.supportedLanguages.isEmpty else { return false }
+        return SetupWizardEngineRecommendation.unsupportedLanguages(
+            spokenLanguages,
+            reportedLanguages: engine.supportedLanguages
+        ).isEmpty
+    }
+
+    private func appleSpeechModelId(from models: [PluginModelInfo]) -> String? {
+        SetupWizardAppleSpeechFallback.preferredModelId(from: models, spokenLanguage: spokenLanguages.codes.first)
     }
 
     private var canUseAppleSpeechFallback: Bool {
@@ -1628,7 +1835,7 @@ struct SetupWizardView: View {
         for _ in 0..<40 {
             if Task.isCancelled { return }
             if appleSpeechEngine.isConfigured { return }
-            if let modelId = SetupWizardAppleSpeechFallback.preferredModelId(from: appleSpeechEngine.modelCatalog) {
+            if let modelId = appleSpeechModelId(from: appleSpeechEngine.modelCatalog) {
                 appleSpeechEngine.selectModel(modelId)
                 break
             }
@@ -1643,7 +1850,7 @@ struct SetupWizardView: View {
 
     @MainActor
     private func preparePreferredSetupEngineIfNeeded() async {
-        guard !isActivatingParakeet else { return }
+        guard activatingEngine == nil else { return }
 
         if let manuallySelectedSetupProviderId,
            let manuallySelectedEngine = pluginManager.transcriptionEngine(for: manuallySelectedSetupProviderId),
@@ -1653,15 +1860,18 @@ struct SetupWizardView: View {
         }
 
         let selectedEngineReady = selectedTranscriptionEngineForSetup.map(canUseEngineForSetupTest) ?? false
+        let readyLocalProviderId = readyLocalProviderId
         let preferredProviderId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: modelManager.selectedProviderId,
             selectedEngineReady: selectedEngineReady,
-            parakeetReady: isParakeetReadyForSetup,
-            appleSpeechAvailable: canUseAppleSpeechFallback
+            readyLocalProviderId: readyLocalProviderId,
+            appleSpeechAvailable: canUseAppleSpeechFallback && appleSpeechSupportsSpokenLanguages(appleSpeechEngine)
         )
 
-        if preferredProviderId == SetupWizardParakeetRecommendation.providerId, let parakeetEngine {
-            modelManager.selectProvider(parakeetEngine.providerId)
+        if let readyLocalProviderId,
+           preferredProviderId == readyLocalProviderId,
+           let readyEngine = pluginManager.transcriptionEngine(for: readyLocalProviderId) {
+            modelManager.selectProvider(readyEngine.providerId)
             return
         }
 
@@ -1678,13 +1888,15 @@ struct SetupWizardView: View {
 
         ensureAppleSpeechPluginEnabledIfPossible()
 
+        // A spoken language Apple Speech does not support leaves the engine unselected:
+        // the step explains it and recommends another engine instead.
         guard let appleSpeechEngine = await waitForAppleSpeechEngine(),
               modelManager.canUseForTranscription(appleSpeechEngine),
               SetupWizardEngineSelection.preferredProviderId(
                 selectedProviderId: modelManager.selectedProviderId,
                 selectedEngineReady: selectedEngineReady,
-                parakeetReady: isParakeetReadyForSetup,
-                appleSpeechAvailable: true
+                readyLocalProviderId: readyLocalProviderId,
+                appleSpeechAvailable: appleSpeechSupportsSpokenLanguages(appleSpeechEngine)
               ) == SetupWizardAppleSpeechFallback.providerId else {
             return
         }
@@ -1698,7 +1910,7 @@ struct SetupWizardView: View {
         for _ in 0..<40 {
             if Task.isCancelled { return }
             if appleSpeechEngine.isConfigured { return }
-            if let modelId = SetupWizardAppleSpeechFallback.preferredModelId(from: appleSpeechEngine.modelCatalog) {
+            if let modelId = appleSpeechModelId(from: appleSpeechEngine.modelCatalog) {
                 appleSpeechEngine.selectModel(modelId)
                 break
             }
@@ -1786,6 +1998,7 @@ struct SetupWizardView: View {
         case .recorderToggle: return dictation.recorderToggleHotkeyLabel
         case .undoLastDictation: return dictation.undoLastDictationHotkeyLabel
         case .restoreRawTranscript: return dictation.restoreRawTranscriptHotkeyLabel
+        case .correctLastDictation: return dictation.correctLastDictationHotkeyLabel
         }
     }
 
@@ -1801,6 +2014,7 @@ struct SetupWizardView: View {
         case .recorderToggle: return String(localized: "settings.tab.recorder")
         case .undoLastDictation: return localizedAppText("Undo Last Dictation", de: "Letztes Diktat rückgängig")
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
+        case .correctLastDictation: return String(localized: "Correct Last Dictation")
         }
     }
 
@@ -1974,13 +2188,6 @@ enum SetupWizardParakeetRecommendation {
     static let providerId = "parakeet"
     static let manifestId = "com.typewhisper.parakeet"
 
-    static var description: String {
-        localizedAppText(
-            "Best local quality for daily dictation. Runs offline with no API key.",
-            de: "Beste lokale Qualität für tägliches Diktieren. Läuft offline ohne API-Key."
-        )
-    }
-
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
         models.first { $0.id == "parakeet-ultra" }?.id
             ?? models.first { $0.id == "parakeet-tdt-0.6b-v3" }?.id
@@ -1990,22 +2197,27 @@ enum SetupWizardParakeetRecommendation {
 }
 
 enum SetupWizardEngineSelection {
+    /// - Parameters:
+    ///   - readyLocalProviderId: A downloaded local engine other than Apple Speech that
+    ///     supports the spoken languages, as `SetupWizardEngineRecommendation.readyEngine` finds it.
+    ///   - appleSpeechAvailable: Apple Speech can be prepared and supports the spoken languages.
     static func preferredProviderId(
         selectedProviderId: String?,
         selectedEngineReady: Bool,
-        parakeetReady: Bool,
+        readyLocalProviderId: String?,
         appleSpeechAvailable: Bool
     ) -> String? {
-        if parakeetReady, selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
-            return SetupWizardParakeetRecommendation.providerId
+        if let readyLocalProviderId, selectedProviderId == SetupWizardAppleSpeechFallback.providerId {
+            return readyLocalProviderId
         }
 
+        // Kept even when it does not support the spoken language; the step says so.
         if selectedEngineReady {
             return selectedProviderId
         }
 
-        if parakeetReady {
-            return SetupWizardParakeetRecommendation.providerId
+        if let readyLocalProviderId {
+            return readyLocalProviderId
         }
 
         if appleSpeechAvailable {
@@ -2020,12 +2232,26 @@ enum SetupWizardAppleSpeechFallback {
     static let providerId = AppleSpeechModelSelection.providerId
     static let manifestId = AppleSpeechModelSelection.manifestId
 
+    /// The model for the spoken language when Apple Speech has one, otherwise the one for
+    /// the Mac's locale. The Mac's own locale also wins when it is in the spoken language,
+    /// so "de" loads de_CH on a Swiss Mac.
     static func preferredModelId(
         from models: [PluginModelInfo],
+        spokenLanguage: String? = nil,
         localeIdentifier: String = Locale.current.identifier,
         languageCode: String? = Locale.current.language.languageCode?.identifier
     ) -> String? {
-        AppleSpeechModelSelection.preferredModelId(
+        if let spokenLanguage, spokenLanguage != languageCode,
+           let modelId = AppleSpeechModelSelection.preferredModelId(
+               from: models,
+               localeIdentifier: spokenLanguage,
+               languageCode: spokenLanguage,
+               fallbackToFirst: false
+           ) {
+            return modelId
+        }
+
+        return AppleSpeechModelSelection.preferredModelId(
             from: models,
             localeIdentifier: localeIdentifier,
             languageCode: languageCode
@@ -2038,6 +2264,7 @@ enum SetupWizardAppleSpeechFallback {
 enum SetupWizardRecommendationUnavailableReason: Equatable {
     case appleSiliconOnly
     case marketplaceUnavailable
+    case offline
 
     var title: String {
         switch self {
@@ -2045,6 +2272,8 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
             localizedAppText("Apple Silicon only", de: "Nur Apple Silicon")
         case .marketplaceUnavailable:
             localizedAppText("Unavailable", de: "Nicht verfügbar")
+        case .offline:
+            String(localized: "Offline")
         }
     }
 
@@ -2060,6 +2289,8 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
                 "No compatible download is available for this Mac.",
                 de: "Für diesen Mac ist kein kompatibler Download verfügbar."
             )
+        case .offline:
+            String(localized: "Connect to the internet to download it.")
         }
     }
 }
@@ -2179,6 +2410,18 @@ enum SetupWizardRecommendationAvailability: Equatable {
     case loading
     case unavailable(SetupWizardRecommendationUnavailableReason)
 
+    /// Pressing the card selects, activates or installs the engine.
+    var allowsActivation: Bool {
+        switch self {
+        case .ready, .setupRequired, .installAvailable:
+            true
+        case .installState, .loading, .unavailable:
+            false
+        }
+    }
+
+    /// - Parameter modelIsDownloaded: The model that activating the installed engine
+    ///   loads is on disk, so activating it needs no connection.
     static func resolve(
         manifestId: String,
         isInstalled: Bool,
@@ -2186,6 +2429,8 @@ enum SetupWizardRecommendationAvailability: Equatable {
         registryPlugin: RegistryPlugin?,
         installState: PluginRegistryService.InstallState?,
         fetchState: PluginRegistryService.FetchState,
+        modelIsDownloaded: Bool = false,
+        isOffline: Bool = false,
         architecture: String = RuntimeArchitecture.current
     ) -> SetupWizardRecommendationAvailability {
         if manifestId == SetupWizardParakeetRecommendation.manifestId, architecture != "arm64" {
@@ -2194,6 +2439,12 @@ enum SetupWizardRecommendationAvailability: Equatable {
 
         if isReady {
             return .ready
+        }
+
+        // Everything below needs a download of the plugin or its model, except loading
+        // a model that is already on disk into an installed engine.
+        if isOffline, !(isInstalled && modelIsDownloaded) {
+            return .unavailable(.offline)
         }
 
         if isInstalled {
@@ -2214,30 +2465,5 @@ enum SetupWizardRecommendationAvailability: Equatable {
         case .loaded, .error(_):
             return .unavailable(.marketplaceUnavailable)
         }
-    }
-}
-
-// MARK: - Recommendation Settings Button
-
-private struct RecommendationSettingsButton: View {
-    let manifestId: String
-
-    var body: some View {
-        Button {
-            if let loaded = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }) {
-                if !loaded.isEnabled {
-                    PluginManager.shared.setPluginEnabled(manifestId, enabled: true)
-                }
-                if let activePlugin = PluginManager.shared.loadedPlugins.first(where: { $0.manifest.id == manifestId }),
-                   activePlugin.supportsSettingsWindow {
-                    PluginSettingsWindowManager.shared.present(activePlugin)
-                }
-            }
-        } label: {
-            Label(localizedAppText("Setup", de: "Setup"), systemImage: "gear")
-                .font(.caption)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
     }
 }

@@ -200,19 +200,26 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
     var websitePatterns: [String]
     var hotkeys: [UnifiedHotkey]
     var hotkeyBehavior: WorkflowHotkeyBehavior
+    /// Apps and websites where an Always trigger does not run. Other kinds ignore them.
+    var excludedAppBundleIdentifiers: [String]
+    var excludedWebsitePatterns: [String]
 
     init(
         kind: WorkflowTriggerKind,
         appBundleIdentifiers: [String] = [],
         websitePatterns: [String] = [],
         hotkeys: [UnifiedHotkey] = [],
-        hotkeyBehavior: WorkflowHotkeyBehavior = .startDictation
+        hotkeyBehavior: WorkflowHotkeyBehavior = .startDictation,
+        excludedAppBundleIdentifiers: [String] = [],
+        excludedWebsitePatterns: [String] = []
     ) {
         self.kind = kind
         self.appBundleIdentifiers = appBundleIdentifiers
         self.websitePatterns = websitePatterns
         self.hotkeys = hotkeys
         self.hotkeyBehavior = hotkeyBehavior
+        self.excludedAppBundleIdentifiers = excludedAppBundleIdentifiers
+        self.excludedWebsitePatterns = excludedWebsitePatterns
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -221,6 +228,8 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         case websitePatterns
         case hotkeys
         case hotkeyBehavior
+        case excludedAppBundleIdentifiers
+        case excludedWebsitePatterns
     }
 
     init(from decoder: Decoder) throws {
@@ -230,6 +239,25 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         self.websitePatterns = try container.decodeIfPresent([String].self, forKey: .websitePatterns) ?? []
         self.hotkeys = try container.decodeIfPresent([UnifiedHotkey].self, forKey: .hotkeys) ?? []
         self.hotkeyBehavior = try container.decodeIfPresent(WorkflowHotkeyBehavior.self, forKey: .hotkeyBehavior) ?? .startDictation
+        self.excludedAppBundleIdentifiers = try container.decodeIfPresent([String].self, forKey: .excludedAppBundleIdentifiers) ?? []
+        self.excludedWebsitePatterns = try container.decodeIfPresent([String].self, forKey: .excludedWebsitePatterns) ?? []
+    }
+
+    /// Writes the exclusion lists only when they have entries, so a trigger without
+    /// exclusions is stored and exported exactly as before they existed.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(appBundleIdentifiers, forKey: .appBundleIdentifiers)
+        try container.encode(websitePatterns, forKey: .websitePatterns)
+        try container.encode(hotkeys, forKey: .hotkeys)
+        try container.encode(hotkeyBehavior, forKey: .hotkeyBehavior)
+        if !excludedAppBundleIdentifiers.isEmpty {
+            try container.encode(excludedAppBundleIdentifiers, forKey: .excludedAppBundleIdentifiers)
+        }
+        if !excludedWebsitePatterns.isEmpty {
+            try container.encode(excludedWebsitePatterns, forKey: .excludedWebsitePatterns)
+        }
     }
 
     static func app(_ bundleIdentifier: String) -> WorkflowTrigger {
@@ -262,8 +290,15 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         WorkflowTrigger(kind: .hotkey, hotkeys: hotkeys, hotkeyBehavior: behavior)
     }
 
-    static func global() -> WorkflowTrigger {
-        WorkflowTrigger(kind: .global)
+    static func global(
+        excludingApps excludedAppBundleIdentifiers: [String] = [],
+        websites excludedWebsitePatterns: [String] = []
+    ) -> WorkflowTrigger {
+        WorkflowTrigger(
+            kind: .global,
+            excludedAppBundleIdentifiers: excludedAppBundleIdentifiers,
+            excludedWebsitePatterns: excludedWebsitePatterns
+        )
     }
 
     static func manual() -> WorkflowTrigger {
@@ -289,6 +324,22 @@ struct WorkflowTrigger: Codable, Equatable, Sendable {
         case .global, .manual:
             true
         }
+    }
+
+    /// Whether the active website can decide if this trigger matches: it has websites
+    /// to match, or it is an Always trigger with excluded websites.
+    var dependsOnWebsite: Bool {
+        !websitePatterns.isEmpty || (kind == .global && !excludedWebsitePatterns.isEmpty)
+    }
+
+    /// `dependsOnWebsite` in the app with `bundleIdentifier`: websites to match in that
+    /// app, or excluded websites of an Always trigger that does not exclude the app.
+    func dependsOnWebsite(inApp bundleIdentifier: String?) -> Bool {
+        if !websitePatterns.isEmpty {
+            return appBundleIdentifiers.isEmpty || appBundleIdentifiers.contains(bundleIdentifier ?? "")
+        }
+        guard kind == .global, !excludedWebsitePatterns.isEmpty else { return false }
+        return bundleIdentifier.map { !excludedAppBundleIdentifiers.contains($0) } ?? true
     }
 }
 

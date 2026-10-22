@@ -391,6 +391,8 @@ final class OpenRouterPlugin: NSObject,
         )
         let (data, response) = try await PluginHTTPClient.data(for: request)
         try Self.validateChatResponse(data: data, response: response)
+        // Reported before parsing: a reply cut off at the token limit still used the tokens.
+        PluginLLMUsageReporting.report(.openAICompatible(from: data))
         return try Self.parseChatResponse(data)
     }
 

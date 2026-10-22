@@ -11,6 +11,7 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var canCorrectLastDictation: Bool
     @Published var canUndoLastDictation: Bool
     @Published var canRestoreRawTranscript: Bool
     @Published var hasLastTranscribedText: Bool
@@ -24,6 +25,7 @@ private final class MenuBarState: ObservableObject {
     @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var undoLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var correctLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     /// Configured dictation shortcuts with their mode, empty when none is set.
     @Published var dictationShortcuts: [MenuBarStatusFormatting.DictationShortcut]
     @Published var needsEngineSetup: Bool
@@ -45,6 +47,7 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.canCorrectLastDictation = dictation.canCorrectLastDictation
         self.canUndoLastDictation = dictation.dictationUndoService.canUndo
         self.canRestoreRawTranscript = dictation.dictationUndoService.canRestoreRaw
         self.hasLastTranscribedText = dictation.lastTranscribedText != nil
@@ -58,6 +61,7 @@ private final class MenuBarState: ObservableObject {
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         self.undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         self.restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
+        self.correctLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .correctLastDictation)
         self.dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
         self.needsEngineSetup = modelManager.activeModelName == nil
         self.lastDictationError = dictation.lastDictationError
@@ -222,6 +226,7 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         canCopyLastTranscription = hasRecentTranscriptions
+        canCorrectLastDictation = DictationViewModel.shared.canCorrectLastDictation
     }
 
     private func refreshRecorderToggle(
@@ -244,6 +249,7 @@ private final class MenuBarState: ObservableObject {
         recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
         restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
+        correctLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .correctLastDictation)
         dictationShortcuts = MenuBarStatusFormatting.dictationShortcuts()
     }
 
@@ -310,6 +316,7 @@ enum MenuBarMenuItem: Hashable {
     case copyLastTranscription
     case pasteLastTranscription
     case readBackLastTranscription
+    case correctLastDictation
     case undoLastDictation
     case restoreRawTranscript
     case checkForUpdates
@@ -342,8 +349,9 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
             [.settings, .history, .errorLog]
         case .transcription:
             hasRecoverableRecording
-                ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
-                : [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
+                ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription,
+                   .correctLastDictation]
+                : [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription, .correctLastDictation]
         }
     }
 }
@@ -644,6 +652,9 @@ struct MenuBarView: View {
         case .readBackLastTranscription:
             readBackLastTranscriptionButton
 
+        case .correctLastDictation:
+            correctLastDictationButton
+
         case .undoLastDictation:
             undoLastDictationButton
 
@@ -672,7 +683,8 @@ struct MenuBarView: View {
             Label(
                 localizedAppText(
                     "Microphone: \(snapshot.microphoneSummary)",
-                    de: "Mikrofon: \(snapshot.microphoneSummary)"
+                    de: "Mikrofon: \(snapshot.microphoneSummary)",
+                    es: "Micrófono: \(snapshot.microphoneSummary)"
                 ),
                 systemImage: "mic"
             )
@@ -703,7 +715,8 @@ struct MenuBarView: View {
             Label(
                 localizedAppText(
                     "Language: \(snapshot.languageSummary)",
-                    de: "Sprache: \(snapshot.languageSummary)"
+                    de: "Sprache: \(snapshot.languageSummary)",
+                    es: "Idioma: \(snapshot.languageSummary)"
                 ),
                 systemImage: "globe"
             )
@@ -728,7 +741,7 @@ struct MenuBarView: View {
                         }
                         if !group.setupRequiredOptions.isEmpty {
                             let count = group.setupRequiredOptions.count
-                            Menu(localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))")) {
+                            Menu(localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))")) {
                                 ForEach(group.setupRequiredOptions) { option in
                                     quickSelectionItem(option, select: quickSelection.selectModel)
                                 }
@@ -743,7 +756,8 @@ struct MenuBarView: View {
             Label(
                 localizedAppText(
                     "Model: \(snapshot.modelSummary)",
-                    de: "Modell: \(snapshot.modelSummary)"
+                    de: "Modell: \(snapshot.modelSummary)",
+                    es: "Modelo: \(snapshot.modelSummary)"
                 ),
                 systemImage: "waveform"
             )
@@ -823,6 +837,25 @@ struct MenuBarView: View {
         }
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(!status.hasLastTranscribedText)
+    }
+
+    @ViewBuilder
+    private var correctLastDictationButton: some View {
+        Button {
+            // MenuBarExtra uses NSMenu tracking. Open the editor panel once the menu has closed.
+            MenuBarActionDispatcher.performAfterMenuDismissal {
+                DictationViewModel.shared.triggerCorrectLastDictation()
+            }
+        } label: {
+            Label(String(localized: "Correct Last Dictation..."), systemImage: "pencil.line")
+        }
+        .keyboardShortcut(keyboardShortcut(from: status.correctLastDictationMenuShortcut))
+        .disabled(!status.canCorrectLastDictation)
+
+        if !status.canCorrectLastDictation {
+            // A disabled menu item cannot explain itself, so the reason follows as a dimmed line.
+            Text(LastDictationCorrectionCopy.noDictationNotice)
+        }
     }
 
     @ViewBuilder

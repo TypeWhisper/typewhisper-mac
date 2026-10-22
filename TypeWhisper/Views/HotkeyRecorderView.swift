@@ -187,7 +187,8 @@ struct HotkeyRecorderView: View {
                 "Clear shortcut for \(title)",
                 de: "Tastenkürzel für „\(title)“ entfernen",
                 ja: "「\(title)」のショートカットキーを削除",
-                zh: "清除“\(title)”的快捷键"
+                zh: "清除“\(title)”的快捷键",
+                es: "Borrar el atajo de \(title)"
             ))
         }
         .fixedSize()
@@ -210,7 +211,8 @@ struct HotkeyRecorderView: View {
             "Edit shortcut for \(title) with visual keyboard",
             de: "Tastenkürzel für „\(title)“ mit visueller Tastatur bearbeiten",
             ja: "「\(title)」のショートカットキーをビジュアルキーボードで編集",
-            zh: "使用可视化键盘编辑“\(title)”的快捷键"
+            zh: "使用可视化键盘编辑“\(title)”的快捷键",
+            es: "Editar el atajo de \(title) con el teclado visual"
         ))
     }
 
@@ -240,6 +242,7 @@ struct HotkeyRecorderView: View {
         case .recorderToggle: return String(localized: "recorder.shortcut.title")
         case .undoLastDictation: return localizedAppText("Undo Last Dictation", de: "Letztes Diktat rückgängig")
         case .restoreRawTranscript: return localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen")
+        case .correctLastDictation: return String(localized: "Correct Last Dictation")
         }
     }
 

@@ -778,6 +778,57 @@ final class OpenRouterPluginTests: XCTestCase {
         )
     }
 
+    // MARK: - Usage reporting
+
+    func testProcessReportsTheUsageWithTheModelThatAnswered() async throws {
+        // A router model such as openrouter/auto answers with the model it picked.
+        let (reply, reports) = try await Self.processCollectingUsage(body: #"""
+        {"model":"anthropic/claude-haiku-4.5","choices":[{"message":{"content":"Routed."}}],
+         "usage":{"prompt_tokens":210,"completion_tokens":12,"total_tokens":222}}
+        """#)
+
+        XCTAssertEqual(reply, "Routed.")
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 210, outputTokens: 12, model: "anthropic/claude-haiku-4.5")])
+    }
+
+    func testProcessWithoutUsageReportsNothing() async throws {
+        let (reply, reports) = try await Self.processCollectingUsage(
+            body: #"{"choices":[{"message":{"content":"No usage."}}]}"#
+        )
+
+        XCTAssertEqual(reply, "No usage.")
+        XCTAssertEqual(reports, [])
+    }
+
+    func testCutOffReplyFailsButReportsItsUsage() async throws {
+        let (reply, reports) = try await Self.processCollectingUsage(body: #"""
+        {"model":"openai/gpt-4o","choices":[{"message":{"content":"half a sen"},"finish_reason":"length"}],
+         "usage":{"prompt_tokens":30,"completion_tokens":4096}}
+        """#)
+
+        XCTAssertNil(reply, "a cut-off reply must still fail")
+        XCTAssertEqual(reports, [PluginLLMUsage(inputTokens: 30, outputTokens: 4096, model: "openai/gpt-4o")])
+    }
+
+    /// Runs one chat request answered with `body` and returns the reply (nil
+    /// when the request failed) and the usage reported meanwhile.
+    private static func processCollectingUsage(body: String) async throws -> (reply: String?, reports: [PluginLLMUsage]) {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(body.utf8), httpResponse(url: "https://openrouter.ai/api/v1/chat/completions", statusCode: 200)),
+            ])
+        }
+        let collector = PluginLLMUsageCollector()
+        let reply = try? await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await plugin.process(systemPrompt: "System prompt", userText: "User text", model: nil)
+        }
+        return (reply, collector.reports)
+    }
+
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
         let data = try XCTUnwrap(request.httpBody)
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

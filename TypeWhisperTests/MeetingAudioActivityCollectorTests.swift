@@ -90,6 +90,31 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         XCTAssertEqual(client.snapshot(at: Date()).availability, .available)
     }
 
+    func testLiveBrowserAudioIsAttributedToItsHostBrowser() throws {
+        // Opt-in: play audio in the selected browser, then set
+        // TEST_RUNNER_TYPEWHISPER_TEST_AUDIO_BROWSER_BUNDLE_ID for `xcodebuild test`.
+        guard let browser = ProcessInfo.processInfo.environment[
+            "TYPEWHISPER_TEST_AUDIO_BROWSER_BUNDLE_ID"
+        ] else {
+            throw XCTSkip("Live browser audio test requires an explicitly selected browser")
+        }
+        let client = CoreAudioMeetingProcessClient()
+        defer { client.stop() }
+        guard client.start(changeHandler: { _ in }) else {
+            throw XCTSkip("CoreAudio process metadata is unavailable on this host")
+        }
+
+        let snapshot = client.snapshot(at: Date())
+        XCTAssertEqual(snapshot.availability, .available)
+        XCTAssertTrue(
+            snapshot.processes.contains {
+                $0.bundleIdentifier == browser && $0.isRunningOutput
+            },
+            "No running browser audio was attributed to \(browser): "
+                + snapshot.processes.map(\.bundleIdentifier).joined(separator: ", ")
+        )
+    }
+
     func testNativeProcessRegistryMapsFaceTimeAudioServices() {
         XCTAssertEqual(
             NativeMeetingAudioProcessRegistry.provider(for: "com.apple.FaceTime"),
@@ -209,6 +234,62 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
                 for: "com.vendor.mediahost",
                 executablePath: other.appendingPathComponent("Contents/MacOS/Other").path
             )
+        )
+    }
+
+    func testChromeHelperIsAttributedToTheReleaseChannelItRunsIn() throws {
+        // Issue #1700: Chrome Beta's audio helper reports `com.google.Chrome.helper`
+        // to CoreAudio, the same identifier as stable Chrome's helper.
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        func helperExecutable(appName: String, appBundleIdentifier: String) throws -> String {
+            let app = root.appendingPathComponent("\(appName).app", isDirectory: true)
+            let helper = app.appendingPathComponent(
+                "Contents/Frameworks/Google Chrome Framework.framework/Versions/157.0.0.0/"
+                    + "Helpers/Google Chrome Helper (Aperitif).app",
+                isDirectory: true
+            )
+            try writeAppBundle(at: app, bundleIdentifier: appBundleIdentifier)
+            try writeAppBundle(at: helper, bundleIdentifier: "com.google.Chrome.helper")
+            return helper.appendingPathComponent("Contents/MacOS/Google Chrome Helper (Aperitif)").path
+        }
+
+        let channels = [
+            ("Google Chrome", SupportedMeetingBrowser.chrome),
+            ("Google Chrome Beta", SupportedMeetingBrowser.chromeBeta),
+            ("Google Chrome Dev", SupportedMeetingBrowser.chromeDev),
+            ("Google Chrome Canary", SupportedMeetingBrowser.chromeCanary)
+        ]
+        for (appName, channel) in channels {
+            let executable = try helperExecutable(appName: appName, appBundleIdentifier: channel)
+            XCTAssertEqual(
+                CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                    for: "com.google.Chrome.helper",
+                    executablePath: executable
+                ),
+                channel,
+                "Unexpected browser for the helper in \(appName)"
+            )
+        }
+
+        let unsupportedExecutable = try helperExecutable(
+            appName: "Unsupported Shell",
+            appBundleIdentifier: "com.example.chromium-shell"
+        )
+        XCTAssertNil(
+            CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                for: "com.google.Chrome.helper",
+                executablePath: unsupportedExecutable
+            )
+        )
+        XCTAssertEqual(
+            CoreAudioMeetingProcessClient.canonicalBundleIdentifier(
+                for: "com.google.Chrome.helper",
+                executablePath: nil
+            ),
+            SupportedMeetingBrowser.chrome
         )
     }
 

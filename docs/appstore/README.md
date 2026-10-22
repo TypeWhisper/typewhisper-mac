@@ -14,7 +14,7 @@ unaffected by `APPSTORE` code.
 | Store record | Universal purchase with the iOS app: bundle ID `com.typewhisper.typewhisper-app`, App Store Connect app `6759319267`. |
 | Business model | Free download with Premium in-app purchases shared with iOS (`com.typewhisper.premium.individual.monthly`, `com.typewhisper.premium.individual.lifetime`, subscription group "TypeWhisper Premium"). |
 | Text insertion | Paste through `CGEvent.post` (TCC "PostEvent", listed under Accessibility) with clipboard fallback. Must stay switchable to clipboard-only in case App Review rejects it under guideline 2.4.5. |
-| Architectures | Universal. Plugins that need Apple silicon (MLX, Core ML, ONNX) are built for arm64 only and hidden on Intel Macs. |
+| Architectures | Universal. Plugins that need Apple silicon (MLX, Core ML, ONNX) are built for arm64 only and hidden on Intel Macs. The ONNX Runtime framework that only the ONNX plugins load is arm64-only too. |
 | Plugins | First-party plugins are signed into `Contents/PlugIns`. Nothing is downloaded or loaded from outside the app bundle (guideline 2.5.2). |
 
 ## Layout
@@ -71,9 +71,10 @@ Run the unit tests in Xcode or with `xcodebuild ... test` on the generated
 `scripts/appstore/update_plugin_catalog.py`.
 
 The audit checks bundle ID, Info.plist keys, bundled components against
-`AppStorePluginCatalog.json`, linked frameworks, architectures and, for signed
-builds, entitlements. Process-launch imports fail in plugins and are reported
-as warnings for the host app.
+`AppStorePluginCatalog.json`, linked frameworks (including a single ONNX
+Runtime), architectures and, for signed builds, entitlements. Process-launch
+imports fail in plugins and plugin-only frameworks and are reported as warnings
+for the host app.
 
 ## Release
 
@@ -159,9 +160,20 @@ is managed on the Speakers page and is not listed in the marketplace.
 
 | Status | Plugins |
 |---|---|
-| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
-| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB), and the Russian-only GigaAM (adds a second ONNX Runtime copy next to Supertonic) |
+| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, GigaAM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
+| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions) and the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB) |
 | Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local): they run external programs or downloaded binaries |
+
+GigaAM and Supertonic share one ONNX Runtime. The `onnxruntime` package is a
+static library, so each plugin linking it would carry its own copy of about
+32 MB, and two loaded copies would register the same Objective-C classes. The
+`TypeWhisperONNXRuntime` framework target links it once and is embedded in
+`Contents/Frameworks`; both plugins link that framework and use the package
+only for its module. The app does not link the framework, so the runtime is
+loaded with the first installed ONNX plugin, and like those plugins it is
+arm64-only. The audit fails if ONNX Runtime ends up in more than one binary.
+The direct-distribution plugins keep their own copy, because each one is
+downloaded and installed on its own.
 
 Some bundled plugins are reduced in the App Store edition (`#if APPSTORE`):
 

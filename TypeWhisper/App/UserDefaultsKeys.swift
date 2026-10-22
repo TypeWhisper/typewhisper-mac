@@ -20,6 +20,8 @@ enum UserDefaultsKeys {
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
+    static let toggleDictationSilenceStopEnabled = "toggleDictationSilenceStopEnabled"
+    static let toggleDictationSilenceStopDuration = "toggleDictationSilenceStopDuration"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
     static let cancellationBehavior = "cancellationBehavior"
@@ -37,6 +39,7 @@ enum UserDefaultsKeys {
     static let recorderToggleHotkey = "recorderToggleHotkey"
     static let undoLastDictationHotkey = "undoLastDictationHotkey"
     static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
+    static let correctLastDictationHotkey = "correctLastDictationHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -49,6 +52,7 @@ enum UserDefaultsKeys {
     static let recorderToggleHotkeys = "recorderToggleHotkeys"
     static let undoLastDictationHotkeys = "undoLastDictationHotkeys"
     static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
+    static let correctLastDictationHotkeys = "correctLastDictationHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -171,6 +175,11 @@ enum UserDefaultsKeys {
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
     static let recorderDetectSpeakers = "recorderDetectSpeakers"
+    /// Security-scoped bookmark of the folder for new recordings; absent for the default folder.
+    static let recorderFolderBookmark = "recorderFolderBookmark"
+    static let recorderFolderPath = "recorderFolderPath"
+    /// JSON list of folders recordings were saved to before, which the Recorder keeps listing.
+    static let recorderEarlierFolders = "recorderEarlierFolders"
     static let calendarMeetingDetectSpeakers = "calendarMeetingDetectSpeakers"
     static let speakerStripCollapsed = "speakerStripCollapsed"
 

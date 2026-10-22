@@ -1,7 +1,7 @@
 {
     "id": "com.typewhisper.deepgram",
     "name": "Deepgram",
-    "version": "1.0.19",
+    "version": "1.0.20",
     "minHostVersion": "1.8.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
@@ -9,6 +9,7 @@
     "description": "Cloud transcription via Deepgram API with real-time WebSocket streaming. Requires API key.",
     "descriptions": {
         "de": "Cloud-Transkription über die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "es": "Transcripción en la nube con la API de Deepgram y streaming en tiempo real por WebSocket. Requiere una clave de API.",
         "ja": "Deepgram APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
     },
     "category": "transcription",

@@ -124,6 +124,14 @@ enum OpenAICompatibleReasoningEffort: String, Codable, CaseIterable, Sendable {
     var requestValue: String? {
         self == .providerDefault ? nil : rawValue
     }
+
+    /// The levels a Responses profile can send, lowest first.
+    static let requestLevels: [OpenAICompatibleReasoningEffort] = [.low, .medium, .high, .xhigh, .max]
+
+    /// The level's name for the host's effort pickers.
+    var localizedName: String {
+        String(localized: String.LocalizationValue(displayName), bundle: pluginModuleBundle)
+    }
 }
 
 /// Knowledge about the well-known OpenAI/Azure realtime transcription model
@@ -391,7 +399,7 @@ final class OpenAICompatiblePlugin: NSObject,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
     LLMProviderIdentityProviding,
-    LLMTemperatureControllableProvider,
+    LLMTemperatureAndEffortControllableProvider,
     LLMModelSelectable,
     AdditionalTranscriptionEnginesProviding,
     AdditionalLLMProvidersProviding,
@@ -597,6 +605,47 @@ final class OpenAICompatiblePlugin: NSObject,
             temperatureDirective: temperatureDirective,
             profileId: providerId
         )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        effort: String?
+    ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort,
+            profileId: providerId
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
+        try await process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: effort,
+            profileId: providerId
+        )
+    }
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        supportedEfforts(for: model, profileId: providerId)
+    }
+
+    func defaultEffortId(for model: String?) -> String? {
+        defaultEffortId(for: model, profileId: providerId)
     }
 
     func selectLLMModel(_ modelId: String) {
@@ -1087,11 +1136,47 @@ final class OpenAICompatiblePlugin: NSObject,
         return components.url
     }
 
+    // MARK: - Reasoning Effort
+
+    /// The levels a workflow can pick for the profile. Only Responses profiles
+    /// send an effort, so Chat Completions profiles report none and the host
+    /// shows no effort picker for them.
+    func supportedEfforts(for model: String?, profileId: String) -> [PluginLLMEffortInfo] {
+        guard profile(for: profileId)?.llmAPI == .responses else { return [] }
+        return OpenAICompatibleReasoningEffort.requestLevels.map {
+            PluginLLMEffortInfo(id: $0.rawValue, displayName: $0.localizedName)
+        }
+    }
+
+    /// The profile's Reasoning Effort, which a request uses when a workflow
+    /// leaves effort on Provider Default. Nil when the profile omits it.
+    func defaultEffortId(for model: String?, profileId: String) -> String? {
+        guard let profile = profile(for: profileId), profile.llmAPI == .responses else { return nil }
+        return profile.reasoningEffort.requestValue
+    }
+
+    /// The effort a Responses request sends: a workflow's effort when it is one
+    /// of the levels the profile offers, otherwise the profile's own setting.
+    nonisolated static func requestReasoningEffort(
+        _ requested: String?,
+        profile: OpenAICompatibleProfile
+    ) -> String? {
+        if let requested = requested?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let effort = OpenAICompatibleReasoningEffort(rawValue: requested),
+           OpenAICompatibleReasoningEffort.requestLevels.contains(effort) {
+            return effort.rawValue
+        }
+        return profile.reasoningEffort.requestValue
+    }
+
+    /// A nil `effort` uses the profile's Reasoning Effort. Chat Completions
+    /// requests never send an effort.
     func process(
         systemPrompt: String,
         userText: String,
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String? = nil,
         profileId: String
     ) async throws -> String {
         guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
@@ -1119,14 +1204,15 @@ final class OpenAICompatiblePlugin: NSObject,
                 apiVersion: profile.apiVersion
             )
         case .responses:
+            let reasoningEffort = Self.requestReasoningEffort(effort, profile: profile)
             return try await processResponse(
                 apiKey: apiKey,
                 baseURL: profile.baseURL,
                 model: modelId,
                 systemPrompt: systemPrompt,
                 userText: userText,
-                temperature: profile.reasoningEffort.requestValue == nil ? temperature : nil,
-                reasoningEffort: profile.reasoningEffort.requestValue,
+                temperature: reasoningEffort == nil ? temperature : nil,
+                reasoningEffort: reasoningEffort,
                 requestTimeout: profile.resolvedChatRequestTimeout,
                 apiVersion: profile.apiVersion
             )
@@ -1605,7 +1691,8 @@ final class OpenAICompatiblePlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
-            break
+            // Reported before parsing: a reply cut off at the token limit still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
         case 401:
             throw PluginChatError.invalidApiKey
         case 429:
@@ -1689,6 +1776,8 @@ final class OpenAICompatiblePlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            // Reported before parsing: a reply without text still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
             return try Self.parseResponsesText(from: data)
         case 401:
             throw PluginChatError.invalidApiKey
@@ -1941,7 +2030,7 @@ private final class OpenAICompatibleProfileRole: NSObject,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
     LLMProviderIdentityProviding,
-    LLMTemperatureControllableProvider,
+    LLMTemperatureAndEffortControllableProvider,
     LLMModelSelectable,
     LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin,
     @unchecked Sendable
@@ -2086,6 +2175,47 @@ private final class OpenAICompatibleProfileRole: NSObject,
             temperatureDirective: temperatureDirective,
             profileId: profileId
         )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        effort: String?
+    ) async throws -> String {
+        try await plugin.process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort,
+            profileId: profileId
+        )
+    }
+
+    func process(
+        systemPrompt: String,
+        userText: String,
+        model: String?,
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
+    ) async throws -> String {
+        try await plugin.process(
+            systemPrompt: systemPrompt,
+            userText: userText,
+            model: model,
+            temperatureDirective: temperatureDirective,
+            effort: effort,
+            profileId: profileId
+        )
+    }
+
+    func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+        plugin.supportedEfforts(for: model, profileId: profileId)
+    }
+
+    func defaultEffortId(for model: String?) -> String? {
+        plugin.defaultEffortId(for: model, profileId: profileId)
     }
 }
 
