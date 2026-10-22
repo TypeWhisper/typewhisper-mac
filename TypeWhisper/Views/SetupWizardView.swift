@@ -965,7 +965,9 @@ struct SetupWizardView: View {
                     : engine.map(canUseEngineForSetupTest) ?? false,
                 // Apple Speech reports no languages until it has asked the system.
                 reportedLanguages: languages.isEmpty ? nil : languages,
-                modelIds: engine.map { $0.modelCatalog.map(\.id) }
+                modelIds: engine.map { $0.modelCatalog.map(\.id) },
+                selectedModelId: engine?.selectedModelId,
+                downloadedModelIds: engine.map(modelManager.downloadedModelIds(of:)) ?? []
             )
         }
 
@@ -1063,6 +1065,7 @@ struct SetupWizardView: View {
             registryPlugin: registryPlugin,
             installState: registryService.installStates[manifestId],
             fetchState: registryService.fetchState,
+            modelIsDownloaded: choice.modelIsDownloaded,
             isOffline: networkStatus.isOffline
         )
         let card = setupCard(isSelected: isSelected) {
@@ -1252,14 +1255,7 @@ struct SetupWizardView: View {
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> Bool {
-        guard !isSelected else { return false }
-
-        switch availability {
-        case .ready, .setupRequired, .installAvailable:
-            return true
-        default:
-            return false
-        }
+        !isSelected && availability.allowsActivation
     }
 
     private func recommendationCardAccessibilityHint(
@@ -1317,8 +1313,12 @@ struct SetupWizardView: View {
             reportedLanguages: engine.supportedLanguages
         ).isEmpty
         if !engine.isConfigured || !selectedModelFits,
-           let modelId = (selectedModelFits ? engine.selectedModelId : nil)
-               ?? Self.modelToLoad(for: choice, from: engine.modelCatalog),
+           let modelId = SetupWizardEngineRecommendation.activationModelId(
+               selectedModelId: engine.selectedModelId,
+               reportedLanguages: engine.supportedLanguages,
+               recommendedModelId: Self.modelToLoad(for: choice, from: engine.modelCatalog),
+               spokenLanguages: spokenLanguages
+           ),
            !modelManager.startModelLoad(modelId, of: engine) {
             engine.selectModel(modelId)
         }
@@ -1733,8 +1733,9 @@ struct SetupWizardView: View {
         return engine.providerId
     }
 
-    /// Apple Speech transcribes one language at a time and reports which ones the
-    /// system offers. Before it has reported them, it supports no specific language yet.
+    /// Apple Speech reports the languages the system offers and loads the model of the
+    /// requested one before each transcription. Before it has reported them, it supports
+    /// no specific language yet.
     private func appleSpeechSupportsSpokenLanguages(_ engine: TranscriptionEnginePlugin?) -> Bool {
         guard case .specific = spokenLanguages else { return true }
         guard let engine, !engine.supportedLanguages.isEmpty else { return false }
@@ -2402,6 +2403,18 @@ enum SetupWizardRecommendationAvailability: Equatable {
     case loading
     case unavailable(SetupWizardRecommendationUnavailableReason)
 
+    /// Pressing the card selects, activates or installs the engine.
+    var allowsActivation: Bool {
+        switch self {
+        case .ready, .setupRequired, .installAvailable:
+            true
+        case .installState, .loading, .unavailable:
+            false
+        }
+    }
+
+    /// - Parameter modelIsDownloaded: The model that activating the installed engine
+    ///   loads is on disk, so activating it needs no connection.
     static func resolve(
         manifestId: String,
         isInstalled: Bool,
@@ -2409,6 +2422,7 @@ enum SetupWizardRecommendationAvailability: Equatable {
         registryPlugin: RegistryPlugin?,
         installState: PluginRegistryService.InstallState?,
         fetchState: PluginRegistryService.FetchState,
+        modelIsDownloaded: Bool = false,
         isOffline: Bool = false,
         architecture: String = RuntimeArchitecture.current
     ) -> SetupWizardRecommendationAvailability {
@@ -2420,8 +2434,9 @@ enum SetupWizardRecommendationAvailability: Equatable {
             return .ready
         }
 
-        // Everything below needs a download of the plugin or its model.
-        if isOffline {
+        // Everything below needs a download of the plugin or its model, except loading
+        // a model that is already on disk into an installed engine.
+        if isOffline, !(isInstalled && modelIsDownloaded) {
             return .unavailable(.offline)
         }
 

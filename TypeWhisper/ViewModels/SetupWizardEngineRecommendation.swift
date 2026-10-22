@@ -43,7 +43,9 @@ enum SetupWizardSpokenLanguages: Equatable, Sendable {
 /// support the spoken languages. Parakeet comes first because it transcribes far faster
 /// than the others in the benchmark at similar accuracy in English, German and Russian.
 /// WhisperKit covers the most languages. Qwen3 adds Filipino. Apple Speech needs no
-/// plugin download but transcribes only one language at a time.
+/// plugin download but was the least accurate where measured. None of them takes
+/// language hints: with a mix of languages, each transcribes the first one, and Apple
+/// Speech loads the system model for it before each transcription.
 enum SetupWizardLocalEngine: String, CaseIterable, Sendable {
     case parakeet
     case whisperKit
@@ -159,6 +161,11 @@ struct SetupWizardEngineState: Equatable, Sendable {
     var reportedLanguages: [String]?
     /// Models the loaded engine offers, nil while it is not loaded.
     var modelIds: [String]?
+    /// The model selected in the engine, nil while none is.
+    var selectedModelId: String?
+    /// Models whose files are on disk, as the plugin reports them. Empty for a plugin
+    /// that does not report them, such as Parakeet, whose model then counts as a download.
+    var downloadedModelIds: Set<String> = []
 }
 
 /// The plugin marketplace as far as the app could load it.
@@ -207,7 +214,8 @@ struct SetupWizardEngineChoice: Equatable, Sendable {
     }
 
     enum Availability: Equatable, Sendable {
-        /// Ready, or the plugin or model can be downloaded now.
+        /// Ready, installed with its model on disk, or the plugin or model can be
+        /// downloaded now.
         case available
         /// The plugin or model needs a download and the Mac is offline.
         case needsConnection
@@ -220,6 +228,9 @@ struct SetupWizardEngineChoice: Equatable, Sendable {
     let engine: SetupWizardLocalEngine
     /// The model to load when the engine has none yet. Nil for Apple Speech.
     let modelId: String?
+    /// The model that activating the engine loads, the one selected in it or `modelId`,
+    /// is on disk, so the engine can be activated offline.
+    let modelIsDownloaded: Bool
     let reason: Reason
     let availability: Availability
 }
@@ -247,11 +258,19 @@ extension SetupWizardEngineRecommendation {
                   )
             else { continue }
 
+            let modelId = model(for: engine, state: state, memoryGB: memoryGB)?.id
+            let modelIsDownloaded = activationModelId(
+                selectedModelId: state.selectedModelId,
+                reportedLanguages: state.reportedLanguages ?? [],
+                recommendedModelId: modelId,
+                spokenLanguages: input.spokenLanguages
+            ).map(state.downloadedModelIds.contains) ?? false
             compatible.append(SetupWizardEngineChoice(
                 engine: engine,
-                modelId: model(for: engine, state: state, memoryGB: memoryGB)?.id,
+                modelId: modelId,
+                modelIsDownloaded: modelIsDownloaded,
                 reason: reason,
-                availability: availability(of: engine, state: state, input: input)
+                availability: availability(of: engine, state: state, modelIsDownloaded: modelIsDownloaded, input: input)
             ))
         }
 
@@ -287,6 +306,20 @@ extension SetupWizardEngineRecommendation {
                     spokenLanguages: input.spokenLanguages
                 ) != nil
         }
+    }
+
+    /// The model that activating an engine loads: the one selected in it when that model
+    /// supports the spoken languages, otherwise the recommended one.
+    static func activationModelId(
+        selectedModelId: String?,
+        reportedLanguages: [String],
+        recommendedModelId: String?,
+        spokenLanguages: SetupWizardSpokenLanguages
+    ) -> String? {
+        guard unsupportedLanguages(spokenLanguages, reportedLanguages: reportedLanguages).isEmpty else {
+            return recommendedModelId
+        }
+        return selectedModelId ?? recommendedModelId
     }
 
     /// The spoken languages missing from the languages an engine reports. Engines that
@@ -350,10 +383,13 @@ extension SetupWizardEngineRecommendation {
     private static func availability(
         of engine: SetupWizardLocalEngine,
         state: SetupWizardEngineState,
+        modelIsDownloaded: Bool,
         input: SetupWizardEngineRecommendationInput
     ) -> SetupWizardEngineChoice.Availability {
         // Apple Speech comes with the app; the system manages its language assets.
         if state.isReady || engine == .appleSpeech { return .available }
+        // An installed engine loads a model that is already on disk without a connection.
+        if state.isInstalled, modelIsDownloaded { return .available }
         if input.isOffline { return .needsConnection }
         if state.isInstalled { return .available }
 

@@ -646,12 +646,20 @@ final class ModelManagerService: ObservableObject {
     /// as available. An engine a bundle exposes next to its main one has its
     /// models managed by that bundle, unless it manages them itself.
     func lacksDownloadedModel(_ engine: TranscriptionEnginePlugin) -> Bool {
-        guard !engine.isConfigured,
-              let modelManager = (engine as? any PluginDownloadedModelManaging)
-                  ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
-                      as? any PluginDownloadedModelManaging)
-        else { return false }
+        guard !engine.isConfigured, let modelManager = downloadedModelManager(for: engine) else { return false }
         return modelManager.downloadedModels.isEmpty
+    }
+
+    /// Models of the engine whose files are on disk, as its plugin reports them. Empty
+    /// when the plugin does not report downloaded models.
+    func downloadedModelIds(of engine: TranscriptionEnginePlugin) -> Set<String> {
+        Set(downloadedModelManager(for: engine)?.downloadedModels.map(\.id) ?? [])
+    }
+
+    private func downloadedModelManager(for engine: TranscriptionEnginePlugin) -> (any PluginDownloadedModelManaging)? {
+        (engine as? any PluginDownloadedModelManaging)
+            ?? (PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.instance
+                as? any PluginDownloadedModelManaging)
     }
 
     func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {

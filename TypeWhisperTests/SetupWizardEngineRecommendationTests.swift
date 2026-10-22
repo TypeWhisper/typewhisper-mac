@@ -186,6 +186,20 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
         XCTAssertEqual(choice?.engine, .appleSpeech)
     }
 
+    func testIntelOnMacOS26RecommendsAppleSpeechForAMixOfLanguagesItSupports() {
+        // Like every local engine, Apple Speech transcribes the first language of a mix;
+        // the app loads its model for the requested language before each transcription.
+        let choice = recommend(
+            .specific(["de", "ja"]),
+            architecture: "x86_64",
+            macOS: 26,
+            engines: [.appleSpeech: appleSpeech(["en", "de", "ja"])]
+        )
+
+        XCTAssertEqual(choice?.engine, .appleSpeech)
+        XCTAssertEqual(choice?.reason, .supportsLanguages(["de", "ja"]))
+    }
+
     // MARK: - Plugins, catalog and network
 
     func testUnavailablePluginFallsBackToTheNextCompatibleEngine() {
@@ -285,6 +299,112 @@ final class SetupWizardEngineRecommendationTests: XCTestCase {
 
         XCTAssertEqual(choice?.engine, .parakeet)
         XCTAssertEqual(choice?.availability, .available)
+    }
+
+    func testOfflineActivatesAnInstalledEngineWhoseModelIsDownloaded() {
+        let choice = recommend(
+            .specific(["ja"]),
+            engines: [.whisperKit: SetupWizardEngineState(
+                isInstalled: true,
+                downloadedModelIds: ["openai_whisper-large-v3_turbo"]
+            )],
+            isOffline: true
+        )
+
+        XCTAssertEqual(choice?.engine, .whisperKit)
+        XCTAssertEqual(choice?.modelIsDownloaded, true)
+        XCTAssertEqual(choice?.availability, .available)
+    }
+
+    func testOfflineInstalledEngineNeedsAConnectionForAModelThatIsNotDownloaded() {
+        let choice = recommend(
+            .specific(["ja"]),
+            engines: [.whisperKit: SetupWizardEngineState(
+                isInstalled: true,
+                downloadedModelIds: ["openai_whisper-small"]
+            )],
+            isOffline: true
+        )
+
+        XCTAssertEqual(choice?.engine, .whisperKit)
+        XCTAssertEqual(choice?.modelIsDownloaded, false)
+        XCTAssertEqual(choice?.availability, .needsConnection)
+    }
+
+    func testOfflinePrefersAnInstalledEngineWhoseModelIsDownloaded() {
+        // Parakeet does not report its downloaded models, so its model counts as a download.
+        let choice = recommend(
+            .specific(["de"]),
+            engines: [
+                .parakeet: SetupWizardEngineState(isInstalled: true),
+                .whisperKit: SetupWizardEngineState(
+                    isInstalled: true,
+                    downloadedModelIds: ["openai_whisper-large-v3_turbo"]
+                ),
+            ],
+            isOffline: true
+        )
+
+        XCTAssertEqual(choice?.engine, .whisperKit)
+        XCTAssertEqual(choice?.availability, .available)
+    }
+
+    func testOfflineDownloadIsJudgedByTheModelTheActivationLoads() {
+        // Activation keeps the model selected in the engine when it supports the language.
+        let selectedModelOnDisk = recommend(
+            .specific(["ja"]),
+            engines: [.whisperKit: SetupWizardEngineState(
+                isInstalled: true,
+                selectedModelId: "openai_whisper-small",
+                downloadedModelIds: ["openai_whisper-small"]
+            )],
+            isOffline: true
+        )
+        let otherModelOnDisk = recommend(
+            .specific(["ja"]),
+            engines: [.whisperKit: SetupWizardEngineState(
+                isInstalled: true,
+                selectedModelId: "openai_whisper-small",
+                downloadedModelIds: ["openai_whisper-large-v3_turbo"]
+            )],
+            isOffline: true
+        )
+
+        XCTAssertEqual(selectedModelOnDisk?.availability, .available)
+        XCTAssertEqual(otherModelOnDisk?.availability, .needsConnection)
+    }
+
+    func testActivationKeepsTheSelectedModelOnlyWhenItSupportsTheLanguages() {
+        typealias Recommendation = SetupWizardEngineRecommendation
+
+        XCTAssertEqual(
+            Recommendation.activationModelId(
+                selectedModelId: "parakeet-tdt-0.6b-v3",
+                reportedLanguages: ["de", "en"],
+                recommendedModelId: "parakeet-ultra",
+                spokenLanguages: .specific(["de"])
+            ),
+            "parakeet-tdt-0.6b-v3"
+        )
+        // Parakeet v2 transcribes English only.
+        XCTAssertEqual(
+            Recommendation.activationModelId(
+                selectedModelId: "parakeet-tdt-0.6b-v2",
+                reportedLanguages: ["en"],
+                recommendedModelId: "parakeet-ultra",
+                spokenLanguages: .specific(["de"])
+            ),
+            "parakeet-ultra"
+        )
+        XCTAssertEqual(
+            Recommendation.activationModelId(
+                selectedModelId: nil,
+                reportedLanguages: [],
+                recommendedModelId: "parakeet-ultra",
+                spokenLanguages: .specific(["de"])
+            ),
+            "parakeet-ultra"
+        )
     }
 
     func testInstalledPluginWithoutTheRecommendedModelGetsAModelItOffers() {

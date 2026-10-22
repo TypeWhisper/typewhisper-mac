@@ -290,7 +290,8 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
     }
 
     func testOfflineShowsThatADownloadIsNeeded() {
-        for isInstalled in [false, true] {
+        // Without the plugin, or with the plugin but without the model it would load.
+        for (isInstalled, modelIsDownloaded) in [(false, false), (true, false), (false, true)] {
             let state = SetupWizardRecommendationAvailability.resolve(
                 manifestId: "com.typewhisper.whisperkit",
                 isInstalled: isInstalled,
@@ -298,11 +299,48 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
                 registryPlugin: makeRegistryPlugin(id: "com.typewhisper.whisperkit"),
                 installState: nil,
                 fetchState: .loaded,
+                modelIsDownloaded: modelIsDownloaded,
                 isOffline: true,
                 architecture: "arm64"
             )
 
-            XCTAssertEqual(state, .unavailable(.offline), "installed: \(isInstalled)")
+            XCTAssertEqual(state, .unavailable(.offline), "installed: \(isInstalled), downloaded: \(modelIsDownloaded)")
+            XCTAssertFalse(state.allowsActivation, "installed: \(isInstalled), downloaded: \(modelIsDownloaded)")
+        }
+    }
+
+    func testOfflineActivatesAnInstalledEngineWhoseModelIsDownloaded() {
+        let state = SetupWizardRecommendationAvailability.resolve(
+            manifestId: "com.typewhisper.whisperkit",
+            isInstalled: true,
+            isReady: false,
+            registryPlugin: nil,
+            installState: nil,
+            fetchState: .error("offline"),
+            modelIsDownloaded: true,
+            isOffline: true,
+            architecture: "arm64"
+        )
+
+        XCTAssertEqual(state, .setupRequired)
+        XCTAssertTrue(state.allowsActivation)
+    }
+
+    func testCardCanBePressedOnlyToSelectActivateOrInstall() {
+        let pressable: [SetupWizardRecommendationAvailability] = [.ready, .setupRequired, .installAvailable]
+        let notPressable: [SetupWizardRecommendationAvailability] = [
+            .installState(.downloading(0.42)),
+            .installState(.restartRequired),
+            .loading,
+            .unavailable(.offline),
+            .unavailable(.marketplaceUnavailable),
+        ]
+
+        for availability in pressable {
+            XCTAssertTrue(availability.allowsActivation, "\(availability)")
+        }
+        for availability in notPressable {
+            XCTAssertFalse(availability.allowsActivation, "\(availability)")
         }
     }
 
