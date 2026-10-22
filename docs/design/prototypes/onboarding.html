@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="zh-Hans" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>上手引导 · dictum 原型</title>
+<style>
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #c9d6f2 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #e8d5e6 0%, transparent 60%), linear-gradient(160deg,#dfe4ee,#eceaf0);
+  --bg-window: #ffffff;
+  --bg-sidebar: rgba(236,236,240,0.78);
+  --bg-content: #ffffff;
+  --bg-card: #f6f6f8;
+  --bg-raised: #ffffff;
+  --bg-hover: rgba(0,0,0,0.045);
+  --bg-selected: rgba(0,0,0,0.075);
+  --bg-control: #ffffff;
+  --bg-field: #ffffff;
+  --bg-inset: #f1f1f4;
+  --separator: rgba(0,0,0,0.085);
+  --separator-strong: rgba(0,0,0,0.14);
+  --text-1: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #a1a1a6;
+  --text-on-accent: #ffffff;
+  --accent: #3b5bdb;
+  --accent-hover: #3451c7;
+  --accent-soft: rgba(59,91,219,0.10);
+  --accent-text: #3451c7;
+  --live: #f2423a;
+  --translate: #8e4fe8;
+  --translate-soft: rgba(142,79,232,0.12);
+  --success: #23a55a;
+  --success-soft: rgba(35,165,90,0.12);
+  --warning: #d98a00;
+  --warning-soft: rgba(217,138,0,0.13);
+  --danger: #e0434b;
+  --danger-soft: rgba(224,67,75,0.10);
+  --heat-0: #ececf0; --heat-1: #cdd6f6; --heat-2: #9aaeee; --heat-3: #6a86e3; --heat-4: #3b5bdb;
+  --shadow-window: 0 0 0 0.5px rgba(0,0,0,0.22), 0 24px 70px rgba(20,24,40,0.28), 0 6px 18px rgba(20,24,40,0.10);
+  --shadow-popover: 0 0 0 0.5px rgba(0,0,0,0.16), 0 12px 32px rgba(0,0,0,0.16), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-control: 0 0 0 0.5px rgba(0,0,0,0.16), 0 1px 1.5px rgba(0,0,0,0.08);
+  --shadow-card: none;
+  --r-control: 6px; --r-row: 8px; --r-card: 12px; --r-window: 12px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  color-scheme: light;
+}
+[data-theme="dark"]{
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #1f2a4a 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #3a2240 0%, transparent 60%), linear-gradient(160deg,#111318,#17151c);
+  --bg-window: #1e1e20;
+  --bg-sidebar: rgba(38,38,42,0.80);
+  --bg-content: #1e1e20;
+  --bg-card: #262629;
+  --bg-raised: #2c2c2f;
+  --bg-hover: rgba(255,255,255,0.05);
+  --bg-selected: rgba(255,255,255,0.09);
+  --bg-control: #3a3a3d;
+  --bg-field: #29292c;
+  --bg-inset: #18181a;
+  --separator: rgba(255,255,255,0.08);
+  --separator-strong: rgba(255,255,255,0.14);
+  --text-1: #f2f2f4;
+  --text-2: #a1a1a8;
+  --text-3: #6c6c72;
+  --accent: #6e8bff;
+  --accent-hover: #829bff;
+  --accent-soft: rgba(110,139,255,0.16);
+  --accent-text: #8ea4ff;
+  --live: #ff5a50;
+  --translate: #b383ff;
+  --translate-soft: rgba(179,131,255,0.16);
+  --success: #3ccf72;
+  --success-soft: rgba(60,207,114,0.14);
+  --warning: #ffb340;
+  --warning-soft: rgba(255,179,64,0.14);
+  --danger: #ff6369;
+  --danger-soft: rgba(255,99,105,0.14);
+  --heat-0: #2c2c30; --heat-1: #283463; --heat-2: #34479a; --heat-3: #4e67d1; --heat-4: #7b94ff;
+  --shadow-window: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.6), 0 24px 70px rgba(0,0,0,0.55);
+  --shadow-popover: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.5), 0 14px 36px rgba(0,0,0,0.5);
+  --shadow-control: 0 0 0 0.5px rgba(255,255,255,0.10), 0 1px 1.5px rgba(0,0,0,0.3);
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{min-height:100%}
+html{background:var(--bg-desktop);background-color:var(--bg-window)}
+body{font-family:var(--font);font-size:13px;line-height:1.45;color:var(--text-1);-webkit-font-smoothing:antialiased;min-height:100vh;transition:color .2s var(--ease-out)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:default}
+input,textarea,select{font:inherit;color:inherit}
+svg{display:block;flex-shrink:0}
+.num{font-family:var(--font-rounded);font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono);font-size:12px}
+
+/* prototype chrome (outside the app) */
+.proto-bar{position:fixed;top:14px;right:16px;z-index:100;display:flex;align-items:center;gap:6px;padding:5px;border-radius:999px;background:rgba(255,255,255,0.72);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.08);font-size:12px}
+[data-theme="dark"] .proto-bar{background:rgba(40,40,44,0.72);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 4px 16px rgba(0,0,0,.4)}
+.proto-bar a,.proto-bar button{color:var(--text-2);text-decoration:none;padding:4px 10px;border-radius:999px}
+.proto-bar a:hover,.proto-bar button:hover{background:var(--bg-hover);color:var(--text-1)}
+.proto-bar .on{background:var(--bg-selected);color:var(--text-1)}
+.proto-bar .sep{width:1px;height:14px;background:var(--separator-strong)}
+.stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:64px 32px 40px}
+
+/* window */
+.window{width:1040px;height:680px;border-radius:var(--r-window);background:var(--bg-window);box-shadow:var(--shadow-window);display:flex;overflow:hidden;position:relative}
+.traffic{position:absolute;top:19px;left:20px;display:flex;gap:8px;z-index:5}
+.traffic i{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+.traffic i:nth-child(1){background:#ff5f57}.traffic i:nth-child(2){background:#febc2e}.traffic i:nth-child(3){background:#28c840}
+.sidebar{width:212px;flex-shrink:0;background:var(--bg-sidebar);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-right:.5px solid var(--separator);display:flex;flex-direction:column;padding:52px 10px 12px}
+.sb-group{display:flex;flex-direction:column;gap:1px}
+.sb-label{font-size:11px;font-weight:600;color:var(--text-3);padding:14px 10px 5px}
+.sb-item{display:flex;align-items:center;gap:9px;height:30px;padding:0 10px;border-radius:7px;color:var(--text-1);text-decoration:none;font-size:13px;transition:background .15s var(--ease-out)}
+.sb-item svg{color:var(--text-2)}
+.sb-item:hover{background:var(--bg-hover)}
+.sb-item.active{background:var(--bg-selected)}
+.sb-item.active svg{color:var(--accent)}
+.sb-item .count{margin-left:auto;font-size:11px;color:var(--text-3)}
+.sb-spacer{flex:1}
+.sb-status{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12px;color:var(--text-2)}
+.sb-status:hover{background:var(--bg-hover)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.dot.warn{background:var(--warning)}.dot.err{background:var(--danger)}.dot.idle{background:var(--text-3)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-content)}
+.toolbar{height:52px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 20px 0 28px}
+.toolbar h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.toolbar .grow{flex:1}
+.content{flex:1;overflow:auto;padding:4px 28px 28px}
+.content::-webkit-scrollbar{width:0}
+
+/* type */
+.t-title{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.t-h{font-size:13px;font-weight:600}
+.t-body{font-size:13px}
+.t-sub{font-size:12px;color:var(--text-2)}
+.t-cap{font-size:11px;color:var(--text-3)}
+.t-reading{font-size:15px;line-height:1.7}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 12px;border-radius:var(--r-control);background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap;transition:filter .15s,background .15s}
+.btn:hover{filter:brightness(.98)}
+.btn:active{filter:brightness(.94)}
+.btn.primary{background:var(--accent);color:var(--text-on-accent);box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 1px 2px rgba(59,91,219,.3)}
+.btn.primary:hover{background:var(--accent-hover);filter:none}
+.btn.danger{color:var(--danger)}
+.btn.plain{background:none;box-shadow:none;color:var(--text-2);padding:0 8px}
+.btn.plain:hover{background:var(--bg-hover);color:var(--text-1)}
+.btn.icon{width:28px;padding:0}
+.btn.sm{height:24px;padding:0 9px;font-size:12px;border-radius:5px}
+.btn.lg{height:36px;padding:0 18px;font-size:14px;border-radius:8px;font-weight:500}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.link{color:var(--accent-text);text-decoration:none;cursor:pointer}
+.link:hover{text-decoration:underline}
+
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--bg-inset);box-shadow:inset 0 0 0 .5px var(--separator)}
+.seg button{height:22px;padding:0 11px;border-radius:5px;font-size:12px;color:var(--text-2);transition:color .15s}
+.seg button.on{background:var(--bg-raised);color:var(--text-1);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.08)}
+[data-theme="dark"] .seg button.on{background:#4a4a4e;box-shadow:none}
+.seg.lg button{height:26px;padding:0 14px;font-size:13px}
+
+.switch{position:relative;width:32px;height:19px;border-radius:999px;background:var(--separator-strong);transition:background .2s var(--ease-out);flex-shrink:0;cursor:default}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.06);transition:transform .22s var(--ease-spring)}
+.switch.on{background:var(--accent)}
+.switch.on::after{transform:translateX(13px)}
+[data-theme="dark"] .switch{background:rgba(255,255,255,.16)}
+[data-theme="dark"] .switch.on{background:var(--accent)}
+
+.field{height:28px;border-radius:var(--r-control);background:var(--bg-field);box-shadow:inset 0 0 0 .5px var(--separator-strong);padding:0 9px;outline:none;border:0;font-size:13px;width:100%}
+.field:focus{box-shadow:inset 0 0 0 .5px var(--accent),0 0 0 3px var(--accent-soft)}
+.field::placeholder{color:var(--text-3)}
+.search{position:relative;width:200px}
+.search svg{position:absolute;left:8px;top:7px;color:var(--text-3)}
+.search .field{padding-left:27px;background:var(--bg-inset);box-shadow:none;height:28px}
+.search .field:focus{box-shadow:0 0 0 3px var(--accent-soft),inset 0 0 0 .5px var(--accent);background:var(--bg-field)}
+
+.popup{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap}
+.popup::after{content:"";width:14px;height:14px;background:currentColor;opacity:.55;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat}
+
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:5px;background:var(--bg-raised);box-shadow:0 0 0 .5px var(--separator-strong),0 1.5px 0 var(--separator-strong);font-size:12px;font-weight:500;color:var(--text-1);font-family:var(--font)}
+.kbd.lg{min-width:44px;height:40px;font-size:15px;border-radius:8px;padding:0 12px}
+.kbd-row{display:inline-flex;align-items:center;gap:4px}
+
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;font-size:11px;font-weight:500;background:var(--bg-selected);color:var(--text-2);white-space:nowrap}
+.badge.accent{background:var(--accent-soft);color:var(--accent-text)}
+.badge.translate{background:var(--translate-soft);color:var(--translate)}
+.badge.success{background:var(--success-soft);color:var(--success)}
+.badge.warning{background:var(--warning-soft);color:var(--warning)}
+.badge.danger{background:var(--danger-soft);color:var(--danger)}
+
+.card{background:var(--bg-card);border-radius:var(--r-card)}
+.hairline{height:.5px;background:var(--separator)}
+
+/* grouped form, like Form + .formStyle(.grouped) */
+.form{display:flex;flex-direction:column;gap:22px;max-width:640px;margin:0 auto}
+.form-section h3{font-size:13px;font-weight:600;padding:0 4px 8px}
+.form-box{background:var(--bg-card);border-radius:10px;box-shadow:inset 0 0 0 .5px var(--separator)}
+.form-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 14px;position:relative}
+.form-row + .form-row::before{content:"";position:absolute;top:0;left:14px;right:14px;height:.5px;background:var(--separator)}
+.form-row .label{flex:1;min-width:0}
+.form-row .label .t-sub{margin-top:1px}
+.form-foot{font-size:12px;color:var(--text-2);padding:7px 4px 0}
+
+/* app icons (monogram tiles standing in for real NSWorkspace icons) */
+.appicon{width:20px;height:20px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.appicon.lg{width:28px;height:28px;border-radius:7px;font-size:13px}
+.ai-wechat{background:linear-gradient(#3fd36a,#1aad3f)}
+.ai-mail{background:linear-gradient(#5ab8ff,#1a7cf5)}
+.ai-slack{background:linear-gradient(#5b2a63,#3f0e40)}
+.ai-notion{background:linear-gradient(#fff,#ececec);color:#111}
+.ai-lark{background:linear-gradient(#4fa3ff,#2468f2)}
+.ai-chrome{background:conic-gradient(#ea4335 0 33%,#fbbc05 0 66%,#34a853 0)}
+.ai-notes{background:linear-gradient(#ffe27a,#f7c500);color:#6b5200}
+.ai-cursor{background:linear-gradient(#2b2b2b,#0a0a0a)}
+.ai-messages{background:linear-gradient(#6cf27d,#21c933)}
+.ai-xcode{background:linear-gradient(#5fb2ff,#1f6fe0)}
+.ai-dingtalk{background:linear-gradient(#3d8bff,#1867f2)}
+.ai-outlook{background:linear-gradient(#2b8cf0,#0a5bc4)}
+.ai-telegram{background:linear-gradient(#45b8f2,#1e96d8)}
+.ai-word{background:linear-gradient(#3f7fe0,#1b56b8)}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;color:var(--text-2);padding:40px}
+.empty .glyph{width:52px;height:52px;border-radius:14px;background:var(--bg-card);display:flex;align-items:center;justify-content:center;color:var(--text-3);margin-bottom:4px}
+.empty h4{font-size:15px;font-weight:600;color:var(--text-1)}
+
+.banner{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12.5px}
+.banner.warning{background:var(--warning-soft);color:var(--text-1)}
+.banner.warning svg{color:var(--warning)}
+.banner.danger{background:var(--danger-soft)}
+.banner.danger svg{color:var(--danger)}
+.banner.info{background:var(--accent-soft)}
+.banner.info svg{color:var(--accent)}
+.banner .grow{flex:1}
+
+.menu{position:absolute;z-index:40;min-width:200px;padding:5px;border-radius:10px;background:rgba(246,246,248,.86);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8);box-shadow:var(--shadow-popover);font-size:13px}
+[data-theme="dark"] .menu{background:rgba(44,44,48,.86)}
+.menu .mi{display:flex;align-items:center;gap:8px;height:24px;padding:0 9px;border-radius:5px;white-space:nowrap}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi:hover .t-cap,.menu .mi:hover .sc{color:rgba(255,255,255,.8)}
+.menu .mi .sc{margin-left:auto;color:var(--text-3);padding-left:20px}
+.menu .ms{height:.5px;background:var(--separator-strong);margin:5px 9px}
+.menu .mh{font-size:11px;font-weight:600;color:var(--text-3);padding:4px 9px 2px}
+.check{width:12px;display:inline-flex;justify-content:center}
+
+.fade-in{animation:fadeIn .24s var(--ease-out) both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<script>
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem('dictum-theme');
+  const q = new URLSearchParams(location.search).get('theme');
+  root.dataset.theme = q || saved || 'light';
+  function sync(){
+    document.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === root.dataset.theme));
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-theme-set]');
+    if (t){ root.dataset.theme = t.dataset.themeSet; localStorage.setItem('dictum-theme', t.dataset.themeSet); sync(); }
+    const s = e.target.closest('.seg button');
+    if (s && !s.hasAttribute('data-free')){ s.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === s)); }
+    const sw = e.target.closest('.switch');
+    if (sw && !sw.hasAttribute('data-free')) sw.classList.toggle('on');
+  });
+  document.addEventListener('DOMContentLoaded', sync);
+  sync();
+})();
+function $(s, r){ return (r||document).querySelector(s); }
+function $$(s, r){ return Array.from((r||document).querySelectorAll(s)); }
+function closeMenus(except){ $$('.menu[data-pop]').forEach(m => { if (m !== except) m.hidden = true; }); }
+document.addEventListener('click', e => {
+  const opener = e.target.closest('[data-menu]');
+  if (opener){
+    const m = document.getElementById(opener.dataset.menu);
+    const willOpen = m.hidden;
+    closeMenus(m);
+    m.hidden = !willOpen;
+    e.stopPropagation();
+    return;
+  }
+  if (!e.target.closest('.menu')) closeMenus();
+});
+</script>
+</head>
+<body>
+<style>
+.ob{width:640px;height:540px;border-radius:var(--r-window);background:var(--bg-window);box-shadow:var(--shadow-window);position:relative;overflow:hidden;display:flex;flex-direction:column}
+.ob .traffic{top:16px;left:16px}
+.ob .traffic i:nth-child(2),.ob .traffic i:nth-child(3){background:var(--separator-strong)}
+.steps{display:flex;justify-content:center;gap:6px;padding-top:22px;height:40px}
+.steps i{width:6px;height:6px;border-radius:3px;background:var(--separator-strong);transition:all .3s var(--ease-out)}
+.steps i.on{width:18px;background:var(--accent)}
+.steps i.done{background:var(--text-3)}
+.pane{flex:1;display:none;flex-direction:column;align-items:center;padding:20px 64px 0;text-align:center}
+.pane.on{display:flex;animation:paneIn .35s var(--ease-out) both}
+@keyframes paneIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+.pane h1{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:18px}
+.pane .lead{font-size:14px;color:var(--text-2);margin-top:8px;line-height:1.6;max-width:430px}
+.foot{height:72px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px}
+.foot .grow{flex:1}
+.hero{width:96px;height:96px;border-radius:24px;background:linear-gradient(160deg,#5b7cff,#3b5bdb 55%,#2a3fa8);display:flex;align-items:center;justify-content:center;color:#fff;box-shadow:0 12px 30px rgba(59,91,219,.35),inset 0 1px 0 rgba(255,255,255,.25);margin-top:34px}
+.keys{display:flex;gap:18px;margin-top:28px}
+.keys .k{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12px;color:var(--text-2)}
+.perm{width:100%;margin-top:26px;text-align:left}
+.perm .form-row{min-height:60px}
+.perm .ic{width:32px;height:32px;border-radius:8px;background:var(--bg-inset);display:flex;align-items:center;justify-content:center;color:var(--text-2)}
+.perm .ok{display:inline-flex;align-items:center;gap:5px;color:var(--success);font-size:12.5px}
+.perm .wait{display:inline-flex;align-items:center;gap:7px;color:var(--text-2);font-size:12.5px}
+.spin{width:12px;height:12px;border-radius:50%;border:1.6px solid var(--separator-strong);border-top-color:var(--accent);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.big-meter{display:flex;align-items:center;gap:4px;height:90px;margin-top:40px}
+.big-meter i{width:7px;border-radius:4px;background:var(--accent);height:6px;transition:height .08s linear;opacity:.9}
+.heard{margin-top:22px;height:22px;font-size:13px;color:var(--text-2);display:flex;align-items:center;gap:6px}
+.heard.ok{color:var(--success)}
+.dl{width:100%;margin-top:30px;text-align:left;padding:16px 18px;border-radius:var(--r-card);background:var(--bg-card)}
+.dl .top{display:flex;align-items:center;gap:12px}
+.dl .trk{height:6px;border-radius:3px;background:var(--separator-strong);overflow:hidden;margin-top:14px}
+.dl .trk i{display:block;height:100%;background:var(--accent);border-radius:3px;transition:width .2s linear}
+.dl .t-cap{margin-top:7px;display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.practice{width:100%;margin-top:22px;text-align:left}
+.say{padding:12px 14px;border-radius:10px;background:var(--accent-soft);font-size:13.5px;line-height:1.65}
+.say.tr{background:var(--translate-soft)}
+.say small{display:block;font-size:11px;font-weight:600;color:var(--text-3);margin-bottom:3px}
+.pad{margin-top:12px;min-height:118px;border-radius:10px;padding:12px 14px;box-shadow:inset 0 0 0 .5px var(--separator-strong);background:var(--bg-field);font-size:13.5px;line-height:1.7;white-space:pre-line}
+.pad .ph{color:var(--text-3)}
+.caret{display:inline-block;width:1.5px;height:16px;background:var(--accent);vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.mini-vb{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;height:40px;padding:0 14px;border-radius:20px;background:rgba(24,24,27,.86);color:#fff;font-size:13px;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14),0 10px 30px rgba(0,0,0,.3);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);animation:vbIn .3s var(--ease-spring) both;white-space:nowrap}
+@keyframes vbIn{from{opacity:0;transform:translateX(-50%) translateY(8px) scale(.92)}}
+.mini-vb .rd{width:8px;height:8px;border-radius:50%;background:var(--live)}
+.mini-vb .wv{display:flex;align-items:center;gap:2px;height:20px}
+.mini-vb .wv i{width:2.5px;border-radius:2px;background:rgba(255,255,255,.88);height:3px;transition:height .07s linear}
+.mini-vb .chip{height:24px;padding:0 9px;border-radius:12px;background:rgba(179,131,255,.26);color:#e6d6ff;font-size:12px;display:flex;align-items:center}
+.mini-vb .ok{width:18px;height:18px;border-radius:50%;background:#30d158;color:#06260f;display:flex;align-items:center;justify-content:center}
+.nice{margin-top:10px;font-size:12.5px;color:var(--success);display:flex;align-items:center;gap:6px;justify-content:center;opacity:0;transition:opacity .3s}
+.nice.on{opacity:1}
+.cheat{display:grid;grid-template-columns:auto 1fr;gap:14px 18px;align-items:center;margin-top:30px;text-align:left}
+.cheat .kbd-row{justify-content:flex-end}
+.cheat span{font-size:14px}
+</style>
+
+<div class="proto-bar"><a href="index.html">全部原型</a><span class="sep"></span><button data-theme-set="light">浅色</button><button data-theme-set="dark">深色</button><span class="sep"></span><span id="jump"></span></div>
+
+<div class="stage">
+<div class="ob" id="ob">
+  <div class="traffic"><i></i><i></i><i></i></div>
+  <div class="steps" id="dots"></div>
+
+  <section class="pane" data-step="0">
+    <div class="hero"><svg width="48" height="48" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M2 7v2M4.6 5v6M7.2 2.5v11M9.8 4.5v7M12.4 6v4M14.6 7.2v1.6"/></svg></div>
+    <h1>说话，就能打字</h1>
+    <p class="lead">在任何输入框里按一下 fn，说完再按一下。dictum 会去掉口头禅、整理好段落，把文字放到光标处。</p>
+    <div class="keys"><div class="k"><span class="kbd lg">fn</span>听写</div><div class="k"><span class="kbd-row"><span class="kbd lg">fn</span><span class="kbd lg">左 ⇧</span></span>翻译</div><div class="k"><span class="kbd lg">esc</span>取消</div></div>
+  </section>
+
+  <section class="pane" data-step="1">
+    <h1>开启权限</h1>
+    <p class="lead">录音和文字只在你按下快捷键时处理。</p>
+    <div class="perm form-box">
+      <div class="form-row"><span class="ic"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 1.8c1.2 0 2.2 1 2.2 2.2v3.2c0 1.2-1 2.2-2.2 2.2s-2.2-1-2.2-2.2V4c0-1.2 1-2.2 2.2-2.2zM3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2.1"/></svg></span><div class="label"><div>麦克风</div><div class="t-sub">听你说话</div></div><span id="pMic"><button class="btn sm primary" data-perm="mic">允许</button></span></div>
+      <div class="form-row"><span class="ic"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M5.6 8.4V3.6a1 1 0 0 1 2 0v4M7.6 7.4V2.8a1 1 0 0 1 2 0v4.6M9.6 7.4V3.6a1 1 0 0 1 2 0v5.2c0 2.8-1.8 4.9-4.3 4.9-1.6 0-2.6-.7-3.6-2.2L2.4 9.4a1 1 0 0 1 1.6-1.2l1.6 1.6"/></svg></span><div class="label"><div>辅助功能</div><div class="t-sub">把文字输入到其他应用，并识别 fn 键</div></div><span id="pAx"><button class="btn sm" data-perm="ax">打开系统设置</button></span></div>
+      <div class="form-row"><span class="ic"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.2 4.2h11.6c.3 0 .6.3.6.6v6.4c0 .3-.3.6-.6.6H2.2c-.3 0-.6-.3-.6-.6V4.8c0-.3.3-.6.6-.6zM4.4 6.6h.01M6.8 6.6h.01M9.2 6.6h.01M11.6 6.6h.01M5.4 9.4h5.2"/></svg></span><div class="label"><div>fn 键</div><div class="t-sub" id="fnSub">系统把 fn 设成了“显示表情与符号”，需要改为“不执行任何操作”</div></div><span id="pFn"><button class="btn sm" data-perm="fn">打开键盘设置</button></span></div>
+    </div>
+  </section>
+
+  <section class="pane" data-step="2">
+    <h1>说句话试试</h1>
+    <p class="lead">比如：“今天天气不错。”</p>
+    <div class="big-meter" id="bigMeter"></div>
+    <div class="heard" id="heard">等待声音…</div>
+    <div style="margin-top:18px"><div class="popup">MacBook Pro 麦克风</div></div>
+  </section>
+
+  <section class="pane" data-step="3">
+    <h1>准备语音模型</h1>
+    <p class="lead">Qwen3-ASR 在这台 Mac 上识别中英文，不需要联网。</p>
+    <div class="dl"><div class="top"><span class="pt" style="width:32px;height:32px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2 7v2M4.6 5v6M7.2 2.5v11M9.8 4.5v7M12.4 6v4M14.6 7.2v1.6"/></svg></span><div style="flex:1"><div style="font-weight:500">Qwen3-ASR 1.7B</div><div class="t-sub" id="dlState">下载中</div></div></div>
+      <div class="trk"><i id="dlBar" style="width:0"></i></div><div class="t-cap"><span id="dlPct">0%</span><span id="dlEta">约 2 分钟</span></div></div>
+    <a class="link" style="margin-top:16px;font-size:12.5px" href="settings-models.html">改用云端识别</a>
+  </section>
+
+  <section class="pane" data-step="4">
+    <h1>练习听写</h1>
+    <p class="lead">按一下 fn，读出下面这段话，再按一下 fn。</p>
+    <div class="practice">
+      <div class="say"><small>照着读，口头禅和改口也读出来</small>嗯，我们周五，呃不对，周四下午开个会吧，讨论三件事，预算、招聘，还有下个季度的计划。</div>
+      <div class="pad" id="pad1"><span class="ph">文字会出现在这里</span><span class="caret"></span></div>
+      <div class="nice" id="nice1"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>口头禅和改口都处理好了</div>
+    </div>
+  </section>
+
+  <section class="pane" data-step="5">
+    <h1>练习翻译</h1>
+    <p class="lead">按 fn + 左 ⇧，用中文说下面这句话，再按一下 fn。</p>
+    <div class="practice">
+      <div class="say tr"><small>中文 → English</small>今晚我请大家吃饭，七点在公司楼下集合。</div>
+      <div class="pad" id="pad2"><span class="ph">译文会出现在这里</span><span class="caret"></span></div>
+      <div class="nice" id="nice2"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>在语音条上点语言，可以换成其他目标语言</div>
+    </div>
+  </section>
+
+  <section class="pane" data-step="6">
+    <div class="hero" style="background:linear-gradient(160deg,#3ccf72,#23a55a);box-shadow:0 12px 30px rgba(35,165,90,.3)"><svg width="44" height="44" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></div>
+    <h1>准备好了</h1>
+    <div class="cheat">
+      <span class="kbd-row"><span class="kbd">fn</span></span><span>听写，再按一下结束</span>
+      <span class="kbd-row"><span class="kbd">fn</span><span class="kbd">左 ⇧</span></span><span>翻译</span>
+      <span class="kbd-row"><span class="kbd">esc</span></span><span>取消，可以在历史里找回</span>
+    </div>
+  </section>
+
+  <div class="foot"><button class="btn plain" id="back">返回</button><span class="grow"></span><button class="btn plain" id="skip">稍后设置</button><button class="btn primary lg" id="next">开始</button></div>
+</div>
+</div>
+
+<script>
+const N = 7, NAMES = ['欢迎','权限','麦克风','模型','听写','翻译','完成'];
+let step = 0, perms = {mic:false, ax:false, fn:false}, heardOk = false, dl = 0, did = {4:false, 5:false};
+$('#dots').innerHTML = '<i></i>'.repeat(N);
+$('#jump').innerHTML = NAMES.map((n, i) => `<button data-jump="${i}">${n}</button>`).join('');
+function canNext(){
+  if (step === 1) return perms.mic && perms.ax && perms.fn;
+  if (step === 2) return heardOk;
+  if (step === 3) return dl >= 100;
+  if (step === 4 || step === 5) return did[step];
+  return true;
+}
+function render(){
+  $$('.pane').forEach(p => p.classList.toggle('on', +p.dataset.step === step));
+  $$('#dots i').forEach((d, i) => d.className = i === step ? 'on' : i < step ? 'done' : '');
+  $$('[data-jump]').forEach(b => b.classList.toggle('on', +b.dataset.jump === step));
+  $('#back').style.visibility = step === 0 || step === N-1 ? 'hidden' : 'visible';
+  $('#skip').style.display = step === 4 || step === 5 ? '' : 'none';
+  $('#skip').textContent = '跳过';
+  $('#next').textContent = step === 0 ? '开始' : step === N-1 ? '开始使用' : '继续';
+  $('#next').disabled = !canNext();
+}
+$('#next').onclick = () => { if (step < N-1){ step++; render(); } };
+$('#back').onclick = () => { if (step > 0){ step--; render(); } };
+$('#skip').onclick = () => { step++; render(); };
+document.addEventListener('click', e => {
+  const j = e.target.closest('[data-jump]'); if (j){ step = +j.dataset.jump; render(); return; }
+  const p = e.target.closest('[data-perm]'); if (!p) return;
+  const k = p.dataset.perm, slot = p.parentElement;
+  const ok = '<span class="ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>已开启</span>';
+  if (k === 'mic'){ perms.mic = true; slot.innerHTML = ok; }
+  else { slot.innerHTML = '<span class="wait"><span class="spin"></span>等待开启</span>'; setTimeout(() => { perms[k] = true; slot.innerHTML = ok; if (k === 'fn') $('#fnSub').textContent = '按下 fn 时不再触发系统功能'; render(); }, 1500); }
+  render();
+});
+/* mic meter */
+$('#bigMeter').innerHTML = '<i></i>'.repeat(32);
+let t = 0;
+setInterval(() => {
+  if (step !== 2) return;
+  t += .09;
+  const talking = t > 1.2;
+  $$('#bigMeter i').forEach((b, i) => { const env = Math.exp(-Math.pow((i - 15.5) / 9, 2)); const lv = talking ? Math.max(0, Math.sin(t*8 + i*.5)) * .7 + Math.random()*.3 : Math.random()*.06; b.style.height = (6 + lv * env * 80).toFixed(1) + 'px'; });
+  if (talking && !heardOk && t > 2.6){ heardOk = true; $('#heard').className = 'heard ok'; $('#heard').innerHTML = '<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>听得很清楚'; render(); }
+}, 80);
+/* model download runs from the welcome step on */
+setInterval(() => {
+  if (dl >= 100) return;
+  dl = Math.min(100, dl + (step >= 3 ? 2.5 : .6));
+  $('#dlBar').style.width = dl + '%';
+  $('#dlPct').textContent = Math.floor(dl) + '% · ' + (3.4 * dl / 100).toFixed(1) + ' / 3.4 GB';
+  $('#dlEta').textContent = dl >= 100 ? '' : '约 ' + Math.max(1, Math.ceil((100 - dl) / 40)) + ' 分钟';
+  if (dl >= 100){ $('#dlState').innerHTML = '<span style="color:var(--success)">已就绪</span>'; }
+  if (step === 3) render();
+}, 120);
+/* practice */
+const OUT = {
+  4: '我们周四下午开个会，讨论三件事：\n1. 预算\n2. 招聘\n3. 下个季度的计划',
+  5: 'I\'m treating everyone to dinner tonight. Let\'s meet downstairs at 7.'
+};
+let vb = null;
+function wave(){ return '<span class="wv">' + '<i></i>'.repeat(16) + '</span>'; }
+function startPractice(mode){
+  if (vb) return;
+  const box = document.createElement('div'); box.className = 'mini-vb';
+  box.innerHTML = (mode === 5 ? '<span class="chip">中文 → English</span>' : '<span class="rd"></span>') + wave() + '<span style="opacity:.6">esc 取消 · fn 结束</span>';
+  $('#ob').appendChild(box); vb = box;
+  vb._i = setInterval(() => $$('.wv i', box).forEach(b => b.style.height = (3 + Math.random() * 16).toFixed(1) + 'px'), 70);
+}
+function stopPractice(){
+  if (!vb) return;
+  clearInterval(vb._i);
+  vb.innerHTML = '<span class="ok"><svg width="11" height="11" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></span>已插入';
+  const pad = $('#pad' + (step - 3)); pad.innerHTML = OUT[step] + '<span class="caret"></span>';
+  did[step] = true; $('#nice' + (step - 3)).classList.add('on'); render();
+  const v = vb; vb = null; setTimeout(() => v.remove(), 1100);
+}
+document.addEventListener('keydown', e => {
+  if (step !== 4 && step !== 5) return;
+  if (e.key === 'Escape' && vb){ clearInterval(vb._i); vb.remove(); vb = null; return; }
+  if (e.key.toLowerCase() === 'f'){ vb ? stopPractice() : startPractice(step); }
+});
+$$('.pad').forEach(p => p.addEventListener('click', () => vb ? stopPractice() : startPractice(step)));
+render();
+</script>
+</body>
+</html>

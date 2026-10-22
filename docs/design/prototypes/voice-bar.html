@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-Hans" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>语音条 · dictum 原型</title>
+<style>
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #c9d6f2 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #e8d5e6 0%, transparent 60%), linear-gradient(160deg,#dfe4ee,#eceaf0);
+  --bg-window: #ffffff;
+  --bg-sidebar: rgba(236,236,240,0.78);
+  --bg-content: #ffffff;
+  --bg-card: #f6f6f8;
+  --bg-raised: #ffffff;
+  --bg-hover: rgba(0,0,0,0.045);
+  --bg-selected: rgba(0,0,0,0.075);
+  --bg-control: #ffffff;
+  --bg-field: #ffffff;
+  --bg-inset: #f1f1f4;
+  --separator: rgba(0,0,0,0.085);
+  --separator-strong: rgba(0,0,0,0.14);
+  --text-1: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #a1a1a6;
+  --text-on-accent: #ffffff;
+  --accent: #3b5bdb;
+  --accent-hover: #3451c7;
+  --accent-soft: rgba(59,91,219,0.10);
+  --accent-text: #3451c7;
+  --live: #f2423a;
+  --translate: #8e4fe8;
+  --translate-soft: rgba(142,79,232,0.12);
+  --success: #23a55a;
+  --success-soft: rgba(35,165,90,0.12);
+  --warning: #d98a00;
+  --warning-soft: rgba(217,138,0,0.13);
+  --danger: #e0434b;
+  --danger-soft: rgba(224,67,75,0.10);
+  --heat-0: #ececf0; --heat-1: #cdd6f6; --heat-2: #9aaeee; --heat-3: #6a86e3; --heat-4: #3b5bdb;
+  --shadow-window: 0 0 0 0.5px rgba(0,0,0,0.22), 0 24px 70px rgba(20,24,40,0.28), 0 6px 18px rgba(20,24,40,0.10);
+  --shadow-popover: 0 0 0 0.5px rgba(0,0,0,0.16), 0 12px 32px rgba(0,0,0,0.16), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-control: 0 0 0 0.5px rgba(0,0,0,0.16), 0 1px 1.5px rgba(0,0,0,0.08);
+  --shadow-card: none;
+  --r-control: 6px; --r-row: 8px; --r-card: 12px; --r-window: 12px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  color-scheme: light;
+}
+[data-theme="dark"]{
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #1f2a4a 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #3a2240 0%, transparent 60%), linear-gradient(160deg,#111318,#17151c);
+  --bg-window: #1e1e20;
+  --bg-sidebar: rgba(38,38,42,0.80);
+  --bg-content: #1e1e20;
+  --bg-card: #262629;
+  --bg-raised: #2c2c2f;
+  --bg-hover: rgba(255,255,255,0.05);
+  --bg-selected: rgba(255,255,255,0.09);
+  --bg-control: #3a3a3d;
+  --bg-field: #29292c;
+  --bg-inset: #18181a;
+  --separator: rgba(255,255,255,0.08);
+  --separator-strong: rgba(255,255,255,0.14);
+  --text-1: #f2f2f4;
+  --text-2: #a1a1a8;
+  --text-3: #6c6c72;
+  --accent: #6e8bff;
+  --accent-hover: #829bff;
+  --accent-soft: rgba(110,139,255,0.16);
+  --accent-text: #8ea4ff;
+  --live: #ff5a50;
+  --translate: #b383ff;
+  --translate-soft: rgba(179,131,255,0.16);
+  --success: #3ccf72;
+  --success-soft: rgba(60,207,114,0.14);
+  --warning: #ffb340;
+  --warning-soft: rgba(255,179,64,0.14);
+  --danger: #ff6369;
+  --danger-soft: rgba(255,99,105,0.14);
+  --heat-0: #2c2c30; --heat-1: #283463; --heat-2: #34479a; --heat-3: #4e67d1; --heat-4: #7b94ff;
+  --shadow-window: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.6), 0 24px 70px rgba(0,0,0,0.55);
+  --shadow-popover: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.5), 0 14px 36px rgba(0,0,0,0.5);
+  --shadow-control: 0 0 0 0.5px rgba(255,255,255,0.10), 0 1px 1.5px rgba(0,0,0,0.3);
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{min-height:100%}
+html{background:var(--bg-desktop);background-color:var(--bg-window)}
+body{font-family:var(--font);font-size:13px;line-height:1.45;color:var(--text-1);-webkit-font-smoothing:antialiased;min-height:100vh;transition:color .2s var(--ease-out)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:default}
+input,textarea,select{font:inherit;color:inherit}
+svg{display:block;flex-shrink:0}
+.num{font-family:var(--font-rounded);font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono);font-size:12px}
+
+/* prototype chrome (outside the app) */
+.proto-bar{position:fixed;top:14px;right:16px;z-index:100;display:flex;align-items:center;gap:6px;padding:5px;border-radius:999px;background:rgba(255,255,255,0.72);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.08);font-size:12px}
+[data-theme="dark"] .proto-bar{background:rgba(40,40,44,0.72);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 4px 16px rgba(0,0,0,.4)}
+.proto-bar a,.proto-bar button{color:var(--text-2);text-decoration:none;padding:4px 10px;border-radius:999px}
+.proto-bar a:hover,.proto-bar button:hover{background:var(--bg-hover);color:var(--text-1)}
+.proto-bar .on{background:var(--bg-selected);color:var(--text-1)}
+.proto-bar .sep{width:1px;height:14px;background:var(--separator-strong)}
+.stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:64px 32px 40px}
+
+/* window */
+.window{width:1040px;height:680px;border-radius:var(--r-window);background:var(--bg-window);box-shadow:var(--shadow-window);display:flex;overflow:hidden;position:relative}
+.traffic{position:absolute;top:19px;left:20px;display:flex;gap:8px;z-index:5}
+.traffic i{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+.traffic i:nth-child(1){background:#ff5f57}.traffic i:nth-child(2){background:#febc2e}.traffic i:nth-child(3){background:#28c840}
+.sidebar{width:212px;flex-shrink:0;background:var(--bg-sidebar);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-right:.5px solid var(--separator);display:flex;flex-direction:column;padding:52px 10px 12px}
+.sb-group{display:flex;flex-direction:column;gap:1px}
+.sb-label{font-size:11px;font-weight:600;color:var(--text-3);padding:14px 10px 5px}
+.sb-item{display:flex;align-items:center;gap:9px;height:30px;padding:0 10px;border-radius:7px;color:var(--text-1);text-decoration:none;font-size:13px;transition:background .15s var(--ease-out)}
+.sb-item svg{color:var(--text-2)}
+.sb-item:hover{background:var(--bg-hover)}
+.sb-item.active{background:var(--bg-selected)}
+.sb-item.active svg{color:var(--accent)}
+.sb-item .count{margin-left:auto;font-size:11px;color:var(--text-3)}
+.sb-spacer{flex:1}
+.sb-status{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12px;color:var(--text-2)}
+.sb-status:hover{background:var(--bg-hover)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.dot.warn{background:var(--warning)}.dot.err{background:var(--danger)}.dot.idle{background:var(--text-3)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-content)}
+.toolbar{height:52px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 20px 0 28px}
+.toolbar h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.toolbar .grow{flex:1}
+.content{flex:1;overflow:auto;padding:4px 28px 28px}
+.content::-webkit-scrollbar{width:0}
+
+/* type */
+.t-title{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.t-h{font-size:13px;font-weight:600}
+.t-body{font-size:13px}
+.t-sub{font-size:12px;color:var(--text-2)}
+.t-cap{font-size:11px;color:var(--text-3)}
+.t-reading{font-size:15px;line-height:1.7}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 12px;border-radius:var(--r-control);background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap;transition:filter .15s,background .15s}
+.btn:hover{filter:brightness(.98)}
+.btn:active{filter:brightness(.94)}
+.btn.primary{background:var(--accent);color:var(--text-on-accent);box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 1px 2px rgba(59,91,219,.3)}
+.btn.primary:hover{background:var(--accent-hover);filter:none}
+.btn.danger{color:var(--danger)}
+.btn.plain{background:none;box-shadow:none;color:var(--text-2);padding:0 8px}
+.btn.plain:hover{background:var(--bg-hover);color:var(--text-1)}
+.btn.icon{width:28px;padding:0}
+.btn.sm{height:24px;padding:0 9px;font-size:12px;border-radius:5px}
+.btn.lg{height:36px;padding:0 18px;font-size:14px;border-radius:8px;font-weight:500}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.link{color:var(--accent-text);text-decoration:none;cursor:pointer}
+.link:hover{text-decoration:underline}
+
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--bg-inset);box-shadow:inset 0 0 0 .5px var(--separator)}
+.seg button{height:22px;padding:0 11px;border-radius:5px;font-size:12px;color:var(--text-2);transition:color .15s}
+.seg button.on{background:var(--bg-raised);color:var(--text-1);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.08)}
+[data-theme="dark"] .seg button.on{background:#4a4a4e;box-shadow:none}
+.seg.lg button{height:26px;padding:0 14px;font-size:13px}
+
+.switch{position:relative;width:32px;height:19px;border-radius:999px;background:var(--separator-strong);transition:background .2s var(--ease-out);flex-shrink:0;cursor:default}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.06);transition:transform .22s var(--ease-spring)}
+.switch.on{background:var(--accent)}
+.switch.on::after{transform:translateX(13px)}
+[data-theme="dark"] .switch{background:rgba(255,255,255,.16)}
+[data-theme="dark"] .switch.on{background:var(--accent)}
+
+.field{height:28px;border-radius:var(--r-control);background:var(--bg-field);box-shadow:inset 0 0 0 .5px var(--separator-strong);padding:0 9px;outline:none;border:0;font-size:13px;width:100%}
+.field:focus{box-shadow:inset 0 0 0 .5px var(--accent),0 0 0 3px var(--accent-soft)}
+.field::placeholder{color:var(--text-3)}
+.search{position:relative;width:200px}
+.search svg{position:absolute;left:8px;top:7px;color:var(--text-3)}
+.search .field{padding-left:27px;background:var(--bg-inset);box-shadow:none;height:28px}
+.search .field:focus{box-shadow:0 0 0 3px var(--accent-soft),inset 0 0 0 .5px var(--accent);background:var(--bg-field)}
+
+.popup{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap}
+.popup::after{content:"";width:14px;height:14px;background:currentColor;opacity:.55;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat}
+
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:5px;background:var(--bg-raised);box-shadow:0 0 0 .5px var(--separator-strong),0 1.5px 0 var(--separator-strong);font-size:12px;font-weight:500;color:var(--text-1);font-family:var(--font)}
+.kbd.lg{min-width:44px;height:40px;font-size:15px;border-radius:8px;padding:0 12px}
+.kbd-row{display:inline-flex;align-items:center;gap:4px}
+
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;font-size:11px;font-weight:500;background:var(--bg-selected);color:var(--text-2);white-space:nowrap}
+.badge.accent{background:var(--accent-soft);color:var(--accent-text)}
+.badge.translate{background:var(--translate-soft);color:var(--translate)}
+.badge.success{background:var(--success-soft);color:var(--success)}
+.badge.warning{background:var(--warning-soft);color:var(--warning)}
+.badge.danger{background:var(--danger-soft);color:var(--danger)}
+
+.card{background:var(--bg-card);border-radius:var(--r-card)}
+.hairline{height:.5px;background:var(--separator)}
+
+/* grouped form, like Form + .formStyle(.grouped) */
+.form{display:flex;flex-direction:column;gap:22px;max-width:640px;margin:0 auto}
+.form-section h3{font-size:13px;font-weight:600;padding:0 4px 8px}
+.form-box{background:var(--bg-card);border-radius:10px;box-shadow:inset 0 0 0 .5px var(--separator)}
+.form-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 14px;position:relative}
+.form-row + .form-row::before{content:"";position:absolute;top:0;left:14px;right:14px;height:.5px;background:var(--separator)}
+.form-row .label{flex:1;min-width:0}
+.form-row .label .t-sub{margin-top:1px}
+.form-foot{font-size:12px;color:var(--text-2);padding:7px 4px 0}
+
+/* app icons (monogram tiles standing in for real NSWorkspace icons) */
+.appicon{width:20px;height:20px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.appicon.lg{width:28px;height:28px;border-radius:7px;font-size:13px}
+.ai-wechat{background:linear-gradient(#3fd36a,#1aad3f)}
+.ai-mail{background:linear-gradient(#5ab8ff,#1a7cf5)}
+.ai-slack{background:linear-gradient(#5b2a63,#3f0e40)}
+.ai-notion{background:linear-gradient(#fff,#ececec);color:#111}
+.ai-lark{background:linear-gradient(#4fa3ff,#2468f2)}
+.ai-chrome{background:conic-gradient(#ea4335 0 33%,#fbbc05 0 66%,#34a853 0)}
+.ai-notes{background:linear-gradient(#ffe27a,#f7c500);color:#6b5200}
+.ai-cursor{background:linear-gradient(#2b2b2b,#0a0a0a)}
+.ai-messages{background:linear-gradient(#6cf27d,#21c933)}
+.ai-xcode{background:linear-gradient(#5fb2ff,#1f6fe0)}
+.ai-dingtalk{background:linear-gradient(#3d8bff,#1867f2)}
+.ai-outlook{background:linear-gradient(#2b8cf0,#0a5bc4)}
+.ai-telegram{background:linear-gradient(#45b8f2,#1e96d8)}
+.ai-word{background:linear-gradient(#3f7fe0,#1b56b8)}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;color:var(--text-2);padding:40px}
+.empty .glyph{width:52px;height:52px;border-radius:14px;background:var(--bg-card);display:flex;align-items:center;justify-content:center;color:var(--text-3);margin-bottom:4px}
+.empty h4{font-size:15px;font-weight:600;color:var(--text-1)}
+
+.banner{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12.5px}
+.banner.warning{background:var(--warning-soft);color:var(--text-1)}
+.banner.warning svg{color:var(--warning)}
+.banner.danger{background:var(--danger-soft)}
+.banner.danger svg{color:var(--danger)}
+.banner.info{background:var(--accent-soft)}
+.banner.info svg{color:var(--accent)}
+.banner .grow{flex:1}
+
+.menu{position:absolute;z-index:40;min-width:200px;padding:5px;border-radius:10px;background:rgba(246,246,248,.86);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8);box-shadow:var(--shadow-popover);font-size:13px}
+[data-theme="dark"] .menu{background:rgba(44,44,48,.86)}
+.menu .mi{display:flex;align-items:center;gap:8px;height:24px;padding:0 9px;border-radius:5px;white-space:nowrap}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi:hover .t-cap,.menu .mi:hover .sc{color:rgba(255,255,255,.8)}
+.menu .mi .sc{margin-left:auto;color:var(--text-3);padding-left:20px}
+.menu .ms{height:.5px;background:var(--separator-strong);margin:5px 9px}
+.menu .mh{font-size:11px;font-weight:600;color:var(--text-3);padding:4px 9px 2px}
+.check{width:12px;display:inline-flex;justify-content:center}
+
+.fade-in{animation:fadeIn .24s var(--ease-out) both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<script>
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem('dictum-theme');
+  const q = new URLSearchParams(location.search).get('theme');
+  root.dataset.theme = q || saved || 'light';
+  function sync(){
+    document.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === root.dataset.theme));
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-theme-set]');
+    if (t){ root.dataset.theme = t.dataset.themeSet; localStorage.setItem('dictum-theme', t.dataset.themeSet); sync(); }
+    const s = e.target.closest('.seg button');
+    if (s && !s.hasAttribute('data-free')){ s.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === s)); }
+    const sw = e.target.closest('.switch');
+    if (sw && !sw.hasAttribute('data-free')) sw.classList.toggle('on');
+  });
+  document.addEventListener('DOMContentLoaded', sync);
+  sync();
+})();
+function $(s, r){ return (r||document).querySelector(s); }
+function $$(s, r){ return Array.from((r||document).querySelectorAll(s)); }
+function closeMenus(except){ $$('.menu[data-pop]').forEach(m => { if (m !== except) m.hidden = true; }); }
+document.addEventListener('click', e => {
+  const opener = e.target.closest('[data-menu]');
+  if (opener){
+    const m = document.getElementById(opener.dataset.menu);
+    const willOpen = m.hidden;
+    closeMenus(m);
+    m.hidden = !willOpen;
+    e.stopPropagation();
+    return;
+  }
+  if (!e.target.closest('.menu')) closeMenus();
+});
+</script>
+</head>
+<body>
+<style>
+/* ---------- voice bar component (always dark HUD material) ---------- */
+.vb{--vb-bg:rgba(24,24,27,.80);--vb-fg:rgba(255,255,255,.94);--vb-fg2:rgba(255,255,255,.58);--vb-fg3:rgba(255,255,255,.34);
+  position:relative;display:inline-flex;flex-direction:column;color:var(--vb-fg);background:var(--vb-bg);
+  backdrop-filter:blur(28px) saturate(1.7);-webkit-backdrop-filter:blur(28px) saturate(1.7);
+  border-radius:22px;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14),0 0 0 .5px rgba(0,0,0,.35),0 14px 36px rgba(0,0,0,.30),0 3px 8px rgba(0,0,0,.18);
+  font-family:var(--font);overflow:hidden;transition:width .42s var(--ease-spring),border-radius .3s var(--ease-out);color-scheme:dark}
+[data-theme="dark"] .vb{--vb-bg:rgba(30,30,34,.78);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.16),0 0 0 .5px rgba(0,0,0,.6),0 14px 36px rgba(0,0,0,.5)}
+.vb.has-text{width:460px;border-radius:20px}
+.vb-text{max-height:0;opacity:0;padding:0 18px;font-size:15px;line-height:22px;letter-spacing:.005em;transition:max-height .42s var(--ease-spring),opacity .25s,padding .42s var(--ease-spring);overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;-webkit-mask:linear-gradient(to bottom,transparent 0,#000 18px);mask:linear-gradient(to bottom,transparent 0,#000 18px)}
+.vb.has-text .vb-text{max-height:88px;opacity:1;padding:14px 18px 2px}
+.vb-text .p{color:var(--vb-fg3);transition:color .2s}
+.vb-text .w{animation:wordIn .18s var(--ease-out) both}
+@keyframes wordIn{from{opacity:0;filter:blur(2px)}to{opacity:1;filter:none}}
+.vb-row{display:flex;align-items:center;height:44px;padding:0 7px 0 15px;gap:10px;flex-shrink:0}
+.vb-row .grow{flex:1}
+.vb-dot{width:8px;height:8px;border-radius:50%;background:var(--live);position:relative;flex-shrink:0}
+.vb-dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;background:var(--live);opacity:.35;animation:pulse 1.6s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:.45}100%{transform:scale(1.6);opacity:0}}
+.vb-wave{display:flex;align-items:center;gap:2.5px;height:24px;width:118px;-webkit-mask:linear-gradient(to right,transparent,#000 22%);mask:linear-gradient(to right,transparent,#000 22%)}
+.vb-wave i{width:2.5px;border-radius:2px;background:rgba(255,255,255,.88);height:3px;flex-shrink:0;transition:height .07s linear}
+.vb.translate .vb-wave i{background:#e2d2ff}
+.vb-time{font-family:var(--font-rounded);font-variant-numeric:tabular-nums;font-size:13px;color:var(--vb-fg2);min-width:32px}
+.vb-btn{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--vb-fg2);transition:background .15s,color .15s;position:relative}
+.vb-btn:hover{background:rgba(255,255,255,.10);color:var(--vb-fg)}
+.vb-btn.ok{background:rgba(255,255,255,.94);color:#17171a}
+.vb-btn.ok:hover{background:#fff}
+.vb-btn .hint{position:absolute;bottom:38px;left:50%;transform:translateX(-50%);font-size:11px;padding:2px 6px;border-radius:5px;background:rgba(0,0,0,.75);color:#fff;opacity:0;pointer-events:none;transition:opacity .15s;white-space:nowrap}
+.vb-btn:hover .hint{opacity:1}
+.vb-chip{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 8px 0 10px;border-radius:13px;background:rgba(179,131,255,.24);color:#e6d6ff;font-size:12.5px;font-weight:500;white-space:nowrap;margin-left:-6px;transition:background .15s}
+.vb-chip:hover{background:rgba(179,131,255,.34)}
+.vb-chip svg{opacity:.8}
+.vb-label{font-size:13px;color:var(--vb-fg);white-space:nowrap}
+.vb-label .dim{color:var(--vb-fg2);margin-left:6px;font-variant-numeric:tabular-nums}
+.vb-act{height:26px;padding:0 11px;border-radius:13px;background:rgba(255,255,255,.14);color:var(--vb-fg);font-size:12.5px;white-space:nowrap}
+.vb-act:hover{background:rgba(255,255,255,.22)}
+.vb-ok-ic{width:20px;height:20px;border-radius:50%;background:#30d158;color:#06260f;display:flex;align-items:center;justify-content:center;flex-shrink:0;animation:pop .38s var(--ease-spring) both}
+@keyframes pop{from{transform:scale(.3);opacity:0}to{transform:none;opacity:1}}
+.vb-warn-ic{color:#ffb340}.vb-err-ic{color:#ff6961}
+.vb-ripple{display:flex;align-items:center;gap:4px;padding:0 2px}
+.vb-ripple i{width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,.85);animation:ripple 1.1s ease-in-out infinite}
+.vb-ripple i:nth-child(2){animation-delay:.12s}.vb-ripple i:nth-child(3){animation-delay:.24s}
+@keyframes ripple{0%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}
+.vb.processing .vb-text .c{background:linear-gradient(100deg,rgba(255,255,255,.45) 0%,rgba(255,255,255,.45) 38%,#fff 50%,rgba(255,255,255,.45) 62%,rgba(255,255,255,.45) 100%);background-size:250% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shimmer 1.3s linear infinite}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:-150% 0}}
+.vb-ring{width:18px;height:18px;flex-shrink:0}
+.vb-time.warn{color:#ffb340}
+.vb-drain{position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;overflow:hidden}
+.vb-drain::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,.45);transform-origin:left;animation:drain 3s linear infinite}
+.vb-drain.amber::after{background:#ffb340;animation:none;transform:scaleX(.7)}
+@keyframes drain{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+.vb-spin{width:14px;height:14px;border-radius:50%;border:1.8px solid rgba(255,255,255,.22);border-top-color:rgba(255,255,255,.9);animation:spin .8s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.vb-menu{position:absolute;bottom:52px;left:0;width:208px;padding:5px;border-radius:12px;background:rgba(36,36,40,.9);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.14),0 12px 30px rgba(0,0,0,.4);color:#fff;font-size:13px;z-index:5}
+.vb-menu .mi{display:flex;align-items:center;gap:8px;height:26px;padding:0 9px;border-radius:6px}
+.vb-menu .mi:hover{background:var(--translate)}
+.vb-menu .mi .sc{margin-left:auto;color:rgba(255,255,255,.45);font-size:12px}
+.vb-menu .ms{height:.5px;background:rgba(255,255,255,.14);margin:5px 9px}
+
+/* ---------- page layout ---------- */
+.page{max-width:1120px;margin:0 auto;padding:72px 32px 64px}
+.page h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.page .lead{color:var(--text-2);margin-top:6px;font-size:14px}
+.demo{margin-top:22px;border-radius:16px;height:440px;position:relative;overflow:hidden;background:var(--bg-desktop);box-shadow:inset 0 0 0 .5px var(--separator-strong)}
+.demo-app{position:absolute;left:50%;top:28px;transform:translateX(-50%);width:640px;height:300px;border-radius:12px;background:var(--bg-window);box-shadow:var(--shadow-window);display:flex;flex-direction:column;overflow:hidden}
+.demo-title{height:38px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:.5px solid var(--separator);font-size:13px;font-weight:600}
+.demo-title .traffic{position:static;margin-right:10px}
+.demo-msgs{flex:1;padding:14px 18px;display:flex;flex-direction:column;gap:8px;overflow:hidden;justify-content:flex-end}
+.bubble{max-width:72%;padding:7px 11px;border-radius:14px;font-size:13px;line-height:1.45;background:var(--bg-card)}
+.bubble.me{align-self:flex-end;background:var(--accent);color:#fff}
+.demo-input{margin:0 14px 14px;min-height:38px;border-radius:10px;box-shadow:inset 0 0 0 .5px var(--separator-strong);padding:9px 12px;font-size:13px;display:flex;align-items:flex-start}
+.caret{display:inline-block;width:1.5px;height:17px;background:var(--accent);margin-left:1px;animation:blink 1s steps(1) infinite;vertical-align:-3px}
+@keyframes blink{50%{opacity:0}}
+.demo-input .typed{animation:fadeIn .3s var(--ease-out)}
+.demo-bar{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);display:flex;justify-content:center;width:600px;pointer-events:none}
+.demo-bar .vb{pointer-events:auto}
+.demo-bar .vb.enter{animation:vbIn .34s var(--ease-spring) both}
+.demo-bar .vb.out{animation:vbOut .2s ease-in both}
+@keyframes vbIn{from{opacity:0;transform:translateY(10px) scale(.92)}to{opacity:1;transform:none}}
+@keyframes vbOut{to{opacity:0;transform:translateY(6px) scale(.96)}}
+.demo-ctl{display:flex;align-items:center;gap:8px;margin-top:12px;flex-wrap:wrap}
+.demo-ctl .t-sub{margin-left:8px}
+.states{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:34px}
+.st{border-radius:14px;overflow:hidden;background:var(--bg-card);box-shadow:inset 0 0 0 .5px var(--separator)}
+.st-scene{height:200px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:26px;background:var(--bg-desktop);position:relative}
+.st-cap{display:flex;align-items:baseline;gap:8px;padding:11px 14px}
+.st-cap b{font-size:13px;font-weight:600}
+.st-cap span{font-size:12px;color:var(--text-2)}
+.st-cap .t-cap{margin-left:auto}
+.ghost{width:200px;height:44px;border-radius:22px;border:1px dashed var(--separator-strong);display:flex;align-items:center;justify-content:center;color:var(--text-3);font-size:12px}
+.sec-title{font-size:15px;font-weight:600;margin-top:40px}
+</style>
+
+<div class="proto-bar"><a href="index.html">全部原型</a><span class="sep"></span><button data-theme-set="light">浅色</button><button data-theme-set="dark">深色</button></div>
+
+<div class="page">
+  <h1>语音条</h1>
+  <p class="lead">按 fn 开始听写，fn + 左 ⇧ 开始翻译，再按 fn 结束，esc 取消。下面的演示用 F 键代替 fn。</p>
+
+  <div class="demo" id="demo">
+    <div class="demo-app">
+      <div class="demo-title"><div class="traffic"><i></i><i></i><i></i></div><span class="appicon ai-wechat">微</span>产品小组</div>
+      <div class="demo-msgs" id="msgs">
+        <div class="bubble">周四的评审会大家时间都可以吗？</div>
+        <div class="bubble">我这边下午三点有冲突 😅</div>
+      </div>
+      <div class="demo-input" id="input"><span id="typed"></span><span class="caret"></span></div>
+    </div>
+    <div class="demo-bar" id="demoBar"></div>
+  </div>
+  <div class="demo-ctl">
+    <button class="btn primary" id="btnDictate"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" x="5.8" y="1.8" width="4.4" height="7.6" rx="2.2"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2.1"/></svg> 听写</button>
+    <button class="btn" id="btnTranslate"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2 3.5h6.5M5.2 2v1.5M3.4 3.5c.6 2.4 2 4.1 4.3 5M7 3.5C6.4 6 4.9 7.8 2.6 8.8M8.2 14l2.6-6.2 2.7 6.2m-4.6-1.8h3.8"/></svg> 翻译</button>
+    <button class="btn" id="btnLong">长录音倒计时</button>
+    <button class="btn plain" id="btnReset">重置</button>
+    <span class="t-sub">键盘：F 开始或结束 · ⇧F 翻译 · esc 取消</span>
+  </div>
+
+  <div class="sec-title">全部状态</div>
+  <div class="states">
+
+    <div class="st"><div class="st-scene"><div class="ghost">不显示</div></div>
+      <div class="st-cap"><b>空闲</b><span>Idle</span><span class="t-cap">没有任何浮层</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row"><span class="vb-spin"></span><span class="vb-label" style="color:rgba(255,255,255,.7)">准备中</span><div class="vb-wave live"></div><span class="vb-time">0:01</span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></div></div>
+    </div><div class="st-cap"><b>准备中</b><span>Preparing</span><span class="t-cap">模型加载时已开始录音</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row"><span class="vb-dot"></span><div class="vb-wave live"></div><span class="vb-time">0:02</span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg><span class="hint">esc</span></button><button class="vb-btn ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg><span class="hint">fn</span></button></div></div>
+    </div><div class="st-cap"><b>聆听</b><span>Listening</span><span class="t-cap">还没有识别出文字</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb has-text"><div class="vb-text"><div><span class="c">明天下午三点的会，呃，改到四点吧，地点不变，</span><span class="p">麻烦大家</span></div></div>
+      <div class="vb-row"><span class="vb-dot"></span><div class="vb-wave live"></div><span class="vb-time">0:07</span><span class="grow"></span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button><button class="vb-btn ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg></button></div></div>
+    </div><div class="st-cap"><b>聆听 · 实时文字</b><span>Listening, streaming</span><span class="t-cap">灰色为未确定部分</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb has-text translate"><div class="vb-text"><div><span class="c">谢谢你这么快就改好了，我今晚看一下，</span><span class="p">明天早上</span></div></div>
+      <div class="vb-row"><button class="vb-chip">中文 → English <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 6 8 10.5 12.5 6"/></svg></button><div class="vb-wave live"></div><span class="vb-time">0:05</span><span class="grow"></span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button><button class="vb-btn ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg></button></div></div>
+    </div><div class="st-cap"><b>翻译</b><span>Translating</span><span class="t-cap">点击语言可切换目标</span></div></div>
+
+    <div class="st"><div class="st-scene" style="padding-bottom:14px">
+      <div style="position:relative"><div class="vb-menu" style="bottom:52px">
+        <div class="mi"><span class="check"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></span>English<span class="sc">EN</span></div>
+        <div class="mi"><span class="check"></span>日本語<span class="sc">JA</span></div>
+        <div class="mi"><span class="check"></span>한국어<span class="sc">KO</span></div>
+        <div class="ms"></div><div class="mi"><span class="check"></span>编辑语言…</div></div>
+      <div class="vb translate"><div class="vb-row"><button class="vb-chip" style="background:rgba(179,131,255,.38)">中文 → English <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 6 8 10.5 12.5 6"/></svg></button><div class="vb-wave live"></div><span class="vb-time">0:01</span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button><button class="vb-btn ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg></button></div></div></div>
+    </div><div class="st-cap"><b>翻译 · 选择语言</b><span>Target menu</span><span class="t-cap">录音不中断</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb has-text processing"><div class="vb-text"><div><span class="c">明天下午三点的会，呃，改到四点吧，地点不变，麻烦大家相互转告一下。</span></div></div>
+      <div class="vb-row"><div class="vb-ripple"><i></i><i></i><i></i></div><span class="vb-label">润色中</span><span class="grow"></span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></div></div>
+    </div><div class="st-cap"><b>润色</b><span>Polishing</span><span class="t-cap">翻译时显示“翻译中”</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:16px"><span class="vb-ok-ic"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg></span><span class="vb-label">已插入<span class="dim">32 字</span></span></div></div>
+    </div><div class="st-cap"><b>已插入</b><span>Inserted</span><span class="t-cap">停留 1.2 秒后淡出</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:10px"><span style="color:rgba(255,255,255,.85)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" x="5.3" y="5.3" width="8" height="8" rx="1.6"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M10.7 5.3V3.6c0-.5-.4-.9-.9-.9H3.6c-.5 0-.9.4-.9.9v6.2c0 .5.4.9.9.9h1.7"/></svg></span><span class="vb-label">已复制，没有找到输入框</span><span class="kbd" style="background:rgba(255,255,255,.12);color:#fff;box-shadow:none">⌘V</span></div></div>
+    </div><div class="st-cap"><b>已复制</b><span>Copied</span><span class="t-cap">光标不在输入框时</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:8px"><span class="vb-warn-ic"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M7.1 2.6 1.9 11.8c-.4.7.1 1.6.9 1.6h10.4c.8 0 1.3-.9.9-1.6L8.9 2.6a1 1 0 0 0-1.8 0zM8 6.3v3m0 2v.1"/></svg></span><span class="vb-label">润色失败，已插入原文</span><button class="vb-act">重试</button></div></div>
+    </div><div class="st-cap"><b>错误 · 可恢复</b><span>Error, recovered</span><span class="t-cap">停留 4 秒</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:8px"><span class="vb-err-ic"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" x="5.8" y="1.8" width="4.4" height="7.6" rx="2.2"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2.1"/></svg></span><span class="vb-label">无法使用麦克风</span><button class="vb-act">打开设置</button><button class="vb-btn" style="width:26px;height:26px"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></div></div>
+    </div><div class="st-cap"><b>错误 · 需要处理</b><span>Error, blocking</span><span class="t-cap">直到关闭</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:16px"><span style="color:rgba(255,255,255,.6)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" x="5.8" y="1.8" width="4.4" height="7.6" rx="2.2"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 7.6a4.5 4.5 0 0 0 9 0M8 12.1v2.1"/></svg></span><span class="vb-label">没有听到声音</span></div></div>
+    </div><div class="st-cap"><b>没有声音</b><span>No speech</span><span class="t-cap">不写入历史</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:8px"><svg class="vb-ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/><circle cx="9" cy="9" r="7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-dasharray="44" stroke-dashoffset="16.7" transform="rotate(-90 9 9)"/></svg><span class="vb-label">语音模型下载中<span class="dim">62%</span></span><button class="vb-act">查看</button></div></div>
+    </div><div class="st-cap"><b>模型下载中</b><span>Model downloading</span><span class="t-cap">不开始录音，停留 3 秒</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:8px"><span style="color:rgba(255,255,255,.6)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M4.6 12.4h7.1a2.8 2.8 0 0 0 .4-5.6 4 4 0 0 0-7.7-.9 3.3 3.3 0 0 0 .2 6.5z"/></svg></span><span class="vb-label">未连接 AI 模型，已插入原文</span><button class="vb-act">设置</button></div></div>
+    </div><div class="st-cap"><b>无网络或未配置</b><span>Offline, no key</span><span class="t-cap">识别照常，跳过润色</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb has-text"><div class="vb-text"><div><span class="c">第三部分是渠道预算，我们建议把线下活动的比例从三成降到两成，</span><span class="p">省下来的</span></div></div>
+      <div class="vb-row"><span class="vb-dot"></span><div class="vb-wave live"></div><svg class="vb-ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,179,64,.25)" stroke-width="2"/><circle cx="9" cy="9" r="7" fill="none" stroke="#ffb340" stroke-width="2" stroke-linecap="round" stroke-dasharray="44" stroke-dashoffset="13" transform="rotate(-90 9 9)"/></svg><span class="vb-time warn">0:42</span><span class="grow"></span><button class="vb-btn"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button><button class="vb-btn ok"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg></button></div></div>
+    </div><div class="st-cap"><b>长录音倒计时</b><span>Countdown</span><span class="t-cap">第 8 分钟起，9 分钟自动结束</span></div></div>
+
+    <div class="st"><div class="st-scene">
+      <div class="vb"><div class="vb-row" style="padding-right:8px"><span style="color:rgba(255,255,255,.6)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></span><span class="vb-label">已取消</span><button class="vb-act">恢复</button></div><div class="vb-drain"></div></div>
+    </div><div class="st-cap"><b>已取消</b><span>Cancelled</span><span class="t-cap">3 秒内可恢复，之后在历史里</span></div></div>
+
+  </div>
+</div>
+
+<script>
+/* waveform engine: scrolling history, newest bar on the right */
+const BARS = 26;
+function makeWave(el){ el.innerHTML = '<i></i>'.repeat(BARS); el._t = Math.random()*100; el._h = Array.from({length:BARS}, (_, i) => 3 + level(el._t + i*0.055)*19); }
+$$('.vb-wave.live').forEach(makeWave);
+let speaking = true;
+function level(t){
+  const syll = Math.max(0, Math.sin(t*9.5)) * (0.55 + 0.45*Math.sin(t*2.3+1));
+  const breath = (Math.sin(t*0.9) > -0.75) ? 1 : 0.08;
+  return Math.min(1, syll*breath + Math.random()*0.18);
+}
+let last = 0;
+function tick(ts){
+  if (ts - last > 55){
+    last = ts;
+    $$('.vb-wave.live').forEach(el => {
+      el._t += 0.055;
+      const lv = (el.dataset.quiet ? 0.04 : level(el._t)) ;
+      el._h.shift(); el._h.push(3 + lv*19);
+      const bars = el.children;
+      for (let i = 0; i < BARS; i++) bars[i].style.height = el._h[i].toFixed(1) + 'px';
+    });
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+/* ---------- live demo ---------- */
+const ICON = {
+  x: `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg>`, ok: `<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg>`, okS: `<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" d="m3.4 8.4 3 3 6.4-6.6"/></svg>`, chev: `<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 6 8 10.5 12.5 6"/></svg>`, check: `<svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg>`, xS: `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg>`
+};
+const SCRIPT = {
+  dictate: {
+    raw: '嗯，那个，我周四下午三点确实不太行，呃，改到四点吧，四点可以的话我们就在三楼会议室，麻烦大家相互转告一下。',
+    out: '我周四下午三点不太方便，改到四点吧。如果四点可以，我们就在三楼会议室，麻烦大家相互转告一下。'
+  },
+  translate: {
+    raw: '没问题，四点我可以，我会提前把评审材料发到群里。',
+    out: 'No problem, 4 PM works for me. I\'ll share the review materials in the group beforehand.'
+  }
+};
+const bar = $('#demoBar');
+let S = null;  // {mode, t0, shown, timer, phase}
+function render(){
+  if (!S){ bar.innerHTML = ''; return; }
+  const p = S.phase;
+  const tr = S.mode === 'translate';
+  let html = '';
+  if (p === 'listen'){
+    const has = S.shown.length > 0;
+    const committed = S.shown.slice(0, Math.max(0, S.shown.length - 4));
+    const partial = S.shown.slice(committed.length);
+    const lead = tr ? `<button class="vb-chip" id="chip">中文 → ${S.lang} ${ICON.chev}</button>` : '<span class="vb-dot"></span>';
+    const secs = Math.floor((S.elapsed||0));
+    const countdown = S.long && S.remaining != null;
+    const time = countdown
+      ? `<svg class="vb-ring" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="rgba(255,179,64,.25)" stroke-width="2"/><circle cx="9" cy="9" r="7" fill="none" stroke="#ffb340" stroke-width="2" stroke-linecap="round" stroke-dasharray="44" stroke-dashoffset="${(44*(1-S.remaining/60)).toFixed(1)}" transform="rotate(-90 9 9)"/></svg><span class="vb-time warn">0:${String(S.remaining).padStart(2,'0')}</span>`
+      : `<span class="vb-time">${S.long ? '7:5' + (secs%10) : Math.floor(secs/60)+':'+String(secs%60).padStart(2,'0')}</span>`;
+    html = `<div class="vb ${has?'has-text':''} ${tr?'translate':''}">
+      <div class="vb-text"><div><span class="c">${committed}</span><span class="p">${partial}</span></div></div>
+      <div class="vb-row">${lead}<div class="vb-wave live" id="dw"></div>${time}<span class="grow"></span>
+      <button class="vb-btn" data-act="cancel">${ICON.x}<span class="hint">esc</span></button><button class="vb-btn ok" data-act="stop">${ICON.ok}<span class="hint">fn</span></button></div>
+    </div>`;
+  } else if (p === 'process'){
+    html = `<div class="vb has-text processing"><div class="vb-text"><div><span class="c">${S.shown}</span></div></div>
+      <div class="vb-row"><div class="vb-ripple"><i></i><i></i><i></i></div><span class="vb-label">${tr?'翻译中':'润色中'}</span><span class="grow"></span><button class="vb-btn" data-act="cancel">${ICON.x}</button></div></div>`;
+  } else if (p === 'done'){
+    html = `<div class="vb ${S.out?'out':''}"><div class="vb-row" style="padding-right:16px"><span class="vb-ok-ic">${ICON.okS}</span><span class="vb-label">已插入<span class="dim">${S.count} ${tr?'词':'字'}</span></span></div></div>`;
+  } else if (p === 'cancelled'){
+    html = `<div class="vb ${S.out?'out':''}"><div class="vb-row" style="padding-right:8px"><span style="color:rgba(255,255,255,.6)">${ICON.xS}</span><span class="vb-label">已取消</span><button class="vb-act" data-act="restore">恢复</button></div><div class="vb-drain"></div></div>`;
+  }
+  const vb = bar.querySelector('.vb');
+  if (p === 'listen' && S.rendered === 'listen' && vb){
+    const tmp = document.createElement('div'); tmp.innerHTML = html; const nv = tmp.firstElementChild;
+    vb.className = nv.className;
+    vb.querySelector('.vb-text').replaceWith(nv.querySelector('.vb-text'));
+    const row = vb.querySelector('.vb-row'), nrow = nv.querySelector('.vb-row');
+    row.querySelector('.vb-dot, .vb-chip').replaceWith(nrow.querySelector('.vb-dot, .vb-chip'));
+    row.querySelectorAll('.vb-time, .vb-ring').forEach(n => n.remove());
+    nrow.querySelectorAll('.vb-time, .vb-ring').forEach(n => row.querySelector('.grow').before(n));
+    syncMenu();
+    return;
+  }
+  bar.innerHTML = html;
+  const fresh = bar.querySelector('.vb');
+  if (fresh && !S.rendered) fresh.classList.add('enter');
+  S.rendered = p;
+  const w = $('#dw'); if (w) makeWave(w);
+  syncMenu();
+}
+function syncMenu(){
+  let m = bar.querySelector(':scope > .vb-menu');
+  const want = S && S.phase === 'listen' && S.menu;
+  if (!want){ if (m) m.remove(); return; }
+  if (m && m.dataset.key === S.lang) return;
+  if (m) m.remove();
+  const vb = bar.querySelector('.vb');
+  bar.insertAdjacentHTML('beforeend', `<div class="vb-menu" data-key="${S.lang}" style="left:${vb.offsetLeft}px;bottom:${vb.offsetHeight + 8}px;pointer-events:auto">${['English','日本語','한국어'].map(l=>`<div class="mi" data-lang="${l}"><span class="check">${l===S.lang?ICON.check:''}</span>${l}</div>`).join('')}<div class="ms"></div><div class="mi"><span class="check"></span>编辑语言…</div></div>`);
+}
+function start(mode, long){
+  reset(true);
+  S = { mode, phase:'listen', shown:'', i:0, elapsed:0, lang:'English', long };
+  if (long){ S.remaining = 60; }
+  render();
+  S.timer = setInterval(() => {
+    if (!S || S.phase !== 'listen') return;
+    S.elapsed += 0.12;
+    const src = SCRIPT[mode].raw;
+    if (S.i < src.length && S.elapsed > 0.6){ S.i += 1 + (Math.random() < .4 ? 1 : 0); S.shown = src.slice(0, S.i); }
+    if (long){ S.remaining = Math.max(0, 60 - Math.floor(S.elapsed*4)); if (S.remaining === 0) stop(); }
+    const wasMenu = S.menu; render(); if (wasMenu) S.menu = wasMenu;
+  }, 120);
+}
+function stop(){
+  if (!S || S.phase !== 'listen') return;
+  clearInterval(S.timer);
+  S.shown = SCRIPT[S.mode].raw;
+  S.phase = 'process'; S.menu = false; render();
+  setTimeout(() => {
+    if (!S || S.phase !== 'process') return;
+    const out = SCRIPT[S.mode].out;
+    $('#typed').innerHTML = `<span class="typed">${out}</span>`;
+    S.count = S.mode === 'translate' ? out.split(/\s+/).length : out.replace(/[，。、！？\s]/g,'').length;
+    S.phase = 'done'; render();
+    setTimeout(() => { if (S && S.phase === 'done'){ S.out = true; render(); setTimeout(() => { if (S && S.phase==='done'){ S = null; render(); } }, 200); } }, 1200);
+  }, 1500);
+}
+function cancel(){
+  if (!S || (S.phase !== 'listen' && S.phase !== 'process')) return;
+  clearInterval(S.timer); S.phase = 'cancelled'; render();
+  S.cto = setTimeout(() => { if (S && S.phase === 'cancelled'){ S.out = true; render(); setTimeout(() => { if (S && S.phase === 'cancelled'){ S = null; render(); } }, 200); } }, 3000);
+}
+function reset(keepText){ if (S){ clearInterval(S.timer); clearTimeout(S.cto); } S = null; render(); if (!keepText) $('#typed').innerHTML = ''; }
+bar.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]');
+  if (a){ const k = a.dataset.act; if (k === 'stop') stop(); if (k === 'cancel') cancel(); if (k === 'restore'){ clearTimeout(S.cto); S.phase = 'listen'; stop(); } return; }
+  if (e.target.closest('#chip')){ S.menu = !S.menu; render(); return; }
+  const l = e.target.closest('[data-lang]'); if (l){ S.lang = l.dataset.lang; S.menu = false; render(); }
+});
+$('#btnDictate').onclick = () => (S && S.phase === 'listen') ? stop() : start('dictate');
+$('#btnTranslate').onclick = () => (S && S.phase === 'listen') ? stop() : start('translate');
+$('#btnLong').onclick = () => start('dictate', true);
+$('#btnReset').onclick = () => reset(false);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){ cancel(); return; }
+  if (e.key.toLowerCase() === 'f'){
+    if (S && S.phase === 'listen') stop(); else start(e.shiftKey ? 'translate' : 'dictate');
+  }
+});
+</script>
+</body>
+</html>
