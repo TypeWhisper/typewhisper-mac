@@ -507,6 +507,18 @@ final class ModelManagerService: ObservableObject {
         }
     }
 
+    /// Starts loading `modelId`, downloading it when needed, without waiting for the
+    /// load and without selecting the engine, unlike `loadModel(_:modelId:)`. Callers that
+    /// show progress follow the plugin's settings activity. Returns false when the plugin
+    /// cannot load a model on request.
+    @discardableResult
+    func startModelLoad(_ modelId: String, of engine: TranscriptionEnginePlugin) -> Bool {
+        let selector = NSSelectorFromString("triggerRestoreModelForModel:")
+        guard let object = engine as? NSObject, object.responds(to: selector) else { return false }
+        _ = object.perform(selector, with: modelId as NSString)
+        return true
+    }
+
     @discardableResult
     func unloadModel(_ providerId: String) throws -> String? {
         guard let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {

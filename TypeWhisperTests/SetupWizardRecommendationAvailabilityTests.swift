@@ -69,7 +69,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            readyLocalProviderId: nil,
             appleSpeechAvailable: true
         )
 
@@ -80,7 +80,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: "groq",
             selectedEngineReady: true,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -91,7 +91,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: SetupWizardAppleSpeechFallback.providerId,
             selectedEngineReady: true,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -102,7 +102,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: true,
+            readyLocalProviderId: SetupWizardParakeetRecommendation.providerId,
             appleSpeechAvailable: true
         )
 
@@ -113,7 +113,7 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         let providerId = SetupWizardEngineSelection.preferredProviderId(
             selectedProviderId: nil,
             selectedEngineReady: false,
-            parakeetReady: false,
+            readyLocalProviderId: nil,
             appleSpeechAvailable: false
         )
 
@@ -287,6 +287,38 @@ final class SetupWizardRecommendationAvailabilityTests: XCTestCase {
         )
 
         XCTAssertEqual(state, .setupRequired)
+    }
+
+    func testOfflineShowsThatADownloadIsNeeded() {
+        for isInstalled in [false, true] {
+            let state = SetupWizardRecommendationAvailability.resolve(
+                manifestId: "com.typewhisper.whisperkit",
+                isInstalled: isInstalled,
+                isReady: false,
+                registryPlugin: makeRegistryPlugin(id: "com.typewhisper.whisperkit"),
+                installState: nil,
+                fetchState: .loaded,
+                isOffline: true,
+                architecture: "arm64"
+            )
+
+            XCTAssertEqual(state, .unavailable(.offline), "installed: \(isInstalled)")
+        }
+    }
+
+    func testOfflineKeepsAReadyEngineReady() {
+        let state = SetupWizardRecommendationAvailability.resolve(
+            manifestId: "com.typewhisper.parakeet",
+            isInstalled: true,
+            isReady: true,
+            registryPlugin: nil,
+            installState: nil,
+            fetchState: .error("offline"),
+            isOffline: true,
+            architecture: "arm64"
+        )
+
+        XCTAssertEqual(state, .ready)
     }
 
     func testErrorInstallStateTakesPrecedenceForCompatibleArchitecture() {
