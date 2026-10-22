@@ -57,6 +57,22 @@ final class DictationSilenceEndpointDetectorTests: XCTestCase {
         XCTAssertEqual(detector.append(ScriptedAudio.silence(10)), .waitingForSpeech)
     }
 
+    func testSeparateNoiseBurstsDoNotAddUpToSpeech() {
+        var detector = DictationSilenceEndpointDetector(silenceDuration: 3)
+
+        // Three 100 ms bursts (a start sound, a key click, a cough) spread over seconds
+        // reach the minimum speech duration only when added up.
+        for _ in 0..<3 {
+            XCTAssertEqual(detector.append(ScriptedAudio.speech(0.1)), .waitingForSpeech)
+            XCTAssertEqual(detector.append(ScriptedAudio.silence(1)), .waitingForSpeech)
+        }
+        XCTAssertEqual(detector.append(ScriptedAudio.silence(10)), .waitingForSpeech)
+
+        // Continuous speech still arms the stop.
+        XCTAssertEqual(detector.append(ScriptedAudio.speech(0.3)), .listening)
+        XCTAssertEqual(detector.append(ScriptedAudio.silence(3)), .endpointReached)
+    }
+
     func testQuietRoomNoiseCountsAsSilence() {
         var detector = DictationSilenceEndpointDetector(silenceDuration: 2)
 

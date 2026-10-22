@@ -57,7 +57,10 @@ struct DictationSilenceEndpointDetector: Sendable {
     private let requiredSilentFrames: Int
     private let warningFrames: Int
     private var pendingSamples: [Float] = []
-    private var speechFrames = 0
+    /// Speech frames in a row; a silent frame starts the count again.
+    private var speechRunFrames = 0
+    /// Set once one continuous run of speech reached the minimum duration.
+    private var heardSpeech = false
     private var trailingSilentFrames = 0
     private(set) var phase: Phase = .waitingForSpeech
 
@@ -86,14 +89,17 @@ struct DictationSilenceEndpointDetector: Sendable {
             let frame = pendingSamples[offset..<(offset + frameSize)]
             offset += frameSize
             if DictationSpeechActivity.frameContainsSpeech(frame) {
-                speechFrames += 1
+                speechRunFrames += 1
+                if speechRunFrames >= requiredSpeechFrames { heardSpeech = true }
                 trailingSilentFrames = 0
             } else {
+                // Separate noise bursts (a click, a cough) never add up to speech.
+                speechRunFrames = 0
                 trailingSilentFrames += 1
             }
             // The first frame that completes the silence ends the session, even when the
             // same delivery continues with speech.
-            if speechFrames >= requiredSpeechFrames, trailingSilentFrames >= requiredSilentFrames {
+            if heardSpeech, trailingSilentFrames >= requiredSilentFrames {
                 break
             }
         }
@@ -106,7 +112,7 @@ struct DictationSilenceEndpointDetector: Sendable {
     }
 
     private var currentPhase: Phase {
-        guard speechFrames >= requiredSpeechFrames else { return .waitingForSpeech }
+        guard heardSpeech else { return .waitingForSpeech }
         let remainingFrames = requiredSilentFrames - trailingSilentFrames
         if remainingFrames <= 0 {
             return .endpointReached
