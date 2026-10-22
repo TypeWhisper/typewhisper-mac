@@ -65,29 +65,52 @@ enum SpeakerChannelAttribution {
 
     /// Diarizer turns with the user's own speech cut out of them and added
     /// as turns of `ownSpeakerLabel`.
+    ///
+    /// A diarizer speaker who mostly talks where the microphone carries the
+    /// user is the user too. What the microphone missed of them (soft words,
+    /// overlap) goes to `ownSpeakerLabel` as well, so the user doesn't show
+    /// up a second time, or under the name of their own voice profile.
     static func combining(
         _ turns: [PluginSpeakerTurn],
         ownSpeech: [ClosedRange<TimeInterval>]
     ) -> [PluginSpeakerTurn] {
         guard !ownSpeech.isEmpty else { return turns }
         let own = ownSpeech.sorted { $0.lowerBound < $1.lowerBound }
+        let ownLabels = labelsMostlyOnMicrophone(turns, ownSpeech: own)
         var combined: [PluginSpeakerTurn] = []
         for turn in turns {
+            let label = ownLabels.contains(turn.speakerLabel) ? ownSpeakerLabel : turn.speakerLabel
             var start = turn.start
             for range in own where range.upperBound > start && range.lowerBound < turn.end {
                 if range.lowerBound - start >= minimumRemainder {
-                    combined.append(PluginSpeakerTurn(speakerLabel: turn.speakerLabel, start: start, end: range.lowerBound))
+                    combined.append(PluginSpeakerTurn(speakerLabel: label, start: start, end: range.lowerBound))
                 }
                 start = max(start, range.upperBound)
             }
             if turn.end - start >= minimumRemainder {
-                combined.append(PluginSpeakerTurn(speakerLabel: turn.speakerLabel, start: start, end: turn.end))
+                combined.append(PluginSpeakerTurn(speakerLabel: label, start: start, end: turn.end))
             }
         }
         combined.append(contentsOf: own.map {
             PluginSpeakerTurn(speakerLabel: ownSpeakerLabel, start: $0.lowerBound, end: $0.upperBound)
         })
         return combined.sorted { ($0.start, $0.end) < ($1.start, $1.end) }
+    }
+
+    /// Diarizer speakers with more than half of their speech inside own speech.
+    private static func labelsMostlyOnMicrophone(
+        _ turns: [PluginSpeakerTurn],
+        ownSpeech: [ClosedRange<TimeInterval>]
+    ) -> Set<String> {
+        var spoken: [String: TimeInterval] = [:]
+        var onMicrophone: [String: TimeInterval] = [:]
+        for turn in turns {
+            spoken[turn.speakerLabel, default: 0] += max(0, turn.end - turn.start)
+            for range in ownSpeech where range.upperBound > turn.start && range.lowerBound < turn.end {
+                onMicrophone[turn.speakerLabel, default: 0] += min(turn.end, range.upperBound) - max(turn.start, range.lowerBound)
+            }
+        }
+        return Set(onMicrophone.filter { $0.value > spoken[$0.key, default: 0] / 2 }.keys)
     }
 
     /// What is left of a diarizer turn around own speech only counts from this length.
