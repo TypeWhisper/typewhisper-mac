@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="tile" d="M627.36 100c103.83 0 155.75 0 195.41 20.21a185.4 185.4 0 0 1 81.02 81.02c20.21 39.66 20.21 91.58 20.21 195.41V627.36c0 103.83 0 155.75 -20.21 195.41a185.4 185.4 0 0 1 -81.02 81.02c-39.66 20.21 -91.58 20.21 -195.41 20.21H396.64c-103.83 0 -155.75 0 -195.41 -20.21a185.4 185.4 0 0 1 -81.02 -81.02c-20.21 -39.66 -20.21 -91.58 -20.21 -195.41V396.64c0 -103.83 0 -155.75 20.21 -195.41a185.4 185.4 0 0 1 81.02 -81.02c39.66 -20.21 91.58 -20.21 195.41 -20.21Z"/>
+    <clipPath id="tileClip"><use href="#tile"/></clipPath>
+    <linearGradient id="tileFill" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#262626"/>
+      <stop offset="1" stop-color="#0E0E0E"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="470" cy="420" r="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F4F4F2"/>
+      <stop offset="0.8" stop-color="#E2E2DF"/>
+      <stop offset="1" stop-color="#C9C9C5"/>
+    </radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <use href="#tile" fill="#000000" filter="url(#shadow)"/>
+  <use href="#tile" fill="url(#tileFill)"/>
+  <g clip-path="url(#tileClip)">
+    <circle cx="500" cy="450" r="340" fill="url(#spot)"/>
+
+    <path fill="#0B0B0B" d="M300 640 C262 600 236 540 234 470 C232 360 290 262 392 236 C470 216 540 250 562 318 C572 350 570 372 566 392 C564 402 566 410 572 420 L602 466 C606 474 600 482 590 484 L576 488 C578 496 584 502 582 508 C578 512 572 514 574 520 C580 526 580 534 572 540 C566 546 566 552 572 562 C578 580 566 598 540 604 C520 608 500 612 494 632 L490 690 C520 720 600 760 640 840 L700 1024 L100 1024 L100 820 C170 740 270 700 300 640 Z"/>
+
+    <path d="M402 392 C396 320 398 262 410 214" fill="none" stroke="#0B0B0B" stroke-width="30" stroke-linecap="round"/>
+    <rect x="352" y="388" width="104" height="146" rx="44" fill="#0B0B0B" stroke="#E6E6E3" stroke-width="10"/>
+
+    <rect x="644" y="330" width="156" height="276" rx="78" fill="#0B0B0B"/>
+    <g fill="#E6E6E3">
+      <rect x="664" y="372" width="116" height="10" rx="5"/>
+      <rect x="658" y="402" width="128" height="10" rx="5"/>
+      <rect x="656" y="432" width="132" height="10" rx="5"/>
+      <rect x="656" y="494" width="132" height="10" rx="5"/>
+      <rect x="658" y="524" width="128" height="10" rx="5"/>
+      <rect x="664" y="554" width="116" height="10" rx="5"/>
+    </g>
+    <path d="M626 470 V560 C626 620 670 652 722 652 C774 652 818 620 818 560 V470" fill="none" stroke="#0B0B0B" stroke-width="22" stroke-linecap="round"/>
+    <rect x="710" y="650" width="24" height="300" fill="#0B0B0B"/>
+  </g>
+</svg>

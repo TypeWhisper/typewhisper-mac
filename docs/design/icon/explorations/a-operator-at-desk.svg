@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="tile" d="M627.36 100c103.83 0 155.75 0 195.41 20.21a185.4 185.4 0 0 1 81.02 81.02c20.21 39.66 20.21 91.58 20.21 195.41V627.36c0 103.83 0 155.75 -20.21 195.41a185.4 185.4 0 0 1 -81.02 81.02c-39.66 20.21 -91.58 20.21 -195.41 20.21H396.64c-103.83 0 -155.75 0 -195.41 -20.21a185.4 185.4 0 0 1 -81.02 -81.02c-20.21 -39.66 -20.21 -91.58 -20.21 -195.41V396.64c0 -103.83 0 -155.75 20.21 -195.41a185.4 185.4 0 0 1 81.02 -81.02c39.66 -20.21 91.58 -20.21 195.41 -20.21Z"/>
+    <clipPath id="tileClip"><use href="#tile"/></clipPath>
+    <linearGradient id="tileFill" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2F2F0"/>
+      <stop offset="1" stop-color="#C8C8C4"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <use href="#tile" fill="#000000" filter="url(#shadow)"/>
+  <use href="#tile" fill="url(#tileFill)"/>
+  <g clip-path="url(#tileClip)" fill="#111111">
+    <rect x="80" y="716" width="880" height="240"/>
+
+    <path d="M818 528 L866 236" fill="none" stroke="#111111" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="868" cy="230" r="16"/>
+    <rect x="590" y="520" width="290" height="200" rx="18"/>
+    <rect x="628" y="552" width="132" height="62" rx="8" fill="#ECECE9"/>
+    <path d="M694 608 L730 566" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+    <circle cx="820" cy="584" r="26" fill="#ECECE9"/>
+    <circle cx="664" cy="668" r="26" fill="#ECECE9"/>
+    <circle cx="760" cy="668" r="26" fill="#ECECE9"/>
+    <path d="M820 584 L834 566 M664 668 L650 650 M760 668 L778 654" stroke="#111111" stroke-width="8" stroke-linecap="round"/>
+
+    <rect x="470" y="372" width="74" height="122" rx="37"/>
+    <path d="M458 440 V470 C458 510 482 528 507 528 C532 528 556 510 556 470 V440" fill="none" stroke="#111111" stroke-width="12" stroke-linecap="round"/>
+    <rect x="500" y="526" width="14" height="170"/>
+    <path d="M450 716 C450 690 474 684 507 684 C540 684 564 690 564 716 Z"/>
+
+    <path d="M326 300 C380 300 420 340 426 388 L452 424 C456 432 450 438 440 438 L428 440 C430 470 418 488 396 492 L388 520 C420 560 460 620 470 690 L556 694 C566 696 566 716 556 716 L176 716 C170 620 200 540 262 496 C246 470 240 440 244 410 C250 344 280 300 326 300 Z"/>
+    <rect x="314" y="286" width="36" height="84" rx="12" stroke="#ECECE9" stroke-width="7"/>
+    <rect x="300" y="360" width="64" height="96" rx="28" stroke="#ECECE9" stroke-width="8"/>
+  </g>
+</svg>
