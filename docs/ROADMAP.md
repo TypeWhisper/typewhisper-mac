@@ -48,6 +48,8 @@ flowchart LR
 
 每个开发阶段的流程：gpt-6.1-sol 在独立的 git worktree 中开发，自己构建并运行测试，提交 PR；Claude 审查；有问题就由新的 gpt-6.1-sol 代理修复，再审查，最多三轮；通过后合入 `main`，同步更新 Notion。
 
+gpt-6.1-sol 额度用完后不使用重置卡，等待官方重置额度；等待期间的开发改由 Claude 完成，这类阶段的审查除 Claude 外再加一位其他模型家族的审查者。
+
 ## 关键决策
 
 * 品牌只改用户能看到的部分：应用名、Bundle ID、URL scheme、App Group、iCloud 容器、钥匙串前缀、图标、界面文字、网址。Swift 模块名和文件夹名（如 `TypeWhisperPluginSDK`）保持不变，方便以后合并上游更新。
