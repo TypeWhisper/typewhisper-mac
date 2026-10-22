@@ -971,6 +971,16 @@ struct RecordingSettingsView: View {
         )
     }
 
+    /// Also shown when no engine is left, so the saved choice is still named.
+    @ViewBuilder
+    private var unavailableSavedEngineLabel: some View {
+        if let notice = unavailableSavedEngineNotice {
+            Label(notice, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
     @ViewBuilder
     private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
         let authStatus = modelManager.transcriptionAuthStatus(for: engine)
@@ -1212,6 +1222,8 @@ struct RecordingSettingsView: View {
                 if engines.isEmpty {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
+
+                    unavailableSavedEngineLabel
                 } else {
                     // Shows the engine dictation uses right now, which can be a
                     // temporary fallback; only a choice made here is saved (#1533).
@@ -1239,11 +1251,7 @@ struct RecordingSettingsView: View {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
                     }
 
-                    if let notice = unavailableSavedEngineNotice {
-                        Label(notice, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                    }
+                    unavailableSavedEngineLabel
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")

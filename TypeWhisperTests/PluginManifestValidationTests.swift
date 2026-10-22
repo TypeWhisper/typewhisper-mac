@@ -897,6 +897,46 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
         XCTAssertEqual(reason, String(localized: "It has no downloaded model."))
     }
 
+    func testDefaultEngineIsNoneWhileTheRetainedSavedEngineHasNoModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreDefaults = overrideDefaults([
+            UserDefaultsKeys.selectedEngine: "mock-local-engine",
+            "plugin.\(MockLocalEnginePlugin.pluginId).enabled": nil,
+        ])
+        defer { restoreDefaults() }
+        let previousManager = PluginManager.shared
+        defer { PluginManager.shared = previousManager }
+
+        let local = MockLocalEnginePlugin()
+        local.download("small")
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = manager
+        manager.loadedPlugins = [
+            try makeLoadedPlugin(plugin: local, pluginId: MockLocalEnginePlugin.pluginId, directory: appSupportDirectory),
+        ]
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        // A downloaded model that is not loaded yet keeps the engine named.
+        XCTAssertFalse(local.isConfigured)
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-local-engine")
+
+        try await manager.deleteDownloadedModel(pluginId: MockLocalEnginePlugin.pluginId, modelId: "small")
+        modelManager.restoreProviderSelection()
+
+        // Dictation keeps the saved engine to report the missing model, but the
+        // pickers that fall back to it must not name an engine that cannot transcribe.
+        XCTAssertEqual(modelManager.selectedProviderId, "mock-local-engine")
+        XCTAssertNil(modelManager.defaultEngine)
+        XCTAssertNil(modelManager.unavailableSavedEngine, "Dictation still uses the saved engine")
+
+        local.download("large")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-local-engine")
+    }
+
     func testTranscriptionWithModellessEngineFailsBeforePreparation() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginDownloadedModels")
         defer { TestSupport.remove(appSupportDirectory) }
