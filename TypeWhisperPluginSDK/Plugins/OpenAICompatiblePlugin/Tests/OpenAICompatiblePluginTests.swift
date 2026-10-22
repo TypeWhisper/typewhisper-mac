@@ -1385,6 +1385,194 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(reloaded.profileSnapshot(for: custom.id)?.reasoningEffort, .max)
     }
 
+    // MARK: - Workflow reasoning effort
+
+    func testOnlyResponsesProfilesReportEffortLevels() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://default.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let provider: Any = plugin
+
+        XCTAssertTrue(provider is any LLMTemperatureAndEffortControllableProvider)
+        // Chat Completions requests never send an effort, so there is no effort picker.
+        XCTAssertEqual(plugin.supportedEfforts(for: nil).map(\.id), [])
+        XCTAssertNil(plugin.defaultEffortId(for: nil))
+
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        XCTAssertEqual(plugin.supportedEfforts(for: nil).map(\.id), ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertEqual(plugin.supportedEfforts(for: "any-model").map(\.id), ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertFalse(plugin.supportedEfforts(for: nil).contains { $0.displayName.isEmpty })
+        // Provider Default omits the effort until the profile sets one.
+        XCTAssertNil(plugin.defaultEffortId(for: nil))
+
+        plugin.setReasoningEffort(.high, for: plugin.providerId)
+        XCTAssertEqual(plugin.defaultEffortId(for: nil), "high")
+    }
+
+    func testAdditionalProfilesReportTheirOwnEffortSettings() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://default.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setReasoningEffort(.low, for: plugin.providerId)
+        let office = plugin.addProfile(named: "Office")
+        plugin.setBaseURL("https://office.test", for: office.id)
+        plugin.setLLMAPI(.responses, for: office.id)
+        plugin.setReasoningEffort(.max, for: office.id)
+        let local = plugin.addProfile(named: "Local")
+        plugin.setBaseURL("http://localhost:11434", for: local.id)
+        plugin.setServerKind(.ollama, for: local.id)
+
+        let roles = plugin.additionalLLMProviders.compactMap { $0 as? any LLMTemperatureAndEffortControllableProvider }
+        let officeRole = try XCTUnwrap(roles.first { $0.llmProviderId == office.id })
+        let localRole = try XCTUnwrap(roles.first { $0.llmProviderId == local.id })
+
+        XCTAssertEqual(plugin.defaultEffortId(for: nil), "low")
+        XCTAssertEqual(officeRole.supportedEfforts(for: nil).map(\.id), ["low", "medium", "high", "xhigh", "max"])
+        XCTAssertEqual(officeRole.defaultEffortId(for: nil), "max")
+        // A Chat Completions profile, here an Ollama server, reports no levels.
+        XCTAssertEqual(localRole.supportedEfforts(for: nil).map(\.id), [])
+        XCTAssertNil(localRole.defaultEffortId(for: nil))
+    }
+
+    func testResponsesModeSendsTheWorkflowEffortInsteadOfTheProfileSetting() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "reasoning-model",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setReasoningEffort(.low, for: plugin.providerId)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.6)
+
+        let workflowEffort = try await responsesRequestBody(plugin: plugin, model: nil, effort: "xhigh")
+        let providerDefault = try await responsesRequestBody(plugin: plugin, model: nil, effort: nil)
+        let modelOverride = try await responsesRequestBody(plugin: plugin, model: "other-model", effort: "medium")
+        // An effort the profile doesn't offer, e.g. one saved by a newer host, keeps the profile setting.
+        let unknownEffort = try await responsesRequestBody(plugin: plugin, model: nil, effort: "minimal")
+
+        XCTAssertEqual(Self.reasoningEffort(in: workflowEffort), "xhigh")
+        XCTAssertNil(workflowEffort["temperature"])
+        XCTAssertEqual(Self.reasoningEffort(in: providerDefault), "low")
+        XCTAssertNil(providerDefault["temperature"])
+        XCTAssertEqual(modelOverride["model"] as? String, "other-model")
+        XCTAssertEqual(Self.reasoningEffort(in: modelOverride), "medium")
+        XCTAssertEqual(Self.reasoningEffort(in: unknownEffort), "low")
+    }
+
+    func testResponsesModeWithoutProfileEffortSendsOnlyTheWorkflowEffort() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "reasoning-model",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.6)
+
+        let providerDefault = try await responsesRequestBody(plugin: plugin, model: nil, effort: nil)
+        let workflowEffort = try await responsesRequestBody(plugin: plugin, model: nil, effort: "high")
+
+        // Provider Default on a profile without an effort omits reasoning and keeps the temperature.
+        XCTAssertNil(providerDefault["reasoning"])
+        XCTAssertEqual(providerDefault["temperature"] as? Double, 0.6)
+        XCTAssertEqual(Self.reasoningEffort(in: workflowEffort), "high")
+        XCTAssertNil(workflowEffort["temperature"])
+    }
+
+    func testChatCompletionsProfileNeverSendsAWorkflowEffort() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "http://localhost:11434",
+                "selectedLLMModel": "llama3.1:8b",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setServerKind(.ollama, for: plugin.providerId)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.4)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/v1/chat/completions", statusCode: 200)
+                )
+            ])
+        }
+
+        let effortProvider: any LLMTemperatureAndEffortControllableProvider = plugin
+        let result = try await effortProvider.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .inheritProviderSetting,
+            effort: "high"
+        )
+
+        XCTAssertEqual(result, "ok")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+        let json = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
+        )
+        XCTAssertNil(json["reasoning"])
+        XCTAssertNil(json["reasoning_effort"])
+        XCTAssertEqual(json["temperature"] as? Double, 0.4)
+    }
+
+    func testAdditionalProfileSendsTheWorkflowEffortWithItsOwnFallback() async throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://default.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setReasoningEffort(.low, for: plugin.providerId)
+        let office = plugin.addProfile(named: "Office")
+        plugin.setBaseURL("https://office.test", for: office.id)
+        plugin.selectLLMModel("office-model", for: office.id)
+        plugin.setLLMAPI(.responses, for: office.id)
+        plugin.setReasoningEffort(.high, for: office.id)
+        let role = try XCTUnwrap(
+            plugin.additionalLLMProviders.first as? any LLMTemperatureAndEffortControllableProvider
+        )
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"output_text":"ok"}"#.utf8),
+                    Self.httpResponse(url: "https://office.test/v1/responses", statusCode: 200)
+                )
+            ])
+        }
+
+        _ = try await role.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .inheritProviderSetting,
+            effort: nil
+        )
+        _ = try await role.process(systemPrompt: "Fix", userText: "hello", model: nil, effort: "medium")
+
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.host }, ["office.test", "office.test"])
+        let bodies = try requests.map {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap($0.httpBody)) as? [String: Any])
+        }
+        XCTAssertEqual(bodies.map { $0["model"] as? String }, ["office-model", "office-model"])
+        XCTAssertEqual(bodies.map { Self.reasoningEffort(in: $0) }, ["high", "medium"])
+    }
+
     func testProcessRetriesWithMaxCompletionTokensWhenProviderRequestsIt() async throws {
         let host = try PluginTestHostServices(
             defaults: [
@@ -1566,6 +1754,46 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    private static func reasoningEffort(in body: [String: Any]) -> String? {
+        (body["reasoning"] as? [String: Any])?["effort"] as? String
+    }
+
+    /// Runs one prompt request the way the host does for an effort-aware
+    /// provider and returns the body the plugin sent to `/v1/responses`.
+    private func responsesRequestBody(
+        plugin: OpenAICompatiblePlugin,
+        model: String?,
+        effort: String?
+    ) async throws -> [String: Any] {
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"output_text":"ok"}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/responses", statusCode: 200)
+                )
+            ])
+        }
+
+        let effortProvider: any LLMTemperatureAndEffortControllableProvider = plugin
+        let result = try await effortProvider.process(
+            systemPrompt: "Fix",
+            userText: "hello",
+            model: model,
+            temperatureDirective: .inheritProviderSetting,
+            effort: effort
+        )
+
+        XCTAssertEqual(result, "ok")
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let request = try XCTUnwrap(requests.first)
+        XCTAssertEqual(request.url?.path, "/v1/responses")
+        return try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
+        )
     }
 
     // MARK: - Realtime Transport: Migration & Defaults
