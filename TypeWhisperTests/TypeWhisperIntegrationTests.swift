@@ -24639,10 +24639,19 @@ extension TypeWhisperIntegrationTests {
         if !showsIndicator {
             XCTAssertNil(countdown.presentation)
             XCTAssertEqual(notifications.autoStopAttempts, 0)
+            // Shown again, the pending countdown returns with its deadline.
+            controller.setShowsMeetingIndicator(true)
+            XCTAssertEqual(countdown.presentation?.kind, .autoStop)
+            controller.setShowsMeetingIndicator(false)
+            XCTAssertNil(countdown.presentation)
             now = now.addingTimeInterval(60)
             await controller.testingAdvanceTime()
             XCTAssertNotEqual(recorder.state, .recording, "The hidden recording stops at the deadline")
             XCTAssertFalse(recorder.isIndicatorHidden)
+            for _ in 0..<100 where recorder.state != .idle {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(recorder.state, .idle)
             return
         }
         XCTAssertEqual(countdown.presentation?.kind, .autoStop)
