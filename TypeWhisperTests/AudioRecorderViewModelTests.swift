@@ -2870,6 +2870,269 @@ final class AudioRecorderViewModelTests: XCTestCase {
         }
     }
 
+    /// A queued transcript holds no audio once its file is complete; it reads the file
+    /// when its turn comes, so back-to-back meetings do not pile up audio in memory.
+    func testQueuedTranscriptsHoldNoAudioOnceTheirFilesAreComplete() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        var loadedFiles: [String] = []
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: marker,
+            audioSamplesLoader: { url in
+                loadedFiles.append(url.lastPathComponent)
+                return Array(repeating: 0.7, count: Int(AudioRecorderService.transcriptionSampleRate))
+            },
+            // As long as the captured second of audio.
+            recordingDurationReader: { _ in 1 }
+        )
+
+        let first = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+
+        XCTAssertEqual(viewModel.queuedFinalTranscriptionSampleCounts, [0, 0])
+        XCTAssertEqual(loadedFiles.count, 1, "The waiting transcript reads its file when its turn comes")
+
+        await gate.finishNext(.text("first meeting"))
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("second meeting"))
+        let firstSession = try await waitForRecorderSession(viewModel, id: first, status: .completed)
+        let secondSession = try await waitForRecorderSession(viewModel, id: second, status: .completed)
+        XCTAssertEqual(firstSession.text, "first meeting")
+        XCTAssertEqual(secondSession.text, "second meeting")
+        // The engine got each file's audio, not the captured audio.
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.7, 0.7])
+        XCTAssertEqual(loadedFiles, [firstSession, secondSession].compactMap {
+            $0.outputFile.map { URL(fileURLWithPath: $0).lastPathComponent }
+        })
+    }
+
+    /// A file that fails the check at stop leaves its queued transcript the captured
+    /// audio, which the transcript uses when the file cannot be read.
+    func testQueuedTranscriptKeepsCapturedAudioWhenItsFileFailsTheCheck() async throws {
+        try preserveStandardDefaults()
+        let gate = RecorderTranscriptionGate()
+        setupGatedPluginManager(gate: gate)
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let marker = OSAllocatedUnfairLock(initialState: Float(0.1))
+        let checks = OSAllocatedUnfairLock(initialState: 0)
+        let viewModel = makeQueueViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            marker: marker,
+            audioSamplesLoader: { _ in throw AudioFileService.AudioFileError.conversionFailed("truncated file") },
+            // The first file cannot be opened, the second has no audio.
+            recordingDurationReader: { _ in
+                let check = checks.withLock { count in
+                    count += 1
+                    return count
+                }
+                if check == 1 { throw AudioFileService.AudioFileError.unsupportedFormat }
+                return 0
+            }
+        )
+        let capturedSampleCount = Int(AudioRecorderService.transcriptionSampleRate)
+
+        let first = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the first transcript started") { await gate.waitingCount == 1 }
+        marker.withLock { $0 = 0.2 }
+        let second = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+        try await waitUntil("the second recording is queued") { viewModel.pendingTranscriptions.count == 2 }
+
+        XCTAssertEqual(viewModel.queuedFinalTranscriptionSampleCounts, [capturedSampleCount, capturedSampleCount])
+
+        await gate.finishNext(.text("first meeting"))
+        try await waitUntil("the second transcript started") { await gate.waitingCount == 1 }
+        await gate.finishNext(.text("second meeting"))
+        let firstSession = try await waitForRecorderSession(viewModel, id: first, status: .completed)
+        let secondSession = try await waitForRecorderSession(viewModel, id: second, status: .completed)
+        XCTAssertEqual(firstSession.text, "first meeting")
+        XCTAssertEqual(secondSession.text, "second meeting")
+        let startedMarkers = await gate.startedMarkers
+        XCTAssertEqual(startedMarkers, [0.1, 0.2], "Each transcript used its own captured audio")
+    }
+
+    /// A file that was complete at stop but cannot be read when its turn comes leaves
+    /// the recording with its audio, listed as not transcribed, to be transcribed again.
+    func testCompleteFileThatCannotBeReadLaterLeavesTheRecordingNotTranscribed() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("not from this recording"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: makeTemporaryDirectory()),
+            audioSamplesLoader: { _ in throw AudioFileService.AudioFileError.fileNotFound },
+            recordingDurationReader: { _ in 1 }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
+        XCTAssertTrue(session.error?.contains("File not found") == true, session.error ?? "no error")
+        let audioURL = URL(fileURLWithPath: try XCTUnwrap(session.outputFile))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: audioURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: failureSidecarURL(for: audioURL).path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: audioURL.deletingPathExtension().appendingPathExtension("txt").path
+        ))
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq") as? AudioRecorderMockTranscriptionPlugin
+        )
+        XCTAssertNil(plugin.lastRequest, "The engine never gets audio the job could not read")
+
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        XCTAssertEqual(recording.transcriptionFailure?.phase, .preparingFinalAudio)
+        XCTAssertTrue(viewModel.pendingTranscriptions.isEmpty)
+        XCTAssertTrue(viewModel.canTranscribeRecording(recording), "The recording can be transcribed again")
+    }
+
+    func testFinalizedFileCheckAllowsOnlyASmallShortfall() {
+        func isComplete(_ fileDuration: TimeInterval, of capturedDuration: TimeInterval) -> Bool {
+            AudioRecorderViewModel.finalizedFileIsComplete(fileDuration: fileDuration, capturedDuration: capturedDuration)
+        }
+        XCTAssertTrue(isComplete(10, of: 10))
+        XCTAssertTrue(isComplete(11, of: 10), "A longer file holds the whole recording")
+        XCTAssertTrue(isComplete(9.1, of: 10), "Up to a second shorter")
+        XCTAssertFalse(isComplete(8.8, of: 10))
+        XCTAssertTrue(isComplete(3_540, of: 3_600), "Up to 2 % of a long recording shorter")
+        XCTAssertFalse(isComplete(3_500, of: 3_600))
+        XCTAssertFalse(isComplete(0, of: 0), "A file without audio")
+        XCTAssertFalse(isComplete(.nan, of: 10))
+        XCTAssertFalse(isComplete(.infinity, of: 10))
+    }
+
+    func testRecordingDurationReaderReadsTheFileHeader() async throws {
+        let directory = makeTemporaryDirectory()
+        let wavURL = directory.appendingPathComponent("Meeting.wav")
+        try writePCMFile(at: wavURL, frameCount: 72_000, sampleRate: 48_000, channelCount: 2, sample: 0.25)
+        let wavDuration = try await AudioRecorderViewModel.readRecordingDuration(wavURL)
+        XCTAssertEqual(wavDuration, 1.5, accuracy: 0.001)
+
+        let m4aURL = directory.appendingPathComponent("Meeting.m4a")
+        do {
+            let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2))
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 96_000))
+            buffer.frameLength = 96_000
+            let file = try AVAudioFile(forWriting: m4aURL, settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 48_000,
+                AVNumberOfChannelsKey: 2,
+                AVEncoderBitRateKey: 192_000,
+            ])
+            try file.write(from: buffer)
+        }
+        let m4aDuration = try await AudioRecorderViewModel.readRecordingDuration(m4aURL)
+        XCTAssertEqual(m4aDuration, 2, accuracy: 0.05)
+
+        let placeholderURL = directory.appendingPathComponent("Placeholder.wav")
+        try Data("recorded".utf8).write(to: placeholderURL)
+        do {
+            _ = try await AudioRecorderViewModel.readRecordingDuration(placeholderURL)
+            XCTFail("A file that is not audio has no length")
+        } catch {}
+    }
+
+    /// A live transcript's speaker record reads the complete file when its turn comes.
+    func testLiveTranscriptSpeakerRecordReadsTheCompleteFile() async throws {
+        try preserveStandardDefaults()
+        let livePlugin = setupAnsweringLivePlugin()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(livePlugin.providerId)
+        let fileSamples = Array(repeating: Float(0.3), count: Int(AudioRecorderService.transcriptionSampleRate * 6))
+        let viewModel = try makeLiveSpeakerViewModel(
+            modelManager: modelManager,
+            audioSamplesLoader: { _ in fileSamples }
+        )
+        var speakerSamples: [[Float]] = []
+        viewModel.speakerRecordIntake = { input in
+            speakerSamples.append(input.samples)
+            return UUID()
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        try await waitUntil("the live session started") { livePlugin.liveSessionCreateCount == 1 }
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "live meeting notes")
+        XCTAssertEqual(livePlugin.batchTranscriptionCount, 0, "The live session's result is the transcript")
+        XCTAssertEqual(speakerSamples, [fileSamples])
+    }
+
+    /// A live transcript is saved when its file cannot be read for the speaker record;
+    /// only the speaker record is left out, and transcribing the recording again adds it.
+    func testLiveTranscriptIsSavedWhenItsFileCannotBeReadForTheSpeakerRecord() async throws {
+        try preserveStandardDefaults()
+        let livePlugin = setupAnsweringLivePlugin()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(livePlugin.providerId)
+        let viewModel = try makeLiveSpeakerViewModel(
+            modelManager: modelManager,
+            audioSamplesLoader: { _ in throw AudioFileService.AudioFileError.fileNotFound }
+        )
+        var speakerInputs = 0
+        viewModel.speakerRecordIntake = { _ in
+            speakerInputs += 1
+            return UUID()
+        }
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        try await waitUntil("the live session started") { livePlugin.liveSessionCreateCount == 1 }
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "live meeting notes")
+        XCTAssertEqual(speakerInputs, 0)
+        let audioURL = URL(fileURLWithPath: try XCTUnwrap(session.outputFile))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: failureSidecarURL(for: audioURL).path))
+    }
+
+    /// Without a speaker record, a live transcript needs no audio, so nothing is read.
+    func testLiveTranscriptWithoutSpeakerRecordReadsNoAudio() async throws {
+        try preserveStandardDefaults()
+        let livePlugin = setupAnsweringLivePlugin()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(livePlugin.providerId)
+        var loads = 0
+        let viewModel = try makeLiveSpeakerViewModel(
+            modelManager: modelManager,
+            audioSamplesLoader: { _ in
+                loads += 1
+                return []
+            }
+        )
+        viewModel.detectSpeakers = false
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        try await waitUntil("the live session started") { livePlugin.liveSessionCreateCount == 1 }
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "live meeting notes")
+        XCTAssertEqual(loads, 0)
+    }
+
     func testRecorderTranscriptionQueueCopyIsLocalized() throws {
         for key in [
             "recorder.transcriptionQueue",
@@ -2987,6 +3250,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         dictionaryService: DictionaryService? = nil,
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         audioSamplesLoader: AudioRecorderViewModel.AudioSamplesLoader? = nil,
+        recordingDurationReader: AudioRecorderViewModel.RecordingDurationReader? = nil,
         speechRegionDetector: any SpeechRegionDetecting = WholeRecordingSpeechDetector(),
         recordingsLoader: AudioRecorderViewModel.RecordingsLoader? = nil,
         recorderCompletionsLoader: AudioRecorderViewModel.RecorderCompletionsLoader? = nil,
@@ -3006,6 +3270,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             defaults: defaults,
             audioSamplesLoader: audioSamplesLoader,
+            recordingDurationReader: recordingDurationReader,
             speechRegionDetector: speechRegionDetector,
             recordingsLoader: recordingsLoader,
             recorderCompletionsLoader: recorderCompletionsLoader,
@@ -3101,6 +3366,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         defaults: UserDefaults,
         modelManager: ModelManagerService,
         marker: OSAllocatedUnfairLock<Float>,
+        audioSamplesLoader: AudioRecorderViewModel.AudioSamplesLoader? = nil,
+        recordingDurationReader: AudioRecorderViewModel.RecordingDurationReader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil,
         accessibilityAnnouncementService: AccessibilityAnnouncementService? = nil
     ) -> AudioRecorderViewModel {
@@ -3112,12 +3379,53 @@ final class AudioRecorderViewModelTests: XCTestCase {
             defaults: defaults,
             modelManager: modelManager,
             recorderService: recorderService,
+            audioSamplesLoader: audioSamplesLoader,
+            recordingDurationReader: recordingDurationReader,
             livePreviewStartObserver: livePreviewStartObserver,
             accessibilityAnnouncementService: accessibilityAnnouncementService
         )
         viewModel.transcriptionEnabled = true
         viewModel.livePreviewEnabled = false
         return viewModel
+    }
+
+    /// A Recorder with live preview and speaker records. Its six captured seconds
+    /// are matched by a complete file.
+    private func makeLiveSpeakerViewModel(
+        modelManager: ModelManagerService,
+        audioSamplesLoader: @escaping AudioRecorderViewModel.AudioSamplesLoader
+    ) throws -> AudioRecorderViewModel {
+        let captureSamples = Array(repeating: Float(0.25), count: Int(AudioRecorderService.transcriptionSampleRate * 6))
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: makeTemporaryDirectory(), samples: captureSamples),
+            audioSamplesLoader: audioSamplesLoader,
+            recordingDurationReader: { _ in 6 }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = true
+        viewModel.detectSpeakers = true
+        return viewModel
+    }
+
+    /// The mock engines, and a live engine whose session answers all audio.
+    private func setupAnsweringLivePlugin() -> AudioRecorderAnsweringLivePlugin {
+        setupPluginManager()
+        let livePlugin = AudioRecorderAnsweringLivePlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: AudioRecorderAnsweringLivePlugin.pluginId,
+                name: AudioRecorderAnsweringLivePlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "AudioRecorderAnsweringLivePlugin"
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: makeTemporaryDirectory(),
+            isEnabled: true
+        ))
+        return livePlugin
     }
 
     /// Engines whose transcriptions wait for `gate`.
@@ -3691,6 +3999,62 @@ private final class AudioRecorderStallingLivePlugin: NSObject, LiveTranscription
 
         func finish() async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "words before the stall", detectedLanguage: "en")
+        }
+
+        func cancel() async {}
+    }
+}
+
+/// A live session that answers all audio and finishes with more text than its preview.
+private final class AudioRecorderAnsweringLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.answering-live"
+    static let pluginName = "Answering Live"
+
+    var providerId: String { "answering-live" }
+    var providerDisplayName: String { "Answering Live" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
+    var selectedModelId: String? { "live" }
+    var supportsTranslation: Bool { false }
+    private let counts = OSAllocatedUnfairLock(initialState: (sessions: 0, batch: 0))
+
+    var liveSessionCreateCount: Int { counts.withLock { $0.sessions } }
+    var batchTranscriptionCount: Int { counts.withLock { $0.batch } }
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        counts.withLock { $0.batch += 1 }
+        return PluginTranscriptionResult(text: "batch transcript", detectedLanguage: language)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        counts.withLock { $0.sessions += 1 }
+        return AnsweringSession(onProgress: onProgress)
+    }
+
+    private actor AnsweringSession: LiveTranscriptionSession {
+        private let onProgress: @Sendable (String) -> Bool
+
+        init(onProgress: @Sendable @escaping (String) -> Bool) {
+            self.onProgress = onProgress
+        }
+
+        func appendAudio(samples: [Float]) async throws {
+            _ = onProgress("live meeting")
+        }
+
+        func finish() async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "live meeting notes", detectedLanguage: "en")
         }
 
         func cancel() async {}

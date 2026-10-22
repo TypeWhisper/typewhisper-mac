@@ -127,6 +127,8 @@ private func isRegularRecorderAutomationFile(_ url: URL) throws -> Bool {
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
     typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
+    /// Reads a finalized recording's length in seconds from its header, without decoding it.
+    typealias RecordingDurationReader = @Sendable (URL) async throws -> TimeInterval
     typealias RecordingsLoader = @Sendable (
         URL,
         [String: RecordingTranscriptionFailure]
@@ -203,6 +205,21 @@ final class AudioRecorderViewModel: ObservableObject {
         var livePreviewText = ""
         /// Whether a speaker record follows, decided when the request is made.
         var detectsSpeakers = false
+        /// The captured audio's length in samples. A queued job holds no audio while it
+        /// waits, so a live session's job is measured by this.
+        var capturedSampleCount = 0
+    }
+
+    /// Where a queued job finds the recording's audio when it runs. A waiting job
+    /// holds no audio unless its finalized file failed the check at stop.
+    private enum FinalTranscriptionAudio {
+        /// The live session's result is the transcript, and no speaker record needs audio.
+        case notNeeded
+        /// The finalized file was complete at stop; the job reads it when it runs.
+        case finalizedFile
+        /// The finalized file failed the check, so the job keeps the captured audio in
+        /// case the file cannot be read.
+        case capturedAudio([Float])
     }
 
     /// A stopped recording's final transcription. The queue runs one at a time, in
@@ -211,6 +228,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private struct FinalTranscriptionJob {
         let id = UUID()
         let request: FinalTranscriptionRequest
+        let audio: FinalTranscriptionAudio
         let apiSessionID: UUID?
         /// The preview belongs to this recording until the next one starts.
         let recordingGeneration: Int
@@ -487,6 +505,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
     private let audioSamplesLoader: AudioSamplesLoader
+    private let recordingDurationReader: RecordingDurationReader
     private let speechRegionDetector: any SpeechRegionDetecting
     private let recordingsLoader: RecordingsLoader
     private let recorderCompletionsLoader: RecorderCompletionsLoader
@@ -531,6 +550,7 @@ final class AudioRecorderViewModel: ObservableObject {
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
+        recordingDurationReader: RecordingDurationReader? = nil,
         speechRegionDetector: (any SpeechRegionDetecting)? = nil,
         recordingsLoader: RecordingsLoader? = nil,
         recorderCompletionsLoader: RecorderCompletionsLoader? = nil,
@@ -543,6 +563,9 @@ final class AudioRecorderViewModel: ObservableObject {
         self.dictionaryService = dictionaryService
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
             try await audioFileService.loadAudioSamples(from: url)
+        }
+        self.recordingDurationReader = recordingDurationReader ?? { url in
+            try await AudioRecorderViewModel.readRecordingDuration(url)
         }
         self.speechRegionDetector = speechRegionDetector ?? SoundAnalysisSpeechRegionDetector()
         self.recordingsLoader = recordingsLoader ?? { directory, transientFailures in
@@ -947,6 +970,16 @@ final class AudioRecorderViewModel: ObservableObject {
             let (liveSessionFinish, url) = await (liveSessionFinishTask, finalizedURLTask)
             let liveResultFromStart = liveSessionFinish.result
             let liveSessionFailed = if case .failed = liveSessionFinish { true } else { false }
+            // A complete file stands in for the captured audio, so a job waiting in
+            // the queue holds none. Only the file's header is read here.
+            let finalizedFileIsComplete = if shouldTranscribe, let url {
+                await checkFinalizedRecording(
+                    url,
+                    capturedSampleCount: stoppedRecording.transcriptionSamples.count
+                )
+            } else {
+                false
+            }
 
             if let url, let calendarEvent {
                 do {
@@ -976,11 +1009,21 @@ final class AudioRecorderViewModel: ObservableObject {
                 let providerId = engine.providerId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
+                let detectsSpeakers = wantsSpeakerRecord(calendarEvent: calendarEvent)
+                // The engine and a speaker record need the audio; a live session's
+                // result alone does not.
+                let audio: FinalTranscriptionAudio = if liveSessionResult != nil && !detectsSpeakers {
+                    .notNeeded
+                } else if finalizedFileIsComplete {
+                    .finalizedFile
+                } else {
+                    .capturedAudio(stoppedRecording.transcriptionSamples)
+                }
                 finalTranscriptionJob = FinalTranscriptionJob(
                     request: FinalTranscriptionRequest(
                         outputURL: url,
-                        // The job reads the finalized file, unless the live session's result is used.
-                        buffer: stoppedRecording.transcriptionSamples,
+                        // Filled in when the job runs, from `audio`.
+                        buffer: [],
                         languageSelection: languageSelection,
                         task: selectedTask,
                         providerId: providerId,
@@ -992,8 +1035,10 @@ final class AudioRecorderViewModel: ObservableObject {
                         calendarEvent: calendarEvent,
                         ownSpeech: stoppedRecording.ownSpeech,
                         livePreviewText: partialText,
-                        detectsSpeakers: wantsSpeakerRecord(calendarEvent: calendarEvent)
+                        detectsSpeakers: detectsSpeakers,
+                        capturedSampleCount: stoppedRecording.transcriptionSamples.count
                     ),
+                    audio: audio,
                     apiSessionID: apiSessionID,
                     recordingGeneration: recordingGeneration,
                     recordingDuration: recordingDuration,
@@ -1035,6 +1080,56 @@ final class AudioRecorderViewModel: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Whether the finalized file holds the whole recording, from its header alone.
+    private func checkFinalizedRecording(_ url: URL, capturedSampleCount: Int) async -> Bool {
+        let capturedDuration = Double(capturedSampleCount) / AudioRecorderService.transcriptionSampleRate
+        do {
+            let fileDuration = try await recordingDurationReader(url)
+            guard Self.finalizedFileIsComplete(fileDuration: fileDuration, capturedDuration: capturedDuration) else {
+                logger.warning(
+                    "Finalized recording is shorter than the captured audio (\(fileDuration, privacy: .public)s of \(capturedDuration, privacy: .public)s); keeping the capture buffer"
+                )
+                return false
+            }
+            return true
+        } catch {
+            logger.warning(
+                "Could not check the finalized recording; keeping the capture buffer: \(error.localizedDescription, privacy: .public)"
+            )
+            return false
+        }
+    }
+
+    /// A complete file has audio and is at most a second, or 2 % of a long
+    /// recording, shorter than the captured audio.
+    nonisolated static func finalizedFileIsComplete(
+        fileDuration: TimeInterval,
+        capturedDuration: TimeInterval
+    ) -> Bool {
+        guard fileDuration.isFinite, fileDuration > 0 else { return false }
+        return capturedDuration - fileDuration <= max(1, capturedDuration * 0.02)
+    }
+
+    /// The file's length from its header; the audio is not decoded.
+    nonisolated static func readRecordingDuration(_ url: URL) async throws -> TimeInterval {
+        try await Task.detached(priority: .utility) {
+            let file = try AVAudioFile(forReading: url)
+            let sampleRate = file.processingFormat.sampleRate
+            guard sampleRate > 0 else { throw AudioFileService.AudioFileError.unsupportedFormat }
+            return Double(file.length) / sampleRate
+        }.value
+    }
+
+    /// Reads a finalized file that was complete at stop. Without captured audio to
+    /// fall back on, a file that cannot be read or holds no audio is an error.
+    private func loadCompleteFinalizedRecording(_ outputURL: URL) async throws -> [Float] {
+        let samples = try await audioSamplesLoader(outputURL)
+        guard !samples.isEmpty else {
+            throw AudioFileService.AudioFileError.conversionFailed("The recording contains no audio")
+        }
+        return samples
     }
 
     private func finalizedRecordingSamples(
@@ -1513,15 +1608,58 @@ final class AudioRecorderViewModel: ObservableObject {
         finalTranscriptionTask = Task { [weak self] in
             guard let self else { return }
             var request = job.request
-            if request.liveSessionResult == nil {
-                request.buffer = await self.finalizedRecordingSamples(
-                    from: request.outputURL,
-                    fallback: request.buffer
-                )
+            switch job.audio {
+            case .notNeeded:
+                break
+            case .finalizedFile:
+                do {
+                    request.buffer = try await self.loadCompleteFinalizedRecording(request.outputURL)
+                } catch {
+                    // A job given up when the app quit is marked as interrupted already.
+                    guard !Task.isCancelled else {
+                        self.finishFinalTranscription(job, outcome: .skipped, previewText: request.livePreviewText)
+                        return
+                    }
+                    guard request.liveSessionResult != nil else {
+                        self.failFinalTranscriptionAudio(job, request: request, error: error)
+                        return
+                    }
+                    // The live session's result is still the transcript; only the
+                    // speaker record needed the file.
+                    logger.warning(
+                        "Could not read the finalized recording for its speaker record: \(error.localizedDescription, privacy: .public)"
+                    )
+                    request.detectsSpeakers = false
+                }
+            case .capturedAudio(let capturedSamples):
+                // The finished file comes first; the captured audio is the fallback.
+                request.buffer = if request.liveSessionResult == nil {
+                    await self.finalizedRecordingSamples(from: request.outputURL, fallback: capturedSamples)
+                } else {
+                    capturedSamples
+                }
             }
             let result = await self.runFinalTranscription(request)
             self.finishFinalTranscription(job, outcome: result.outcome, previewText: result.previewText)
         }
+    }
+
+    /// The recording keeps its audio and is listed as not transcribed, so it can be
+    /// transcribed again once its file can be read.
+    private func failFinalTranscriptionAudio(
+        _ job: FinalTranscriptionJob,
+        request: FinalTranscriptionRequest,
+        error: Error
+    ) {
+        logger.error("Could not read the finalized recording for transcription: \(error.localizedDescription, privacy: .public)")
+        let failure = makeTranscriptionFailure(
+            phase: .preparingFinalAudio,
+            providerError: error.localizedDescription,
+            request: request
+        )
+        let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
+        errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+        finishFinalTranscription(job, outcome: .failed(recordedFailure), previewText: request.livePreviewText)
     }
 
     private func finishFinalTranscription(
@@ -1621,8 +1759,10 @@ final class AudioRecorderViewModel: ObservableObject {
         // for the transcript.
         let preview = request.livePreviewText
         let previewCanBeTranscript = !request.liveSessionFailed
-        let buffer = request.buffer
-        guard buffer.count > 8000 else { // At least 0.5s of audio
+        // A live session's job holds audio only for a speaker record, so the captured
+        // length decides for it.
+        let sampleCount = request.liveSessionResult == nil ? request.buffer.count : request.capturedSampleCount
+        guard sampleCount > 8000 else { // At least 0.5s of audio
             // Use streaming result as final if buffer too short
             if previewCanBeTranscript, !preview.isEmpty {
                 return (saveTranscriptOutcome(preview, for: request.outputURL, request: request), preview)
@@ -2304,6 +2444,14 @@ final class AudioRecorderViewModel: ObservableObject {
 
 #if DEBUG
 extension AudioRecorderViewModel {
+    /// The audio samples each queued transcription holds while it waits, for tests.
+    var queuedFinalTranscriptionSampleCounts: [Int] {
+        finalTranscriptionJobs.map { job in
+            let capturedSampleCount = if case .capturedAudio(let samples) = job.audio { samples.count } else { 0 }
+            return job.request.buffer.count + capturedSampleCount
+        }
+    }
+
     /// Screenshot fixture: a meeting is recorded while the two meetings before it
     /// wait for their transcripts.
     func prepareScreenshotQueueFixture() {
