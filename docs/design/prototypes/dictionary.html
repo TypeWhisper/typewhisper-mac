@@ -1,0 +1,443 @@
+<!doctype html>
+<html lang="zh-Hans" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>词典 · dictum 原型</title>
+<style>
+:root{
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Helvetica Neue", sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, "PingFang SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #c9d6f2 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #e8d5e6 0%, transparent 60%), linear-gradient(160deg,#dfe4ee,#eceaf0);
+  --bg-window: #ffffff;
+  --bg-sidebar: rgba(236,236,240,0.78);
+  --bg-content: #ffffff;
+  --bg-card: #f6f6f8;
+  --bg-raised: #ffffff;
+  --bg-hover: rgba(0,0,0,0.045);
+  --bg-selected: rgba(0,0,0,0.075);
+  --bg-control: #ffffff;
+  --bg-field: #ffffff;
+  --bg-inset: #f1f1f4;
+  --separator: rgba(0,0,0,0.085);
+  --separator-strong: rgba(0,0,0,0.14);
+  --text-1: #1d1d1f;
+  --text-2: #6e6e73;
+  --text-3: #a1a1a6;
+  --text-on-accent: #ffffff;
+  --accent: #3b5bdb;
+  --accent-hover: #3451c7;
+  --accent-soft: rgba(59,91,219,0.10);
+  --accent-text: #3451c7;
+  --live: #f2423a;
+  --translate: #8e4fe8;
+  --translate-soft: rgba(142,79,232,0.12);
+  --success: #23a55a;
+  --success-soft: rgba(35,165,90,0.12);
+  --warning: #d98a00;
+  --warning-soft: rgba(217,138,0,0.13);
+  --danger: #e0434b;
+  --danger-soft: rgba(224,67,75,0.10);
+  --heat-0: #ececf0; --heat-1: #cdd6f6; --heat-2: #9aaeee; --heat-3: #6a86e3; --heat-4: #3b5bdb;
+  --shadow-window: 0 0 0 0.5px rgba(0,0,0,0.22), 0 24px 70px rgba(20,24,40,0.28), 0 6px 18px rgba(20,24,40,0.10);
+  --shadow-popover: 0 0 0 0.5px rgba(0,0,0,0.16), 0 12px 32px rgba(0,0,0,0.16), 0 2px 6px rgba(0,0,0,0.06);
+  --shadow-control: 0 0 0 0.5px rgba(0,0,0,0.16), 0 1px 1.5px rgba(0,0,0,0.08);
+  --shadow-card: none;
+  --r-control: 6px; --r-row: 8px; --r-card: 12px; --r-window: 12px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  color-scheme: light;
+}
+[data-theme="dark"]{
+  --bg-desktop: radial-gradient(1200px 800px at 15% 10%, #1f2a4a 0%, transparent 60%), radial-gradient(900px 700px at 90% 90%, #3a2240 0%, transparent 60%), linear-gradient(160deg,#111318,#17151c);
+  --bg-window: #1e1e20;
+  --bg-sidebar: rgba(38,38,42,0.80);
+  --bg-content: #1e1e20;
+  --bg-card: #262629;
+  --bg-raised: #2c2c2f;
+  --bg-hover: rgba(255,255,255,0.05);
+  --bg-selected: rgba(255,255,255,0.09);
+  --bg-control: #3a3a3d;
+  --bg-field: #29292c;
+  --bg-inset: #18181a;
+  --separator: rgba(255,255,255,0.08);
+  --separator-strong: rgba(255,255,255,0.14);
+  --text-1: #f2f2f4;
+  --text-2: #a1a1a8;
+  --text-3: #6c6c72;
+  --accent: #6e8bff;
+  --accent-hover: #829bff;
+  --accent-soft: rgba(110,139,255,0.16);
+  --accent-text: #8ea4ff;
+  --live: #ff5a50;
+  --translate: #b383ff;
+  --translate-soft: rgba(179,131,255,0.16);
+  --success: #3ccf72;
+  --success-soft: rgba(60,207,114,0.14);
+  --warning: #ffb340;
+  --warning-soft: rgba(255,179,64,0.14);
+  --danger: #ff6369;
+  --danger-soft: rgba(255,99,105,0.14);
+  --heat-0: #2c2c30; --heat-1: #283463; --heat-2: #34479a; --heat-3: #4e67d1; --heat-4: #7b94ff;
+  --shadow-window: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.6), 0 24px 70px rgba(0,0,0,0.55);
+  --shadow-popover: 0 0 0 0.5px rgba(255,255,255,0.12), 0 0 0 1px rgba(0,0,0,0.5), 0 14px 36px rgba(0,0,0,0.5);
+  --shadow-control: 0 0 0 0.5px rgba(255,255,255,0.10), 0 1px 1.5px rgba(0,0,0,0.3);
+  color-scheme: dark;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{min-height:100%}
+html{background:var(--bg-desktop);background-color:var(--bg-window)}
+body{font-family:var(--font);font-size:13px;line-height:1.45;color:var(--text-1);-webkit-font-smoothing:antialiased;min-height:100vh;transition:color .2s var(--ease-out)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:default}
+input,textarea,select{font:inherit;color:inherit}
+svg{display:block;flex-shrink:0}
+.num{font-family:var(--font-rounded);font-variant-numeric:tabular-nums}
+.mono{font-family:var(--font-mono);font-size:12px}
+
+/* prototype chrome (outside the app) */
+.proto-bar{position:fixed;top:14px;right:16px;z-index:100;display:flex;align-items:center;gap:6px;padding:5px;border-radius:999px;background:rgba(255,255,255,0.72);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.08);font-size:12px}
+[data-theme="dark"] .proto-bar{background:rgba(40,40,44,0.72);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 4px 16px rgba(0,0,0,.4)}
+.proto-bar a,.proto-bar button{color:var(--text-2);text-decoration:none;padding:4px 10px;border-radius:999px}
+.proto-bar a:hover,.proto-bar button:hover{background:var(--bg-hover);color:var(--text-1)}
+.proto-bar .on{background:var(--bg-selected);color:var(--text-1)}
+.proto-bar .sep{width:1px;height:14px;background:var(--separator-strong)}
+.stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:64px 32px 40px}
+
+/* window */
+.window{width:1040px;height:680px;border-radius:var(--r-window);background:var(--bg-window);box-shadow:var(--shadow-window);display:flex;overflow:hidden;position:relative}
+.traffic{position:absolute;top:19px;left:20px;display:flex;gap:8px;z-index:5}
+.traffic i{width:12px;height:12px;border-radius:50%;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.18)}
+.traffic i:nth-child(1){background:#ff5f57}.traffic i:nth-child(2){background:#febc2e}.traffic i:nth-child(3){background:#28c840}
+.sidebar{width:212px;flex-shrink:0;background:var(--bg-sidebar);backdrop-filter:blur(40px) saturate(1.8);-webkit-backdrop-filter:blur(40px) saturate(1.8);border-right:.5px solid var(--separator);display:flex;flex-direction:column;padding:52px 10px 12px}
+.sb-group{display:flex;flex-direction:column;gap:1px}
+.sb-label{font-size:11px;font-weight:600;color:var(--text-3);padding:14px 10px 5px}
+.sb-item{display:flex;align-items:center;gap:9px;height:30px;padding:0 10px;border-radius:7px;color:var(--text-1);text-decoration:none;font-size:13px;transition:background .15s var(--ease-out)}
+.sb-item svg{color:var(--text-2)}
+.sb-item:hover{background:var(--bg-hover)}
+.sb-item.active{background:var(--bg-selected)}
+.sb-item.active svg{color:var(--accent)}
+.sb-item .count{margin-left:auto;font-size:11px;color:var(--text-3)}
+.sb-spacer{flex:1}
+.sb-status{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;font-size:12px;color:var(--text-2)}
+.sb-status:hover{background:var(--bg-hover)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--success);flex-shrink:0}
+.dot.warn{background:var(--warning)}.dot.err{background:var(--danger)}.dot.idle{background:var(--text-3)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg-content)}
+.toolbar{height:52px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 20px 0 28px}
+.toolbar h1{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.toolbar .grow{flex:1}
+.content{flex:1;overflow:auto;padding:4px 28px 28px}
+.content::-webkit-scrollbar{width:0}
+
+/* type */
+.t-title{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.t-h{font-size:13px;font-weight:600}
+.t-body{font-size:13px}
+.t-sub{font-size:12px;color:var(--text-2)}
+.t-cap{font-size:11px;color:var(--text-3)}
+.t-reading{font-size:15px;line-height:1.7}
+
+/* controls */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;padding:0 12px;border-radius:var(--r-control);background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap;transition:filter .15s,background .15s}
+.btn:hover{filter:brightness(.98)}
+.btn:active{filter:brightness(.94)}
+.btn.primary{background:var(--accent);color:var(--text-on-accent);box-shadow:0 0 0 .5px rgba(0,0,0,.1),0 1px 2px rgba(59,91,219,.3)}
+.btn.primary:hover{background:var(--accent-hover);filter:none}
+.btn.danger{color:var(--danger)}
+.btn.plain{background:none;box-shadow:none;color:var(--text-2);padding:0 8px}
+.btn.plain:hover{background:var(--bg-hover);color:var(--text-1)}
+.btn.icon{width:28px;padding:0}
+.btn.sm{height:24px;padding:0 9px;font-size:12px;border-radius:5px}
+.btn.lg{height:36px;padding:0 18px;font-size:14px;border-radius:8px;font-weight:500}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.link{color:var(--accent-text);text-decoration:none;cursor:pointer}
+.link:hover{text-decoration:underline}
+
+.seg{display:inline-flex;padding:2px;border-radius:7px;background:var(--bg-inset);box-shadow:inset 0 0 0 .5px var(--separator)}
+.seg button{height:22px;padding:0 11px;border-radius:5px;font-size:12px;color:var(--text-2);transition:color .15s}
+.seg button.on{background:var(--bg-raised);color:var(--text-1);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 1px 2px rgba(0,0,0,.08)}
+[data-theme="dark"] .seg button.on{background:#4a4a4e;box-shadow:none}
+.seg.lg button{height:26px;padding:0 14px;font-size:13px}
+
+.switch{position:relative;width:32px;height:19px;border-radius:999px;background:var(--separator-strong);transition:background .2s var(--ease-out);flex-shrink:0;cursor:default}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.06);transition:transform .22s var(--ease-spring)}
+.switch.on{background:var(--accent)}
+.switch.on::after{transform:translateX(13px)}
+[data-theme="dark"] .switch{background:rgba(255,255,255,.16)}
+[data-theme="dark"] .switch.on{background:var(--accent)}
+
+.field{height:28px;border-radius:var(--r-control);background:var(--bg-field);box-shadow:inset 0 0 0 .5px var(--separator-strong);padding:0 9px;outline:none;border:0;font-size:13px;width:100%}
+.field:focus{box-shadow:inset 0 0 0 .5px var(--accent),0 0 0 3px var(--accent-soft)}
+.field::placeholder{color:var(--text-3)}
+.search{position:relative;width:200px}
+.search svg{position:absolute;left:8px;top:7px;color:var(--text-3)}
+.search .field{padding-left:27px;background:var(--bg-inset);box-shadow:none;height:28px}
+.search .field:focus{box-shadow:0 0 0 3px var(--accent-soft),inset 0 0 0 .5px var(--accent);background:var(--bg-field)}
+
+.popup{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 6px 0 10px;border-radius:6px;background:var(--bg-control);box-shadow:var(--shadow-control);font-size:13px;white-space:nowrap}
+.popup::after{content:"";width:14px;height:14px;background:currentColor;opacity:.55;-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14'%3E%3Cpath d='M4.5 5.5 7 3l2.5 2.5M4.5 8.5 7 11l2.5-2.5' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat}
+
+.kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:5px;background:var(--bg-raised);box-shadow:0 0 0 .5px var(--separator-strong),0 1.5px 0 var(--separator-strong);font-size:12px;font-weight:500;color:var(--text-1);font-family:var(--font)}
+.kbd.lg{min-width:44px;height:40px;font-size:15px;border-radius:8px;padding:0 12px}
+.kbd-row{display:inline-flex;align-items:center;gap:4px}
+
+.badge{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border-radius:5px;font-size:11px;font-weight:500;background:var(--bg-selected);color:var(--text-2);white-space:nowrap}
+.badge.accent{background:var(--accent-soft);color:var(--accent-text)}
+.badge.translate{background:var(--translate-soft);color:var(--translate)}
+.badge.success{background:var(--success-soft);color:var(--success)}
+.badge.warning{background:var(--warning-soft);color:var(--warning)}
+.badge.danger{background:var(--danger-soft);color:var(--danger)}
+
+.card{background:var(--bg-card);border-radius:var(--r-card)}
+.hairline{height:.5px;background:var(--separator)}
+
+/* grouped form, like Form + .formStyle(.grouped) */
+.form{display:flex;flex-direction:column;gap:22px;max-width:640px;margin:0 auto}
+.form-section h3{font-size:13px;font-weight:600;padding:0 4px 8px}
+.form-box{background:var(--bg-card);border-radius:10px;box-shadow:inset 0 0 0 .5px var(--separator)}
+.form-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 14px;position:relative}
+.form-row + .form-row::before{content:"";position:absolute;top:0;left:14px;right:14px;height:.5px;background:var(--separator)}
+.form-row .label{flex:1;min-width:0}
+.form-row .label .t-sub{margin-top:1px}
+.form-foot{font-size:12px;color:var(--text-2);padding:7px 4px 0}
+
+/* app icons (monogram tiles standing in for real NSWorkspace icons) */
+.appicon{width:20px;height:20px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;flex-shrink:0;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.12)}
+.appicon.lg{width:28px;height:28px;border-radius:7px;font-size:13px}
+.ai-wechat{background:linear-gradient(#3fd36a,#1aad3f)}
+.ai-mail{background:linear-gradient(#5ab8ff,#1a7cf5)}
+.ai-slack{background:linear-gradient(#5b2a63,#3f0e40)}
+.ai-notion{background:linear-gradient(#fff,#ececec);color:#111}
+.ai-lark{background:linear-gradient(#4fa3ff,#2468f2)}
+.ai-chrome{background:conic-gradient(#ea4335 0 33%,#fbbc05 0 66%,#34a853 0)}
+.ai-notes{background:linear-gradient(#ffe27a,#f7c500);color:#6b5200}
+.ai-cursor{background:linear-gradient(#2b2b2b,#0a0a0a)}
+.ai-messages{background:linear-gradient(#6cf27d,#21c933)}
+.ai-xcode{background:linear-gradient(#5fb2ff,#1f6fe0)}
+.ai-dingtalk{background:linear-gradient(#3d8bff,#1867f2)}
+.ai-outlook{background:linear-gradient(#2b8cf0,#0a5bc4)}
+.ai-telegram{background:linear-gradient(#45b8f2,#1e96d8)}
+.ai-word{background:linear-gradient(#3f7fe0,#1b56b8)}
+
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;color:var(--text-2);padding:40px}
+.empty .glyph{width:52px;height:52px;border-radius:14px;background:var(--bg-card);display:flex;align-items:center;justify-content:center;color:var(--text-3);margin-bottom:4px}
+.empty h4{font-size:15px;font-weight:600;color:var(--text-1)}
+
+.banner{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;font-size:12.5px}
+.banner.warning{background:var(--warning-soft);color:var(--text-1)}
+.banner.warning svg{color:var(--warning)}
+.banner.danger{background:var(--danger-soft)}
+.banner.danger svg{color:var(--danger)}
+.banner.info{background:var(--accent-soft)}
+.banner.info svg{color:var(--accent)}
+.banner .grow{flex:1}
+
+.menu{position:absolute;z-index:40;min-width:200px;padding:5px;border-radius:10px;background:rgba(246,246,248,.86);backdrop-filter:blur(30px) saturate(1.8);-webkit-backdrop-filter:blur(30px) saturate(1.8);box-shadow:var(--shadow-popover);font-size:13px}
+[data-theme="dark"] .menu{background:rgba(44,44,48,.86)}
+.menu .mi{display:flex;align-items:center;gap:8px;height:24px;padding:0 9px;border-radius:5px;white-space:nowrap}
+.menu .mi:hover{background:var(--accent);color:#fff}
+.menu .mi:hover .t-cap,.menu .mi:hover .sc{color:rgba(255,255,255,.8)}
+.menu .mi .sc{margin-left:auto;color:var(--text-3);padding-left:20px}
+.menu .ms{height:.5px;background:var(--separator-strong);margin:5px 9px}
+.menu .mh{font-size:11px;font-weight:600;color:var(--text-3);padding:4px 9px 2px}
+.check{width:12px;display:inline-flex;justify-content:center}
+
+.fade-in{animation:fadeIn .24s var(--ease-out) both}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+<script>
+(function(){
+  const root = document.documentElement;
+  const saved = localStorage.getItem('dictum-theme');
+  const q = new URLSearchParams(location.search).get('theme');
+  root.dataset.theme = q || saved || 'light';
+  function sync(){
+    document.querySelectorAll('[data-theme-set]').forEach(b => b.classList.toggle('on', b.dataset.themeSet === root.dataset.theme));
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-theme-set]');
+    if (t){ root.dataset.theme = t.dataset.themeSet; localStorage.setItem('dictum-theme', t.dataset.themeSet); sync(); }
+    const s = e.target.closest('.seg button');
+    if (s && !s.hasAttribute('data-free')){ s.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === s)); }
+    const sw = e.target.closest('.switch');
+    if (sw && !sw.hasAttribute('data-free')) sw.classList.toggle('on');
+  });
+  document.addEventListener('DOMContentLoaded', sync);
+  sync();
+})();
+function $(s, r){ return (r||document).querySelector(s); }
+function $$(s, r){ return Array.from((r||document).querySelectorAll(s)); }
+function closeMenus(except){ $$('.menu[data-pop]').forEach(m => { if (m !== except) m.hidden = true; }); }
+document.addEventListener('click', e => {
+  const opener = e.target.closest('[data-menu]');
+  if (opener){
+    const m = document.getElementById(opener.dataset.menu);
+    const willOpen = m.hidden;
+    closeMenus(m);
+    m.hidden = !willOpen;
+    e.stopPropagation();
+    return;
+  }
+  if (!e.target.closest('.menu')) closeMenus();
+});
+</script>
+</head>
+<body>
+<style>
+.bar2{display:flex;align-items:center;gap:10px;padding:0 28px 12px}
+.bar2 .grow{flex:1}
+.tbl{flex:1;overflow:auto;padding:0 20px 20px}
+.tbl::-webkit-scrollbar{width:0}
+.th,.tr{display:grid;grid-template-columns:28px minmax(0,1.2fr) minmax(0,1fr) 92px 64px 84px;align-items:center;gap:10px;padding:0 8px}
+.th{height:28px;font-size:11px;font-weight:600;color:var(--text-3);border-bottom:.5px solid var(--separator);position:sticky;top:0;background:var(--bg-content);z-index:1}
+.th .r,.tr .r{text-align:right;font-variant-numeric:tabular-nums}
+.tr{height:38px;border-radius:7px;font-size:13px}
+.tr:nth-child(even){background:var(--bg-card)}
+.tr:hover{background:var(--bg-hover)}
+.tr.sel{background:var(--accent-soft)}
+.tr .term{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr .heard{color:var(--text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr .heard s{text-decoration:none}
+.tr .when{font-size:12px;color:var(--text-3)}
+.tr .acts{display:none;justify-content:flex-end;gap:2px}
+.tr:hover .acts{display:flex}
+.tr:hover .when{display:none}
+.cb{width:14px;height:14px;border-radius:4px;box-shadow:inset 0 0 0 1px var(--separator-strong);background:var(--bg-field);display:flex;align-items:center;justify-content:center;color:#fff}
+.cb.on{background:var(--accent);box-shadow:none}
+.cb svg{opacity:0}.cb.on svg{opacity:1}
+.th .cb,.tr .cb{opacity:0;transition:opacity .12s}
+.tr:hover .cb,.selecting .cb{opacity:1}
+.selbar{position:absolute;left:50%;bottom:20px;transform:translate(-50%,16px);opacity:0;pointer-events:none;display:flex;align-items:center;gap:12px;padding:6px 6px 6px 16px;border-radius:12px;background:var(--bg-raised);box-shadow:var(--shadow-popover);transition:all .22s var(--ease-out);font-size:13px;z-index:20}
+.selbar.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.learned{display:flex;align-items:center;gap:12px;margin:0 20px 14px;padding:11px 14px;border-radius:10px;background:var(--accent-soft)}
+.learned .chips{display:flex;gap:6px;flex-wrap:wrap}
+.learned .chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 9px;border-radius:6px;background:var(--bg-raised);box-shadow:var(--shadow-control);font-size:12.5px}
+.learned .chip small{color:var(--text-3);font-size:11.5px}
+.learned .chip button{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:var(--text-3)}
+.learned .chip button:hover{background:var(--bg-hover);color:var(--text-1)}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.18);display:flex;justify-content:center;align-items:flex-start;padding-top:52px;z-index:30;opacity:0;pointer-events:none;transition:opacity .18s}
+[data-theme="dark"] .sheet-bg{background:rgba(0,0,0,.4)}
+.sheet-bg.on{opacity:1;pointer-events:auto}
+.sheet{width:420px;border-radius:12px;background:var(--bg-raised);box-shadow:var(--shadow-popover);padding:20px;transform:translateY(-10px);transition:transform .25s var(--ease-out)}
+.sheet-bg.on .sheet{transform:none}
+.sheet h3{font-size:15px;font-weight:600}
+.sheet .row{margin-top:14px}
+.sheet .row label{display:block;font-size:12px;color:var(--text-2);margin-bottom:5px}
+.sheet .foot{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+.drop{margin-top:14px;height:120px;border-radius:10px;border:1.5px dashed var(--separator-strong);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--text-2);font-size:13px}
+.drop svg{color:var(--text-3)}
+.preview{margin-top:14px;border-radius:10px;background:var(--bg-card);padding:12px 14px;font-size:13px}
+.preview .num{font-weight:600}
+.preview .t-cap{margin-top:6px;line-height:1.6}
+.count{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums}
+[data-state="empty"] .has-data{display:none}
+.no-data{display:none}
+[data-state="empty"] .no-data{display:flex}
+</style>
+
+<div class="proto-bar"><a href="index.html">全部原型</a><span class="sep"></span><button data-theme-set="light">浅色</button><button data-theme-set="dark">深色</button><span class="sep"></span><button class="on" data-st="ok">日常</button><button data-st="empty">空</button><button data-sheet="add">添加词</button><button data-sheet="csv">导入 CSV</button></div>
+
+<div class="stage">
+<div class="window" id="win" data-state="ok">
+  <div class="traffic"><i></i><i></i><i></i></div>
+  <nav class="sidebar"><div class="sb-group"><a class="sb-item" href="home.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.5 7.2 8 2.8l5.5 4.4V13a.8.8 0 0 1-.8.8H10V10H6v3.8H3.3a.8.8 0 0 1-.8-.8z"/></svg><span>首页</span></a><a class="sb-item" href="history.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 2.2a5.8 5.8 0 1 1 0 11.6A5.8 5.8 0 0 1 8 2.2zM8 4.8V8l2.2 1.4"/></svg><span>历史</span></a><a class="sb-item active" href="dictionary.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3 3.2c1.8-.6 3.5-.4 5 .8 1.5-1.2 3.2-1.4 5-.8v9.4c-1.8-.6-3.5-.4-5 .8-1.5-1.2-3.2-1.4-5-.8zM8 4v9.4"/></svg><span>词典</span></a><a class="sb-item" href="style.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3 13 7.2-7.2m-1-1 1.6-1.6 1.9 1.9-1.6 1.6M12.6 1.8v1.6m.8-.8h-1.6M4.8 2.6v1.6M5.6 3.4H4M13.4 9.6v1.6m.8-.8h-1.6"/></svg><span>风格</span></a></div><div class="sb-label">设置</div><div class="sb-group"><a class="sb-item" href="settings-general.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8zM6.9 1.8h2.2l.4 1.7 1.2.7 1.7-.5 1.1 1.9-1.3 1.2v1.4l1.3 1.2-1.1 1.9-1.7-.5-1.2.7-.4 1.7H6.9l-.4-1.7-1.2-.7-1.7.5-1.1-1.9 1.3-1.2V7.2L2.5 6l1.1-1.9 1.7.5 1.2-.7z"/></svg><span>通用</span></a><a class="sb-item" href="settings-models.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2 7v2M4.6 5v6M7.2 2.5v11M9.8 4.5v7M12.4 6v4M14.6 7.2v1.6"/></svg><span>语音识别</span></a><a class="sb-item" href="settings-providers.html"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M6.5 2.5 7.6 5.9 11 7l-3.4 1.1L6.5 11.5 5.4 8.1 2 7l3.4-1.1zM12 9.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/></svg><span>AI 模型</span></a></div><div class="sb-spacer"></div><a class="sb-status" href="settings-models.html" style="text-decoration:none"><span class="dot"></span><span style="color:var(--text-1)">就绪</span><span class="t-cap" style="margin-left:auto">Qwen3-ASR</span></a></nav>
+  <section class="main" style="position:relative">
+    <header class="toolbar">
+      <h1>词典</h1><div class="grow"></div>
+      <div class="search has-data"><span><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M7 2.6a4.4 4.4 0 1 1 0 8.8 4.4 4.4 0 0 1 0-8.8zM10.2 10.2l3.3 3.3"/></svg></span><input class="field" id="q" placeholder="搜索词"></div>
+      <button class="btn has-data" data-sheet="csv"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 2.5v7.2M5 6.8l3 3 3-3M3 10.5v1.9c0 .6.5 1.1 1.1 1.1h7.8c.6 0 1.1-.5 1.1-1.1v-1.9"/></svg> 导入</button>
+      <button class="btn primary has-data" data-sheet="add"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M8 3v10M3 8h10"/></svg> 添加词</button>
+    </header>
+    <div class="bar2 has-data">
+      <div class="seg" id="filter"><button class="on" data-f="all">全部</button><button data-f="manual">手动添加</button><button data-f="auto">自动学习</button></div>
+      <div class="grow"></div><span class="count" id="count"></span>
+    </div>
+    <div class="learned has-data" id="learned">
+      <span style="color:var(--accent)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M6.5 2.5 7.6 5.9 11 7l-3.4 1.1L6.5 11.5 5.4 8.1 2 7l3.4-1.1zM12 9.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z"/></svg></span>
+      <span style="white-space:nowrap">刚学会</span>
+      <div class="chips">
+        <span class="chip">Kubernetes <small>← 酷伯尼特斯</small><button title="移除"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></span>
+        <span class="chip">林知远 <small>← 林志远</small><button title="移除"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></span>
+        <span class="chip">OKR <small>← 欧克阿</small><button title="移除"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m4 4 8 8m0-8-8 8"/></svg></button></span>
+      </div>
+      <div class="grow" style="flex:1"></div>
+      <button class="btn plain sm" onclick="this.closest('.learned').remove()">好的</button>
+    </div>
+    <div class="tbl has-data" id="tbl">
+      <div class="th"><span class="cb" id="all"><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></span><span>词</span><span>常被听成</span><span>来源</span><span class="r">使用</span><span class="r">添加于</span></div>
+      <div id="rows"></div>
+    </div>
+    <div class="empty no-data" style="flex:1"><div class="glyph"><svg width="24" height="24" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3 3.2c1.8-.6 3.5-.4 5 .8 1.5-1.2 3.2-1.4 5-.8v9.4c-1.8-.6-3.5-.4-5 .8-1.5-1.2-3.2-1.4-5-.8zM8 4v9.4"/></svg></div><h4>词典还是空的</h4><p style="max-width:340px">添加人名、产品名和专业术语，dictum 会把它们写对。你在别的应用里改正过的词，也会自动加到这里。</p><div style="display:flex;gap:8px;margin-top:6px"><button class="btn" data-sheet="csv">导入 CSV</button><button class="btn primary" data-sheet="add">添加词</button></div></div>
+
+    <div class="selbar" id="selbar"><span id="selcount">已选 2 个</span><button class="btn plain sm" id="selclear">取消选择</button><button class="btn sm danger"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.8 4.3h10.4M6.3 4.3V2.8h3.4v1.5M4.2 4.3l.6 8.6c0 .5.5.9 1 .9h4.4c.5 0 1-.4 1-.9l.6-8.6M6.6 6.8v4.4M9.4 6.8v4.4"/></svg> 删除</button></div>
+
+    <div class="sheet-bg" id="sAdd"><div class="sheet">
+      <h3>添加词</h3>
+      <div class="row"><label>词或短语</label><input class="field" value="dictum" id="addTerm"></div>
+      <div class="row"><label>常被听成（可选，用逗号分隔）</label><input class="field" placeholder="例如：迪克腾，dick tom"></div>
+      <div class="foot"><button class="btn" data-close>取消</button><button class="btn primary" data-close>添加</button></div>
+    </div></div>
+
+    <div class="sheet-bg" id="sCsv"><div class="sheet">
+      <h3>导入 CSV</h3>
+      <div class="drop" id="drop"><svg width="24" height="24" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M8 2.5v7.2M5 6.8l3 3 3-3M3 10.5v1.9c0 .6.5 1.1 1.1 1.1h7.8c.6 0 1.1-.5 1.1-1.1v-1.9"/></svg><span>把 CSV 文件拖到这里，或 <a class="link" id="pick">选择文件</a></span><span class="t-cap">第一列是词，第二列可选，写常被听成的写法</span></div>
+      <div class="preview" id="csvPrev" hidden><div><span class="num">248</span> 个新词，<span class="num">12</span> 个已存在会跳过</div><div class="t-cap">产品术语.csv · 前几个：飞书妙记、灰度发布、北极星指标、留存曲线…</div></div>
+      <div class="foot"><button class="btn" data-close>取消</button><button class="btn primary" data-close id="csvGo" disabled>导入 248 个词</button></div>
+    </div></div>
+  </section>
+</div>
+</div>
+
+<script>
+const W = [
+  ['dictum','迪克腾','manual',214,'10月3日'],
+  ['林知远','林志远','auto',88,'10月21日'],
+  ['Kubernetes','酷伯尼特斯','auto',41,'今天'],
+  ['TypeWhisper','','manual',37,'10月3日'],
+  ['北极星指标','','manual',33,'9月28日'],
+  ['OKR','','auto',29,'今天'],
+  ['SwiftUI','swift ui','manual',26,'9月30日'],
+  ['飞书妙记','飞书秒记','auto',19,'10月12日'],
+  ['灰度发布','','manual',17,'9月28日'],
+  ['周子涵','周紫涵','auto',15,'10月15日'],
+  ['Qwen3-ASR','千问3','manual',12,'10月3日'],
+  ['DeepSeek','迪普西克','auto',11,'10月9日'],
+  ['留存曲线','','manual',8,'9月28日'],
+  ['Figma','','manual',6,'9月22日'],
+];
+let filter = 'all', picked = new Set();
+function render(){
+  const q = $('#q').value.trim().toLowerCase();
+  const rows = W.map((w, i) => [w, i]).filter(([w]) => (filter === 'all' || w[2] === filter) && (!q || w[0].toLowerCase().includes(q) || w[1].includes(q)));
+  $('#rows').innerHTML = rows.length ? rows.map(([w, i]) => `<div class="tr ${picked.has(i)?'sel':''}" data-i="${i}"><span class="cb ${picked.has(i)?'on':''}"><svg width="10" height="10" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="m3.2 8.4 3 3 6.6-6.8"/></svg></span><span class="term">${w[0]}</span><span class="heard">${w[1] || '<span style="color:var(--text-3)">—</span>'}</span><span>${w[2]==='auto'?'<span class="badge accent">自动学习</span>':'<span class="badge">手动</span>'}</span><span class="r">${w[3]}</span><span class="r"><span class="when">${w[4]}</span><span class="acts"><button class="btn plain icon sm" title="编辑" data-sheet="add"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="m3 13 7.2-7.2m-1-1 1.6-1.6 1.9 1.9-1.6 1.6M12.6 1.8v1.6m.8-.8h-1.6M4.8 2.6v1.6M5.6 3.4H4M13.4 9.6v1.6m.8-.8h-1.6"/></svg></button><button class="btn plain icon sm" title="删除"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M2.8 4.3h10.4M6.3 4.3V2.8h3.4v1.5M4.2 4.3l.6 8.6c0 .5.5.9 1 .9h4.4c.5 0 1-.4 1-.9l.6-8.6M6.6 6.8v4.4M9.4 6.8v4.4"/></svg></button></span></span></div>`).join('')
+    : `<div class="empty" style="padding:60px"><h4>没有找到“${$('#q').value}”</h4><button class="btn" data-sheet="add">把“${$('#q').value}”添加到词典</button></div>`;
+  $('#count').textContent = (filter === 'all' ? '1,204' : filter === 'manual' ? '1,077' : '127') + ' 个词';
+  $('#tbl').classList.toggle('selecting', picked.size > 0);
+  $('#selbar').classList.toggle('on', picked.size > 0);
+  $('#selcount').textContent = '已选 ' + picked.size + ' 个';
+}
+$('#rows').addEventListener('click', e => {
+  if (e.target.closest('.acts')) return;
+  const r = e.target.closest('[data-i]'); if (!r) return;
+  const i = +r.dataset.i; picked.has(i) ? picked.delete(i) : picked.add(i); render();
+});
+$('#all').addEventListener('click', () => { picked = picked.size ? new Set() : new Set(W.map((_, i) => i)); $('#all').classList.toggle('on', picked.size > 0); render(); });
+$('#selclear').onclick = () => { picked.clear(); $('#all').classList.remove('on'); render(); };
+$('#filter').addEventListener('click', e => { const b = e.target.closest('[data-f]'); if (b){ filter = b.dataset.f; render(); } });
+$('#q').addEventListener('input', render);
+function sheet(id){ $$('.sheet-bg').forEach(s => s.classList.toggle('on', s.id === id)); if (id === 'sAdd') setTimeout(() => $('#addTerm').focus(), 50); }
+document.addEventListener('click', e => {
+  const s = e.target.closest('[data-sheet]'); if (s){ sheet(s.dataset.sheet === 'add' ? 'sAdd' : 'sCsv'); return; }
+  if (e.target.closest('[data-close]') || e.target.classList.contains('sheet-bg')){ sheet(null); return; }
+  const b = e.target.closest('[data-st]'); if (b){ $$('[data-st]').forEach(x => x.classList.toggle('on', x === b)); $('#win').dataset.state = b.dataset.st; }
+});
+$('#pick').onclick = () => { $('#drop').hidden = true; $('#csvPrev').hidden = false; $('#csvGo').disabled = false; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') sheet(null); });
+render();
+</script>
+</body>
+</html>

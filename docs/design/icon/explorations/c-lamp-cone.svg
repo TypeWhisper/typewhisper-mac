@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="tile" d="M627.36 100c103.83 0 155.75 0 195.41 20.21a185.4 185.4 0 0 1 81.02 81.02c20.21 39.66 20.21 91.58 20.21 195.41V627.36c0 103.83 0 155.75 -20.21 195.41a185.4 185.4 0 0 1 -81.02 81.02c-39.66 20.21 -91.58 20.21 -195.41 20.21H396.64c-103.83 0 -155.75 0 -195.41 -20.21a185.4 185.4 0 0 1 -81.02 -81.02c-20.21 -39.66 -20.21 -91.58 -20.21 -195.41V396.64c0 -103.83 0 -155.75 20.21 -195.41a185.4 185.4 0 0 1 81.02 -81.02c39.66 -20.21 91.58 -20.21 195.41 -20.21Z"/>
+    <clipPath id="tileClip"><use href="#tile"/></clipPath>
+    <linearGradient id="tileFill" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1C1C1C"/>
+      <stop offset="1" stop-color="#080808"/>
+    </linearGradient>
+    <linearGradient id="cone" x1="0" y1="250" x2="0" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F2F2EF"/>
+      <stop offset="1" stop-color="#9C9C98"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <use href="#tile" fill="#000000" filter="url(#shadow)"/>
+  <use href="#tile" fill="url(#tileFill)"/>
+  <g clip-path="url(#tileClip)">
+    <path d="M436 262 H588 L860 800 H164 Z" fill="url(#cone)"/>
+    <rect x="504" y="90" width="16" height="110" fill="#4A4A48"/>
+    <path d="M462 196 H562 L608 266 H416 Z" fill="#3A3A38"/>
+    <rect x="416" y="258" width="192" height="10" rx="5" fill="#FFFFFF"/>
+    <rect x="80" y="790" width="880" height="160" fill="#080808"/>
+
+    <g fill="#080808">
+      <rect x="560" y="636" width="200" height="158" rx="14"/>
+      <path d="M716 640 L760 470" fill="none" stroke="#080808" stroke-width="10" stroke-linecap="round"/>
+      <rect x="500" y="500" width="54" height="92" rx="27"/>
+      <rect x="520" y="590" width="14" height="200"/>
+      <path d="M380 470 C424 470 452 500 456 536 L474 560 C478 566 474 572 466 572 L458 574 C460 598 448 612 430 614 L426 640 C456 670 486 720 496 790 L230 790 C226 700 250 640 300 606 C290 586 286 562 290 538 C296 498 330 470 380 470 Z"/>
+    </g>
+    <rect x="358" y="458" width="30" height="66" rx="10" fill="#080808" stroke="#C9C9C5" stroke-width="6"/>
+    <rect x="348" y="518" width="50" height="76" rx="22" fill="#080808" stroke="#C9C9C5" stroke-width="7"/>
+    <g fill="#C9C9C5">
+      <circle cx="608" cy="720" r="20"/>
+      <circle cx="680" cy="720" r="20"/>
+    </g>
+  </g>
+</svg>

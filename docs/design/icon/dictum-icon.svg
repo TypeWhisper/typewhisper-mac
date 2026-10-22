@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <path id="tile" d="M627.36 100c103.83 0 155.75 0 195.41 20.21a185.4 185.4 0 0 1 81.02 81.02c20.21 39.66 20.21 91.58 20.21 195.41V627.36c0 103.83 0 155.75 -20.21 195.41a185.4 185.4 0 0 1 -81.02 81.02c-39.66 20.21 -91.58 20.21 -195.41 20.21H396.64c-103.83 0 -155.75 0 -195.41 -20.21a185.4 185.4 0 0 1 -81.02 -81.02c-20.21 -39.66 -20.21 -91.58 -20.21 -195.41V396.64c0 -103.83 0 -155.75 20.21 -195.41a185.4 185.4 0 0 1 81.02 -81.02c39.66 -20.21 91.58 -20.21 195.41 -20.21Z"/>
+    <clipPath id="tileClip"><use href="#tile"/></clipPath>
+    <linearGradient id="tileFill" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2A2A2A"/>
+      <stop offset="1" stop-color="#101010"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="470" cy="400" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F5F5F3"/>
+      <stop offset="0.75" stop-color="#E4E4E1"/>
+      <stop offset="1" stop-color="#C6C6C2"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="100" x2="0" y2="924" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.03"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.06"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <use href="#tile" fill="#000000" filter="url(#shadow)"/>
+  <use href="#tile" fill="url(#tileFill)"/>
+  <g clip-path="url(#tileClip)">
+    <circle cx="512" cy="450" r="344" fill="url(#spot)"/>
+
+    <g fill="#0A0A0A">
+      <path d="M318 676 C268 620 236 548 234 470 C232 360 290 262 392 236 C470 216 540 250 562 318 C572 350 572 372 568 392 C566 400 566 406 570 414 L606 468 C610 476 604 484 594 486 L578 490 C582 498 586 504 584 510 L566 518 L582 528 C586 536 582 544 574 548 C568 552 568 558 574 568 C580 588 568 604 542 610 C518 614 500 620 494 640 L492 720 H344 C336 706 330 690 318 676 Z"/>
+      <path d="M370 404 V230 C370 220 376 214 386 213 C398 212 410 212 422 214 C430 215 434 221 434 230 V404 Z" stroke="#E4E4E1" stroke-width="9" stroke-linejoin="round"/>
+      <rect x="342" y="384" width="116" height="156" rx="52" stroke="#E4E4E1" stroke-width="10"/>
+    </g>
+
+    <path fill="#0A0A0A" d="M80 1024 V800 C140 740 196 708 236 694 L250 606 C262 640 290 690 344 712 H490 C520 690 560 670 594 644 C596 700 620 770 660 860 L706 1024 Z"/>
+
+    <g transform="translate(30 0) rotate(-6 722 652) translate(722 652) scale(0.92) translate(-722 -652)" fill="#0A0A0A">
+      <rect x="704" y="652" width="36" height="420"/>
+      <path d="M626 470 V560 C626 620 670 652 722 652 C774 652 818 620 818 560 V470" fill="none" stroke="#0A0A0A" stroke-width="22"/>
+      <circle cx="626" cy="474" r="20"/>
+      <circle cx="818" cy="474" r="20"/>
+      <rect x="644" y="320" width="156" height="296" rx="78"/>
+      <g fill="#E4E4E1">
+        <rect x="672" y="356" width="100" height="12" rx="6"/>
+        <rect x="660" y="388" width="124" height="12" rx="6"/>
+        <rect x="658" y="420" width="128" height="12" rx="6"/>
+        <rect x="658" y="504" width="128" height="12" rx="6"/>
+        <rect x="660" y="536" width="124" height="12" rx="6"/>
+        <rect x="672" y="568" width="100" height="12" rx="6"/>
+      </g>
+    </g>
+
+    <use href="#tile" fill="none" stroke="url(#rim)" stroke-width="6"/>
+  </g>
+</svg>
