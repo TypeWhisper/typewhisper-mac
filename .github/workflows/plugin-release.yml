@@ -33,9 +33,7 @@ permissions:
 
 jobs:
   build:
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses xcode-27.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'xcode-27' }}
+    runs-on: xcode-27
     concurrency:
       group: plugin-release-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-v{2}', inputs.distribution_source, inputs.plugin_name, inputs.plugin_version) || github.ref_name }}
       cancel-in-progress: true
