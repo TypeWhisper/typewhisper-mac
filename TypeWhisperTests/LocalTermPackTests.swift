@@ -630,6 +630,32 @@ final class LocalTermPackDictionaryTests: XCTestCase {
         XCTAssertTrue(LocalTermPackStore(directory: fixture.store.directory).packs.isEmpty)
     }
 
+    func testRemovingAPackKeepsItsFileWhenItsEntriesCannotBeDeleted() throws {
+        let fixture = try makeFixture()
+        fixture.viewModel.importLocalTermPack(data: LocalTermPackFileTests.packJSON(terms: "[\"Alpha\", \"Beta\"]", corrections: nil))
+        let pack = try XCTUnwrap(fixture.viewModel.visibleLocalPacks.first)
+        fixture.viewModel.activatePack(pack)
+        fixture.service.deleteEntriesSaveOverride = { throw NSError(domain: "LocalTermPackRemovalTest", code: 1) }
+
+        fixture.viewModel.requestLocalTermPackRemoval(pack)
+        fixture.viewModel.confirmLocalTermPackRemoval()
+
+        XCTAssertNotNil(fixture.viewModel.error)
+        XCTAssertTrue(fixture.viewModel.isPackActivated(pack))
+        XCTAssertEqual(Set(fixture.service.entries.map(\.original)), ["Alpha", "Beta"])
+        XCTAssertEqual(LocalTermPackStore(directory: fixture.store.directory).packs.map(\.id), ["team-terms"])
+
+        fixture.service.deleteEntriesSaveOverride = nil
+        fixture.viewModel.clearError()
+        fixture.viewModel.requestLocalTermPackRemoval(pack)
+        fixture.viewModel.confirmLocalTermPackRemoval()
+
+        XCTAssertNil(fixture.viewModel.error)
+        XCTAssertNil(fixture.viewModel.activatedPackStates["team-terms"])
+        XCTAssertTrue(fixture.service.entries.isEmpty)
+        XCTAssertTrue(LocalTermPackStore(directory: fixture.store.directory).packs.isEmpty)
+    }
+
     // MARK: - Fixtures
 
     private struct Fixture {

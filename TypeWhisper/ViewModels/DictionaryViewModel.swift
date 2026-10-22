@@ -955,6 +955,15 @@ class DictionaryViewModel: ObservableObject {
         reconcileActivatedPacks(from: activatedPackStates, to: nextStates)
     }
 
+    /// Turns a pack off like `deactivatePack`, but throws when its entries could not be deleted;
+    /// the pack then stays on. A pack that is already off succeeds.
+    private func deactivatePackRemovingEntries(_ pack: TermPack) throws {
+        guard isPackActivated(pack) else { return }
+        var nextStates = activatedPackStates
+        nextStates.removeValue(forKey: pack.id)
+        try applyActivatedPacks(from: activatedPackStates, to: nextStates, throwsWhenDeletionFails: true)
+    }
+
     func updatePack(_ pack: TermPack) {
         guard isPackActivated(pack) else { return }
         var nextStates = activatedPackStates
@@ -1107,18 +1116,19 @@ class DictionaryViewModel: ObservableObject {
         pendingLocalTermPackRemoval = nil
     }
 
-    /// Deletes the pack file and removes the entries the pack added to the dictionary.
+    /// Removes the entries the pack added to the dictionary, then deletes the pack file.
     func confirmLocalTermPackRemoval() {
         guard let pack = pendingLocalTermPackRemoval, let localTermPackStore else { return }
         pendingLocalTermPackRemoval = nil
 
         do {
+            // Entries first: if they cannot be removed, the file stays, so the removal can be tried again.
+            try deactivatePackRemovingEntries(pack)
             try localTermPackStore.remove(id: pack.id)
         } catch {
             self.error = String(localized: "The term pack could not be removed. \(error.localizedDescription)")
             return
         }
-        deactivatePack(pack)
         // Forget per-entry settings, unless a registry pack with the same ID may own them.
         if reservedPackConflict(forID: pack.id) == nil,
            inactivePackEntryOverrides.removeValue(forKey: pack.id) != nil {
@@ -1199,6 +1209,17 @@ class DictionaryViewModel: ObservableObject {
         from previousStates: [String: ActivatedTermPackState],
         to nextStates: [String: ActivatedTermPackState]
     ) {
+        // A failed deletion is logged by DictionaryService, and the states follow the request.
+        try? applyActivatedPacks(from: previousStates, to: nextStates, throwsWhenDeletionFails: false)
+    }
+
+    /// With `throwsWhenDeletionFails`, a failed deletion of stale pack entries throws before
+    /// the dictionary, the pack states or the entry overrides change.
+    private func applyActivatedPacks(
+        from previousStates: [String: ActivatedTermPackState],
+        to nextStates: [String: ActivatedTermPackState],
+        throwsWhenDeletionFails: Bool
+    ) throws {
         let previouslyManagedIDs = managedPackEntryIDs(from: previousStates)
         var reusableEntries: [String: DictionaryEntry] = [:]
         var claimedKeys = Set<String>()
@@ -1309,7 +1330,9 @@ class DictionaryViewModel: ObservableObject {
         }
 
         // Remove stale entries before adding, so a changed correction replacement can take the original's place.
-        if !reusableEntries.isEmpty {
+        if throwsWhenDeletionFails {
+            try dictionaryService.deleteEntries(ids: Set(reusableEntries.values.map(\.id)))
+        } else if !reusableEntries.isEmpty {
             dictionaryService.deleteEntries(Array(reusableEntries.values))
         }
         for (entry, original, replacement, caseSensitive) in refreshedEntries {
