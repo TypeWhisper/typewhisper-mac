@@ -2108,9 +2108,9 @@ final class DictionaryServiceTests: XCTestCase {
             termPackRegistryService: registry
         )
 
-        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "real-estate" })
-        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "architecture" })
-        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "legal" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "web-dev" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "ios-macos" })
+        XCTAssertTrue(viewModel.visibleBuiltInPacks.contains { $0.id == "devops" })
         XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "real-estate" })
         XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "architecture" })
         XCTAssertTrue(viewModel.visibleCommunityPacks.contains { $0.id == "legal" })

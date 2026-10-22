@@ -1594,7 +1594,7 @@ final class LocalLLMPluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this TypeWhisper release and may still fail to load. Recommended models: Gemma 4 E2B (4-bit), Gemma 4 E4B (4-bit)."
+            "Gemma 4 26B-A4B (4-bit, MoE) is experimental in this dictum release and may still fail to load. Recommended models: Gemma 4 E2B (4-bit), Gemma 4 E4B (4-bit)."
         )
     }
 

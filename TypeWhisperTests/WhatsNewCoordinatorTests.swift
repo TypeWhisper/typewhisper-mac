@@ -38,7 +38,7 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
         let nextLaunch = WhatsNewCoordinator(defaults: defaults, contentVersion: 2)
         XCTAssertFalse(nextLaunch.hasUnseenContent)
-        XCTAssertEqual(launch(nextLaunch, otherPromptsPending: false), .none)
+        XCTAssertEqual(launch(nextLaunch), .none)
     }
 
     func testSetupWinsEvenWhenItIsResetAfterInitialization() {
@@ -75,7 +75,7 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         defaults.set("99.0+123@daily", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
         let nextLaunch = WhatsNewCoordinator(defaults: defaults, contentVersion: 2)
         XCTAssertFalse(nextLaunch.hasUnseenContent)
-        XCTAssertEqual(launch(nextLaunch, otherPromptsPending: false), .none)
+        XCTAssertEqual(launch(nextLaunch), .none)
     }
 
     func testOnlyNewerContentBecomesPending() {
@@ -116,10 +116,10 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         XCTAssertTrue(coordinator.hasUnseenContent)
     }
 
-    func testStartupSettingsWindowDoesNotSuppressItsOwnPromo() {
+    func testSeenHighlightsKeepNormalLaunchWindowless() {
         defaults.set(WhatsNewContent.version, forKey: UserDefaultsKeys.lastSeenWhatsNewContentVersion)
         let coordinator = WhatsNewCoordinator(defaults: defaults)
-        XCTAssertEqual(launch(coordinator), .settings)
+        XCTAssertEqual(launch(coordinator), .none)
         coordinator.handleWindowRequest()
         XCTAssertFalse(coordinator.isSuppressedForLaunch)
     }
@@ -457,8 +457,7 @@ final class WhatsNewCoordinatorTests: XCTestCase {
         _ coordinator: WhatsNewCoordinator,
         normal: Bool = true,
         setupRequired: Bool = false,
-        busy: Bool = false,
-        otherPromptsPending: Bool = true
+        busy: Bool = false
     ) -> InitialWindowPresentation {
         coordinator.presentationForLaunch(
             isNormalLaunch: normal,

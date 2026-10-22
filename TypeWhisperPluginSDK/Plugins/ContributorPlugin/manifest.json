@@ -1,15 +1,15 @@
 {
     "id": "com.typewhisper.improve",
-    "name": "Improve TypeWhisper",
+    "name": "Text Contributions",
     "version": "0.1.2",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Review and manually contribute corrected dictation text to improve TypeWhisper.",
+    "description": "Review corrections and submit them to a configured contribution service.",
     "descriptions": {
-        "de": "Korrigierte Diktattexte prüfen und manuell zur Verbesserung von TypeWhisper beitragen.",
-        "ja": "修正済みの音声入力テキストを確認し、TypeWhisperの改善に手動で提供します。"
+        "de": "Korrekturen prüfen und an einen konfigurierten Beitragsdienst senden.",
+        "ja": "修正を確認し、設定済みの提供サービスに送信します。"
     },
     "category": "utility",
     "hosting": "cloud",

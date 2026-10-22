@@ -1,7 +1,6 @@
 enum InitialWindowPresentation: Equatable {
     case setup
     case whatsNew
-    case settings
     case none
 }
 

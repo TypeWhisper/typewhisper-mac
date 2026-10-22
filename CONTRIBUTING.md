@@ -74,25 +74,8 @@ commit does not remove it from history. Follow the
 
 ## Reporting Issues
 
-Use the [issue templates](https://github.com/TypeWhisper/typewhisper-mac/issues/new/choose) for bug reports and feature requests.
+Use the [issue templates](https://github.com/schneidervvv/dictum/issues/new/choose) for bug reports and feature requests.
 
 ## License
 
 Contributions to the open-source project are distributed under GPLv3.
-TypeWhisper also offers commercial licenses. Our shared
-[Contributor License Agreement](https://github.com/TypeWhisper/.github/blob/main/CLA.md)
-lets contributors retain ownership while granting the rights needed for both
-open-source and commercial distribution.
-
-Read the [organization-wide contribution rules](https://github.com/TypeWhisper/.github/blob/main/CONTRIBUTING.md)
-and the agreement at [app.typewhisper.com/cla](https://app.typewhisper.com/cla).
-You can open a pull request before signing. Before it can be merged, each
-contributor must be covered by the current agreement and the `TypeWhisper CLA`
-check must pass. Sign in with GitHub, read and explicitly accept the agreement,
-and select any already-open pull requests you want it to cover. The check runs
-again after acceptance. One acceptance covers future contributions across all
-participating TypeWhisper projects for that agreement version.
-
-A pull request submission does not itself record acceptance, and previously
-merged contributions are reviewed separately. Employer authorization and
-third-party licenses still apply.

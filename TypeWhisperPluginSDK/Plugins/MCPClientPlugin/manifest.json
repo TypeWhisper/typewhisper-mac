@@ -6,11 +6,11 @@
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Connect TypeWhisper workflows to local or remote MCP tools over stdio or Streamable HTTP.",
+    "description": "Connect dictum workflows to local or remote MCP tools over stdio or Streamable HTTP.",
     "descriptions": {
-        "de": "TypeWhisper-Workflows über stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
-        "ja": "TypeWhisperのワークフローをstdioまたはStreamable HTTP経由でローカルまたはリモートのMCPツールに接続します。",
-        "zh-Hans": "通过 stdio 或 Streamable HTTP 将 TypeWhisper 工作流连接到本地或远程 MCP 工具。"
+        "de": "dictum-Workflows über stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
+        "ja": "dictumのワークフローをstdioまたはStreamable HTTP経由でローカルまたはリモートのMCPツールに接続します。",
+        "zh-Hans": "通过 stdio 或 Streamable HTTP 将 dictum 工作流连接到本地或远程 MCP 工具。"
     },
     "category": "action",
     "iconSystemName": "point.3.connected.trianglepath.dotted",

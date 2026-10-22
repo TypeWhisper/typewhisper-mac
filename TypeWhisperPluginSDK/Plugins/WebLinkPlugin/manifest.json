@@ -6,10 +6,10 @@
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "TypeWhisper",
-  "description": "Downloads audio from supported web links with yt-dlp and ffmpeg for transcription in TypeWhisper.",
+  "description": "Downloads audio from supported web links with yt-dlp and ffmpeg for transcription in dictum.",
   "descriptions": {
-    "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter.",
-    "ja": "対応するWebリンクからyt-dlpとffmpegで音声をダウンロードし、TypeWhisperで文字起こしします。"
+    "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in dictum herunter.",
+    "ja": "対応するWebリンクからyt-dlpとffmpegで音声をダウンロードし、dictumで文字起こしします。"
   },
   "principalClass": "WebLinkPlugin",
   "requiresAPIKey": false,

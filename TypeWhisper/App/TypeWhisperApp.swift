@@ -1006,8 +1006,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 openSetupWindow()
             case .whatsNew:
                 showWhatsNew(coordinator: whatsNew)
-            case .settings:
-                openSettingsWindow()
             case .none:
                 break
             }

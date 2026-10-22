@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindowLayoutProviding,
     ObservableObject, @unchecked Sendable {
     static let pluginId = "com.typewhisper.improve"
-    static let pluginName = "dictum"
+    static let pluginName = "Text Contributions"
 
     static let pluginVersion = "0.1.0"
     static let consentVersion = "contribution-text-v1"

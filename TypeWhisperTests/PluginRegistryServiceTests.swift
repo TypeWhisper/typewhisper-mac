@@ -43,7 +43,7 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         XCTAssertEqual(announcements.items.map { $0.message }, [
             String(localized: "Error: \("com.example.a: Failed to extract ZIP")"),
-            String(localized: "Restart TypeWhisper to finish updating."),
+            String(localized: "Restart dictum to finish updating."),
             String(localized: "Error: \("com.example.d: Failed to extract ZIP")"),
         ])
         XCTAssertEqual(announcements.items.map { $0.isUrgent }, [true, false, true])

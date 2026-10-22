@@ -41,6 +41,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: PromptActionService(appSupportDirectory: dir),
             pluginManager: PluginManager(appSupportDirectory: dir),
             pluginRegistryService: PluginRegistryService(
+                registryBaseURL: URL(string: "https://example.com")!,
                 cacheDirectory: dir.appendingPathComponent("MarketplaceCache", isDirectory: true),
                 userDefaults: userDefaults,
                 fetchData: { _ in throw URLError(.notConnectedToInternet) }

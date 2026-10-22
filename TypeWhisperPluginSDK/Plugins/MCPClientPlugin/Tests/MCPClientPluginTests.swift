@@ -38,7 +38,7 @@ final class MCPClientPluginTests: XCTestCase {
         let descriptions = try XCTUnwrap(object["descriptions"] as? [String: String])
         XCTAssertEqual(
             descriptions["zh-Hans"],
-            "通过 stdio 或 Streamable HTTP 将 TypeWhisper 工作流连接到本地或远程 MCP 工具。"
+            "通过 stdio 或 Streamable HTTP 将 dictum 工作流连接到本地或远程 MCP 工具。"
         )
     }
 

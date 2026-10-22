@@ -17149,7 +17149,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     /// A Debug build started from a checkout with `--store-screenshots` has the Dev app's bundle
     /// identifier; its preferences and managed settings come from the screenshot domain instead.
     func testScreenshotRunsUseTheScreenshotDomainWhateverTheBundleIdentifier() {
-        let screenshots = "com.typewhisper.mac.screenshots"
+        let screenshots = "com.schneidervvv.dictum.screenshots"
         XCTAssertEqual(AppConstants.screenshotPreferencesDomain, screenshots)
         for bundleIdentifier in ["com.typewhisper.mac.dev", "com.typewhisper.mac", "com.typewhisper.typewhisper-app.dev", nil] {
             XCTAssertEqual(
@@ -17174,7 +17174,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     func testTestHostDoesNotUseTheAppsKeychainItems() {
-        XCTAssertEqual(AppConstants.keychainServicePrefix, "com.typewhisper.mac.tests.apikey.")
+        XCTAssertEqual(AppConstants.keychainServicePrefix, "com.schneidervvv.dictum.tests.apikey.")
     }
 
     func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {

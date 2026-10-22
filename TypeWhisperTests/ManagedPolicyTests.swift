@@ -244,9 +244,9 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         XCTAssertTrue(snapshot.recommendedValues.isEmpty)
         XCTAssertTrue(snapshot.invalidEnforcedKeys.isEmpty)
         XCTAssertEqual(snapshot.issues.map(\.message), [
-            "FutureSetting is not a TypeWhisper managed setting and is not applied as one.",
-            "allowCloudTranscription is not a TypeWhisper managed setting; keys are case-sensitive (did you mean AllowCloudTranscription?).",
-            "launchAtLogin is not a TypeWhisper managed setting; keys are case-sensitive (did you mean LaunchAtLogin?).",
+            "FutureSetting is not a dictum managed setting and is not applied as one.",
+            "allowCloudTranscription is not a dictum managed setting; keys are case-sensitive (did you mean AllowCloudTranscription?).",
+            "launchAtLogin is not a dictum managed setting; keys are case-sensitive (did you mean LaunchAtLogin?).",
         ])
     }
 
@@ -268,7 +268,7 @@ final class ManagedPolicyValidatorTests: XCTestCase {
         XCTAssertEqual(snapshot.status, .absent)
         XCTAssertFalse(snapshot.isManaged)
         XCTAssertEqual(snapshot.issues.map(\.message), [
-            "SUEnableAutomaticChecks is not a TypeWhisper managed setting and is not applied as one.",
+            "SUEnableAutomaticChecks is not a dictum managed setting and is not applied as one.",
         ])
         XCTAssertEqual(validate(forced: ["Recommended": .dictionary([:])]).status, .present)
         XCTAssertEqual(validate(forced: ["UpdateMode": .integer(1), "SUEnableAutomaticChecks": .boolean(false)]).status, .present)
@@ -616,7 +616,7 @@ final class ManagedPolicyDiagnosticsTests: XCTestCase {
         ])
         XCTAssertEqual(diagnostics.recommended, [.init(name: "UpdateChannel", value: "2", items: nil)])
         XCTAssertEqual(diagnostics.issues, [
-            .init(key: "[omitted]", scope: "enforced", message: "[omitted] is not a TypeWhisper managed setting and is not applied as one."),
+            .init(key: "[omitted]", scope: "enforced", message: "[omitted] is not a dictum managed setting and is not applied as one."),
         ])
     }
 
