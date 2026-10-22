@@ -226,11 +226,8 @@ class GeneratorTests(unittest.TestCase):
 class ProfileTests(unittest.TestCase):
 
     def test_example_profiles_hold_only_supported_values(self):
-        profiles = [DEPLOYMENT / "examples" / name for name in (
-            "TypeWhisper-LocalOnly.mobileconfig", "TypeWhisper-ApprovedCloud.mobileconfig",
-            "TypeWhisper-RecommendedDefaults.mobileconfig",
-        )]
-        self.assertEqual(len(profiles), 3)
+        profiles = sorted((DEPLOYMENT / "examples").glob("*.mobileconfig"))
+        self.assertGreaterEqual(len(profiles), 3)
         seen_preferences = False
         for path in profiles:
             with self.subTest(profile=path.name):

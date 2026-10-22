@@ -17,7 +17,7 @@ dictum 从 macOS 配置描述文件读取组织设置。正式版的偏好域为
 | 键 | 类型 | 范围 | 行为 |
 | --- | --- | --- | --- |
 | `TranscriptionProviderId` | 字符串 | 强制或建议 | 语音识别供应商的插件标识。一个插件包含多个供应商时使用 `<插件标识>:<供应商标识>`。与 `TranscriptionModelId` 在同一范围内设置。 |
-| `TranscriptionModelId` | 字符串 | 强制或建议 | 供应商模型目录中的模型标识，例如 `parakeet-tdt-0.6b-v3`。 |
+| `TranscriptionModelId` | 字符串 | 强制或建议 | 供应商模型目录中的模型标识，例如 `qwen3-asr-1.7b-6bit`。 |
 | `LlmProviderId` | 字符串 | 强制或建议 | 语言模型供应商的插件标识或限定供应商标识。Apple Intelligence 使用 `com.typewhisper.apple-intelligence`。与 `LlmModelId` 在同一范围内设置。 |
 | `LlmModelId` | 字符串 | 强制或建议 | 语言模型供应商列出的模型标识。 |
 | `AllowedTranscriptionProviders` | 字符串数组 | 强制 | 允许接收音频的插件或限定供应商标识。空数组禁止所有语音识别供应商。 |
@@ -42,8 +42,8 @@ python3 deployment/macos/make-typewhisper-profile.py \
   --domain com.schneidervvv.dictum \
   --set AllowCloudTranscription=false \
   --set AllowCloudTextProcessing=false \
-  --set TranscriptionProviderId=com.typewhisper.parakeet \
-  --set TranscriptionModelId=parakeet-tdt-0.6b-v3 \
+  --set TranscriptionProviderId=com.typewhisper.qwen3 \
+  --set TranscriptionModelId=qwen3-asr-1.7b-6bit \
   --recommend LaunchAtLogin=true \
   --identifier com.example.dictum.local \
   --name 'dictum 本地处理' \
@@ -62,16 +62,16 @@ python3 deployment/macos/make-typewhisper-profile.py \
 
 dictum 0.1.0 由负责人在本机构建和安装，更新由负责人手动部署。开发验证使用 `scripts/dictum-verify.sh`，签名与辅助功能授权要求见仓库 [README](../../README.md)。部署到其他 Mac 时，应根据实际构建的签名和标识配置系统权限。
 
-语音引擎、语言模型供应商和集成插件随应用内置。设置侧栏提供各内置插件的配置页面。插件的加载、启用、模型下载和实际处理仍受上述组织策略限制。插件代码随应用版本更新。
+语音引擎与语言模型供应商随应用内置。设置侧栏提供各内置插件的配置页面。插件的加载、启用、模型下载和实际处理仍受上述组织策略限制。插件代码随应用版本更新。
 
 ## 网络访问
 
 - 本地模型供应商可能从模型托管网站下载模型文件。
 - 云端语音和语言模型供应商访问用户配置的 API 地址。
-- 自定义端点、脚本、Webhook、MCP 和文件集成按用户配置访问对应资源。
+- OpenAI 兼容供应商访问用户配置的自定义端点。
 - 社区词库使用词库服务的地址。禁止云端文本处理不会自动禁止词库文件下载。
 
-网络白名单应依据实际启用的供应商、模型和集成配置制定。组织可以通过 `AllowedPlugins`、供应商白名单和云端处理开关限制内容去向。
+网络白名单应依据实际启用的供应商和模型设置制定。组织可以通过 `AllowedPlugins`、供应商白名单和云端处理开关限制内容去向。
 
 ## 管理控制台文件
 

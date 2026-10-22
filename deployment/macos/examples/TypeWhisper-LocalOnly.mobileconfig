@@ -20,9 +20,9 @@
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>TranscriptionModelId</key>
-			<string>parakeet-tdt-0.6b-v3</string>
+			<string>qwen3-asr-1.7b-6bit</string>
 			<key>TranscriptionProviderId</key>
-			<string>com.typewhisper.parakeet</string>
+			<string>com.typewhisper.qwen3</string>
 		</dict>
 		<dict>
 			<key>AllowCloudTextProcessing</key>
@@ -40,9 +40,9 @@
 			<key>PayloadVersion</key>
 			<integer>1</integer>
 			<key>TranscriptionModelId</key>
-			<string>parakeet-tdt-0.6b-v3</string>
+			<string>qwen3-asr-1.7b-6bit</string>
 			<key>TranscriptionProviderId</key>
-			<string>com.typewhisper.parakeet</string>
+			<string>com.typewhisper.qwen3</string>
 		</dict>
 	</array>
 	<key>PayloadDescription</key>
