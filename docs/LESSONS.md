@@ -16,3 +16,8 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - 问题：普通 Debug 构建不包含 `APPSTORE` 分支中的初始化，单版本构建无法覆盖该分支。
   - 证据：AppStore 编译检查发现一处遗留的付费服务启动调用。
   - 方法：检查服务的声明、初始化、订阅和启动点，并分别编译 GPL 与 AppStore 版本。
+
+- Keep running shell scripts unchanged (Seen x1: 2026-10-23)
+  - What went wrong: The verification script was edited while its long test command was running.
+  - Evidence: Xcode and SDK tests finished successfully, then Bash resumed at a changed file offset and reported an unexpected EOF. The current file passed `bash -n`.
+  - Fix: Finish script edits before starting verification. Wait for that invocation to exit before editing the script again, then rerun the complete verification command.

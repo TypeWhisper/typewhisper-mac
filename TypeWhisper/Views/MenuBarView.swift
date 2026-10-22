@@ -424,12 +424,7 @@ struct MenuBarView: View {
     private func menuItem(for item: MenuBarMenuItem) -> some View {
         switch item {
         case .settings:
-            Button {
-                openManagedWindow("settings")
-            } label: {
-                Label(String(localized: "Settings..."), systemImage: "gear")
-            }
-            .keyboardShortcut(",")
+            DictumWindowMenuItems()
 
         case .history:
             Button {

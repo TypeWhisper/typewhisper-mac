@@ -6,6 +6,7 @@ import os
 import TypeWhisperPluginSDK
 
 extension UserDefaults {
+    @objc dynamic var dictumShowInDock: Bool { bool(forKey: UserDefaultsKeys.dictumShowInDock) }
     @objc dynamic var showMenuBarIcon: Bool {
         bool(forKey: UserDefaultsKeys.showMenuBarIcon)
     }
@@ -468,6 +469,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             }
         }
 
+        DictumMainWindow()
         WindowConfiguration.settings(content: AnyView(settingsContent))
         WindowConfiguration.setup(content: AnyView(setupContent))
         WindowConfiguration.history(content: AnyView(historyContent))
@@ -656,6 +658,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var translationHostWindow: NSWindow?
     private var menuBarIconObserver: NSKeyValueObservation?
     private var dockIconBehaviorObserver: NSKeyValueObservation?
+    private var dictumDockObserver: NSKeyValueObservation?
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
     private var workspaceSleepObserver: NSObjectProtocol?
@@ -673,7 +676,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var shouldShowDockIcon: Bool {
-        DockIconVisibility.shouldShowDockIcon(
+        if showMenuBarIconPreference {
+            return UserDefaults.standard.dictumShowInDock || hasInteractiveForegroundContent
+        }
+        return DockIconVisibility.shouldShowDockIcon(
             showMenuBarIcon: showMenuBarIconPreference,
             dockIconBehavior: dockIconBehaviorPreference,
             hasVisibleManagedWindow: hasVisibleManagedWindow,
@@ -784,6 +790,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.applyActivationPolicy()
             }
         }
+        dictumDockObserver = UserDefaults.standard.observe(\.dictumShowInDock, options: [.new]) { [weak self] _, _ in
+            Task { @MainActor in self?.applyActivationPolicy() }
+        }
 
         appActivationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -885,12 +894,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
             return true
         }
-        if !hasVisibleManagedWindow {
-            if ManagedLaunchGate.isSetupWizardRequired {
-                openSetupWindow()
-            } else {
-                openSettingsWindow()
-            }
+        DictumNavigation.shared.open()
+        if ManagedLaunchGate.isSetupWizardRequired {
+            openSetupWindow()
         }
         return true
     }
@@ -907,9 +913,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentInitialWindow() {
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-            guard ManagedLaunchGate.isSetupWizardRequired else { return }
-            NSApp.setActivationPolicy(.regular)
-            openSetupWindow()
+            DictumNavigation.shared.open()
+            if ManagedLaunchGate.isSetupWizardRequired {
+                openSetupWindow()
+            }
         }
     }
 
@@ -1057,21 +1064,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "dictum" else { return }
+        if url.host == "main" {
+            let page = DictumPage(rawValue: url.lastPathComponent)
+            DictumNavigation.shared.open(page)
+            return
+        }
         #if DEBUG
         if url.host == "dictate" {
             DictumDebugDictation.shared.handle(url)
             return
         }
         #endif
+        if url.host == "settings", url.path != "/plugins" {
+            DictumNavigation.shared.open(.general)
+            return
+        }
         if url.host == "settings", url.path == "/plugins" {
             SettingsNavigationCoordinator.shared.navigate(to: SettingsView.firstPluginTab)
+            openSettingsWindow()
+            return
         }
-        openSettingsWindow()
+        DictumNavigation.shared.open()
     }
 
     func isManagedWindow(_ window: NSWindow) -> Bool {
         if let identifier = window.identifier?.rawValue.lowercased() {
             if identifier.contains("settings")
+                || identifier.contains("dictum")
                 || identifier.contains("setup")
                 || identifier.contains("history")
                 || identifier.contains("errors") {
@@ -1081,6 +1100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let title = window.title
         return title == String(localized: "Settings")
+            || title == "dictum"
             || title == String(localized: "dictum Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
