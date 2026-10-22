@@ -86,6 +86,12 @@ struct HotkeySettingsView: View {
                     title: String(localized: "Paste last transcription shortcut"),
                     subtitle: String(localized: "Insert your latest transcription into the focused app.")
                 )
+
+                MultiHotkeySlotRecorder(
+                    slot: .correctLastDictation,
+                    title: String(localized: "Correct last dictation shortcut"),
+                    subtitle: String(localized: "correctLastDictation.shortcut.description")
+                )
                 }
 
                 #if !APPSTORE
