@@ -7,7 +7,7 @@ struct AppSection: View {
     @State private var needsRestart = false
 
     private var languageLabel: String {
-        ["zh-Hans": "简体中文", "en": "English", "de": "Deutsch", "ja": "日本語"][language]
+        ["zh-Hans": "简体中文", "en": "English"][language]
             ?? String(localized: "System", table: "DictumShell")
     }
 
@@ -29,8 +29,6 @@ struct AppSection: View {
                     Text("System", tableName: "DictumShell").tag("system")
                     Text(verbatim: "简体中文").tag("zh-Hans")
                     Text(verbatim: "English").tag("en")
-                    Text(verbatim: "Deutsch").tag("de")
-                    Text(verbatim: "日本語").tag("ja")
                 }
             }
             GroupedFormRow(separated: true) {
