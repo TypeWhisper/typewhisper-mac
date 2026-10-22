@@ -63,6 +63,8 @@ struct DiagnosticWorkflowInfo: Encodable, Equatable {
     let triggerAppBundleIdentifierCount: Int
     let triggerWebsitePatternCount: Int
     let triggerHotkeyCount: Int
+    let triggerExcludedAppBundleIdentifierCount: Int
+    let triggerExcludedWebsitePatternCount: Int
     let hotkeyBehavior: String?
     let outputFormat: String?
     let outputAutoEnter: Bool
@@ -734,6 +736,8 @@ final class ErrorLogService: ObservableObject {
                     triggerAppBundleIdentifierCount: trigger?.appBundleIdentifiers.count ?? 0,
                     triggerWebsitePatternCount: trigger?.websitePatterns.count ?? 0,
                     triggerHotkeyCount: trigger?.hotkeys.count ?? 0,
+                    triggerExcludedAppBundleIdentifierCount: trigger?.excludedAppBundleIdentifiers.count ?? 0,
+                    triggerExcludedWebsitePatternCount: trigger?.excludedWebsitePatterns.count ?? 0,
                     hotkeyBehavior: trigger?.hotkeyBehavior.rawValue,
                     outputFormat: trimmedOrNil(output.format),
                     outputAutoEnter: output.autoEnter,

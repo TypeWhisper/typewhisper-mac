@@ -10943,6 +10943,278 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteExcludedFromAlwaysWorkflowSkipsItOnceTheURLResolves() async throws {
+        let ruleName = try await alwaysWorkflowDictationRuleName(
+            trigger: .global(websites: ["example.com"]),
+            resolvedURL: "https://docs.example.com/chat"
+        )
+
+        XCTAssertNil(ruleName)
+    }
+
+    @MainActor
+    func testAlwaysWorkflowWithWebsiteExclusionsStillRunsOnOtherWebsites() async throws {
+        let ruleName = try await alwaysWorkflowDictationRuleName(
+            trigger: .global(websites: ["example.com"]),
+            resolvedURL: "https://other.example/chat"
+        )
+
+        XCTAssertEqual(ruleName, "Always Dictation")
+    }
+
+    @MainActor
+    func testAlwaysWorkflowWebsiteExclusionsDoNotDelayAnAppWorkflow() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://docs.example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Dictation",
+            template: .dictation,
+            trigger: .global(websites: ["example.com"]),
+            output: WorkflowOutput(autoEnterMode: .never),
+            sortOrder: 0
+        )
+        _ = context.workflowService.addWorkflow(
+            name: "Chrome Dictation",
+            template: .dictation,
+            trigger: .app("com.google.Chrome"),
+            output: WorkflowOutput(autoEnterMode: .never),
+            sortOrder: 1
+        )
+        var completedRuleNames: [String?] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .transcriptionCompleted(let payload) = event {
+                completedRuleNames.append(payload.ruleName)
+            }
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = { pasted.fulfill() }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Chrome Dictation")
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // The app workflow wins wherever the Always workflow is excluded, so the blocked
+        // lookup cannot delay the insertion.
+        await fulfillment(of: [pasted], timeout: 2)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+
+        urlGate.signal()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(completedRuleNames, ["Chrome Dictation"])
+    }
+
+    @MainActor
+    func testWebsiteExcludedFromAlwaysSubmitWorkflowIsCheckedBeforeRecording() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let firstLookupCompleted = LockedFlag()
+        // The lookup before recording blocks; the check after audio starts sees the same tab.
+        let resolver = BrowserURLResolver { _, _ in
+            if !firstLookupCompleted.value {
+                urlRequested.fulfill()
+                urlGate.wait()
+                firstLookupCompleted.set()
+            }
+            return BrowserResolution(url: URL(string: "https://docs.example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Submit",
+            template: .dictation,
+            trigger: .global(websites: ["example.com"]),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        // An unreadable field: the paste cannot be verified, so no Insert offer keeps the indicator busy.
+        let unreadableElement = AXUIElementCreateSystemWide()
+        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: nil, selectedText: nil, selectedRange: nil)
+        }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.hotkeyService.externalKeySuppressionAvailableOverride = true
+        context.hotkeyService.secureInputEnabledProvider = { false }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        // The website can still exclude the Always workflow, so it is checked before audio starts.
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+
+        urlGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertNil(context.dictationViewModel.activeRuleName)
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+
+        XCTAssertEqual(context.dictationViewModel.apiStopRecording(), sessionID)
+        for _ in 0..<160 {
+            if context.dictationViewModel.state == .idle { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(returnCount, 0)
+    }
+
+    /// Dictates in Chrome with one Always workflow while the browser URL lookup is held, and
+    /// returns the workflow name that the completed dictation reports.
+    @MainActor
+    private func alwaysWorkflowDictationRuleName(
+        trigger: WorkflowTrigger,
+        resolvedURL: String
+    ) async throws -> String? {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: resolvedURL), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Always Dictation",
+            template: .dictation,
+            trigger: trigger,
+            output: WorkflowOutput(autoEnterMode: .never)
+        )
+        var completedRuleNames: [String?] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            if case .transcriptionCompleted(let payload) = event {
+                completedRuleNames.append(payload.ruleName)
+            }
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var urlReleased = false
+        let pastedBeforeURL = expectation(description: "Text pasted before URL resolution")
+        pastedBeforeURL.isInverted = true
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            if !urlReleased {
+                pastedBeforeURL.fulfill()
+            }
+            pasted.fulfill()
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        // Until the website is known, the Always workflow applies.
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Always Dictation")
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // A website exclusion can still change the workflow, so insertion waits for the URL.
+        await fulfillment(of: [pastedBeforeURL], timeout: 0.3)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+
+        urlReleased = true
+        urlGate.signal()
+        await fulfillment(of: [pasted], timeout: 2)
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(completedRuleNames.count, 1)
+        return completedRuleNames.first ?? nil
+    }
+
+    @MainActor
     func testWebsiteSubmitPreparationWebsiteMatch() async throws {
         try await assertWebsiteSubmitPreparation(scenario: "website")
     }

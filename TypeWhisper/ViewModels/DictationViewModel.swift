@@ -2054,13 +2054,13 @@ final class DictationViewModel: ObservableObject {
         }
 
         let resolveWebsiteBeforeRecording = WorkflowAutoEnterMode.duringDictation.isAvailable
-            && initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
+            && initialForcedWorkflow == nil && (workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   workflow.output.autoEnterMode == .duringDictation || effectiveAutoEnterMode == .duringDictation,
                   let trigger = workflow.trigger, !trigger.websitePatterns.isEmpty else { return false }
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(initialActiveApp.bundleId ?? "")
-        }
+        } || websiteExclusionCanChangeSubmit(bundleIdentifier: initialActiveApp.bundleId))
         if resolveWebsiteBeforeRecording {
             state = .processing
             processingPhase = localizedAppText("Checking website…", de: "Website wird geprüft …")
@@ -2455,8 +2455,17 @@ final class DictationViewModel: ObservableObject {
                 return nil
             }
 
-            if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
-                logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
+            let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL)
+            // The Always workflow matched while the URL was unknown. A website it excludes
+            // leaves no match, so the recording continues without a workflow.
+            let websiteExcludesAlwaysWorkflow = workflowMatch == nil
+                && activeWorkflowMatch?.kind == .globalFallback
+            if workflowMatch != nil || websiteExcludesAlwaysWorkflow {
+                if let workflowMatch {
+                    logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
+                } else {
+                    logger.info("URL resolution: the website is excluded from the Always workflow")
+                }
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
                 prewarmDictationModel()
                 let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
@@ -2596,8 +2605,10 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    /// Whether the website can still change the workflow in this app: a website workflow can
+    /// match here, or the matched Always workflow excludes websites.
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
-        workflowService.workflows.contains { workflow in
+        let websiteWorkflowCanMatch = workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   let trigger = workflow.trigger,
                   !trigger.websitePatterns.isEmpty else {
@@ -2606,6 +2617,25 @@ final class DictationViewModel: ObservableObject {
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(bundleIdentifier ?? "")
         }
+        return websiteWorkflowCanMatch || matchedAlwaysWorkflowExcludesWebsites(inApp: bundleIdentifier)
+    }
+
+    /// Whether the current match is an Always workflow that the website can still exclude.
+    /// Exclusions never matter when an app or website workflow matched instead.
+    private func matchedAlwaysWorkflowExcludesWebsites(inApp bundleIdentifier: String?) -> Bool {
+        guard let match = activeWorkflowMatch, match.kind == .globalFallback else { return false }
+        return match.workflow.trigger?.dependsOnWebsite(inApp: bundleIdentifier) == true
+    }
+
+    /// Whether a website that the matched Always workflow excludes changes submitting during
+    /// dictation: that workflow submits, or another Always workflow that can take over does.
+    private func websiteExclusionCanChangeSubmit(bundleIdentifier: String?) -> Bool {
+        matchedAlwaysWorkflowExcludesWebsites(inApp: bundleIdentifier)
+            && workflowService.workflows.contains { workflow in
+                workflow.isEnabled
+                    && workflow.trigger?.kind == .global
+                    && workflow.output.autoEnterMode == .duringDictation
+            }
     }
 
     private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
