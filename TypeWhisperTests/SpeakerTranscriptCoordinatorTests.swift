@@ -1068,6 +1068,25 @@ final class SpeakerChannelAttributionTests: XCTestCase {
         ])
         XCTAssertEqual(SpeakerChannelAttribution.combining(turns, ownSpeech: []), turns)
     }
+
+    /// What the microphone missed of the user stays theirs instead of
+    /// becoming a second speaker that their voice profile then names.
+    func testADiarizerSpeakerMostlyOnTheMicrophoneIsTheUser() {
+        let own = SpeakerChannelAttribution.ownSpeakerLabel
+        let turns = [
+            PluginSpeakerTurn(speakerLabel: "remote", start: 0, end: 10),
+            PluginSpeakerTurn(speakerLabel: "user", start: 10, end: 20),
+        ]
+
+        let combined = SpeakerChannelAttribution.combining(turns, ownSpeech: [10.5...18])
+
+        XCTAssertEqual(combined, [
+            PluginSpeakerTurn(speakerLabel: "remote", start: 0, end: 10),
+            PluginSpeakerTurn(speakerLabel: own, start: 10, end: 10.5),
+            PluginSpeakerTurn(speakerLabel: own, start: 10.5, end: 18),
+            PluginSpeakerTurn(speakerLabel: own, start: 18, end: 20),
+        ])
+    }
 }
 
 /// The Speakers row, and the VoiceOver value read from it, show the step a record runs next.

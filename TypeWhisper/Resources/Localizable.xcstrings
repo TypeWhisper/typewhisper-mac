@@ -43441,6 +43441,12 @@
     },
     "Require API Token" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API-Token erforderlich"
+          }
+        },
         "es" : {
           "stringUnit" : {
             "state" : "translated",

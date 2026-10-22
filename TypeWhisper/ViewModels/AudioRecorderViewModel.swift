@@ -107,7 +107,10 @@ private func readRecorderTranscriptCompletions(
                 text: saved.text,
                 audioFilePath: audioURL.path,
                 transcriptFilePath: txtURL.path,
-                markdownFilePath: hasMarkdown ? markdownURL.path : nil
+                markdownFilePath: hasMarkdown ? markdownURL.path : nil,
+                recordedAt: saved.recordedAt,
+                durationSeconds: saved.durationSeconds,
+                calendarEvent: saved.calendarEvent
             )
         }
         .sorted(by: recorderCompletionPrecedes)
@@ -289,13 +292,6 @@ final class AudioRecorderViewModel: ObservableObject {
         case transcriptSaved(recordingID: UUID)
         case failed(RecordingTranscriptionFailure)
 
-        var savedRecordingID: UUID? {
-            if case .transcriptSaved(let recordingID) = self {
-                return recordingID
-            }
-            return nil
-        }
-
         var failure: RecordingTranscriptionFailure? {
             if case .failed(let failure) = self {
                 return failure
@@ -358,6 +354,9 @@ final class AudioRecorderViewModel: ObservableObject {
         didSet { defaults.set(detectSpeakers, forKey: UserDefaultsKeys.recorderDetectSpeakers) }
     }
     var speakerRecordIntake: SpeakerRecordIntake?
+    /// Adds the speakers History holds for a recording to its completion; with
+    /// `true`, after a detection run for it has finished.
+    var addingRecorderSpeakers: (@MainActor (RecorderTranscriptReadyPayload, Bool) async -> RecorderTranscriptReadyPayload)?
 
     @Published var trackMode: AudioRecorderService.TrackMode {
         didSet {
@@ -1212,7 +1211,13 @@ final class AudioRecorderViewModel: ObservableObject {
             }.value
             try Task.checkCancellation()
             guard generation == recorderTranscriptGeneration else { continue }
-            return try result.get()
+            let completions = try result.get()
+            guard let addingRecorderSpeakers else { return completions }
+            var withSpeakers: [RecorderTranscriptReadyPayload] = []
+            for completion in completions {
+                withSpeakers.append(await addingRecorderSpeakers(completion, false))
+            }
+            return withSpeakers
         }
         throw CocoaError(.fileReadUnknown)
     }
@@ -1797,8 +1802,11 @@ final class AudioRecorderViewModel: ObservableObject {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
                 // The transcript is saved first; adding the speaker record can take seconds.
-                let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
-                await addSpeakerRecordIfWanted(result, request: request, recordingID: outcome.savedRecordingID)
+                let (outcome, payload) = savingTranscript(text, for: request.outputURL, request: request)
+                let speakerRecordID = await addSpeakerRecordIfWanted(
+                    result, request: request, recordingID: payload?.recordingID
+                )
+                announce(payload, waitingForSpeakers: speakerRecordID != nil)
                 return (outcome, text)
             } else if previewCanBeTranscript, !preview.isEmpty {
                 return (saveTranscriptOutcome(preview, for: request.outputURL, request: request), preview)
@@ -1852,11 +1860,14 @@ final class AudioRecorderViewModel: ObservableObject {
                 return .failed(recordedFailure)
             }
 
-            let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
+            let (outcome, payload) = savingTranscript(text, for: request.outputURL, request: request)
             // A recording that already has its speaker record keeps it; the
             // intake tells them apart by the recording ID.
-            if let recordingID = outcome.savedRecordingID {
-                await addSpeakerRecordIfWanted(result, request: request, recordingID: recordingID)
+            if let payload {
+                let speakerRecordID = await addSpeakerRecordIfWanted(
+                    result, request: request, recordingID: payload.recordingID
+                )
+                announce(payload, waitingForSpeakers: speakerRecordID != nil)
             }
             return outcome
         } catch is CancellationError {
@@ -1887,13 +1898,14 @@ final class AudioRecorderViewModel: ObservableObject {
             : detectSpeakers
     }
 
+    /// Returns the History record's ID, or nil when no speaker record was wanted or saved.
     private func addSpeakerRecordIfWanted(
         _ result: TranscriptionResult,
         request: FinalTranscriptionRequest,
         recordingID: UUID?
-    ) async {
-        guard request.detectsSpeakers, let speakerRecordIntake else { return }
-        _ = await speakerRecordIntake(SpeakerRecordingInput(
+    ) async -> UUID? {
+        guard request.detectsSpeakers, let speakerRecordIntake else { return nil }
+        return await speakerRecordIntake(SpeakerRecordingInput(
             result: result,
             samples: request.buffer,
             title: request.outputURL.deletingPathExtension().lastPathComponent,
@@ -2161,12 +2173,19 @@ final class AudioRecorderViewModel: ObservableObject {
         }
         let receiptURL = transcriptReadyURL(for: audioURL)
         let identity = try recordingIdentity(for: audioURL)
+        // The header holds the length; the samples are not read.
+        let duration = (try? AVAudioFile(forReading: audioURL)).map {
+            Double($0.length) / $0.fileFormat.sampleRate
+        } ?? 0
         let payload = RecorderTranscriptReadyPayload(
             recordingID: identity.recordingID,
             text: text,
             audioFilePath: audioURL.path,
             transcriptFilePath: txtURL.path,
-            markdownFilePath: calendarEvent == nil ? nil : transcriptMarkdownURL(for: audioURL).path
+            markdownFilePath: calendarEvent == nil ? nil : transcriptMarkdownURL(for: audioURL).path,
+            recordedAt: (try? FileManager.default.attributesOfItem(atPath: audioURL.path))?[.creationDate] as? Date,
+            durationSeconds: duration.isFinite && duration > 0 ? duration : nil,
+            calendarEvent: calendarEvent?.recorderCalendarEvent
         )
         var writes = [RecordingFileWrite(url: txtURL, data: Data(text.utf8))]
         if let calendarEvent {
@@ -2354,14 +2373,37 @@ final class AudioRecorderViewModel: ObservableObject {
         for audioURL: URL,
         request: FinalTranscriptionRequest
     ) -> FinalTranscriptionOutcome {
+        let (outcome, payload) = savingTranscript(text, for: audioURL, request: request)
+        announce(payload, waitingForSpeakers: false)
+        return outcome
+    }
+
+    /// Emits a saved completion. With a speaker record it waits for the record's
+    /// speakers, without holding up the next recording's transcription.
+    private func announce(_ payload: RecorderTranscriptReadyPayload?, waitingForSpeakers: Bool) {
+        guard let payload else { return }
+        guard waitingForSpeakers, let addingRecorderSpeakers else {
+            EventBus.shared.emit(.recorderTranscriptReady(payload))
+            return
+        }
+        Task { @MainActor in
+            EventBus.shared.emit(.recorderTranscriptReady(await addingRecorderSpeakers(payload, true)))
+        }
+    }
+
+    /// Saves the transcript without emitting its completion, which is returned.
+    private func savingTranscript(
+        _ text: String,
+        for audioURL: URL,
+        request: FinalTranscriptionRequest
+    ) -> (FinalTranscriptionOutcome, RecorderTranscriptReadyPayload?) {
         do {
             let payload = try saveTranscript(
                 text,
                 for: audioURL,
                 calendarEvent: request.calendarEvent
             )
-            EventBus.shared.emit(.recorderTranscriptReady(payload))
-            return .transcriptSaved(recordingID: payload.recordingID)
+            return (.transcriptSaved(recordingID: payload.recordingID), payload)
         } catch {
             logger.error("Failed to save transcript: \(error.localizedDescription)")
             let failure = makeTranscriptionFailure(
@@ -2371,7 +2413,7 @@ final class AudioRecorderViewModel: ObservableObject {
             )
             let recordedFailure = saveTranscriptionFailure(failure, for: audioURL)
             errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
-            return .failed(recordedFailure)
+            return (.failed(recordedFailure), nil)
         }
     }
 
@@ -2508,3 +2550,24 @@ extension AudioRecorderViewModel {
     }
 }
 #endif
+
+private extension CalendarMeetingTranscriptMetadata {
+    var recorderCalendarEvent: RecorderCalendarEvent {
+        func participant(_ participant: CalendarMeetingParticipant) -> RecorderCalendarParticipant {
+            RecorderCalendarParticipant(
+                name: participant.name,
+                email: participant.emailAddress,
+                status: participant.status.rawValue,
+                isCurrentUser: participant.isCurrentUser
+            )
+        }
+        return RecorderCalendarEvent(
+            title: title,
+            start: startDate,
+            end: endDate,
+            location: location,
+            organizer: organizer.map(participant),
+            attendees: attendees.map(participant)
+        )
+    }
+}

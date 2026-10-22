@@ -13,9 +13,7 @@ permissions:
 
 jobs:
   fetch:
-    # Runs started by SeoFood from this repository use the self-hosted Mac mini
-    # while the MAC_MINI_RUNNER variable is "on"; everything else uses macos-latest.
-    runs-on: ${{ (vars.MAC_MINI_RUNNER == 'on' && github.actor == 'SeoFood' && github.triggering_actor == 'SeoFood' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)) && 'seofood-mac-mini' || 'macos-latest' }}
+    runs-on: macos-latest
     steps:
       - name: Fetch Notarization Log
         env:

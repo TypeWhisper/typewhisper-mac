@@ -12,6 +12,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     private static let historySyncActionID = "com.typewhisper.history.transcription-updated"
     private static let liveSyncEntryRetention: TimeInterval = 30 * 24 * 60 * 60
     private static let liveSyncEntryLimit = 500
+    private static let recorderNoteLimit = 500
 
     var actionName: String { "Save to Obsidian" }
     var actionId: String { "obsidian-save-note" }
@@ -36,8 +37,14 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     fileprivate var _frontmatterEnabled: Bool = true
     fileprivate var _frontmatterTags: [String] = ["typewhisper"]
     fileprivate var _autoExportEnabled: Bool = false
+    /// Auto-export of dictations; on by default, as before recordings could be exported.
+    fileprivate var _exportDictations: Bool = true
+    /// Auto-export of Recorder transcripts, off by default.
+    fileprivate var _exportRecordings: Bool = false
     fileprivate var _liveSyncEnabled: Bool = true
     private let liveSyncEntries = OSAllocatedUnfairLock(initialState: [String: LiveSyncEntry]())
+    /// Note of each exported recording, by recording ID, so a retranscription updates it.
+    private let recorderNotes = OSAllocatedUnfairLock(initialState: [String: RecorderNoteEntry]())
 
     required override init() {
         super.init()
@@ -78,6 +85,12 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         _frontmatterEnabled = host?.userDefault(forKey: "frontmatterEnabled") as? Bool ?? true
         _frontmatterTags = host?.userDefault(forKey: "frontmatterTags") as? [String] ?? ["typewhisper"]
         _autoExportEnabled = host?.userDefault(forKey: "autoExportEnabled") as? Bool ?? false
+        _exportDictations = host?.userDefault(forKey: "exportDictations") as? Bool ?? true
+        _exportRecordings = host?.userDefault(forKey: "exportRecordings") as? Bool ?? false
+        if let data = host?.userDefault(forKey: "recorderNotes") as? Data,
+           let notes = try? JSONDecoder().decode([String: RecorderNoteEntry].self, from: data) {
+            recorderNotes.withLock { $0 = notes }
+        }
         _liveSyncEnabled = host?.userDefault(forKey: "liveSyncEnabled") as? Bool ?? true
         let storedEntries: [String: LiveSyncEntry]
         if let data = host?.userDefault(forKey: "liveSyncEntries") as? Data,
@@ -120,11 +133,14 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         subscriptionId = host?.eventBus.subscribe { [weak self] event in
             switch event {
             case .transcriptionCompleted(let payload):
-                if self?._autoExportEnabled == true {
+                if self?._autoExportEnabled == true, self?._exportDictations == true {
                     await self?.autoExport(payload: payload)
                 } else if self?._liveSyncEnabled == true {
                     await self?.adoptMatchingActionExport(payload: payload)
                 }
+            case .recorderTranscriptReady(let payload):
+                guard self?._autoExportEnabled == true, self?._exportRecordings == true else { return }
+                await self?.exportRecording(payload: payload)
             case .actionCompleted(let payload) where payload.actionId == Self.historySyncActionID:
                 guard self?._liveSyncEnabled == true else { return }
                 await self?.liveSync(payload: payload)
@@ -298,6 +314,20 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             pipelineSteps = []
         }
 
+        init(recording payload: RecorderTranscriptReadyPayload) {
+            timestamp = payload.completedAt
+            rawText = payload.text
+            finalText = payload.text
+            appName = "Recorder"
+            bundleIdentifier = nil
+            url = nil
+            language = nil
+            engineUsed = nil
+            modelUsed = nil
+            durationSeconds = nil
+            pipelineSteps = []
+        }
+
         init(_ payload: HistorySyncPayload, timestamp: Date) {
             self.timestamp = timestamp
             rawText = payload.rawText
@@ -317,6 +347,11 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let path: String
         let context: NoteContext
         let awaitingCompletion: Bool
+    }
+
+    private struct RecorderNoteEntry: Codable, Sendable {
+        let path: String
+        let completedAt: Date
     }
 
     private struct WrittenNote {
@@ -835,6 +870,101 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         )
     }
 
+    // MARK: - Recorder Transcripts
+
+    /// Saves a Recorder transcript as its own note, also in daily note mode. A
+    /// calendar recording keeps the Markdown the Recorder wrote, with title and
+    /// attendees in its frontmatter. With Live Sync, a retranscription replaces
+    /// the note it exported before.
+    private func exportRecording(payload: RecorderTranscriptReadyPayload) async {
+        guard isConfigured, !payload.text.isEmpty else { return }
+        let content = recordingNoteContent(payload)
+        let endVaultAccess = beginVaultAccess()
+        defer { endVaultAccess() }
+        do {
+            try recorderNotes.withLock { notes in
+                let key = payload.recordingID.uuidString
+                // Events can arrive out of order; an older transcript never replaces a newer one.
+                if let existing = notes[key], existing.completedAt > payload.completedAt { return }
+                if _liveSyncEnabled, let existing = notes[key],
+                   isInsideConfiguredVault(existing.path),
+                   FileManager.default.fileExists(atPath: existing.path) {
+                    try content.write(toFile: existing.path, atomically: true, encoding: .utf8)
+                    notes[key] = RecorderNoteEntry(path: existing.path, completedAt: payload.completedAt)
+                } else {
+                    let folderPath = try noteFolderPath()
+                    let baseName = ((payload.audioFilePath as NSString).lastPathComponent as NSString)
+                        .deletingPathExtension
+                    let sanitized = sanitizeFilename(baseName)
+                    let filePath = uniquePath(for: (folderPath as NSString)
+                        .appendingPathComponent("\(sanitized.isEmpty ? "Recording" : sanitized).md"))
+                    try content.write(toFile: filePath, atomically: true, encoding: .utf8)
+                    notes[key] = RecorderNoteEntry(path: filePath, completedAt: payload.completedAt)
+                }
+                persistRecorderNotes(&notes)
+            }
+        } catch {
+            print("[ObsidianPlugin] Recording export failed: \(error)")
+        }
+    }
+
+    private func recordingNoteContent(_ payload: RecorderTranscriptReadyPayload) -> String {
+        if let markdownPath = payload.markdownFilePath,
+           let markdown = try? String(contentsOfFile: markdownPath, encoding: .utf8),
+           !markdown.isEmpty {
+            return _frontmatterEnabled ? addingTags(to: markdown) : markdownBody(of: markdown)
+        }
+        let context = NoteContext(recording: payload)
+        var content = ""
+        if _frontmatterEnabled {
+            content += buildFrontmatter(context: context)
+            content += "\n\n"
+        }
+        let template = _noteTemplate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "{{TRANSCRIPT}}"
+            : _noteTemplate
+        content += resolveTemplate(template, context: context)
+        return content
+    }
+
+    /// The Recorder's Markdown with the configured tags added to its frontmatter.
+    private func addingTags(to markdown: String) -> String {
+        guard !_frontmatterTags.isEmpty, markdown.hasPrefix("---\n"),
+              let end = markdown.range(of: "\n---\n", range: markdown.index(markdown.startIndex, offsetBy: 3)..<markdown.endIndex)
+        else { return markdown }
+        let tags = (["tags:"] + _frontmatterTags.map { "  - \(yamlScalar($0))" }).joined(separator: "\n")
+        var result = markdown
+        result.insert(contentsOf: "\n" + tags, at: end.lowerBound)
+        return result
+    }
+
+    private func markdownBody(of markdown: String) -> String {
+        guard markdown.hasPrefix("---\n"),
+              let end = markdown.range(of: "\n---\n", range: markdown.index(markdown.startIndex, offsetBy: 3)..<markdown.endIndex)
+        else { return markdown }
+        return String(markdown[end.upperBound...]).trimmingCharacters(in: .newlines)
+    }
+
+    private func noteFolderPath() throws -> String {
+        guard !_vaultPath.isEmpty else {
+            throw NSError(domain: "ObsidianPlugin", code: 1, userInfo: [NSLocalizedDescriptionKey: "No vault configured"])
+        }
+        let subfolder = _subfolder.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folderPath = subfolder.isEmpty ? _vaultPath : (_vaultPath as NSString).appendingPathComponent(subfolder)
+        try FileManager.default.createDirectory(atPath: folderPath, withIntermediateDirectories: true)
+        return folderPath
+    }
+
+    private func persistRecorderNotes(_ notes: inout [String: RecorderNoteEntry]) {
+        if notes.count > Self.recorderNoteLimit {
+            let kept = notes.sorted { $0.value.completedAt > $1.value.completedAt }.prefix(Self.recorderNoteLimit)
+            notes = Dictionary(uniqueKeysWithValues: kept.map { ($0.key, $0.value) })
+        }
+        if let data = try? JSONEncoder().encode(notes) {
+            host?.setUserDefault(data, forKey: "recorderNotes")
+        }
+    }
+
     // MARK: - Settings View
 
     var settingsView: AnyView? {
@@ -858,6 +988,8 @@ private struct ObsidianSettingsView: View {
     @State private var frontmatterEnabled: Bool = true
     @State private var tagsInput: String = "typewhisper"
     @State private var autoExportEnabled: Bool = false
+    @State private var exportDictations: Bool = true
+    @State private var exportRecordings: Bool = false
     @State private var liveSyncEnabled: Bool = true
     private let bundle = pluginModuleBundle
 
@@ -1090,7 +1222,7 @@ private struct ObsidianSettingsView: View {
                         VStack(alignment: .leading) {
                             Text("Auto-Export", bundle: bundle)
                                 .font(.headline)
-                            Text("Automatically save every transcription to Obsidian.", bundle: bundle)
+                            Text("Automatically save the transcriptions selected below to Obsidian.", bundle: bundle)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1101,6 +1233,31 @@ private struct ObsidianSettingsView: View {
                         plugin.updateAutoExportSubscription()
                     }
 
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle(isOn: $exportDictations) {
+                            Text("Dictations", bundle: bundle)
+                        }
+                        .onChange(of: exportDictations) { _, newValue in
+                            plugin._exportDictations = newValue
+                            plugin.saveSetting(newValue, forKey: "exportDictations")
+                        }
+
+                        Toggle(isOn: $exportRecordings) {
+                            VStack(alignment: .leading) {
+                                Text("Recorder transcripts", bundle: bundle)
+                                Text("Saves each finished recording as its own note, also in daily note mode. Calendar recordings keep their title and attendees in the frontmatter. With Live Sync, a new transcription of the recording updates its note.", bundle: bundle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .onChange(of: exportRecordings) { _, newValue in
+                            plugin._exportRecordings = newValue
+                            plugin.saveSetting(newValue, forKey: "exportRecordings")
+                        }
+                    }
+                    .padding(.leading, 20)
+                    .disabled(!autoExportEnabled)
+
                     Toggle(isOn: $liveSyncEnabled) {
                         VStack(alignment: .leading) {
                             Text("Live Sync History Edits", bundle: bundle)
@@ -1110,14 +1267,19 @@ private struct ObsidianSettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    .disabled(dailyNoteEnabled)
+                    // In daily note mode it still updates the separate notes of recordings.
+                    .disabled(dailyNoteEnabled && !(autoExportEnabled && exportRecordings))
                     .onChange(of: liveSyncEnabled) { _, newValue in
                         plugin._liveSyncEnabled = newValue
                         plugin.saveSetting(newValue, forKey: "liveSyncEnabled")
                         plugin.updateAutoExportSubscription()
                     }
 
-                    if dailyNoteEnabled {
+                    if dailyNoteEnabled && autoExportEnabled && exportRecordings {
+                        Text("In daily note mode, Live Sync only updates the notes of Recorder transcripts.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if dailyNoteEnabled {
                         Text("Live Sync is available for individual notes only.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -1168,6 +1330,8 @@ private struct ObsidianSettingsView: View {
             frontmatterEnabled = plugin._frontmatterEnabled
             tagsInput = plugin._frontmatterTags.joined(separator: ", ")
             autoExportEnabled = plugin._autoExportEnabled
+            exportDictations = plugin._exportDictations
+            exportRecordings = plugin._exportRecordings
             liveSyncEnabled = plugin._liveSyncEnabled
             #if !APPSTORE
             detectedVaults = ObsidianPlugin.detectVaults() ?? []

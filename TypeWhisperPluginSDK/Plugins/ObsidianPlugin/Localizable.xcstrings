@@ -191,34 +191,6 @@
         }
       }
     },
-    "Automatically save every transcription to Obsidian.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jede Transkription automatisch in Obsidian speichern."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Guarda automáticamente cada transcripción en Obsidian."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "各テキストを自動的にObsidianに保存します。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自动将每次转录保存到 Obsidian。"
-          }
-        }
-      }
-    },
     "Browse...": {
       "localizations": {
         "de": {
@@ -999,6 +971,146 @@
           "stringUnit": {
             "state": "translated",
             "value": "TypeWhisper 无法再访问此 Vault。请通过“浏览...”重新选择。"
+          }
+        }
+      }
+    },
+    "Dictations": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktate"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dictados"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声入力"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "听写"
+          }
+        }
+      }
+    },
+    "Recorder transcripts": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recorder-Transkripte"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transcripciones de la grabadora"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "レコーダーの文字起こし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音器转录"
+          }
+        }
+      }
+    },
+    "Saves each finished recording as its own note, also in daily note mode. Calendar recordings keep their title and attendees in the frontmatter. With Live Sync, a new transcription of the recording updates its note.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichert jede fertige Aufnahme als eigene Notiz, auch im Tagesnotiz-Modus. Kalender-Aufnahmen behalten Titel und Teilnehmer im Frontmatter. Mit Live-Sync aktualisiert eine neue Transkription der Aufnahme ihre Notiz."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda cada grabación terminada como su propia nota, también en el modo de nota diaria. Las grabaciones del calendario conservan su título y sus asistentes en el frontmatter. Con la sincronización en vivo, una nueva transcripción de la grabación actualiza su nota."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了した録音をそれぞれ個別のノートとして保存します（デイリーノートモードでも同様）。カレンダーからの録音は、タイトルと参加者をフロントマターに保持します。ライブ同期がオンの場合、録音を再度文字起こしするとそのノートが更新されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将每个完成的录音保存为单独的笔记，在每日笔记模式下也是如此。日历录音会在 frontmatter 中保留标题和参会者。开启实时同步后，重新转录录音会更新其笔记。"
+          }
+        }
+      }
+    },
+    "Automatically save the transcriptions selected below to Obsidian.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die unten gewählten Transkriptionen automatisch in Obsidian speichern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guarda automáticamente en Obsidian las transcripciones seleccionadas abajo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下で選択した文字起こしを自動的にObsidianに保存します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动将下方选择的转录保存到 Obsidian。"
+          }
+        }
+      }
+    },
+    "In daily note mode, Live Sync only updates the notes of Recorder transcripts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Tagesnotiz-Modus aktualisiert Live-Sync nur die Notizen von Recorder-Transkripten."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En el modo de nota diaria, la sincronización en vivo solo actualiza las notas de las transcripciones de la grabadora."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デイリーノートモードでは、ライブ同期はレコーダーの文字起こしのノートのみを更新します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在每日笔记模式下，实时同步只会更新录音器转录的笔记。"
           }
         }
       }
