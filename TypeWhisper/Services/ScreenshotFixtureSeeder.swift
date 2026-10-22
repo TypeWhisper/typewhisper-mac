@@ -277,6 +277,16 @@ extension ServiceContainer {
 
         if AppConstants.screenshotState == "history",
            let selectedRecord = historyService.allRecords().first(where: { $0.processingState == .ready }) {
+            // Listed under Details, which stays collapsed in the default capture.
+            selectedRecord.llmUsage = HistoryLLMUsage(entries: [
+                HistoryLLMUsage.Entry(
+                    providerId: "Claude",
+                    providerName: "Claude",
+                    model: "claude-haiku-4-5",
+                    inputTokens: 1_284,
+                    outputTokens: 18
+                ),
+            ])
             historyViewModel.requestRecordSelection([selectedRecord.id])
         }
         if AppConstants.screenshotState == "history-speakers" {

@@ -1691,7 +1691,8 @@ final class OpenAICompatiblePlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
-            break
+            // Reported before parsing: a reply cut off at the token limit still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
         case 401:
             throw PluginChatError.invalidApiKey
         case 429:
@@ -1775,6 +1776,8 @@ final class OpenAICompatiblePlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            // Reported before parsing: a reply without text still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
             return try Self.parseResponsesText(from: data)
         case 401:
             throw PluginChatError.invalidApiKey

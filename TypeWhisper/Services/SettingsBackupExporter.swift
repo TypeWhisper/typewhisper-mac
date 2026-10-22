@@ -138,6 +138,8 @@ enum SettingsBackupExporter {
         let engineUsed: String
         let modelUsed: String?
         let pipelineSteps: [String]
+        /// Absent in backups of earlier versions.
+        var llmUsage: HistoryLLMUsage? = nil
     }
 
     /// Simple, portable preferences from the General, Dictation, Dictation
@@ -538,7 +540,8 @@ enum SettingsBackupExporter {
                 language: record.language,
                 engineUsed: record.engineUsed,
                 modelUsed: record.modelUsed,
-                pipelineSteps: record.pipelineStepList
+                pipelineSteps: record.pipelineStepList,
+                llmUsage: record.llmUsage
             )
         }
 
@@ -966,7 +969,8 @@ enum SettingsBackupExporter {
                 language: entry.language,
                 engineUsed: entry.engineUsed,
                 modelUsed: entry.modelUsed,
-                pipelineSteps: entry.pipelineSteps
+                pipelineSteps: entry.pipelineSteps,
+                llmUsage: entry.llmUsage
             )
             // UsageStatisticsService only backfills from history once, at app
             // launch (ServiceContainer), so an import happening mid-session
@@ -1233,6 +1237,25 @@ extension SettingsBackupExporter.WorkflowDTO {
             && Set(lhs.hotkeys) == Set(rhs.hotkeys)
             && Set(lhs.excludedAppBundleIdentifiers) == Set(rhs.excludedAppBundleIdentifiers)
             && Set(lhs.excludedWebsitePatterns) == Set(rhs.excludedWebsitePatterns)
+    }
+}
+
+extension SettingsBackupExporter.HistoryEntryDTO {
+    /// A usage value this build cannot read is dropped instead of failing the whole import.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timestamp = try container.decode(Date.self, forKey: .timestamp)
+        rawText = try container.decode(String.self, forKey: .rawText)
+        finalText = try container.decode(String.self, forKey: .finalText)
+        appName = try container.decodeIfPresent(String.self, forKey: .appName)
+        appBundleIdentifier = try container.decodeIfPresent(String.self, forKey: .appBundleIdentifier)
+        appURL = try container.decodeIfPresent(String.self, forKey: .appURL)
+        durationSeconds = try container.decode(Double.self, forKey: .durationSeconds)
+        language = try container.decodeIfPresent(String.self, forKey: .language)
+        engineUsed = try container.decode(String.self, forKey: .engineUsed)
+        modelUsed = try container.decodeIfPresent(String.self, forKey: .modelUsed)
+        pipelineSteps = try container.decode([String].self, forKey: .pipelineSteps)
+        llmUsage = (try? container.decodeIfPresent(HistoryLLMUsage.self, forKey: .llmUsage)) ?? nil
     }
 }
 

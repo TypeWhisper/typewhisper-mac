@@ -1087,6 +1087,24 @@ final class APIHandlers: @unchecked Sendable {
             let text: String
         }
 
+        struct LLMUsageProviderEntry: Encodable {
+            let provider: String
+            let provider_name: String?
+            let model: String?
+            let requests: Int
+            /// Absent when no request to this provider and model reported it.
+            let input_tokens: Int?
+            let output_tokens: Int?
+        }
+
+        struct LLMUsageEntry: Encodable {
+            /// Sums over `providers`; absent when no request reported them.
+            let input_tokens: Int?
+            let output_tokens: Int?
+            let requests: Int
+            let providers: [LLMUsageProviderEntry]
+        }
+
         struct HistoryEntry: Encodable {
             let id: String
             let text: String
@@ -1109,6 +1127,8 @@ final class APIHandlers: @unchecked Sendable {
             let speakers: [SpeakerEntry]?
             /// Only with `include=speaker_segments`.
             let speaker_segments: [SpeakerSegmentEntry]?
+            /// The LLM requests behind the text; absent when none were recorded.
+            let llm_usage: LLMUsageEntry?
         }
 
 
@@ -1159,7 +1179,24 @@ final class APIHandlers: @unchecked Sendable {
                     ? transcript?.segments.map {
                         SpeakerSegmentEntry(start: $0.start, end: $0.end, speaker: $0.speakerID, text: $0.text)
                     }
-                    : nil
+                    : nil,
+                llm_usage: record.llmUsage.map { usage in
+                    LLMUsageEntry(
+                        input_tokens: usage.inputTokens,
+                        output_tokens: usage.outputTokens,
+                        requests: usage.requestCount,
+                        providers: usage.entries.map {
+                            LLMUsageProviderEntry(
+                                provider: $0.providerId,
+                                provider_name: $0.providerName,
+                                model: $0.model,
+                                requests: $0.requestCount,
+                                input_tokens: $0.inputTokens,
+                                output_tokens: $0.outputTokens
+                            )
+                        }
+                    )
+                }
             )
         }
 
