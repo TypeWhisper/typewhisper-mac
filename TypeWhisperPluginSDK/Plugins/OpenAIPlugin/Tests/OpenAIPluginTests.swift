@@ -744,6 +744,218 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual((requestBody["reasoning"] as? [String: Any])?["effort"] as? String, "medium")
     }
 
+    // MARK: - Workflow reasoning effort
+
+    func testOpenAIReportsTheEffortLevelsOfTheModelAWorkflowUses() throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "xhigh",
+        ])
+        let provider: Any = plugin
+
+        XCTAssertTrue(provider is any LLMEffortControllableProvider)
+        // Workflow temperatures stay out (#987): requests keep the plugin's temperature setting.
+        XCTAssertFalse(provider is any LLMTemperatureControllableProvider)
+        // "Provider Default" in a workflow resolves to the model selected in the plugin.
+        XCTAssertEqual((provider as? LLMModelSelectable)?.preferredModelId, "gpt-5.5")
+
+        XCTAssertEqual(plugin.supportedEfforts(for: nil).map(\.id), ["none", "low", "medium", "high", "xhigh"])
+        XCTAssertEqual(
+            plugin.supportedEfforts(for: "gpt-5.6-sol").map(\.id),
+            ["none", "low", "medium", "high", "xhigh", "max"]
+        )
+        XCTAssertEqual(plugin.supportedEfforts(for: "o4-mini").map(\.id), ["low", "medium", "high"])
+        XCTAssertFalse(plugin.supportedEfforts(for: "gpt-5.5").contains { $0.displayName.isEmpty })
+        // No levels for models without reasoning effort, so the host shows no effort picker.
+        XCTAssertEqual(plugin.supportedEfforts(for: "gpt-4.1").map(\.id), [])
+        XCTAssertEqual(plugin.supportedEfforts(for: "gpt-5-chat-latest").map(\.id), [])
+
+        // Provider Default is the plugin setting, or the model's default where the model lacks it.
+        XCTAssertEqual(plugin.defaultEffortId(for: nil), "xhigh")
+        XCTAssertEqual(plugin.defaultEffortId(for: "o4-mini"), "medium")
+        XCTAssertEqual(plugin.defaultEffortId(for: "gpt-5.1"), "none")
+        XCTAssertNil(plugin.defaultEffortId(for: "gpt-4.1"))
+    }
+
+    func testOpenAIRequestSendsTheWorkflowEffortWithTheInheritedModel() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "low",
+        ])
+
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: nil,
+            effort: "xhigh",
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+
+        XCTAssertEqual(request.url?.path, "/v1/responses")
+        XCTAssertEqual(request.body["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(Self.reasoningEffort(in: request.body), "xhigh")
+    }
+
+    func testOpenAIRequestOnProviderDefaultUsesThePluginSetting() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "low",
+        ])
+
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: nil,
+            effort: nil,
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+
+        XCTAssertEqual(request.body["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(Self.reasoningEffort(in: request.body), "low")
+    }
+
+    func testOpenAIRequestSendsTheWorkflowEffortWithAModelOverride() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "low",
+        ])
+
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: "gpt-5.6-sol",
+            effort: "max",
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+
+        XCTAssertEqual(request.body["model"] as? String, "gpt-5.6-sol")
+        XCTAssertEqual(Self.reasoningEffort(in: request.body), "max")
+    }
+
+    func testOpenAIRequestUsesThePluginSettingForAnEffortTheModelLacks() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "low",
+        ])
+
+        // A workflow effort saved for another model, e.g. before the plugin's model changed.
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: nil,
+            effort: "max",
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+
+        XCTAssertEqual(Self.reasoningEffort(in: request.body), "low")
+    }
+
+    func testOpenAIRequestToAModelWithoutReasoningSendsNoEffort() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "high",
+        ])
+
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: "gpt-4.1",
+            effort: "high",
+            responseURL: "https://api.openai.com/v1/chat/completions",
+            responseBody: #"{"choices":[{"message":{"content":"Done"}}]}"#
+        )
+
+        XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+        XCTAssertEqual(request.body["model"] as? String, "gpt-4.1")
+        XCTAssertNil(request.body["reasoning_effort"])
+        XCTAssertNil(request.body["reasoning"])
+    }
+
+    func testOpenAIChatCompletionsReasoningModelSendsTheWorkflowEffort() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "selectedLLMModel": "gpt-5.5",
+            "reasoningEffort": "low",
+        ])
+
+        let request = try await processedRequest(
+            plugin: plugin,
+            model: "o4-mini",
+            effort: "high",
+            responseURL: "https://api.openai.com/v1/chat/completions",
+            responseBody: #"{"choices":[{"message":{"content":"Done"}}]}"#
+        )
+
+        XCTAssertEqual(request.url?.path, "/v1/chat/completions")
+        XCTAssertEqual(request.body["reasoning_effort"] as? String, "high")
+    }
+
+    func testOpenAIWorkflowEffortDecidesWhetherGPT51KeepsTheCustomTemperature() async throws {
+        let plugin = try Self.activatedPlugin(defaults: [
+            "reasoningEffort": "none",
+            "llmTemperatureMode": PluginLLMTemperatureMode.custom.rawValue,
+            "llmTemperatureValue": 0.7,
+        ])
+
+        let providerDefault = try await processedRequest(
+            plugin: plugin,
+            model: "gpt-5.1",
+            effort: nil,
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+        let workflowEffort = try await processedRequest(
+            plugin: plugin,
+            model: "gpt-5.1",
+            effort: "high",
+            responseURL: "https://api.openai.com/v1/responses"
+        )
+
+        XCTAssertEqual(providerDefault.body["model"] as? String, "gpt-5.1")
+        XCTAssertEqual(Self.reasoningEffort(in: providerDefault.body), "none")
+        XCTAssertEqual(providerDefault.body["temperature"] as? Double, 0.7)
+        // GPT-5.1 takes a temperature only without reasoning.
+        XCTAssertEqual(Self.reasoningEffort(in: workflowEffort.body), "high")
+        XCTAssertNil(workflowEffort.body["temperature"])
+    }
+
+    func testOpenAIChatGPTLoginSendsTheWorkflowEffort() async throws {
+        let plugin = try Self.activatedPlugin(
+            defaults: [
+                "authMode": "chatgpt",
+                "selectedLLMModel": "gpt-5.5",
+                "reasoningEffort": "low",
+                "oauthAccountID": "account-123",
+                "oauthExpiresAt": Date().addingTimeInterval(3_600),
+            ],
+            secrets: [
+                "oauth-access-token": "oauth-token",
+                "oauth-refresh-token": "refresh-token",
+            ]
+        )
+
+        let workflowEffort = try await processedRequest(
+            plugin: plugin,
+            model: nil,
+            effort: "high",
+            responseURL: "https://chatgpt.com/backend-api/codex/responses"
+        )
+        let providerDefault = try await processedRequest(
+            plugin: plugin,
+            model: nil,
+            effort: nil,
+            responseURL: "https://chatgpt.com/backend-api/codex/responses"
+        )
+
+        XCTAssertEqual(workflowEffort.url?.host, "chatgpt.com")
+        XCTAssertEqual(workflowEffort.url?.path, "/backend-api/codex/responses")
+        XCTAssertEqual(workflowEffort.body["model"] as? String, "gpt-5.5")
+        XCTAssertEqual(Self.reasoningEffort(in: workflowEffort.body), "high")
+        XCTAssertEqual(Self.reasoningEffort(in: providerDefault.body), "low")
+    }
+
+    func testOpenAIRequestReasoningEffortResolution() {
+        XCTAssertEqual(OpenAIPlugin.requestReasoningEffort("max", preferred: .low, for: "gpt-5.6-luna"), .max)
+        XCTAssertEqual(OpenAIPlugin.requestReasoningEffort(" high ", preferred: .low, for: "gpt-5.5"), .high)
+        XCTAssertEqual(OpenAIPlugin.requestReasoningEffort(nil, preferred: .low, for: "gpt-5.5"), .low)
+        XCTAssertEqual(OpenAIPlugin.requestReasoningEffort("ultra", preferred: .low, for: "gpt-5.5"), .low)
+        XCTAssertEqual(OpenAIPlugin.requestReasoningEffort("none", preferred: .low, for: "gpt-5.4-pro"), .medium)
+        XCTAssertNil(OpenAIPlugin.requestReasoningEffort("high", preferred: .high, for: "gpt-4o"))
+    }
+
     func testOpenAIRealtimeRequestUsesRealtimeWhisperEndpointAndAuth() throws {
         let request = try OpenAIRealtimeTranscriptionSession.makeRequest(apiKey: "sk-test")
 
@@ -1312,6 +1524,54 @@ final class OpenAIPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    private static func activatedPlugin(
+        defaults: [String: Any],
+        secrets: [String: String] = ["api-key": "sk-live"]
+    ) throws -> OpenAIPlugin {
+        let host = try PluginTestHostServices(defaults: defaults, secrets: secrets)
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+        return plugin
+    }
+
+    private static func reasoningEffort(in body: [String: Any]) -> String? {
+        (body["reasoning"] as? [String: Any])?["effort"] as? String
+    }
+
+    /// Runs one prompt request the way the host does for an effort-aware
+    /// provider and returns what the plugin sent.
+    private func processedRequest(
+        plugin: OpenAIPlugin,
+        model: String?,
+        effort: String?,
+        responseURL: String,
+        responseBody: String = #"{"output":[{"type":"message","content":[{"type":"output_text","text":"Done"}]}]}"#
+    ) async throws -> (url: URL?, body: [String: Any]) {
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(responseBody.utf8), Self.httpResponse(url: responseURL, statusCode: 200)),
+            ])
+        }
+
+        let effortProvider: any LLMEffortControllableProvider = plugin
+        let result = try await effortProvider.process(
+            systemPrompt: "Fix grammar",
+            userText: "hello",
+            model: model,
+            effort: effort
+        )
+
+        XCTAssertEqual(result, "Done")
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let request = try XCTUnwrap(requests.first)
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any]
+        )
+        return (request.url, body)
     }
 
     private func assertOpenAIResponsesRequestTemperature(

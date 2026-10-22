@@ -513,13 +513,13 @@ final class DictationQuickSelectionModel: ObservableObject {
     }
 
     /// Resolves the frontmost browser's URL the same way dictation does, so website
-    /// workflows show up in the menu. Only runs when such workflows exist, because
-    /// it asks the browser through AppleScript.
+    /// workflows and websites excluded from Always workflows apply in the menu. Only
+    /// runs when such workflows exist, because it asks the browser through AppleScript.
     private func refreshFrontmostBrowserURL() {
         let container = ServiceContainer.shared
         guard let bundleId = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
               container.workflowService.workflows.contains(where: { workflow in
-                  workflow.isEnabled && workflow.trigger?.websitePatterns.isEmpty == false
+                  workflow.isEnabled && workflow.trigger?.dependsOnWebsite == true
               }) else {
             browserURLTask?.task.cancel()
             browserURLTask = nil

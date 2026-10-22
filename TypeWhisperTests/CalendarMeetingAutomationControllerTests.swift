@@ -329,6 +329,49 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         XCTAssertTrue(safari.isRunningOutput)
     }
 
+    func testChromeBetaIsAggregatedSeparatelyFromStableChrome() throws {
+        // The collector has already attributed these helpers by their host app.
+        let betaInput = MeetingAudioProcess(
+            audioObjectID: 42,
+            processID: 420,
+            bundleIdentifier: SupportedMeetingBrowser.chromeBeta,
+            isRunningInput: true,
+            isRunningOutput: false
+        )
+        let betaOutput = MeetingAudioProcess(
+            audioObjectID: 41,
+            processID: 410,
+            bundleIdentifier: SupportedMeetingBrowser.chromeBeta,
+            isRunningInput: false,
+            isRunningOutput: true
+        )
+        let stableChrome = MeetingAudioProcess(
+            audioObjectID: 51,
+            processID: 510,
+            bundleIdentifier: SupportedMeetingBrowser.chrome + ".helper",
+            isRunningInput: false,
+            isRunningOutput: true
+        )
+
+        let aggregated = CalendarMeetingAutomationController.aggregatedBrowserProcesses([
+            betaInput,
+            betaOutput,
+            stableChrome
+        ])
+
+        XCTAssertEqual(
+            aggregated.map(\.bundleIdentifier),
+            [SupportedMeetingBrowser.chrome, SupportedMeetingBrowser.chromeBeta]
+        )
+        let beta = try XCTUnwrap(aggregated.first {
+            $0.bundleIdentifier == SupportedMeetingBrowser.chromeBeta
+        })
+        XCTAssertEqual(beta.processID, betaOutput.processID)
+        XCTAssertTrue(beta.isRunningInput)
+        XCTAssertTrue(beta.isRunningOutput)
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: beta))
+    }
+
     func testSuppressionFIFOIsUniqueAndBounded() {
         let initial = (0..<CalendarMeetingSuppressionList.capacity).map { "digest-\($0)" }
         let refreshed = CalendarMeetingSuppressionList.appending("digest-10", to: initial)

@@ -580,6 +580,28 @@
         }
       }
     },
+    "NVIDIA Nemotron 3.5 ASR Streaming - streams as you speak, so the text is ready when you stop. 28 languages, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Nemotron 3.5 ASR Streaming - transkribiert schon beim Sprechen, damit der Text beim Stoppen fertig ist. 28 Sprachen, kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Nemotron 3.5 ASR Streaming - 話している間に文字起こしするため、停止した時点でテキストが完成しています。28言語、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Nemotron 3.5 ASR Streaming - 边说边转写，停止时文字即已就绪。支持 28 种语言，无需 API 密钥。"
+          }
+        }
+      }
+    },
     "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
       "localizations": {
         "de": {

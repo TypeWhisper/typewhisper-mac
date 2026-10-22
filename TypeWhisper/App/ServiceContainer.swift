@@ -91,6 +91,7 @@ final class ServiceContainer: ObservableObject {
     let punctuationStrategyResolver: PunctuationStrategyResolver
     let punctuationVerificationService: PunctuationVerificationService
     let audioRecorderService: AudioRecorderService
+    let recorderFolderStore: RecorderFolderStore
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
     let speechFeedbackService: SpeechFeedbackService
@@ -206,8 +207,10 @@ final class ServiceContainer: ObservableObject {
         punctuationRulesLoader = PunctuationRulesLoader()
         punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: dictationPunctuationProfileStore)
         punctuationVerificationService = PunctuationVerificationService(rulesLoader: punctuationRulesLoader)
+        recorderFolderStore = RecorderFolderStore()
         audioRecorderService = AudioRecorderService(
-            inputActivationGuard: inputActivationGuard
+            inputActivationGuard: inputActivationGuard,
+            folderStore: recorderFolderStore
         )
         promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService

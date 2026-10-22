@@ -118,7 +118,8 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 
 ### Transcription
 
-- **Local and cloud engines** - Choose from WhisperKit, Parakeet (Ultra, TDT v3 and v2), Apple
+- **Local and cloud engines** - Choose from WhisperKit, Parakeet (Ultra, TDT v3 and v2, Fluid
+  Speech Mini, and Nemotron 3.5 ASR Streaming, which shows text while you speak), Apple
   SpeechAnalyzer, Granite Speech, Qwen3 ASR, Voxtral, Cohere Transcribe, GigaAM (Russian), Groq
   Whisper, OpenAI Whisper, Soniox, Smallest Pulse, xAI/Grok STT, OpenAI
   Compatible, and additional bundled or community providers
@@ -265,6 +266,7 @@ If `~/Library` is hidden in Finder, use `Go -> Go to Folder...` and paste the pa
    ```bash
    rm -rf ~/Documents/TypeWhisper\ Recordings
    ```
+   Recordings saved to a folder you chose under Settings > Recorder > Recordings Folder, or to an earlier folder listed there, are in that folder. Delete them in Finder if you want to remove them too.
 9. Restart your Mac, then install the latest build again.
 
 If a fresh install still crashes immediately after these steps, please open an issue and include your macOS version, how you installed TypeWhisper, and whether the crash happens on first launch or after granting permissions.
@@ -443,6 +445,19 @@ curl -X DELETE "http://localhost:8978/v1/history?id=<uuid>"
 ```
 
 Entries with speaker detection carry `speaker_state`. Once a speaker transcript exists, they also carry `speakers`. Each speaker has an `id` and a `name`: the confirmed name, or `Speaker N`. When a voice profile suggested a name that nobody has confirmed yet, it is returned as `suggested_name`, and `name` stays `Speaker N`. Add `include=speaker_segments` to get the speaker segments. Entries that came from the Recorder carry the `recording_id` used by `GET /v1/recorder/recordings` and the `.transcript-ready.json` sidecar.
+
+Entries whose text an LLM processed carry `llm_usage`: `requests`, the summed `input_tokens` and `output_tokens`, and `providers`, one item per provider and model with `provider`, `provider_name`, `model`, `requests`, `input_tokens` and `output_tokens`. Token counts are what the providers reported, summed over every request for the text, including fallback attempts and retries. A count is absent when no request reported it, for example with Apple Intelligence or a plugin that does not report usage. Entries without LLM processing, and entries made before TypeWhisper recorded usage, have no `llm_usage`. TypeWhisper does not estimate costs.
+
+```json
+"llm_usage": {
+  "requests": 1,
+  "input_tokens": 1284,
+  "output_tokens": 18,
+  "providers": [
+    { "provider": "Claude", "provider_name": "Claude", "model": "claude-haiku-4-5", "requests": 1, "input_tokens": 1284, "output_tokens": 18 }
+  ]
+}
+```
 
 #### Name speakers and teach voice profiles
 
@@ -749,7 +764,7 @@ Conflict and lookup behavior:
 
 ### Completed Recorder Transcripts
 
-`GET /v1/recorder/recordings` returns the latest successfully saved transcript for each recording, including recordings started manually, by the calendar integration, or through the API. Results survive app restarts and do not depend on live preview or an API session.
+`GET /v1/recorder/recordings` returns the latest successfully saved transcript for each recording, including recordings started manually, by the calendar integration, or through the API. Results survive app restarts and do not depend on live preview or an API session. It covers the Recorder folder chosen in Settings > Recorder and the earlier folders the Recorder still lists there.
 
 ```bash
 curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"
@@ -885,6 +900,8 @@ When you start dictating, TypeWhisper matches the active app and browser URL aga
 2. **URL-only match** - cross-browser workflows (e.g. github.com in any browser)
 3. **App-only match** - generic app workflows (e.g. all of Chrome)
 4. **Always fallback** - global workflow when no more specific workflow matches
+
+An Always workflow can exclude apps and websites. In an excluded app or on an excluded website it does not run, and TypeWhisper behaves as if the workflow did not exist. Website exclusions use the same subdomain matching as website triggers.
 
 Hotkeys are direct workflow shortcuts, not context conditions in the app/URL matching order. Manual workflows are excluded from automatic dictation matching. They appear only in the Workflow Palette and use the existing Workflow Palette hotkey.
 

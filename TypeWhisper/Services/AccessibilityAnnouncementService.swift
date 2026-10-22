@@ -67,6 +67,11 @@ class AccessibilityAnnouncementService {
         ))
     }
 
+    /// A toggle dictation that ended on its own after the configured silence (#1023).
+    func announceRecordingStoppedAfterSilence() {
+        announce(String(localized: "Recording stopped after silence, transcribing"))
+    }
+
     func announceTranscriptionComplete(wordCount: Int) {
         announce(String(localized: "Transcription complete, \(wordCount) words"))
     }

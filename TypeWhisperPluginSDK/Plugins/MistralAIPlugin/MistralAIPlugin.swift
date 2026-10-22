@@ -272,6 +272,8 @@ struct MistralAPIClient {
         }
 
         if httpResponse.statusCode == 200 {
+            // Reported before parsing: an unreadable reply still used the tokens.
+            PluginLLMUsageReporting.report(.openAICompatible(from: data))
             return try parseChatResponse(data)
         } else {
             throw MistralAPIError.apiError(errorMessage(from: data, response: httpResponse))

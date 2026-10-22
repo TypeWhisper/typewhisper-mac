@@ -223,6 +223,9 @@ final class WorkflowIncrementalPostProcessingSession {
 
     let request: WorkflowLLMRequest
     let policy: WorkflowSegmentationPolicy
+    /// The LLM requests of this session's segments, also of segments the final
+    /// text cannot reuse: the provider processed them either way.
+    let usage: LLMUsageLedger
     private let limiter: WorkflowSegmentRequestLimiter
     private let prepareInput: @MainActor (String) -> String
     private let processor: WorkflowSegmentProcessor
@@ -238,14 +241,18 @@ final class WorkflowIncrementalPostProcessingSession {
     ///   - prepareInput: Turns confirmed transcript text into the text the LLM step
     ///     would receive for it (the post-processing steps that run before the LLM).
     ///   - processor: Sends one prepared segment through the workflow provider path.
+    ///   - usage: Receives the LLM requests of the segments. A session that replaces
+    ///     another one of the same recording continues its ledger.
     init(
         request: WorkflowLLMRequest,
         policy: WorkflowSegmentationPolicy = .default,
         prepareInput: @escaping @MainActor (String) -> String,
-        processor: @escaping WorkflowSegmentProcessor
+        processor: @escaping WorkflowSegmentProcessor,
+        usage: LLMUsageLedger = LLMUsageLedger()
     ) {
         self.request = request
         self.policy = policy
+        self.usage = usage
         self.limiter = WorkflowSegmentRequestLimiter(limit: policy.maximumConcurrentRequests)
         self.prepareInput = prepareInput
         self.processor = processor
@@ -380,13 +387,16 @@ final class WorkflowIncrementalPostProcessingSession {
     private func enqueue(input: String, separator: String) {
         let limiter = self.limiter
         let processor = self.processor
+        let usage = self.usage
         let task: Task<String, Error> = Task { @MainActor [weak self] in
             do {
                 let output: String
                 if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     output = ""
                 } else {
-                    output = try await limiter.run { try await processor(input) }
+                    output = try await LLMUsageLedger.$current.withValue(usage) {
+                        try await limiter.run { try await processor(input) }
+                    }
                 }
                 self?.segmentDidComplete()
                 return output

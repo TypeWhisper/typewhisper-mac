@@ -162,6 +162,7 @@
 		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
+		133200000000000000000002 /* SetupWizardEngineRecommendationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 133200000000000000000001 /* SetupWizardEngineRecommendationTests.swift */; };
 		545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000003 /* SetupWizardTrialSignalTests.swift */; };
 		AA00000000000000000367 /* AccessibilityPermissionPaneTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
@@ -178,6 +179,7 @@
 			533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */; };
 			533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000003 /* DictationRecoveryAudioStore.swift */; };
 			604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604D00000000000000000001 /* AudioRecorderViewModelTests.swift */; };
+			064D0B6D217C8D7AB2DBCA40 /* RecorderFolderStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95F44EF3EA282906B1B4D195 /* RecorderFolderStoreTests.swift */; };
 			533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */; };
 		5B7E5B7E00000000000000A2 /* SubtitleExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B7E5B7E00000000000000A1 /* SubtitleExporterTests.swift */; };
 			5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */; };
@@ -206,6 +208,7 @@
 		A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000006 /* PromptPaletteControllerTests.swift */; };
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
+		AA1023000000000000000002 /* DictationSilenceEndpointTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1023000000000000000002 /* DictationSilenceEndpointTests.swift */; };
 		AA00000000000000000365 /* VisualShortcutKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
 		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
@@ -297,6 +300,7 @@
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
 		AA16570000000000000001 /* AppLanguageText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000001 /* AppLanguageText.swift */; };
+		AA13320000000000000001 /* SetupWizardEngineRecommendation.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB13320000000000000001 /* SetupWizardEngineRecommendation.swift */; };
 		AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB16570000000000000002 /* InstalledAppsViewModel.swift */; };
 		AA00000000000000000070 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000070 /* UpdateChecker.swift */; };
 		AA00000000000000000071 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000004 /* Sparkle */; settings = {ATTRIBUTES = (Weak, ); }; };
@@ -431,6 +435,7 @@
 		AA00000000000000000180 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000170 /* Localizable.xcstrings */; };
 		AA00000000000000000181 /* DictationEnums.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000171 /* DictationEnums.swift */; };
 		AA00000000000000000182 /* StreamingHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000172 /* StreamingHandler.swift */; };
+		AA1023000000000000000001 /* DictationSilenceEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB1023000000000000000001 /* DictationSilenceEndpoint.swift */; };
 		AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000173 /* PromptPaletteHandler.swift */; };
 		AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000174 /* DictationSettingsHandler.swift */; };
 		BEEB1B96C554D7A639E56CFA /* DictationQuickSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5E6EB12C3CB1F88B36EFA3F /* DictationQuickSelection.swift */; };
@@ -577,8 +582,10 @@
 		AA00000000000000000339 /* it.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000339 /* it.json */; };
 		AA00000000000000000341 /* ja.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000341 /* ja.json */; };
 		AA00000000000000000250 /* AudioRecorderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000238 /* AudioRecorderService.swift */; };
+		50FAD27F3F99E35C5420D277 /* RecorderFolderStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547CC3BB35A0FA398552A1BC /* RecorderFolderStore.swift */; };
 		AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000239 /* AudioRecorderViewModel.swift */; };
 		AA00000000000000000252 /* AudioRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000240 /* AudioRecorderView.swift */; };
+		BBCE2E270475AAAF570972BB /* RecorderFolderSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EAC7463EDDBD91A0E3710C8 /* RecorderFolderSettingsSection.swift */; };
 		AA00000000000000000253 /* WatchFolderService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000241 /* WatchFolderService.swift */; };
 		AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000242 /* WatchFolderViewModel.swift */; };
 		AA00000000000000000255 /* ErrorLogEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000243 /* ErrorLogEntry.swift */; };
@@ -676,10 +683,13 @@
 		D5B200000000000000000001 /* MicrophonePrerollRingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */; };
 		D5B200000000000000000003 /* MicrophonePrerollRingBufferTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */; };
 		A95AAF442CABF1B2C98CACB6 /* HistoryTranscriptionVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */; };
+		5891B9514EDF3C27506FF983 /* HistoryLLMUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02202C112B914897CB23FD17 /* HistoryLLMUsage.swift */; };
 		693A151E5633B308ABB32871 /* HistoryRetranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F78CDA70A0951DD1C2575812 /* HistoryRetranscriptionService.swift */; };
 		EE93DC8E11070DD3985DE3A3 /* HistoryRetranscriptionEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = D56239FE87451CB56F7536BB /* HistoryRetranscriptionEnvironment.swift */; };
 		818D0DF1B1C225681D429646 /* HistoryRetranscriptionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */; };
 		1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */; };
+		9DA7BD7932F43C516ABA7AC4 /* HistoryLLMUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */; };
+		348F609D334BDF2713E83410 /* LLMUsageRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */; };
 		18BC79E19C68403992E7786A /* WatchFolderServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC62D284F14D4F42AD78E35C /* WatchFolderServiceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -852,6 +862,7 @@
 			533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStoreTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000003 /* DictationRecoveryAudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStore.swift; sourceTree = "<group>"; };
 			604D00000000000000000001 /* AudioRecorderViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModelTests.swift; sourceTree = "<group>"; };
+			95F44EF3EA282906B1B4D195 /* RecorderFolderStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderFolderStoreTests.swift; sourceTree = "<group>"; };
 			533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModelTests.swift; sourceTree = "<group>"; };
 		5B7E5B7E00000000000000A1 /* SubtitleExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SubtitleExporterTests.swift; sourceTree = "<group>"; };
 			5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerAppleSpeechModelSelectionTests.swift; sourceTree = "<group>"; };
@@ -874,6 +885,7 @@
 		B91F00000000000000000006 /* PromptPaletteControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptPaletteControllerTests.swift; sourceTree = "<group>"; };
 		7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SoundServiceTests.swift; sourceTree = "<group>"; };
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
+		BB1023000000000000000002 /* DictationSilenceEndpointTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationSilenceEndpointTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -1003,6 +1015,7 @@
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
 		BB16570000000000000001 /* AppLanguageText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguageText.swift; sourceTree = "<group>"; };
+		BB13320000000000000001 /* SetupWizardEngineRecommendation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardEngineRecommendation.swift; sourceTree = "<group>"; };
 		BB16570000000000000002 /* InstalledAppsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledAppsViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
@@ -1133,6 +1146,7 @@
 		BB00000000000000000170 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000171 /* DictationEnums.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationEnums.swift; sourceTree = "<group>"; };
 		BB00000000000000000172 /* StreamingHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingHandler.swift; sourceTree = "<group>"; };
+		BB1023000000000000000001 /* DictationSilenceEndpoint.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSilenceEndpoint.swift; sourceTree = "<group>"; };
 		BB00000000000000000173 /* PromptPaletteHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PromptPaletteHandler.swift; sourceTree = "<group>"; };
 		BB00000000000000000174 /* DictationSettingsHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSettingsHandler.swift; sourceTree = "<group>"; };
 		C5E6EB12C3CB1F88B36EFA3F /* DictationQuickSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationQuickSelection.swift; sourceTree = "<group>"; };
@@ -1291,8 +1305,10 @@
 		206526FD5E41E23B077E3499 /* TranscriptionNormalizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationService.swift; sourceTree = "<group>"; };
 		D4A100000000000000000002 /* RecorderTranscriptionBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBuffer.swift; sourceTree = "<group>"; };
 		BB00000000000000000238 /* AudioRecorderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderService.swift; sourceTree = "<group>"; };
+		547CC3BB35A0FA398552A1BC /* RecorderFolderStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderFolderStore.swift; sourceTree = "<group>"; };
 		BB00000000000000000239 /* AudioRecorderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000240 /* AudioRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderView.swift; sourceTree = "<group>"; };
+		5EAC7463EDDBD91A0E3710C8 /* RecorderFolderSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecorderFolderSettingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000241 /* WatchFolderService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderService.swift; sourceTree = "<group>"; };
 		BB00000000000000000242 /* WatchFolderViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000243 /* ErrorLogEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorLogEntry.swift; sourceTree = "<group>"; };
@@ -1329,6 +1345,7 @@
 		6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FloatingPanelSpacePolicyTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
 		545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardRecommendationAvailabilityTests.swift; sourceTree = "<group>"; };
+		133200000000000000000001 /* SetupWizardEngineRecommendationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardEngineRecommendationTests.swift; sourceTree = "<group>"; };
 		545000000000000000000003 /* SetupWizardTrialSignalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardTrialSignalTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccessibilityPermissionPaneTests.swift; sourceTree = "<group>"; };
 		D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBufferTests.swift; sourceTree = "<group>"; };
@@ -1425,10 +1442,13 @@
 		D5B200000000000000000002 /* MicrophonePrerollRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBuffer.swift; sourceTree = "<group>"; };
 		D5B200000000000000000004 /* MicrophonePrerollRingBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MicrophonePrerollRingBufferTests.swift; sourceTree = "<group>"; };
 		FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryTranscriptionVersion.swift; sourceTree = "<group>"; };
+		02202C112B914897CB23FD17 /* HistoryLLMUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryLLMUsage.swift; sourceTree = "<group>"; };
 		F78CDA70A0951DD1C2575812 /* HistoryRetranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionService.swift; sourceTree = "<group>"; };
 		D56239FE87451CB56F7536BB /* HistoryRetranscriptionEnvironment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionEnvironment.swift; sourceTree = "<group>"; };
 		15909316EF256CB9A63E5026 /* HistoryRetranscriptionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionView.swift; sourceTree = "<group>"; };
 		CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRetranscriptionTests.swift; sourceTree = "<group>"; };
+		DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryLLMUsageTests.swift; sourceTree = "<group>"; };
+		C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LLMUsageRecordingTests.swift; sourceTree = "<group>"; };
 		AC62D284F14D4F42AD78E35C /* WatchFolderServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchFolderServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -2095,6 +2115,7 @@
 				BB00000000000000000332 /* DictationRuntimeContext.swift */,
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				FCC767BA69F722449DB84E53 /* HistoryTranscriptionVersion.swift */,
+				02202C112B914897CB23FD17 /* HistoryLLMUsage.swift */,
 				A1C0DE000000000000001302 /* ManagedPolicy.swift */,
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
@@ -2202,6 +2223,7 @@
 				BB00000000000000000335 /* PunctuationStrategyResolver.swift */,
 				BB00000000000000000336 /* PunctuationVerificationService.swift */,
 				BB00000000000000000238 /* AudioRecorderService.swift */,
+				547CC3BB35A0FA398552A1BC /* RecorderFolderStore.swift */,
 				BB00000000000000000241 /* WatchFolderService.swift */,
 				BB00000000000000000244 /* ErrorLogService.swift */,
 				A1C0DE000000000000001306 /* ManagedPolicyService.swift */,
@@ -2263,6 +2285,7 @@
 				BB00000000000000000063 /* HistoryViewModel.swift */,
 				9C4372F8CA247C5FF34F05CB /* SpeakerWorkspaceModel.swift */,
 				BB16570000000000000001 /* AppLanguageText.swift */,
+				BB13320000000000000001 /* SetupWizardEngineRecommendation.swift */,
 				BB16570000000000000002 /* InstalledAppsViewModel.swift */,
 				BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */,
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
@@ -2272,6 +2295,7 @@
 				B7A100000000000000000002 /* StatisticsViewModel.swift */,
 				BB00000000000000000171 /* DictationEnums.swift */,
 				BB00000000000000000172 /* StreamingHandler.swift */,
+				BB1023000000000000000001 /* DictationSilenceEndpoint.swift */,
 				BB00000000000000000173 /* PromptPaletteHandler.swift */,
 				B91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift */,
 				BB00000000000000000174 /* DictationSettingsHandler.swift */,
@@ -2337,6 +2361,7 @@
 				BB00000000000000000127 /* PluginSettingsView.swift */,
 				BB00000000000000000207 /* IndicatorPreviewView.swift */,
 				BB00000000000000000240 /* AudioRecorderView.swift */,
+				5EAC7463EDDBD91A0E3710C8 /* RecorderFolderSettingsSection.swift */,
 				BB00000000000000000245 /* ErrorLogView.swift */,
 				BB00000000000000000248 /* HotkeyRecorderView.swift */,
 				BB00000000000000000364 /* VisualShortcutKeyboardView.swift */,
@@ -3198,12 +3223,14 @@
 					E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
 					E5A1B2C3D4F5061728394A6E /* AudioWaveformBarModelTests.swift */,
 					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
+					95F44EF3EA282906B1B4D195 /* RecorderFolderStoreTests.swift */,
 					533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */,
 					533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */,
 					5B7E5B7E00000000000000A1 /* SubtitleExporterTests.swift */,
 					5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */,
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
+					BB1023000000000000000002 /* DictationSilenceEndpointTests.swift */,
 					BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
 				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
@@ -3217,6 +3244,8 @@
 				BB7E11000000000000000008 /* TextProcessingAPITests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				CB90BB16BE64912752AD8B96 /* HistoryRetranscriptionTests.swift */,
+				DB812023194EF7026721F4F3 /* HistoryLLMUsageTests.swift */,
+				C75DC15B3FC3545BA8471BBB /* LLMUsageRecordingTests.swift */,
 				AC62D284F14D4F42AD78E35C /* WatchFolderServiceTests.swift */,
 				519F87550CCFA65F007A9B2B /* SpeakerAlignmentTests.swift */,
 				416A0A9CE286386A82A946CD /* SpeechOnlyAudioTests.swift */,
@@ -3242,6 +3271,7 @@
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
+				133200000000000000000001 /* SetupWizardEngineRecommendationTests.swift */,
 				545000000000000000000003 /* SetupWizardTrialSignalTests.swift */,
 				BB00000000000000000367 /* AccessibilityPermissionPaneTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
@@ -5221,12 +5251,14 @@
 					E5A1B2C3D4F5061728394A6D /* AudioWaveformBarModelTests.swift in Sources */,
 					3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
 					604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */,
+					064D0B6D217C8D7AB2DBCA40 /* RecorderFolderStoreTests.swift in Sources */,
 					533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */,
 					533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */,
 				5B7E5B7E00000000000000A2 /* SubtitleExporterTests.swift in Sources */,
 					5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */,
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
+					AA1023000000000000000002 /* DictationSilenceEndpointTests.swift in Sources */,
 					AA00000000000000000365 /* VisualShortcutKeyboardTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
 				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
@@ -5240,6 +5272,8 @@
 				AA7E11000000000000000008 /* TextProcessingAPITests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				1EE0C93EE2D683D8990DB2AC /* HistoryRetranscriptionTests.swift in Sources */,
+				9DA7BD7932F43C516ABA7AC4 /* HistoryLLMUsageTests.swift in Sources */,
+				348F609D334BDF2713E83410 /* LLMUsageRecordingTests.swift in Sources */,
 				18BC79E19C68403992E7786A /* WatchFolderServiceTests.swift in Sources */,
 				E04F3BC001E2391E6C2C130F /* SpeakerAlignmentTests.swift in Sources */,
 				15C2087BBD6C1F119BC489B9 /* SpeechOnlyAudioTests.swift in Sources */,
@@ -5280,6 +5314,7 @@
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,
+				133200000000000000000002 /* SetupWizardEngineRecommendationTests.swift in Sources */,
 				545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */,
 				AA00000000000000000367 /* AccessibilityPermissionPaneTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
@@ -5374,6 +5409,7 @@
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
 				AA00000000000000000181 /* DictationEnums.swift in Sources */,
 				AA00000000000000000182 /* StreamingHandler.swift in Sources */,
+				AA1023000000000000000001 /* DictationSilenceEndpoint.swift in Sources */,
 				AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */,
 				A91F00000000000000000003 /* RecentTranscriptionPaletteHandler.swift in Sources */,
 				AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */,
@@ -5421,6 +5457,7 @@
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,
 				AA00000000000000000060 /* TranscriptionRecord.swift in Sources */,
 				A95AAF442CABF1B2C98CACB6 /* HistoryTranscriptionVersion.swift in Sources */,
+				5891B9514EDF3C27506FF983 /* HistoryLLMUsage.swift in Sources */,
 				AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */,
 				AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */,
 				3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */,
@@ -5451,6 +5488,7 @@
 				AA000000000000000A123601 /* WorkflowTextSegmenter.swift in Sources */,
 				AA000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift in Sources */,
 				AA16570000000000000001 /* AppLanguageText.swift in Sources */,
+				AA13320000000000000001 /* SetupWizardEngineRecommendation.swift in Sources */,
 				AA16570000000000000002 /* InstalledAppsViewModel.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,
 				AA00000000000000000073 /* TranslationService.swift in Sources */,
@@ -5547,8 +5585,10 @@
 				D4A100000000000000000001 /* RecorderTranscriptionBuffer.swift in Sources */,
 				D5B200000000000000000001 /* MicrophonePrerollRingBuffer.swift in Sources */,
 				AA00000000000000000250 /* AudioRecorderService.swift in Sources */,
+				50FAD27F3F99E35C5420D277 /* RecorderFolderStore.swift in Sources */,
 				AA00000000000000000251 /* AudioRecorderViewModel.swift in Sources */,
 				AA00000000000000000252 /* AudioRecorderView.swift in Sources */,
+				BBCE2E270475AAAF570972BB /* RecorderFolderSettingsSection.swift in Sources */,
 				AA00000000000000000253 /* WatchFolderService.swift in Sources */,
 				AA00000000000000000254 /* WatchFolderViewModel.swift in Sources */,
 				AA00000000000000000255 /* ErrorLogEntry.swift in Sources */,

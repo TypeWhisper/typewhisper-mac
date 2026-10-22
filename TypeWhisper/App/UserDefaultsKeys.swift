@@ -20,6 +20,8 @@ enum UserDefaultsKeys {
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
+    static let toggleDictationSilenceStopEnabled = "toggleDictationSilenceStopEnabled"
+    static let toggleDictationSilenceStopDuration = "toggleDictationSilenceStopDuration"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
     static let cancellationBehavior = "cancellationBehavior"
@@ -171,6 +173,11 @@ enum UserDefaultsKeys {
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
     static let recorderDetectSpeakers = "recorderDetectSpeakers"
+    /// Security-scoped bookmark of the folder for new recordings; absent for the default folder.
+    static let recorderFolderBookmark = "recorderFolderBookmark"
+    static let recorderFolderPath = "recorderFolderPath"
+    /// JSON list of folders recordings were saved to before, which the Recorder keeps listing.
+    static let recorderEarlierFolders = "recorderEarlierFolders"
     static let calendarMeetingDetectSpeakers = "calendarMeetingDetectSpeakers"
     static let speakerStripCollapsed = "speakerStripCollapsed"
 

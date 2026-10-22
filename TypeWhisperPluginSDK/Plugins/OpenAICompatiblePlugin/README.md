@@ -65,3 +65,15 @@ native `/api/tags` endpoint. Model names are shown exactly as reported,
 including tags (`llama3.1:8b`). If native discovery fails, the profile falls
 back to the OpenAI-compatible `/v1/models` endpoint, and manual model entry
 remains available. Generic profiles never send Ollama-specific requests.
+
+## Reasoning effort
+
+Profiles that use the **Responses** LLM API have a **Reasoning Effort**
+setting. **Provider Default** omits `reasoning`; the other levels send
+`reasoning: { effort: ... }` to `/v1/responses` and leave out the temperature.
+
+A workflow or an entry in the global LLM fallback list can pick its own effort
+for a Responses profile (Low, Medium, High, X High or Max). Its **Provider
+Default** uses the profile's setting. Each profile is a separate provider with
+its own setting. Chat Completions profiles never send an effort, whatever the
+server kind, so workflows show no effort picker for them.
