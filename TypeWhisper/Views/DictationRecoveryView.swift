@@ -3,6 +3,8 @@ import TypeWhisperPluginSDK
 
 struct DictationRecoveryView: View {
     @ObservedObject private var viewModel = DictationRecoveryViewModel.shared
+    // Names the default engine in the engine picker and follows its changes.
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @Environment(\.openWindow) private var openWindow
     @State private var showDiscardAllConfirmation = false
 
@@ -174,7 +176,8 @@ struct DictationRecoveryView: View {
 
             Section(String(localized: "Transcription")) {
                 Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
-                    Text(String(localized: "Default Engine")).tag(nil as String?)
+                    Text(DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName))
+                        .tag(nil as String?)
                     Divider()
                     ForEach(viewModel.availableEngines, id: \.providerId) { engine in
                         enginePickerLabel(for: engine)
@@ -183,6 +186,10 @@ struct DictationRecoveryView: View {
                     }
                 }
                 .disabled(viewModel.isProcessing)
+
+                if viewModel.selectedEngine == nil {
+                    DefaultEngineSettingsLink()
+                }
 
                 if let engine = viewModel.resolvedEngine {
                     let models = engine.transcriptionModels

@@ -50,7 +50,7 @@ struct SettingsView: View {
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
-        case "file-transcription": return .fileTranscription
+        case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
         case "recorder": return .recorder
         case "history": return .history
@@ -961,6 +961,26 @@ struct RecordingSettingsView: View {
             .unavailableReason
     }
 
+    /// The picker shows the engine dictation uses right now. While that is a
+    /// temporary fallback, this names the saved default engine (#1549).
+    private var unavailableSavedEngineNotice: String? {
+        guard let savedEngine = modelManager.unavailableSavedEngine else { return nil }
+        return DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: savedEngine.displayName,
+            fallbackEngineName: modelManager.defaultEngine?.providerDisplayName
+        )
+    }
+
+    /// Also shown when no engine is left, so the saved choice is still named.
+    @ViewBuilder
+    private var unavailableSavedEngineLabel: some View {
+        if let notice = unavailableSavedEngineNotice {
+            Label(notice, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
     @ViewBuilder
     private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
         let authStatus = modelManager.transcriptionAuthStatus(for: engine)
@@ -1202,6 +1222,8 @@ struct RecordingSettingsView: View {
                 if engines.isEmpty {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
+
+                    unavailableSavedEngineLabel
                 } else {
                     // Shows the engine dictation uses right now, which can be a
                     // temporary fallback; only a choice made here is saved (#1533).
@@ -1228,6 +1250,8 @@ struct RecordingSettingsView: View {
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
                     }
+
+                    unavailableSavedEngineLabel
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")

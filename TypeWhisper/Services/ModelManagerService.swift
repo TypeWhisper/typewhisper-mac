@@ -359,6 +359,42 @@ final class ModelManagerService: ObservableObject {
         return PluginManager.shared.transcriptionEngine(for: providerId)?.providerDisplayName
     }
 
+    /// The saved default engine while dictation cannot use it.
+    struct UnavailableSavedEngine: Equatable {
+        let providerId: String
+        /// Nil while the engine's plugin is not loaded, as during an update.
+        let displayName: String?
+    }
+
+    /// The engine that file transcription, Recovery, the Recorder, watch folders and
+    /// the Speakers page use when they have no engine of their own: the engine
+    /// dictation uses right now. That is a temporary fallback while the saved engine
+    /// is unavailable (#1533), and the enforced engine under managed settings.
+    /// Nil while that engine cannot start a transcription, as when the saved engine
+    /// stays selected without a downloaded model and no other engine can stand in.
+    /// An engine that is still loading its model counts as available.
+    var defaultEngine: TranscriptionEnginePlugin? {
+        guard let manager = PluginManager.shared,
+              let providerId = effectiveEngineId(nil),
+              let engine = manager.transcriptionEngine(for: providerId),
+              transcriptionReadinessError(providerId: providerId) == nil else { return nil }
+        return engine
+    }
+
+    /// The saved default engine while dictation runs on a temporary fallback or on no
+    /// engine because the saved one is unavailable (#1533). Nil while dictation uses
+    /// the saved engine, when none is saved, and while managed settings decide.
+    var unavailableSavedEngine: UnavailableSavedEngine? {
+        guard PluginManager.shared?.enforcedTranscriptionResolution == nil,
+              let savedProviderId = UserDefaults.standard.string(forKey: providerKey),
+              !savedProviderId.isEmpty,
+              savedProviderId != selectedProviderId else { return nil }
+        return UnavailableSavedEngine(
+            providerId: savedProviderId,
+            displayName: PluginManager.shared?.transcriptionEngine(for: savedProviderId)?.providerDisplayName
+        )
+    }
+
     var selectedModelId: String? {
         guard let providerId = selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else { return nil }

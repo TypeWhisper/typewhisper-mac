@@ -17228,6 +17228,188 @@
         }
       }
     },
+    "Default Engine (%@)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine (%@)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジン（%@）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认引擎（%@）"
+          }
+        }
+      }
+    },
+    "Default Engine (none available)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine (keine verfügbar)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジン（利用可能なエンジンなし）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "默认引擎（无可用引擎）"
+          }
+        }
+      }
+    },
+    "Change Default Engine" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Engine ändern"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンを変更"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改默认引擎"
+          }
+        }
+      }
+    },
+    "Opens the Dictation page in Settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffnet in den Einstellungen die Seite Diktat."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定のディクテーションページを開きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置中的听写页面。"
+          }
+        }
+      }
+    },
+    "Your default engine, %@, is not available right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine %@ ist gerade nicht verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンの%@は現在利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎 %@ 当前不可用。"
+          }
+        }
+      }
+    },
+    "Your default engine is not available right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine ist gerade nicht verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンは現在利用できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎当前不可用。"
+          }
+        }
+      }
+    },
+    "Your default engine, %@, is not available right now. Dictation uses %@ until it is available again." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your default engine, %1$@, is not available right now. Dictation uses %2$@ until it is available again."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine %1$@ ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %2$@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンの%1$@は現在利用できません。利用できるようになるまで、ディクテーションには%2$@を使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎 %1$@ 当前不可用。在其恢复可用之前，听写将使用 %2$@。"
+          }
+        }
+      }
+    },
+    "Your default engine is not available right now. Dictation uses %@ until it is available again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Standard-Engine ist gerade nicht verfügbar. Bis sie wieder verfügbar ist, nutzt das Diktat %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "デフォルトエンジンは現在利用できません。利用できるようになるまで、ディクテーションには%@を使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的默认引擎当前不可用。在其恢复可用之前，听写将使用 %@。"
+          }
+        }
+      }
+    },
     "Default LLM" : {
       "localizations" : {
         "ja" : {
@@ -31272,34 +31454,6 @@
         }
       }
     },
-    "recorder.useDictationDefaultEngine" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diktat-Standard-Engine verwenden"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Use Dictation default engine"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dictationのデフォルトエンジンを使用"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "使用听写默认引擎"
-          }
-        }
-      }
-    },
     "Recording" : {
       "localizations" : {
         "de" : {
@@ -40085,34 +40239,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "引擎"
-          }
-        }
-      }
-    },
-    "watchFolder.engine.default" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standard (globale Auswahl)"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Default (global selection)"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "デフォルト（グローバル選択）"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "默认（全局选择）"
           }
         }
       }
