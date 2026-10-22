@@ -9,6 +9,7 @@ struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var preview = IndicatorPreviewSession.shared
+    @ObservedObject private var modelMenu = IndicatorModelMenuController.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
     @Environment(\.colorScheme) private var systemColorScheme
@@ -49,10 +50,11 @@ struct NotchIndicatorView: View {
             return NotchIndicatorLayout.recordingClosedWidth(
                 hasNotch: geometry.hasNotch,
                 notchWidth: geometry.notchWidth,
-                leftContent: viewModel.notchIndicatorLeftContent,
-                rightContent: viewModel.notchIndicatorRightContent,
+                leftContent: viewModel.notchIndicatorLeftContent.shown(isRecorder: presentation.isRecorder),
+                rightContent: viewModel.notchIndicatorRightContent.shown(isRecorder: presentation.isRecorder),
                 recordingDuration: presentation.recordingDuration,
-                activeRuleName: presentation.activeRuleName
+                activeRuleName: presentation.activeRuleName,
+                modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)
             )
         }
 
@@ -68,9 +70,10 @@ struct NotchIndicatorView: View {
         }
 
         let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
-            viewModel.notchIndicatorLeftContent,
+            viewModel.notchIndicatorLeftContent.shown(isRecorder: presentation.isRecorder),
             recordingDuration: presentation.recordingDuration,
-            activeRuleName: presentation.activeRuleName
+            activeRuleName: presentation.activeRuleName,
+            modelTitle: IndicatorModelMenu.contentTitle(modelName: modelMenu.modelName)
         )
         return leftContentWidth > 0 ? NotchIndicatorLayout.leftContentSpacing : 0
     }
@@ -273,6 +276,7 @@ struct NotchIndicatorView: View {
                 || presentation.actionFeedbackMessage != nil ? .contain : .combine
         )
         .accessibilityLabel(notchAccessibilityLabel)
+        .indicatorModelMenuAccessibilityAction(isAvailable: presentation.offersModelMenu)
     }
 
     private var notchAccessibilityLabel: String {

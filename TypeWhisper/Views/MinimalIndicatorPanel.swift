@@ -141,6 +141,17 @@ class MinimalIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
+        // A side that shows the Model content takes the pointer (#1351).
+        Publishers.Merge(
+            vm.$notchIndicatorLeftContent.map { _ in () },
+            vm.$notchIndicatorRightContent.map { _ in () }
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] _ in
+            self?.updateVisibility(vm: vm, recorder: recorder)
+        }
+        .store(in: &cancellables)
+
         vm.$notchIndicatorVisibility
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -246,9 +257,13 @@ class MinimalIndicatorPanel: NSPanel {
             countdownPresented: isMeetingCountdownPresented
         ) {
             show()
-            pointerTracker.setActive(
-                presentation.source == .recorder && presentation.state == .recording
-            )
+            pointerTracker.setActive(presentation.tracksPointer(
+                showsModelContent: NotchIndicatorContent.showsModel(
+                    style: .minimal,
+                    left: vm.notchIndicatorLeftContent,
+                    right: vm.notchIndicatorRightContent
+                )
+            ))
         } else {
             dismiss()
         }
@@ -352,7 +367,7 @@ class MinimalIndicatorPanel: NSPanel {
     }
 
     /// Takes the mouse only for feedback, the countdown, or while the pointer
-    /// is on a Recorder indicator; otherwise clicks pass through to other apps.
+    /// is on a recording indicator; otherwise clicks pass through to other apps.
     private func updateMouseEventHandling() {
         ignoresMouseEvents = !(isFeedbackInteractive || pointerRegion.isPointerInside)
     }

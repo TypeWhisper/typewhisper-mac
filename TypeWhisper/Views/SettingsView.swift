@@ -46,7 +46,7 @@ struct SettingsView: View {
         switch AppConstants.screenshotState {
         case "general": return .general
         case "indicator-settings", "appearance": return .appearance
-        case "indicator": return .home
+        case "indicator", "indicator-model-menu": return .home
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
@@ -273,7 +273,7 @@ struct SettingsView: View {
         switch tab {
         case .home:
             #if DEBUG
-            if AppConstants.screenshotState == "indicator" {
+            if ["indicator", "indicator-model-menu"].contains(AppConstants.screenshotState) {
                 ScreenshotIndicatorShowcaseView()
             } else {
                 HomeSettingsView()

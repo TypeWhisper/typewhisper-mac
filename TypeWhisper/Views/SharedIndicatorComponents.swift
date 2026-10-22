@@ -238,6 +238,12 @@ struct IndicatorLeftStatus: View {
         statusContent
             .opacity(showsRecorderStop ? 0 : 1)
             .accessibilityHidden(true)
+            .background {
+                // VoiceOver opens the model menu here when no side shows the Model content.
+                if presentation.offersModelMenu {
+                    IndicatorModelMenuAnchor(role: .status)
+                }
+            }
             .overlay {
                 if showsRecorderStop {
                     IndicatorRecorderStopButton(sizing: sizing)
@@ -535,6 +541,13 @@ struct IndicatorRecordingContent: View {
                     .accessibilityValue(name)
             } else {
                 Color.clear.frame(width: 0, height: 0)
+            }
+        case .model:
+            // The Recorder picks its engine on its own page, so it shows no dictation model.
+            if presentation.isRecorder {
+                Color.clear.frame(width: 0, height: 0)
+            } else {
+                IndicatorModelContent(offersMenu: presentation.offersModelMenu, sizing: sizing)
             }
         case .none:
             Color.clear.frame(width: 0, height: 0)
