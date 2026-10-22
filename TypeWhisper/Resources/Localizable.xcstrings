@@ -12010,34 +12010,24 @@
         }
       }
     },
-    "Activates Parakeet." : {
+    "Activating %@ for local dictation" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wird für lokales Diktieren aktiviert"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetをアクティベートします。"
+            "value" : "ローカル音声入力用の%@をアクティベートしています"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启用 Parakeet。"
-          }
-        }
-      }
-    },
-    "Activating Parakeet for local dictation" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ローカル音声入力用のParakeetをアクティベートしています"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "正在启用 Parakeet 进行本地听写"
+            "value" : "正在启用 %@ 进行本地听写"
           }
         }
       }
@@ -14464,34 +14454,266 @@
         }
       }
     },
-    "Best local quality for daily dictation. Runs offline with no API key." : {
+    "Supports %@." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützt %@."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日常の音声入力に最適なローカル品質です。APIキーなしでオフラインで動作します。"
+            "value" : "%@に対応しています。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日常听写的最佳本地质量。离线运行，无需 API 密钥。"
+            "value" : "支持%@。"
           }
         }
       }
     },
-    "Best local quality, but requires Apple Silicon. Intel Macs can use Apple Speech for setup." : {
+    "Recognizes %lld European languages. For another language, choose it above." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkennt %lld europäische Sprachen. Für eine andere Sprache wähle sie oben aus."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ローカルで最高の品質を提供しますが、Apple Siliconが必要です。Intel MacではセットアップにApple Speechを使用できます。"
+            "value" : "ヨーロッパの%lld言語を認識します。ほかの言語は上で選択してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本地最佳质量，但需要 Apple Silicon。Intel Mac 可使用 Apple 语音进行设置。"
+            "value" : "可识别 %lld 种欧洲语言。如需其他语言，请在上方选择。"
+          }
+        }
+      }
+    },
+    "Detects the spoken language automatically." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erkennt die gesprochene Sprache automatisch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "話している言語を自動的に検出します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检测所说的语言。"
+          }
+        }
+      }
+    },
+    "Runs offline with no API key." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Läuft offline ohne API-Key."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "APIキーなしでオフラインで動作します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线运行，无需 API 密钥。"
+          }
+        }
+      }
+    },
+    "Connect to the internet to download it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zum Herunterladen brauchst du eine Internetverbindung."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロードするにはインターネットに接続してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请连接互联网以进行下载。"
+          }
+        }
+      }
+    },
+    "Offline" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Offline"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフライン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "离线"
+          }
+        }
+      }
+    },
+    "%@ does not support %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ unterstützt %2$@ nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@は%2$@に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ 不支持%2$@。"
+          }
+        }
+      }
+    },
+    "No local engine for %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine lokale Engine für %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@に対応するローカルエンジンはありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有支持%@的本地引擎"
+          }
+        }
+      }
+    },
+    "No local engine for this Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine lokale Engine für diesen Mac"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで使えるローカルエンジンはありません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有适用于此 Mac 的本地引擎"
+          }
+        }
+      }
+    },
+    "The local engines that run on this Mac don't support this language." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen diese Sprache nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで動作するローカルエンジンは、この言語に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在此 Mac 上运行的本地引擎不支持这种语言。"
+          }
+        }
+      }
+    },
+    "The local engines that run on this Mac don't support all of these languages." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die lokalen Engines, die auf diesem Mac laufen, unterstützen nicht alle diese Sprachen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacで動作するローカルエンジンは、これらすべての言語には対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可在此 Mac 上运行的本地引擎并不支持所有这些语言。"
+          }
+        }
+      }
+    },
+    "Parakeet, WhisperKit and Qwen3 need Apple Silicon. Apple Speech needs macOS 26." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet, WhisperKit und Qwen3 brauchen Apple Silicon. Apple Speech braucht macOS 26."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet、WhisperKit、Qwen3にはApple Siliconが必要です。Apple SpeechにはmacOS 26が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Parakeet、WhisperKit 和 Qwen3 需要 Apple Silicon。Apple 语音识别需要 macOS 26。"
           }
         }
       }
@@ -22375,18 +22597,68 @@
         }
       }
     },
-    "Installs and selects Parakeet." : {
+    "Installs and selects %@." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installiert und wählt %@ aus."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetをインストールして選択します。"
+            "value" : "%@をインストールして選択します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装并选择 Parakeet。"
+            "value" : "安装并选择 %@。"
+          }
+        }
+      }
+    },
+    "Activates %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviert %@."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@をアクティベートします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启用 %@。"
+          }
+        }
+      }
+    },
+    "Selects %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wählt %@ aus."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@を選択します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择 %@。"
           }
         }
       }
@@ -23398,6 +23670,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "轻量级内置方案，无需下载大型本地模型。日常听写建议使用效果更好的 Parakeet。"
+          }
+        }
+      }
+    },
+    "Lightweight built-in option with no large local model." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leichte integrierte Option ohne großes lokales Modell."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大規模なローカルモデルを使用しない軽量な内蔵オプションです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "轻量级内置方案，无需下载大型本地模型。"
+          }
+        }
+      }
+    },
+    "Does not support %@ on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützt %@ auf diesem Mac nicht."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このMacでは%@に対応していません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在此 Mac 上不支持%@。"
           }
         }
       }
@@ -27471,18 +27787,24 @@
         }
       }
     },
-    "Parakeet is ready for local dictation" : {
+    "%@ is ready for local dictation" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ ist für lokales Diktieren bereit"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeetによるローカル音声入力の準備が完了しました"
+            "value" : "%@によるローカル音声入力の準備が完了しました"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Parakeet 已可用于本地听写"
+            "value" : "%@ 已可用于本地听写"
           }
         }
       }
@@ -34320,22 +34642,6 @@
         }
       }
     },
-    "Selects Parakeet." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Parakeetを選択します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择 Parakeet。"
-          }
-        }
-      }
-    },
     "Selects this hotkey mode." : {
       "localizations" : {
         "ja" : {
@@ -34538,28 +34844,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录音"
-          }
-        }
-      }
-    },
-    "Setup" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einrichtung"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置"
           }
         }
       }
@@ -35188,6 +35472,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "口语语言"
+          }
+        }
+      }
+    },
+    "Also used for dictation. You can change it later on the Dictation page." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt auch fürs Diktieren. Du kannst sie später auf der Seite „Diktat“ ändern."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力にも使われます。後から「ディクテーション」ページで変更できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "也用于听写。之后可以在“听写”页面中更改。"
           }
         }
       }
