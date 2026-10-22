@@ -183,6 +183,33 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertTrue(provider.requests.isEmpty)
     }
 
+    /// Issue #1558: the Recorder hands every transcription of a recording to the
+    /// intake, so a recording that has its speaker record keeps that one.
+    func testARecorderRecordingKeepsItsSpeakerRecordWhenTranscribedAgain() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        var recording = input()
+        recording.recorderRecordingID = UUID()
+
+        let firstID = await coordinator.addRecording(recording)
+        let id = try XCTUnwrap(firstID)
+        try await waitUntilIdle(coordinator)
+        let againID = await coordinator.addRecording(recording)
+
+        XCTAssertEqual(againID, id)
+        XCTAssertEqual(history.speakerRecords(limit: 10).map(\.id), [id])
+        XCTAssertEqual(provider.requests.count, 1)
+
+        // Another recording gets its own record.
+        var other = input()
+        other.recorderRecordingID = UUID()
+        let otherID = await coordinator.addRecording(other)
+        XCTAssertNotNil(otherID)
+        XCTAssertNotEqual(otherID, id)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(history.speakerRecords(limit: 10).count, 2)
+    }
+
     func testEngineLabelsAreUsedWithoutRunningTheProvider() async throws {
         let coordinator = makeCoordinator()
 

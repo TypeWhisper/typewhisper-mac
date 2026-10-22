@@ -280,6 +280,49 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(inputs.first?.recorderRecordingID, events.first?.recordingID)
     }
 
+    /// Issue #1558: a recording transcribed while Detect Speakers was off has a
+    /// `.txt` but no speaker record; transcribing it again must add one.
+    func testTranscribingAgainAddsTheSpeakerRecordARecordingDoesNotHaveYet() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("Meeting notes"))
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let directory = makeTemporaryDirectory()
+        let defaults = try makeDefaults()
+        let first = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager, recordingsDirectory: directory)
+        first.detectSpeakers = false
+        var firstInputs: [SpeakerRecordingInput] = []
+        first.speakerRecordIntake = { input in
+            firstInputs.append(input)
+            return UUID()
+        }
+        let sessionID = try await first.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try first.apiStopRecording()
+        _ = try await waitForRecorderSession(first, id: sessionID, status: .completed)
+        XCTAssertTrue(firstInputs.isEmpty)
+        let completions = try await first.apiRecorderRecordings()
+        let original = try XCTUnwrap(completions.first)
+
+        let reloaded = makeViewModel(
+            defaults: defaults, modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: directory),
+            audioSamplesLoader: { _ in [0.25, -0.25] }
+        )
+        reloaded.detectSpeakers = true
+        var inputs: [SpeakerRecordingInput] = []
+        reloaded.speakerRecordIntake = { input in
+            inputs.append(input)
+            return UUID()
+        }
+        try await waitForRecordingsToLoad(reloaded, count: 1)
+        reloaded.transcribeRecording(try XCTUnwrap(reloaded.recordings.first))
+        try await waitForRetranscriptionToFinish(reloaded)
+
+        XCTAssertEqual(inputs.count, 1)
+        XCTAssertEqual(inputs.first?.recorderRecordingID, original.recordingID)
+        XCTAssertEqual(inputs.first?.source, .recorder)
+    }
+
     // Issue #1553: Whisper writes text for the quiet start of a call.
     func testRecorderSendsOnlySpeechToTheEngineAndKeepsRecordingTimes() async throws {
         try preserveStandardDefaults()

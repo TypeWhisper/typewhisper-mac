@@ -631,6 +631,56 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.files.first?.historyRecordID)
     }
 
+    /// Issue #1558: when the Speakers page cannot add a transcribed file to
+    /// History, for example because Premium expired meanwhile, the file must
+    /// fail so it can be tried again instead of ending as done.
+    func testAFileTheSpeakersPageCouldNotSaveFailsAndCanBeRetried() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "meeting.wav")
+        var transcriptions = 0
+        var intakeResults: [UUID?] = [nil, UUID()]
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults,
+            detectsSpeakers: true,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
+                transcriptions += 1
+                return TranscriptionResult(
+                    text: "Meeting text",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+        viewModel.speakerRecordIntake = { _ in intakeResults.removeFirst() }
+        viewModel.selectedEngine = "parakeet"
+
+        viewModel.addFiles([fileURL])
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let failed = try XCTUnwrap(viewModel.files.first)
+        XCTAssertEqual(failed.state, .error)
+        XCTAssertEqual(failed.errorMessage, String(localized: "speakers.page.file.notSaved"))
+        XCTAssertNil(failed.historyRecordID)
+
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        XCTAssertEqual(viewModel.files.first?.state, .done)
+        XCTAssertNotNil(viewModel.files.first?.historyRecordID)
+        XCTAssertEqual(transcriptions, 2)
+        XCTAssertTrue(intakeResults.isEmpty)
+    }
+
     func testTranscribePendingLeavesFailedFilesAlone() async throws {
         let defaults = try makeDefaults()
         let failingURL = makeTemporaryFile(named: "failing.wav")

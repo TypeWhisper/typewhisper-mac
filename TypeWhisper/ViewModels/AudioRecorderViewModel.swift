@@ -1260,9 +1260,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 calendarEvent: item.calendarEvent
             )
 
-            // A recording transcribed before may already have its speaker record.
-            let hadTranscript = FileManager.default.fileExists(atPath: self.transcriptURL(for: url).path)
-            _ = await self.runRetranscription(request, addsSpeakerRecord: !hadTranscript)
+            _ = await self.runRetranscription(request)
         }
     }
 
@@ -1502,10 +1500,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    private func runRetranscription(
-        _ request: FinalTranscriptionRequest,
-        addsSpeakerRecord: Bool
-    ) async -> FinalTranscriptionOutcome {
+    private func runRetranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
         let effectiveTask = resolvedTask(for: request)
 
         do {
@@ -1523,8 +1518,10 @@ final class AudioRecorderViewModel: ObservableObject {
             }
 
             let outcome = saveTranscriptOutcome(text, for: request.outputURL, request: request)
-            if addsSpeakerRecord {
-                await addSpeakerRecordIfWanted(result, request: request, recordingID: outcome.savedRecordingID)
+            // A recording that already has its speaker record keeps it; the
+            // intake tells them apart by the recording ID.
+            if let recordingID = outcome.savedRecordingID {
+                await addSpeakerRecordIfWanted(result, request: request, recordingID: recordingID)
             }
             return outcome
         } catch is CancellationError {

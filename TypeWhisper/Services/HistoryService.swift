@@ -607,6 +607,16 @@ final class HistoryService: ObservableObject {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
+    /// The record a Recorder recording was saved as with speaker detection.
+    func speakerRecord(forRecorderRecordingID recordingID: UUID) -> TranscriptionRecord? {
+        var descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.recorderRecordingID == recordingID },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        return (try? modelContext.fetch(descriptor))?.first
+    }
+
     /// Records that have speaker names, newest first.
     func recordsWithSpeakerNames() -> [TranscriptionRecord] {
         let descriptor = FetchDescriptor<TranscriptionRecord>(

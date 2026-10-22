@@ -357,8 +357,14 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     /// Saves a recording with its audio to History. Speaker labels the engine
     /// returned itself are used as they are; otherwise detection is queued.
+    /// A Recorder recording that already has its record keeps that record,
+    /// whose ID is returned.
     func addRecording(_ input: SpeakerRecordingInput) async -> UUID? {
         guard premiumAccess() else { return nil }
+        if let recordingID = input.recorderRecordingID,
+           let existing = historyService.speakerRecord(forRecorderRecordingID: recordingID) {
+            return existing.id
+        }
         let segments = input.result.segments
         let timedText = SpeakerTranscriptBuilder.timedText(from: segments)
         let providerTranscript = SpeakerTranscriptBuilder.providerTranscript(
