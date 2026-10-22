@@ -8,7 +8,7 @@ struct SoundSection: View {
     private var level: Float { audio.isRecording ? audio.audioLevel : devices.previewAudioLevel }
 
     var body: some View {
-        GroupedFormSection(title: "Sound") {
+        GroupedFormSection(title: "Sound", tableName: "Localizable") {
             GroupedFormRow {
                 Text("Microphone", tableName: "DictumShell")
                 Spacer()
@@ -30,9 +30,9 @@ struct SoundSection: View {
                     }
                 } label: {
                     Text("Microphone", tableName: "DictumShell")
-                }.labelsHidden().fixedSize()
+                }.labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
             }
-            GroupedFormToggle(title: "Interaction sounds", isOn: $dictation.soundFeedbackEnabled)
+            GroupedFormToggle(title: "Interaction sounds", isOn: $dictation.soundFeedbackEnabled, tableName: "DictumShell")
             GroupedFormToggle(title: "Pause other audio while dictating", isOn: Binding(
                 get: { dictation.mediaPauseEnabled || dictation.audioDuckingEnabled },
                 set: { enabled in

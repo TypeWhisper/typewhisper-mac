@@ -1,21 +1,22 @@
 import SwiftUI
 
 struct StatTile: View {
-    let title: String
+    let title: LocalizedStringKey
     let value: String
-    var unit: String? = nil
-    var delta: String? = nil
+    var unit: LocalizedStringKey? = nil
+    var delta: LocalizedStringKey? = nil
     var improved = false
+    var tableName: String = "DictumShell"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.textSecondary)
+            Text(title, tableName: tableName).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.textSecondary)
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(value).font(DictumTheme.Typography.stat)
-                if let unit { Text(unit).font(DictumTheme.Typography.body).foregroundStyle(DictumTheme.textSecondary) }
+                Text(verbatim: value).font(DictumTheme.Typography.stat)
+                if let unit { Text(unit, tableName: tableName).font(DictumTheme.Typography.body).foregroundStyle(DictumTheme.textSecondary) }
             }
             if let delta {
-                Text(delta).font(.system(size: 11.5)).foregroundStyle(improved ? DictumTheme.success : DictumTheme.textTertiary)
+                Text(delta, tableName: tableName).font(.system(size: 11.5)).foregroundStyle(improved ? DictumTheme.success : DictumTheme.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

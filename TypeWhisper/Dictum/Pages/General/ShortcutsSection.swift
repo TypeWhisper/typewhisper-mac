@@ -32,7 +32,7 @@ struct ShortcutsSection: View {
                 } label: {
                     Text("When held", tableName: "DictumShell")
                 }
-                .labelsHidden().fixedSize()
+                .labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
             }
             GroupedFormRow(separated: true) {
                 Text("External keyboard", tableName: "DictumShell")

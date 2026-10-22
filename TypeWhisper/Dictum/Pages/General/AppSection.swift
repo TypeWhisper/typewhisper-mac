@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 struct AppSection: View {
@@ -8,7 +7,7 @@ struct AppSection: View {
     @State private var needsRestart = false
 
     var body: some View {
-        GroupedFormSection(title: "App") {
+        GroupedFormSection(title: "App", tableName: "DictumShell") {
             GroupedFormToggle(title: "Launch at login", isOn: Binding(
                     get: { launchAtLogin.isEnabled || launchAtLogin.requiresApproval },
                     set: { launchAtLogin.setUserChoice($0) }
@@ -16,13 +15,6 @@ struct AppSection: View {
                 .managedLockAccessibilityHint(isLocked: launchAtLogin.isLocked, reason: nil)
             if let error = launchAtLogin.lastErrorDescription {
                 Text(error).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.danger).padding(10)
-            }
-            if launchAtLogin.requiresApproval {
-                GroupedFormRow(separated: true) {
-                    Button { SMAppService.openSystemSettingsLoginItems() } label: {
-                        Text("Open Login Items", tableName: "DictumShell")
-                    }
-                }
             }
             GroupedFormToggle(title: "Show in Dock", isOn: $showInDock)
             GroupedFormRow(separated: true) {
@@ -32,9 +24,11 @@ struct AppSection: View {
                     Text("System", tableName: "DictumShell").tag("system")
                     Text(verbatim: "简体中文").tag("zh-Hans")
                     Text(verbatim: "English").tag("en")
+                    Text(verbatim: "Deutsch").tag("de")
+                    Text(verbatim: "日本語").tag("ja")
                 } label: {
                     Text("Language", tableName: "DictumShell")
-                }.labelsHidden().fixedSize()
+                }.labelsHidden().fixedSize().pickerStyle(.menu).buttonStyle(.bordered).tint(.primary)
             }
             GroupedFormRow(separated: true) {
                 Text("Advanced settings", tableName: "DictumShell")
@@ -44,7 +38,7 @@ struct AppSection: View {
                         Text("Open", tableName: "DictumShell")
                         Image(systemName: "arrow.up.right").accessibilityHidden(true)
                     }
-                }.controlSize(.small)
+                }.buttonStyle(.bordered).controlSize(.small).tint(.primary)
             }
         }
         .onAppear { launchAtLogin.refreshStatus() }

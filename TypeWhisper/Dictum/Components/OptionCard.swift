@@ -1,16 +1,17 @@
 import SwiftUI
 
 struct OptionCard: View {
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
     let isSelected: Bool
+    var tableName: String = "DictumShell"
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(DictumTheme.Typography.section)
-                Text(detail).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.textSecondary)
+                Text(title, tableName: tableName).font(DictumTheme.Typography.section)
+                Text(detail, tableName: tableName).font(DictumTheme.Typography.secondary).foregroundStyle(DictumTheme.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 10).padding(.horizontal, 12)

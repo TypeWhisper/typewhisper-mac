@@ -1,14 +1,15 @@
 import SwiftUI
 
 struct Toast: View {
-    let message: String
+    let message: LocalizedStringKey
     @Binding var isPresented: Bool
+    var tableName: String = "DictumShell"
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Group {
             if isPresented {
-                Text(message).font(.system(size: 12.5)).foregroundStyle(.white)
+                Text(message, tableName: tableName).font(.system(size: 12.5)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
                     .background(.black.opacity(0.92), in: Capsule())
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: 8)))

@@ -56,7 +56,6 @@ struct DictumMainView: View {
         .ignoresSafeArea()
         .font(DictumTheme.Typography.body)
         .foregroundStyle(DictumTheme.textPrimary)
-        .tint(DictumTheme.accent)
         .frame(minWidth: 860, minHeight: 560)
         .background(DictumWindowAccessor(page: navigation.page))
     }
@@ -74,18 +73,30 @@ struct DictumMainView: View {
     }
 }
 
-struct DictumPageFrame<Content: View>: View {
+struct DictumPageFrame<Actions: View, Content: View>: View {
     let page: DictumPage
-    @ViewBuilder let content: () -> Content
+    let actions: Actions
+    let content: Content
+
+    init(page: DictumPage, @ViewBuilder actions: () -> Actions, @ViewBuilder content: () -> Content) {
+        self.page = page
+        self.actions = actions()
+        self.content = content()
+    }
+
+    init(page: DictumPage, @ViewBuilder content: () -> Content) where Actions == EmptyView {
+        self.init(page: page, actions: { EmptyView() }, content: content)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 10) {
                 Text(page.title).font(DictumTheme.Typography.toolbar).accessibilityAddTraits(.isHeader)
                 Spacer()
+                actions
             }
             .padding(.leading, 28).padding(.trailing, 20).frame(height: 52)
-            content().frame(maxWidth: .infinity, maxHeight: .infinity)
+            content.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -125,6 +136,7 @@ private struct DictumWindowAccessor: NSViewRepresentable {
         }
 
         private func positionWindowButtons(_ window: NSWindow) {
+            guard !window.styleMask.contains(.fullScreen) else { return }
             for (index, kind) in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].enumerated() {
                 guard let button = window.standardWindowButton(kind), let parent = button.superview else { continue }
                 let origin = parent.convert(NSPoint(
