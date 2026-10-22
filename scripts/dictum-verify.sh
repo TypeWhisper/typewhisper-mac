@@ -147,6 +147,9 @@ acquire_lock() {
 
 run() {
   local app_pid attempt
+  if [[ "${1:-}" == --audio-file ]]; then
+    [[ -n "${2:-}" && -r "$2" ]] || { printf '音频文件不可读取。\n' >&2; return 2; }
+  fi
   acquire_lock
   quit_app
   build
@@ -187,9 +190,37 @@ print_lock_holder() {
     "$(cat "$run_lock/since" 2>/dev/null || stat -f '%Sm' "$run_lock" 2>/dev/null || printf '未知')" >&2
 }
 
+dictate() {
+  local audio_file="${1:-}" result_file url attempt
+  [[ -n "$audio_file" && -r "$audio_file" ]] || { printf '请提供可读取的音频文件。\n' >&2; return 2; }
+  if [[ ! -d "$run_lock" ]]; then
+    printf '请先运行 scripts/dictum-verify.sh run --audio-file <音频文件>，再将光标放进目标输入框。\n' >&2
+    return 1
+  fi
+  [[ "$(cat "$run_lock/worktree" 2>/dev/null || true)" == "$repo_root" && -n "$(running_pids)" ]] || {
+    print_lock_holder
+    return 1
+  }
+  result_file="$(mktemp /tmp/dictum-dictate-XXXXXXXX)"
+  url="$(python3 -c 'import pathlib,sys,urllib.parse; print("dictum://dictate?" + urllib.parse.urlencode({"file":str(pathlib.Path(sys.argv[1]).resolve()),"result":sys.argv[2]}))' "$audio_file" "$result_file")"
+  open -g -a "$installed_app" "$url"
+  for ((attempt=0; attempt<1900; attempt++)); do
+    if [[ -s "$result_file" ]]; then
+      cp "$result_file" "$receipts/dictation-result.json"
+      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and r.get("inserted") else 1)' "$result_file"
+      return $?
+    fi
+    [[ -n "$(running_pids)" ]] || { printf '听写过程中应用退出。\n' >&2; return 1; }
+    sleep 0.1
+  done
+  printf '等待听写结果超时，结果路径 %s。\n' "$result_file" >&2
+  return 1
+}
+
 case "${1:-}" in
   build) build ;;
   test) test_all ;;
+  dictate) shift; dictate "$@" ;;
   run|stop)
     command="$1"
     shift
@@ -202,5 +233,5 @@ case "${1:-}" in
   locked-run) shift; run "$@" ;;
   locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|all|run [应用参数...]|stop [--force]}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [--audio-file 路径] [应用参数...]|dictate 音频文件|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac

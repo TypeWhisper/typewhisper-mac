@@ -398,6 +398,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
 #if DEBUG
     private(set) var testingLastBluetoothStopBehavior: BluetoothStopBehavior?
+    private var debugAudioFileInput: DictumAudioFileInput?
+    var onAudioFileInputFinished: (() -> Void)?
 #endif
     var engineTeardownOverride: ((AVAudioEngine) -> Void)?
     /// Called on the main queue with the uptime at which the first audio buffer arrived.
@@ -695,6 +697,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     var hasMicrophonePermission: Bool {
+        #if DEBUG
+        if DictumDebugAudioConfiguration.fileURL != nil { return true }
+        #endif
         if let hasMicrophonePermissionOverride {
             return hasMicrophonePermissionOverride
         }
@@ -728,6 +733,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// without starting capture. If the user explicitly opts in, an active Bluetooth
     /// stream can also be kept ready and reused by the next recording.
     func prepareRecordingInputIfEligible() {
+        #if DEBUG
+        if DictumDebugAudioConfiguration.fileURL != nil { return }
+        #endif
         scheduleRecordingInputPreparation(after: 0)
     }
 
@@ -819,6 +827,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func scheduleRecordingInputPreparation(after delay: TimeInterval) {
+        #if DEBUG
+        if DictumDebugAudioConfiguration.fileURL != nil { return }
+        #endif
         let scheduledGeneration = engineLock.withLock { preparedInputGeneration }
         recordingStartQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self,
@@ -2041,6 +2052,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         commitStart: @escaping () -> Bool
     ) throws {
         try throwIfRecordingStartCancelled(shouldCancel)
+        #if DEBUG
+        if let url = DictumDebugAudioConfiguration.fileURL {
+            try startAudioFileInput(url, requestUptimeNanoseconds: requestUptimeNanoseconds, commitStart: commitStart)
+            return
+        }
+        #endif
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
         }
@@ -2252,6 +2269,21 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ) async -> [Float] {
 #if DEBUG
         testingLastBluetoothStopBehavior = bluetoothBehavior
+        if let input = engineLock.withLock({ () -> DictumAudioFileInput? in
+            defer { debugAudioFileInput = nil }
+            return debugAudioFileInput
+        }) {
+            input.stop()
+            setRecordingActive(false)
+            resetAudioLevelPublishing()
+            DispatchQueue.main.async { [weak self] in
+                self?.audioLevel = 0
+                self?.rawAudioLevel = 0
+            }
+            let samples = drainSampleBuffer()
+            logger.notice("Debug audio input stopped samples=\(samples.count, privacy: .public)")
+            return samples
+        }
 #endif
         if let stopRecordingOverride {
             outputVolumeGuard.captureBaseline()
@@ -3453,6 +3485,30 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self?.rawAudioLevel = 0
         }
     }
+
+    #if DEBUG
+    private func startAudioFileInput(_ url: URL, requestUptimeNanoseconds: UInt64, commitStart: () -> Bool) throws {
+        let input = try DictumAudioFileInput(url: url, queue: processingQueue) { [weak self] samples in
+            var samples = samples
+            self?.processConvertedSamples(&samples)
+        } completion: { [weak self] error in
+            if let error {
+                self?.publishRecoveryError(.engineStartFailed(error.localizedDescription))
+            }
+            logger.notice("Debug audio input reached end of file")
+            DispatchQueue.main.async { self?.onAudioFileInputFinished?() }
+        }
+        guard commitStart() else { throw CancellationError() }
+        publishRecoveryError(nil)
+        clearRecordingBuffer(requestUptimeNanoseconds: requestUptimeNanoseconds)
+        recoveryAudioStore.startNewRecording()
+        publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
+        engineLock.withLock { debugAudioFileInput = input }
+        setRecordingActive(true)
+        input.start()
+        logger.notice("Debug audio input started at real-time pace")
+    }
+    #endif
 
     private func processConvertedSamples(
         _ samples: inout [Float],

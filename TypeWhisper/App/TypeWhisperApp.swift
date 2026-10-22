@@ -1057,6 +1057,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleIncomingURL(_ url: URL) {
         guard url.scheme == "dictum" else { return }
+        #if DEBUG
+        if url.host == "dictate" {
+            DictumDebugDictation.shared.handle(url)
+            return
+        }
+        #endif
         if url.host == "settings", url.path == "/plugins" {
             SettingsNavigationCoordinator.shared.navigate(to: SettingsView.firstPluginTab)
         }
