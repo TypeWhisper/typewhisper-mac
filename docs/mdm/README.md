@@ -64,8 +64,11 @@ keys. Avoid putting real keys in interactive shell history or command-line logs.
   from TypeWhisper 1.8, otherwise on the next launch). It does
   not revoke or delete an existing activation. Queued cleanup of replaced
   activations continues. Deactivate the current activation manually or revoke it
-  centrally through Polar; central changes are noticed on the normal validation
-  schedule (up to seven days for an already-active license).
+  centrally through Polar. TypeWhisper checks an active license with Polar only at
+  launch, when the managed key changes and on Retry Activation, and skips the check
+  until seven days have passed since the last successful one; a running app does
+  not check on its own. A central change is therefore noticed at the first such
+  check after those seven days, usually a later launch.
 - A revoked license is not repeatedly reactivated. An activation deleted in Polar
   can be recreated if the configured key remains valid.
 - Managed mode hides manual commercial activation and plan controls, suppresses
