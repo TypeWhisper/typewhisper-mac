@@ -110,10 +110,12 @@ private func readRecorderTranscriptCompletions(
                 markdownFilePath: hasMarkdown ? markdownURL.path : nil
             )
         }
-        .sorted {
-            if $0.completedAt == $1.completedAt { return $0.completionID.uuidString < $1.completionID.uuidString }
-            return $0.completedAt < $1.completedAt
-        }
+        .sorted(by: recorderCompletionPrecedes)
+}
+
+private func recorderCompletionPrecedes(_ lhs: RecorderTranscriptReadyPayload, _ rhs: RecorderTranscriptReadyPayload) -> Bool {
+    if lhs.completedAt == rhs.completedAt { return lhs.completionID.uuidString < rhs.completionID.uuidString }
+    return lhs.completedAt < rhs.completedAt
 }
 
 private func isRegularRecorderAutomationFile(_ url: URL) throws -> Bool {
@@ -1196,12 +1198,17 @@ final class AudioRecorderViewModel: ObservableObject {
 
     /// Reads durable completion receipts, including manual and calendar recordings.
     func apiRecorderRecordings(since: Date? = nil) async throws -> [RecorderTranscriptReadyPayload] {
-        let directory = recorderService.recordingsDirectory
+        let recorderService = recorderService
         let loader = recorderCompletionsLoader
         for _ in 0..<3 {
             let generation = recorderTranscriptGeneration
             let result = await Task.detached(priority: .utility) {
-                Result { try loader(directory, since) }
+                // Earlier Recorder folders keep their recordings, so their completions are included.
+                Result {
+                    try recorderService.recordingsDirectories
+                        .flatMap { try loader($0, since) }
+                        .sorted(by: recorderCompletionPrecedes)
+                }
             }.value
             try Task.checkCancellation()
             guard generation == recorderTranscriptGeneration else { continue }
@@ -1449,7 +1456,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func loadRecordings() {
         guard hasRequestedInitialRecordingsLoad else { return }
-        let dir = recorderService.recordingsDirectory
+        let recorderService = recorderService
         let transientFailures = transientTranscriptionFailures
         let loader = recordingsLoader
         recordingsLoadGeneration += 1
@@ -1457,7 +1464,10 @@ final class AudioRecorderViewModel: ObservableObject {
 
         recordingsLoadTask?.cancel()
         let worker = Task.detached(priority: .userInitiated) {
-            loader(dir, transientFailures)
+            // Recordings stay in the folder they were saved to, also after the folder changed.
+            recorderService.recordingsDirectories
+                .flatMap { loader($0, transientFailures) }
+                .sorted { $0.date > $1.date }
         }
         recordingsLoadTask = Task { [weak self] in
             let items = await worker.value

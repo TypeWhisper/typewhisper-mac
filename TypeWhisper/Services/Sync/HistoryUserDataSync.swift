@@ -51,6 +51,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         case processingFailureCategory
         case processingFailureMessage
         case alignmentResetAt
+        case llmUsage
     }
 
     let recordID: UUID
@@ -73,6 +74,10 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
     let processingFailureMessage: String?
     /// A promoted run invalidates alignment from earlier runs, independently of text edits.
     let alignmentResetAt: Date?
+    /// The LLM requests behind the text. Absent from clients that predate it,
+    /// so receivers keep the usage they know instead of clearing it; an empty
+    /// entry list means the text was made without an LLM.
+    let llmUsage: HistoryLLMUsage?
 
     init(
         recordID: UUID,
@@ -93,7 +98,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         modelDisplayName: String? = nil,
         processingFailureCategory: String? = nil,
         processingFailureMessage: String? = nil,
-        alignmentResetAt: Date? = nil
+        alignmentResetAt: Date? = nil,
+        llmUsage: HistoryLLMUsage? = nil
     ) {
         self.recordID = recordID
         self.createdAt = createdAt
@@ -116,6 +122,7 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         self.processingFailureCategory = processingFailureCategory
         self.processingFailureMessage = processingFailureMessage
         self.alignmentResetAt = alignmentResetAt
+        self.llmUsage = llmUsage
     }
 
     init(from decoder: Decoder) throws {
@@ -151,6 +158,8 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
             forKey: .processingFailureMessage
         )
         alignmentResetAt = try container.decodeIfPresent(Date.self, forKey: .alignmentResetAt)
+        // Lenient: a usage payload this build cannot read must not drop the text with it.
+        llmUsage = (try? container.decodeIfPresent(HistoryLLMUsage.self, forKey: .llmUsage)) ?? nil
     }
 }
 

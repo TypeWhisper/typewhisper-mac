@@ -53,6 +53,20 @@ enum HistoryExporter {
         let engine = record.modelUsed ?? record.engineUsed
         lines.append("- **Engine:** \(engine)")
 
+        if let llmUsage = record.llmUsage {
+            let providers = llmUsage.entries.map { entry in
+                [entry.displayProviderName, entry.model].compactMap { $0 }.joined(separator: " · ")
+            }
+            lines.append("- **LLM:** \(providers.joined(separator: ", "))")
+            var tokens: [String] = []
+            if let input = llmUsage.inputTokens { tokens.append("\(input) input") }
+            if let output = llmUsage.outputTokens { tokens.append("\(output) output") }
+            if !tokens.isEmpty {
+                if llmUsage.requestCount > 1 { tokens.append("\(llmUsage.requestCount) requests") }
+                lines.append("- **Tokens:** \(tokens.joined(separator: ", "))")
+            }
+        }
+
         if let appName = record.appName {
             var appLine = "- **App:** \(appName)"
             if let domain = record.appDomain {
@@ -121,6 +135,10 @@ enum HistoryExporter {
             dict["pipelineSteps"] = steps
         }
 
+        if let llmUsage = record.llmUsage {
+            dict["llmUsage"] = llmUsageJSON(llmUsage)
+        }
+
         guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
               let json = String(data: data, encoding: .utf8) else {
             return "{}"
@@ -185,6 +203,24 @@ enum HistoryExporter {
     }
 
     // MARK: - Helpers
+
+    /// Token counts are left out when no request reported them.
+    private static func llmUsageJSON(_ usage: HistoryLLMUsage) -> [String: Any] {
+        var json: [String: Any] = [
+            "requests": usage.requestCount,
+            "providers": usage.entries.map { entry in
+                var provider: [String: Any] = ["provider": entry.providerId, "requests": entry.requestCount]
+                provider["providerName"] = entry.providerName
+                provider["model"] = entry.model
+                provider["inputTokens"] = entry.inputTokens
+                provider["outputTokens"] = entry.outputTokens
+                return provider
+            },
+        ]
+        json["inputTokens"] = usage.inputTokens
+        json["outputTokens"] = usage.outputTokens
+        return json
+    }
 
     private static func formatDuration(_ seconds: Double) -> String {
         let s = Int(seconds)

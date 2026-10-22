@@ -291,6 +291,58 @@ final class OpenAIChatHelperTests: XCTestCase {
 
         XCTAssertEqual(result, "done")
     }
+
+    // MARK: - Usage
+
+    func testProcessReportsTheUsageOfTheResponse() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"model":"m-2026-01","choices":[{"message":{"content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":31,"completion_tokens":7,"total_tokens":38}}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+        let collector = PluginLLMUsageCollector()
+
+        let result = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+        }
+
+        XCTAssertEqual(result, "done")
+        XCTAssertEqual(collector.reports, [PluginLLMUsage(inputTokens: 31, outputTokens: 7, model: "m-2026-01")])
+    }
+
+    func testProcessReportsNothingWhenTheResponseHasNoUsage() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"choices":[{"message":{"content":"done"},"finish_reason":"stop"}]}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+        let collector = PluginLLMUsageCollector()
+
+        _ = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+            try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+        }
+
+        XCTAssertEqual(collector.reports, [])
+    }
+
+    func testProcessReportsTheUsageOfATruncatedReply() async throws {
+        let server = try await ChatStubServer.start(
+            body: #"{"choices":[{"message":{"content":"half a sen"},"finish_reason":"length"}],"usage":{"prompt_tokens":20,"completion_tokens":4096}}"#
+        )
+        defer { server.stop() }
+        let helper = PluginOpenAIChatHelper(baseURL: server.baseURL)
+        let collector = PluginLLMUsageCollector()
+
+        do {
+            _ = try await PluginLLMUsageReporting.$collector.withValue(collector) {
+                try await helper.process(apiKey: "key", model: "m", systemPrompt: "s", userText: "u")
+            }
+            XCTFail("Expected the truncated reply to throw")
+        } catch is PluginChatError {
+        }
+
+        XCTAssertEqual(collector.reports, [PluginLLMUsage(inputTokens: 20, outputTokens: 4096)])
+    }
 }
 
 /// Minimal loopback HTTP server that answers every request with one JSON body.

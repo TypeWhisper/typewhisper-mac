@@ -50,9 +50,9 @@ struct SettingsView: View {
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
-        case "file-transcription": return .fileTranscription
+        case "file-transcription", "file-transcription-queue": return .fileTranscription
         case "speakers": return .speakers
-        case "recorder", "recorder-queue": return .recorder
+        case "recorder", "recorder-queue", "recorder-folders", "recorder-folder-unavailable": return .recorder
         case "history": return .history
         case "statistics": return .statistics
         case "dictionary", "dictionary-term-packs": return .dictionary
@@ -961,6 +961,26 @@ struct RecordingSettingsView: View {
             .unavailableReason
     }
 
+    /// The picker shows the engine dictation uses right now. While that is a
+    /// temporary fallback, this names the saved default engine (#1549).
+    private var unavailableSavedEngineNotice: String? {
+        guard let savedEngine = modelManager.unavailableSavedEngine else { return nil }
+        return DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: savedEngine.displayName,
+            fallbackEngineName: modelManager.defaultEngine?.providerDisplayName
+        )
+    }
+
+    /// Also shown when no engine is left, so the saved choice is still named.
+    @ViewBuilder
+    private var unavailableSavedEngineLabel: some View {
+        if let notice = unavailableSavedEngineNotice {
+            Label(notice, systemImage: "exclamationmark.triangle")
+                .font(.caption)
+                .foregroundStyle(.orange)
+        }
+    }
+
     @ViewBuilder
     private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
         let authStatus = modelManager.transcriptionAuthStatus(for: engine)
@@ -1202,6 +1222,8 @@ struct RecordingSettingsView: View {
                 if engines.isEmpty {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
                         .foregroundStyle(.secondary)
+
+                    unavailableSavedEngineLabel
                 } else {
                     // Shows the engine dictation uses right now, which can be a
                     // temporary fallback; only a choice made here is saved (#1533).
@@ -1228,6 +1250,8 @@ struct RecordingSettingsView: View {
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
                     }
+
+                    unavailableSavedEngineLabel
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")
@@ -1360,6 +1384,21 @@ struct RecordingSettingsView: View {
                         }
                     }
                 }
+            }
+
+                Section(String(localized: "Toggle Mode")) {
+                Toggle(
+                    String(localized: "Stop recording after silence"),
+                    isOn: $dictation.toggleSilenceStopEnabled
+                )
+
+                if dictation.toggleSilenceStopEnabled {
+                    SilenceDurationField(duration: $dictation.toggleSilenceStopDuration)
+                }
+
+                Text(String(localized: "Ends a toggle dictation once you stay silent for the chosen duration, then transcribes and inserts it as usual. The indicator counts down before it stops; keep talking to continue recording. It never stops before you start speaking. Push-to-talk and holding the Hybrid shortcut are not affected."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
                 Section(String(localized: "Sound")) {
@@ -1526,6 +1565,66 @@ struct RecordingSettingsView: View {
         }
     }
 
+}
+
+// MARK: - Silence Duration
+
+/// Seconds of silence that end a toggle dictation (#1023), typed as a number. The value
+/// applies on Return or when the field loses focus; anything outside 1 to 10 seconds is
+/// clamped, and text without a number restores the saved value.
+private struct SilenceDurationField: View {
+    @Binding var duration: TimeInterval
+    @State private var text = ""
+    @FocusState private var isFocused: Bool
+
+    private var locale: Locale {
+        Locale(identifier: preferredAppLanguageCode())
+    }
+
+    var body: some View {
+        LabeledContent(String(localized: "Silence duration")) {
+            HStack(spacing: 6) {
+                TextField(String(localized: "Silence duration"), text: $text)
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .frame(width: 56)
+                    .focused($isFocused)
+                    .onSubmit(commit)
+                    .accessibilityHint(String(localized: "Seconds, from 1 to 10"))
+                Text(String(localized: "seconds"))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+        }
+        .onAppear {
+            text = DictationSilenceDurationInput.text(for: duration, locale: locale)
+        }
+        .onChange(of: text) { _, newValue in
+            let filtered = DictationSilenceDurationInput.filtered(newValue)
+            if filtered != newValue {
+                text = filtered
+            }
+        }
+        .onChange(of: isFocused) { _, focused in
+            if !focused {
+                commit()
+            }
+        }
+        .onChange(of: duration) { _, newValue in
+            guard !isFocused else { return }
+            text = DictationSilenceDurationInput.text(for: newValue, locale: locale)
+        }
+        .onDisappear(perform: commit)
+    }
+
+    private func commit() {
+        if let value = DictationSilenceDurationInput.duration(from: text), value != duration {
+            duration = value
+        }
+        text = DictationSilenceDurationInput.text(for: duration, locale: locale)
+    }
 }
 
 // MARK: - Sound Event Picker

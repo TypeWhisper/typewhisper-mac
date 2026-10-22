@@ -282,6 +282,41 @@ let result = try await helper.process(
 )
 ```
 
+#### Token usage
+
+TypeWhisper records which provider and model processed a dictation in its
+history, and the token counts when the provider reports them. Usage reporting
+is optional: `process` keeps returning plain text, and a provider that reports
+nothing is recorded with its name and model only. To report the token counts
+of a response, call `PluginLLMUsageReporting.report` from the task that runs
+`process`, once per request you send:
+
+```swift
+let (data, response) = try await PluginHTTPClient.data(for: request)
+// ...check the status code...
+// Before parsing: a reply that is cut off or refused still used the tokens.
+PluginLLMUsageReporting.report(.openAICompatible(from: data))
+return try parseReply(data)
+```
+
+- `PluginLLMUsage.openAICompatible(from:)` reads Chat Completions
+  (`prompt_tokens`, `completion_tokens`) and Responses API (`input_tokens`,
+  `output_tokens`) bodies, and `PluginLLMUsage.anthropicMessages(from:)` reads
+  Anthropic Messages bodies. For other formats, create a
+  `PluginLLMUsage(inputTokens:outputTokens:model:)` yourself. Input counts every
+  prompt token including cached ones, output includes reasoning tokens, and
+  `model` is the model that answered when the response names it.
+- Report only counts the response contains; never estimate them. Leave a count
+  nil when the response does not include it.
+- Report from the same task, not from a detached task: the host collects the
+  reports through a task-local value. Outside a host request the call does nothing.
+- `PluginOpenAIChatHelper.process` reports usage on its own.
+
+`PluginLLMUsageReporting` requires TypeWhisper 1.8.0 or later; declare
+`"minHostVersion": "1.8.0"` when you call it. Plugins that only use
+`PluginOpenAIChatHelper` need no change: on TypeWhisper 1.8.0 the helper reports
+for them.
+
 ### TTSProviderPlugin
 
 Add a text-to-speech provider for spoken feedback and manual readback.

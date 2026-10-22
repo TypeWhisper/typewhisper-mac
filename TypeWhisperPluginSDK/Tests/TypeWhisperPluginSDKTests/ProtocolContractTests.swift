@@ -340,6 +340,60 @@ private final class MockCatalogTranscriptionPlugin: NSObject, TranscriptionEngin
     }
 }
 
+private final class MockLiveSession: LiveTranscriptionSession, @unchecked Sendable {
+    func appendAudio(samples: [Float]) async throws {}
+    func finish() async throws -> PluginTranscriptionResult { PluginTranscriptionResult(text: "", detectedLanguage: nil) }
+    func cancel() async {}
+}
+
+/// Streams with every model; it does not adopt `LiveTranscriptionModelSupportProviding`.
+@objc(MockLiveTranscriptionPlugin)
+private class MockLiveTranscriptionPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+    class var pluginId: String { "com.typewhisper.mock.live" }
+    class var pluginName: String { "Mock Live" }
+
+    var selectedModel = "streaming"
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    var providerId: String { "mock-live" }
+    var providerDisplayName: String { "Mock Live" }
+    var isConfigured: Bool { true }
+    var transcriptionModels: [PluginModelInfo] {
+        [PluginModelInfo(id: "streaming", displayName: "Streaming"), PluginModelInfo(id: "batch", displayName: "Batch")]
+    }
+    var selectedModelId: String? { selectedModel }
+    func selectModel(_ modelId: String) { selectedModel = modelId }
+    var supportsTranslation: Bool { false }
+
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "ok", detectedLanguage: language)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        MockLiveSession()
+    }
+}
+
+/// Streams only with its "streaming" model.
+@objc(MockModelDependentLiveTranscriptionPlugin)
+private final class MockModelDependentLiveTranscriptionPlugin: MockLiveTranscriptionPlugin, LiveTranscriptionModelSupportProviding, @unchecked Sendable {
+    override class var pluginId: String { "com.typewhisper.mock.model-dependent-live" }
+    override class var pluginName: String { "Mock Model-Dependent Live" }
+
+    func supportsLiveTranscriptionSession(forModelId modelId: String?) -> Bool {
+        (modelId ?? selectedModel) == "streaming"
+    }
+}
+
 @objc(MockStructuredTranscriptionPlugin)
 private final class MockStructuredTranscriptionPlugin: NSObject, StructuredTranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.structured"
@@ -913,6 +967,24 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertFalse(legacyPlugin is any TranscriptionModelCatalogProviding)
         XCTAssertEqual(legacyPlugin.modelCatalog.map(\.id), ["tiny"])
         XCTAssertEqual(catalogPlugin.modelCatalog.map(\.id), ["tiny", "large"])
+    }
+
+    func testLiveSessionsFollowTheModelOnlyForEnginesThatSaySo() {
+        let batchPlugin = MockTranscriptionPlugin()
+        XCTAssertNil(batchPlugin.liveTranscriptionPlugin(forModelId: nil))
+
+        // Without the optional protocol every model streams, as before.
+        let livePlugin = MockLiveTranscriptionPlugin()
+        livePlugin.selectModel("batch")
+        XCTAssertNotNil(livePlugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertNotNil(livePlugin.liveTranscriptionPlugin(forModelId: "batch"))
+
+        let modelDependentPlugin = MockModelDependentLiveTranscriptionPlugin()
+        XCTAssertTrue(modelDependentPlugin.liveTranscriptionPlugin(forModelId: nil) === modelDependentPlugin)
+        XCTAssertNil(modelDependentPlugin.liveTranscriptionPlugin(forModelId: "batch"))
+        modelDependentPlugin.selectModel("batch")
+        XCTAssertNil(modelDependentPlugin.liveTranscriptionPlugin(forModelId: nil))
+        XCTAssertNotNil(modelDependentPlugin.liveTranscriptionPlugin(forModelId: "streaming"))
     }
 
     func testDownloadedModelManagingProtocolIsOptionalAndUsesModelInfo() async throws {
