@@ -164,14 +164,9 @@ extension SetupWizardLocalEngine {
         allCases.first { $0.providerId == providerId }
     }
 
-    /// The engines this edition can set up, in the wizard's order. The App Store edition
-    /// does not include GigaAM (docs/appstore/README.md).
+    /// The engines the wizard can set up, in its order. Both editions include all of them.
     static var offered: [SetupWizardLocalEngine] {
-        #if APPSTORE
-        allCases.filter { $0 != .gigaAM }
-        #else
         allCases
-        #endif
     }
 }
 
