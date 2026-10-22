@@ -266,6 +266,7 @@ If `~/Library` is hidden in Finder, use `Go -> Go to Folder...` and paste the pa
    ```bash
    rm -rf ~/Documents/TypeWhisper\ Recordings
    ```
+   Recordings saved to a folder you chose under Settings > Recorder > Recordings Folder, or to an earlier folder listed there, are in that folder. Delete them in Finder if you want to remove them too.
 9. Restart your Mac, then install the latest build again.
 
 If a fresh install still crashes immediately after these steps, please open an issue and include your macOS version, how you installed TypeWhisper, and whether the crash happens on first launch or after granting permissions.
@@ -750,7 +751,7 @@ Conflict and lookup behavior:
 
 ### Completed Recorder Transcripts
 
-`GET /v1/recorder/recordings` returns the latest successfully saved transcript for each recording, including recordings started manually, by the calendar integration, or through the API. Results survive app restarts and do not depend on live preview or an API session.
+`GET /v1/recorder/recordings` returns the latest successfully saved transcript for each recording, including recordings started manually, by the calendar integration, or through the API. Results survive app restarts and do not depend on live preview or an API session. It covers the Recorder folder chosen in Settings > Recorder and the earlier folders the Recorder still lists there.
 
 ```bash
 curl "http://localhost:8978/v1/recorder/recordings?since=1791100000.123456"

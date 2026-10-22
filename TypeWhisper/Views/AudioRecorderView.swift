@@ -346,6 +346,13 @@ struct AudioRecorderView: View {
                 viewModel.reconcileSelectionWithAvailablePlugins()
             }
 
+            RecorderFolderSettingsSection(
+                store: ServiceContainer.shared.recorderFolderStore,
+                isLocked: isEditingLocked || viewModel.retranscribingRecordingURL != nil,
+                watchFolderPath: { ServiceContainer.shared.watchFolderViewModel.watchFolderPath },
+                onFoldersChanged: { viewModel.loadRecordings() }
+            )
+
             // Recordings list
             Section {
                 if viewModel.recordings.isEmpty {
