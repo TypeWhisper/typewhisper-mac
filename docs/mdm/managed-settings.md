@@ -88,9 +88,10 @@ and every 30 seconds. macOS has no change notification for profiles, so a new,
 replaced or removed profile takes effect within about 30 seconds without a restart.
 
 Settings > Advanced > Managed Settings lists the managed values, invalid keys and
-policy problems, with the time of the last check and a Refresh button. The support
+policy problems, with the time TypeWhisper read the current values (shown as "Last
+checked"; it changes only when the values change) and a Refresh button. The support
 diagnostics contain the managed values, invalid keys and validation problems, with
-the time of the last check; the license key appears only as `[set]`. An enforced
+the same time; the license key appears only as `[set]`. An enforced
 `UpdateChannel` outside `AllowedUpdateChannels`, keys the App Store edition ignores
 and provider and model pairs that cannot be used are listed only in Settings.
 
