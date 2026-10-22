@@ -9,6 +9,10 @@ on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the
 result with reusable workflows. Your voice data stays on your Mac with local
 models - or use cloud APIs for faster processing.
 
+<p align="center">
+  <img src=".github/screenshots/app-store/01-indicator.png" width="800" alt="TypeWhisper settings window under the headline &quot;Dictate into any Mac app&quot;">
+</p>
+
 TypeWhisper `1.7.0` is the current stable release for macOS. It adds iCloud sync
 for History and Inbox, a visual keyboard shortcut editor, Undo Last Dictation
 and Restore Raw Transcript, new indicator styles, expanded dictation recovery,

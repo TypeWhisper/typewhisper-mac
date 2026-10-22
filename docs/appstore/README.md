@@ -133,21 +133,40 @@ promotional text, URLs) and the App Review notes live in
 (`appstore_metadata_verify` only compares). Name, subtitle and privacy URL are
 shared with the iOS app and are maintained in the iOS repository.
 
-Screenshots come from the App Store edition in screenshot mode:
+Screenshots come from the App Store edition in screenshot mode and are rendered
+into store images by TypeWhisper Studio, the private tool that also renders the
+iOS and Google Play screenshots, so all listings share one look:
 
 ```sh
 bundle exec fastlane mac appstore_screenshots languages:en-US,de-DE
+# in the typewhisper-demo-studio checkout, once per locale:
+npm run render:mac-stills -- --input <mac>/fastlane/screenshots/appstore/<locale> \
+  --locale <locale> --headlines templates/mac-app-store-stills/typewhisper-mac.headlines.json \
+  --output <mac>/fastlane/screenshots/appstore/store
 ASC_API_KEY_PATH=<key.json> bundle exec fastlane mac appstore_screenshots_upload version:<version>
 ```
 
-The first lane writes raw window captures to `fastlane/screenshots/appstore/`.
-The second composes the states listed in `APPSTORE_STORE_SCREENSHOT_STATES`
-into 2880 x 1800 images with `scripts/appstore/compose_store_screenshots.swift`,
-replaces the desktop screenshots of en-US and de-DE and reads them back
+The first lane writes raw window captures without the window shadow to
+`fastlane/screenshots/appstore/<locale>/`. Studio places each capture under a
+headline on the dark TypeWhisper backdrop and writes opaque 2880 x 1800 images
+named `NN-<state>.png` to `fastlane/screenshots/appstore/store/<locale>/`. The
+headlines and their order live in Studio and must match
+`APPSTORE_STORE_SCREENSHOT_STATES`. The upload lane checks names, size and
+opacity, replaces the desktop screenshots of en-US and de-DE and reads them back
 (`appstore_screenshots_verify` only compares). Apple accepts screenshot changes
 only before submission or after a rejection, not while waiting for review. French,
 Italian and Spanish show the en-US screenshots because the app is not localized
 into those languages.
+
+The en-US store images are also kept at 1600 x 1000 in
+`.github/screenshots/app-store/`; the README header shows the first one.
+Refresh them after a new render:
+
+```sh
+for image in fastlane/screenshots/appstore/store/en-US/*.png; do
+  sips -Z 1600 "$image" --out .github/screenshots/app-store/
+done
+```
 
 ## Plugins
 
