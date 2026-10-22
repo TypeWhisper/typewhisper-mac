@@ -233,7 +233,8 @@ struct AudioRecorderView: View {
 
                 let engines = pluginManager.transcriptionEngines
                 Picker(String(localized: "Engine"), selection: $viewModel.engineChoice) {
-                    Text(String(localized: "recorder.useDictationDefaultEngine")).tag(nil as String?)
+                    Text(DefaultEngineChoice.title(engineName: modelManager.defaultEngine?.providerDisplayName))
+                        .tag(nil as String?)
                     Divider()
                     ForEach(engines, id: \.providerId) { engine in
                         enginePickerLabel(for: engine)
@@ -242,6 +243,11 @@ struct AudioRecorderView: View {
                     }
                 }
                 .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+
+                if viewModel.engineChoice == nil {
+                    DefaultEngineSettingsLink()
+                        .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
+                }
 
                 if let notice = transcriptionAuthNotice(for: engines) {
                     Label(notice, systemImage: "key")

@@ -268,3 +268,55 @@ struct ActionConfirmationLabel: View {
             .transition(.opacity)
     }
 }
+
+/// The entry of an engine picker that uses the default engine, which is chosen on
+/// the Dictation page (#1549).
+enum DefaultEngineChoice {
+    /// Names the engine the entry uses right now, or says that none is available.
+    static func title(engineName: String?) -> String {
+        guard let engineName = nonEmpty(engineName) else {
+            return String(localized: "Default Engine (none available)")
+        }
+        return String(localized: "Default Engine (\(engineName))")
+    }
+
+    /// Shown on the Dictation page while the saved default engine is unavailable;
+    /// names the engine dictation uses until it is back, if there is one.
+    static func unavailableSavedEngineNotice(savedEngineName: String?, fallbackEngineName: String?) -> String {
+        let unavailable = nonEmpty(savedEngineName).map {
+            String(localized: "Your default engine, \($0), is not available right now.")
+        } ?? String(localized: "Your default engine is not available right now.")
+        guard let fallbackEngineName = nonEmpty(fallbackEngineName) else { return unavailable }
+        return "\(unavailable) \(String(localized: "Dictation uses \(fallbackEngineName) until it is available again."))"
+    }
+
+    private static func nonEmpty(_ name: String?) -> String? {
+        guard let name, !name.isEmpty else { return nil }
+        return name
+    }
+
+    static var changeTitle: String {
+        String(localized: "Change Default Engine")
+    }
+
+    static var changeAccessibilityHint: String {
+        String(localized: "Opens the Dictation page in Settings.")
+    }
+
+    @MainActor
+    static func openDictationSettings() {
+        SettingsNavigationCoordinator.shared.navigate(to: .dictation)
+    }
+}
+
+/// Opens the Dictation page from an engine picker while it uses the default engine.
+struct DefaultEngineSettingsLink: View {
+    var body: some View {
+        Button(DefaultEngineChoice.changeTitle) {
+            DefaultEngineChoice.openDictationSettings()
+        }
+        .buttonStyle(.link)
+        .font(.caption)
+        .accessibilityHint(DefaultEngineChoice.changeAccessibilityHint)
+    }
+}

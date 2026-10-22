@@ -961,6 +961,16 @@ struct RecordingSettingsView: View {
             .unavailableReason
     }
 
+    /// The picker shows the engine dictation uses right now. While that is a
+    /// temporary fallback, this names the saved default engine (#1549).
+    private var unavailableSavedEngineNotice: String? {
+        guard let savedEngine = modelManager.unavailableSavedEngine else { return nil }
+        return DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: savedEngine.displayName,
+            fallbackEngineName: modelManager.defaultEngine?.providerDisplayName
+        )
+    }
+
     @ViewBuilder
     private func enginePickerLabel(for engine: TranscriptionEnginePlugin) -> some View {
         let authStatus = modelManager.transcriptionAuthStatus(for: engine)
@@ -1227,6 +1237,12 @@ struct RecordingSettingsView: View {
 
                     if let enforced = pluginManager.enforcedTranscriptionResolution {
                         ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
+                    }
+
+                    if let notice = unavailableSavedEngineNotice {
+                        Label(notice, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
                     }
 
                     if let notice = transcriptionAuthNotice(for: engines) {

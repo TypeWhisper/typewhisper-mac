@@ -3289,6 +3289,109 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
         XCTAssertEqual(modelManager.selectedProviderId, "mock-switchable")
     }
 
+    func testDefaultEngineIsTheTemporaryFallbackAndTheSavedEngineIsNamedApart() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        let switchable = MockSwitchableTranscriptionPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(switchable, id: "com.typewhisper.mock.switchable", directory: appSupportDirectory),
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        // Features without an engine of their own use the fallback, as dictation does.
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-compatible")
+        XCTAssertEqual(
+            modelManager.unavailableSavedEngine,
+            ModelManagerService.UnavailableSavedEngine(providerId: "mock-switchable", displayName: "Mock Switchable")
+        )
+
+        var changes = 0
+        let observation = modelManager.objectWillChange.sink { changes += 1 }
+        defer { observation.cancel() }
+        switchable.isAvailable = true
+        modelManager.restoreProviderSelection()
+
+        XCTAssertGreaterThan(changes, 0, "Views naming the default engine are told that it changed")
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-switchable")
+        XCTAssertNil(modelManager.unavailableSavedEngine)
+    }
+
+    func testSavedEngineWhosePluginIsGoneIsReportedWithoutAName() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine("mock-switchable")
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = []
+
+        let modelManager = ModelManagerService()
+        modelManager.restoreProviderSelection()
+
+        XCTAssertNil(modelManager.defaultEngine)
+        XCTAssertEqual(
+            modelManager.unavailableSavedEngine,
+            ModelManagerService.UnavailableSavedEngine(providerId: "mock-switchable", displayName: nil)
+        )
+    }
+
+    func testFirstFallbackIsTheSavedEngineSoNothingIsNamedApart() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let restoreSelection = Self.overrideSavedEngine(nil)
+        defer { restoreSelection() }
+
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            Self.loadedPlugin(MockTranscriptionPlugin(), id: "com.typewhisper.mock.compatible", directory: appSupportDirectory),
+        ]
+
+        let modelManager = ModelManagerService()
+        XCTAssertNil(modelManager.unavailableSavedEngine, "Nothing is saved yet")
+        modelManager.restoreProviderSelection()
+
+        XCTAssertEqual(modelManager.defaultEngine?.providerId, "mock-compatible")
+        XCTAssertNil(modelManager.unavailableSavedEngine)
+    }
+
+    func testDefaultEngineChoiceNamesTheEngineItUses() {
+        let named = DefaultEngineChoice.title(engineName: "Mock Compatible")
+        let unnamed = DefaultEngineChoice.title(engineName: nil)
+
+        XCTAssertTrue(named.contains("Mock Compatible"))
+        XCTAssertNotEqual(named, unnamed)
+        XCTAssertEqual(DefaultEngineChoice.title(engineName: ""), unnamed)
+    }
+
+    func testUnavailableSavedEngineNoticeNamesTheSavedAndTheFallbackEngine() {
+        let notice = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "Mock Switchable",
+            fallbackEngineName: "Mock Compatible"
+        )
+        let withoutFallback = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: "Mock Switchable",
+            fallbackEngineName: nil
+        )
+        let unnamed = DefaultEngineChoice.unavailableSavedEngineNotice(
+            savedEngineName: nil,
+            fallbackEngineName: "Mock Compatible"
+        )
+
+        XCTAssertTrue(notice.contains("Mock Switchable"))
+        XCTAssertTrue(notice.contains("Mock Compatible"))
+        XCTAssertTrue(notice.hasPrefix(withoutFallback))
+        XCTAssertFalse(withoutFallback.contains("Mock Compatible"))
+        XCTAssertFalse(unnamed.contains("Mock Switchable"))
+        XCTAssertTrue(unnamed.contains("Mock Compatible"))
+    }
+
     func testUpdatingTheSelectedPluginKeepsTheSavedEngine() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
