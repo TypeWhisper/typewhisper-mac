@@ -6098,11 +6098,11 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
+				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum.dev;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.icloudbridge;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				SKIP_INSTALL = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -6121,11 +6121,11 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
-				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
+				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_ICLOUD_HELPER_PROFILE_SPECIFIER)";
 				SKIP_INSTALL = YES;
@@ -6151,11 +6151,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				INFOPLIST_KEY_NSPrincipalClass = TypeWhisperTests.TestHostDefaultsGuard;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper.app/Contents/MacOS/TypeWhisper";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/dictum.app/Contents/MacOS/dictum";
 				TEST_TARGET_NAME = TypeWhisper;
 			};
 			name = Release;
@@ -6175,11 +6175,11 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				INFOPLIST_KEY_NSPrincipalClass = TypeWhisperTests.TestHostDefaultsGuard;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.TypeWhisperTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/TypeWhisper Dev.app/Contents/MacOS/TypeWhisper Dev";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/dictum Dev.app/Contents/MacOS/dictum Dev";
 				TEST_TARGET_NAME = TypeWhisper;
 			};
 			name = Debug;
@@ -6323,19 +6323,19 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Dev";
+				INFOPLIST_KEY_CFBundleDisplayName = "dictum Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
-				ICLOUD_HELPER_BUNDLE_ID = com.typewhisper.mac.dev.icloudbridge;
+				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum.dev;
+				ICLOUD_HELPER_BUNDLE_ID = com.schneidervvv.dictum.dev.icloudbridge;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev;
 				PRODUCT_MODULE_NAME = TypeWhisper;
-				PRODUCT_NAME = "TypeWhisper Dev";
+				PRODUCT_NAME = "dictum Dev";
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -6358,17 +6358,19 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = dictum;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
-				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
-				ICLOUD_HELPER_BUNDLE_ID = com.typewhisper.typewhisper-mac;
+				ICLOUD_CONTAINER_ID = iCloud.com.schneidervvv.dictum;
+				ICLOUD_HELPER_BUNDLE_ID = com.schneidervvv.dictum.icloudbridge;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
-				PRODUCT_NAME = TypeWhisper;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum;
+				PRODUCT_MODULE_NAME = TypeWhisper;
+				PRODUCT_NAME = dictum;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -7117,7 +7119,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.transcribe-action;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -7144,7 +7146,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.transcribe-action;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -7164,7 +7166,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeWhisperWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = "dictum Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -7172,7 +7174,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -7192,7 +7194,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TypeWhisperWidgetExtension/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Widgets";
+				INFOPLIST_KEY_CFBundleDisplayName = "dictum Widgets";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -7200,7 +7202,7 @@
 					"@executable_path/../../../../Frameworks",
 				);
 				MARKETING_VERSION = 1.8.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
+				PRODUCT_BUNDLE_IDENTIFIER = com.schneidervvv.dictum.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

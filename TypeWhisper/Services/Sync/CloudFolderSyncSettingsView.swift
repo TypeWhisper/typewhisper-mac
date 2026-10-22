@@ -887,7 +887,7 @@ final class CloudFolderSyncController: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.message = String(localized: "Choose a cloud-synced folder for TypeWhisper.")
+        panel.message = String(localized: "Choose a cloud-synced folder for dictum.")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await selectCustomFolder(url) }

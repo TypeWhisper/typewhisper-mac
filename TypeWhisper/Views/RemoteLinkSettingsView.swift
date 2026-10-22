@@ -55,10 +55,10 @@ struct RemoteLinkSettingsView: View {
                             HStack(alignment: .firstTextBaseline) {
                                 Label(
                                     localizedAppText(
-                                        "If this Mac stays invisible, allow TypeWhisper under Local Network in Privacy & Security.",
-                                        de: "Bleibt dieser Mac unsichtbar, erlaube TypeWhisper unter „Lokales Netzwerk“ in „Datenschutz & Sicherheit“.",
-                                        ja: "この Mac が表示されないままの場合は、「プライバシーとセキュリティ」の「ローカルネットワーク」で TypeWhisper を許可してください。",
-                                        zh: "如果这台 Mac 一直不可见，请在“隐私与安全性”的“本地网络”中允许 TypeWhisper。"
+                                        "If this Mac stays invisible, allow dictum under Local Network in Privacy & Security.",
+                                        de: "Bleibt dieser Mac unsichtbar, erlaube dictum unter „Lokales Netzwerk“ in „Datenschutz & Sicherheit“.",
+                                        ja: "この Mac が表示されないままの場合は、「プライバシーとセキュリティ」の「ローカルネットワーク」で dictum を許可してください。",
+                                        zh: "如果这台 Mac 一直不可见，请在“隐私与安全性”的“本地网络”中允许 dictum。"
                                     ),
                                     systemImage: "network.badge.shield.half.filled"
                                 )
@@ -277,10 +277,10 @@ private struct RemoteLinkPairingSheet: View {
                         zh: "正在等待设备"
                     ))
                 Text(localizedAppText(
-                    "On your iPhone or iPad, open TypeWhisper, go to Settings → Mac and choose “\(viewModel.computerName)”.",
-                    de: "Öffne TypeWhisper auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
-                    ja: "iPhone または iPad で TypeWhisper を開き、設定 → Mac で「\(viewModel.computerName)」を選択してください。",
-                    zh: "在 iPhone 或 iPad 上打开 TypeWhisper，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。"
+                    "On your iPhone or iPad, open the companion app, go to Settings → Mac and choose “\(viewModel.computerName)”.",
+                    de: "Öffne die Begleit-App auf deinem iPhone oder iPad, gehe zu Einstellungen → Mac und wähle „\(viewModel.computerName)“.",
+                    ja: "iPhone または iPad で連携アプリを開き、設定 → Mac で「\(viewModel.computerName)」を選択してください。",
+                    zh: "在 iPhone 或 iPad 上打开配套应用，前往“设置”→“Mac”，然后选择“\(viewModel.computerName)”。"
                 ))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

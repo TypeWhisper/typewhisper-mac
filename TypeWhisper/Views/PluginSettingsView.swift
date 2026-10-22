@@ -1244,8 +1244,8 @@ struct PluginSettingsView: View {
             discoverHeroContent
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
-        .accessibilityLabel(localizedAppText("Open TypeWhisper add-ons website", de: "TypeWhisper-Add-ons-Webseite öffnen"))
+        .help(localizedAppText("Open dictum add-ons website", de: "dictum-Add-ons-Webseite öffnen"))
+        .accessibilityLabel(localizedAppText("Open dictum add-ons website", de: "dictum-Add-ons-Webseite öffnen"))
     }
 
     private var discoverHeroContent: some View {
@@ -1295,8 +1295,8 @@ struct PluginSettingsView: View {
                 .foregroundStyle(.primary)
 
             Text(localizedAppText(
-                "Browse add-ons on the TypeWhisper website and install them directly here.",
-                de: "Durchsuche Add-ons auf der TypeWhisper-Webseite und installiere sie direkt hier."
+                "Browse add-ons on the dictum website and install them directly here.",
+                de: "Durchsuche Add-ons auf der dictum-Webseite und installiere sie direkt hier."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -1645,7 +1645,7 @@ struct PluginSettingsView: View {
     private var bulkUpdateFailureMessage: String {
         let pluginNames = bulkUpdateFailures.map(\.pluginName).joined(separator: ", ")
         return String(
-            localized: "These plugins could not be updated: \(pluginNames). Successful updates remain installed. TypeWhisper was not restarted."
+            localized: "These plugins could not be updated: \(pluginNames). Successful updates remain installed. dictum was not restarted."
         )
     }
 
@@ -1688,11 +1688,11 @@ struct PluginSettingsView: View {
         switch notice {
         case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
             return String(
-                localized: "Installing \(plugin.name) \(availableVersion) will replace an older external plugin bundle (\(installedVersion)) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+                localized: "Installing \(plugin.name) \(availableVersion) will replace an older external plugin bundle (\(installedVersion)) that was kept for another dictum runtime. Older app versions may stop using that bundle after this replacement."
             )
         default:
             return String(
-                localized: "Installing this plugin will replace an older external bundle that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+                localized: "Installing this plugin will replace an older external bundle that was kept for another dictum runtime. Older app versions may stop using that bundle after this replacement."
             )
         }
     }
@@ -1748,11 +1748,11 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
 private let supportedTypeWhisperWebsiteLocalePathComponents: Set<String> = ["de", "en"]
 
 private func localizedTypeWhisperAddonsURLString() -> String {
-    "https://www.typewhisper.com/\(typeWhisperWebsiteLocalePathComponent())/addons/"
+    "https://github.com/schneidervvv/dictum"
 }
 
 private func localizedTypeWhisperAddonURLString(slug: String) -> String {
-    "https://www.typewhisper.com/\(typeWhisperWebsiteLocalePathComponent())/addons/\(slug)/"
+    "https://github.com/schneidervvv/dictum"
 }
 
 private func typeWhisperWebsiteLocalePathComponent() -> String {
@@ -2570,7 +2570,7 @@ private struct IncompatibleBundleRow: View {
             if let actual {
                 return String(localized: "Requires SDK \(expected), but this bundle declares \(actual).")
             }
-            return String(localized: "Missing SDK compatibility metadata for this TypeWhisper runtime.")
+            return String(localized: "Missing SDK compatibility metadata for this dictum runtime.")
         }
     }
 }
@@ -2622,7 +2622,7 @@ private struct PluginInstallStateView: View {
                 Image(systemName: "arrow.clockwise.circle.fill")
                     .foregroundStyle(.orange)
                     .accessibilityHidden(true)
-                Text(String(localized: "Restart TypeWhisper to finish updating."))
+                Text(String(localized: "Restart dictum to finish updating."))
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .lineLimit(1)
@@ -2648,7 +2648,7 @@ private extension ExternalBundleNotice {
     var detailText: String {
         switch self {
         case .legacyBundlePresent(let version):
-            return String(localized: "External plugin bundle \(version) was kept for an older TypeWhisper line.")
+            return String(localized: "External plugin bundle \(version) was kept for an older dictum line.")
         case .incompatibleWithCurrentRuntime(let version):
             return String(localized: "External plugin bundle \(version) is incompatible with this runtime.")
         case .bundledFallbackActive(let version):

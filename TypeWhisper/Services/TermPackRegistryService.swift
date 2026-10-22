@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TermPackRegistry")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "TermPackRegistry")
 
 // MARK: - Registry Models
 

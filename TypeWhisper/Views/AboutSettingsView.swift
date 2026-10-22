@@ -40,7 +40,7 @@ struct AboutSettingsView: View {
                         // Decorative: the app name follows right below.
                         .accessibilityHidden(true)
 
-                    Text("TypeWhisper")
+                    Text("dictum")
                         .font(.title)
                         .fontWeight(.semibold)
                         .accessibilityAddTraits(.isHeader)
@@ -145,6 +145,9 @@ struct AboutSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Link("based on TypeWhisper", destination: URL(string: "https://github.com/TypeWhisper/typewhisper-mac")!)
+                        .font(.caption)
+
                     Text(String(localized: "Licensed under the GNU General Public License v3.0"))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
@@ -170,7 +173,7 @@ private struct WhatsNewButton: View {
     @ObservedObject var coordinator: WhatsNewCoordinator
 
     var body: some View {
-        Button("New in TypeWhisper") {
+        Button("New in dictum") {
             NotificationCenter.default.post(name: .whatsNewRequested, object: nil)
         }
         .disabled(coordinator.operationInProgress)

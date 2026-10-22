@@ -5,7 +5,7 @@ import SwiftUI
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PluginManager")
 
 enum RuntimeArchitecture {
     nonisolated(unsafe) static var overrideCurrent: String?
@@ -111,7 +111,7 @@ private enum PluginLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .incompatibleHostVersion(let pluginName, let required, let current):
-            return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
+            return "\(pluginName) requires dictum \(required) or newer (current: \(current))"
         case .failedToCreateBundle(let bundleName):
             return "Failed to create bundle for \(bundleName)"
         case .missingPrincipalClass(let className, let bundleName):
@@ -1081,7 +1081,7 @@ final class PluginManager: ObservableObject {
             let reason = PluginSDKCompatibility.incompatibilityReason(
                 manifestVersion: manifest.sdkCompatibilityVersion,
                 isBundled: isBundledSource
-            ) ?? "is not compatible with this TypeWhisper build"
+            ) ?? "is not compatible with this dictum build"
             logger.info(
                 "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )

@@ -18,7 +18,7 @@ private final class LoadedFileURLs: @unchecked Sendable {
 }
 
 final class ActionRequestHandler: NSObject, NSExtensionRequestHandling {
-    private static let serviceName = "Transcribe with TypeWhisper"
+    private static let serviceName = "Transcribe with dictum"
 
     func beginRequest(with context: NSExtensionContext) {
         let inputItems = context.inputItems.compactMap { $0 as? NSExtensionItem }
@@ -57,7 +57,7 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling {
             let pasteboardURLs = urls.map { $0 as NSURL }
             guard pasteboard.writeObjects(pasteboardURLs),
                   NSPerformService(Self.serviceName, pasteboard) else {
-                self.cancel(context, message: "TypeWhisper could not receive the selected files.")
+                self.cancel(context, message: "dictum could not receive the selected files.")
                 return
             }
 
@@ -74,7 +74,7 @@ final class ActionRequestHandler: NSObject, NSExtensionRequestHandling {
 
     private func cancel(_ context: NSExtensionContext, message: String) {
         context.cancelRequest(withError: NSError(
-            domain: "com.typewhisper.mac.transcribe-action",
+            domain: "com.schneidervvv.dictum.transcribe-action",
             code: 1,
             userInfo: [NSLocalizedDescriptionKey: message]
         ))

@@ -609,18 +609,18 @@
         }
       }
     },
-    "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry." : {
+    "Your administrator provides the license. dictum activates it automatically without manual key entry." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ライセンスは管理者が提供します。TypeWhisperはキーを手入力することなく自動的に有効化します。"
+            "value" : "ライセンスは管理者が提供します。dictumはキーを手入力することなく自動的に有効化します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "许可证由管理员提供。TypeWhisper 会自动激活，无需手动输入密钥。"
+            "value" : "许可证由管理员提供。dictum 会自动激活，无需手动输入密钥。"
           }
         }
       }
@@ -1457,24 +1457,24 @@
         }
       }
     },
-    "macOS needs your approval in Login Items before TypeWhisper can start at login." : {
+    "macOS needs your approval in Login Items before dictum can start at login." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "macOS braucht deine Freigabe unter „Anmeldeobjekte“, bevor TypeWhisper beim Anmelden starten kann."
+            "value" : "macOS braucht deine Freigabe unter „Anmeldeobjekte“, bevor dictum beim Anmelden starten kann."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperをログイン時に起動するには、「ログイン項目」での承認が必要です。"
+            "value" : "dictumをログイン時に起動するには、「ログイン項目」での承認が必要です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要在“登录项”中批准后，TypeWhisper 才能在登录时启动。"
+            "value" : "需要在“登录项”中批准后，dictum 才能在登录时启动。"
           }
         }
       }
@@ -1655,24 +1655,24 @@
         }
       }
     },
-    "TypeWhisper checks again every 30 seconds and when it becomes active." : {
+    "dictum checks again every 30 seconds and when it becomes active." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper prüft alle 30 Sekunden erneut und sobald die App aktiv wird."
+            "value" : "dictum prüft alle 30 Sekunden erneut und sobald die App aktiv wird."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは30秒ごと、およびアクティブになったときに再確認します。"
+            "value" : "dictumは30秒ごと、およびアクティブになったときに再確認します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 每 30 秒以及在变为活动状态时会重新检查。"
+            "value" : "dictum 每 30 秒以及在变为活动状态时会重新检查。"
           }
         }
       }
@@ -1897,46 +1897,46 @@
         }
       }
     },
-    "TypeWhisper %@ is available." : {
+    "dictum %@ is available." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper %@ ist verfügbar."
+            "value" : "dictum %@ ist verfügbar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper %@ が利用可能です。"
+            "value" : "dictum %@ が利用可能です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper %@ 现已可用。"
+            "value" : "dictum %@ 现已可用。"
           }
         }
       }
     },
-    "New in TypeWhisper" : {
+    "New in dictum" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Neu in TypeWhisper"
+            "value" : "Neu in dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperの新機能"
+            "value" : "dictumの新機能"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 新功能"
+            "value" : "dictum 新功能"
           }
         }
       }
@@ -4322,25 +4322,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zieh Audio oder Video hierher. TypeWhisper transkribiert und zeigt, wer was gesagt hat."
+            "value" : "Zieh Audio oder Video hierher. dictum transkribiert und zeigt, wer was gesagt hat."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Drop audio or video here. TypeWhisper transcribes it and shows who said what."
+            "value" : "Drop audio or video here. dictum transcribes it and shows who said what."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声や動画をここにドロップすると、TypeWhisperが文字起こしして誰が何を話したかを表示します。"
+            "value" : "音声や動画をここにドロップすると、dictumが文字起こしして誰が何を話したかを表示します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "将音频或视频拖到此处，TypeWhisper 会转录并显示谁说了什么。"
+            "value" : "将音频或视频拖到此处，dictum 会转录并显示谁说了什么。"
           }
         }
       }
@@ -4938,13 +4938,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sieh in Aufnahmen und Dateien, wer was gesagt hat, und lass TypeWhisper Personen an der Stimme erkennen."
+            "value" : "Sieh in Aufnahmen und Dateien, wer was gesagt hat, und lass dictum Personen an der Stimme erkennen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "See who said what in recordings and files, and let TypeWhisper recognize people by voice."
+            "value" : "See who said what in recordings and files, and let dictum recognize people by voice."
           }
         },
         "ja" : {
@@ -4956,7 +4956,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在录音和文件中查看谁说了什么，并让 TypeWhisper 通过声音识别人物。"
+            "value" : "在录音和文件中查看谁说了什么，并让 dictum 通过声音识别人物。"
           }
         }
       }
@@ -5330,25 +5330,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper speichert ein Sprecherprofil auf diesem Mac. Hol dir vorher das Einverständnis der Person. Es wird kein Audio gespeichert, und das Profil wird nicht synchronisiert."
+            "value" : "dictum speichert ein Sprecherprofil auf diesem Mac. Hol dir vorher das Einverständnis der Person. Es wird kein Audio gespeichert, und das Profil wird nicht synchronisiert."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper saves a voice profile on this Mac. Make sure the person agrees. No audio is saved, and the profile is not synced."
+            "value" : "dictum saves a voice profile on this Mac. Make sure the person agrees. No audio is saved, and the profile is not synced."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperはこのMacに声のプロフィールを保存します。本人の同意を得てください。音声は保存されず、プロフィールは同期されません。"
+            "value" : "dictumはこのMacに声のプロフィールを保存します。本人の同意を得てください。音声は保存されず、プロフィールは同期されません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 会在这台 Mac 上保存声音档案。请先征得对方同意。不会保存音频，档案也不会同步。"
+            "value" : "dictum 会在这台 Mac 上保存声音档案。请先征得对方同意。不会保存音频，档案也不会同步。"
           }
         }
       }
@@ -7598,25 +7598,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sprecher werden auf diesem Mac erkannt. Es wird kein Audio an TypeWhisper gesendet."
+            "value" : "Sprecher werden auf diesem Mac erkannt. Es wird kein Audio an dictum gesendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Speakers are detected on this Mac. No audio is sent to TypeWhisper."
+            "value" : "Speakers are detected on this Mac. No audio is sent to dictum."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "話者はこのMac上で検出されます。音声がTypeWhisperに送信されることはありません。"
+            "value" : "話者はこのMac上で検出されます。音声がdictumに送信されることはありません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "说话人检测在这台 Mac 上完成，不会向 TypeWhisper 发送任何音频。"
+            "value" : "说话人检测在这台 Mac 上完成，不会向 dictum 发送任何音频。"
           }
         }
       }
@@ -8909,24 +8909,24 @@
         }
       }
     },
-    "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text.": {
+    "Snippets containing dictum dynamic placeholders are excluded to preserve literal text.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Snippets mit dynamischen TypeWhisper-Platzhaltern werden ausgelassen, damit sich der Text nicht ungewollt verändert."
+            "value": "Snippets mit dynamischen dictum-Platzhaltern werden ausgelassen, damit sich der Text nicht ungewollt verändert."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "含有 TypeWhisper 动态占位符的文本片段将被排除，以保留原始文本含义。"
+            "value": "含有 dictum 动态占位符的文本片段将被排除，以保留原始文本含义。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "元の文字列をそのまま保持するため、TypeWhisperの動的プレースホルダーを含むスニペットは取り込みません。"
+            "value" : "元の文字列をそのまま保持するため、dictumの動的プレースホルダーを含むスニペットは取り込みません。"
           }
         }
       }
@@ -9239,24 +9239,24 @@
         }
       }
     },
-    "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed." : {
+    "Choose the folder containing config.json, tokenizer files and weights. dictum keeps its own copy; your original files are not changed." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. TypeWhisper erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
+            "value" : "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. dictum erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "config.json、トークナイザー、重みを含むフォルダを選択してください。TypeWhisperはコピーを保存し、元のファイルは変更しません。"
+            "value" : "config.json、トークナイザー、重みを含むフォルダを選択してください。dictumはコピーを保存し、元のファイルは変更しません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择包含 config.json、分词器文件和权重的文件夹。TypeWhisper 会保存副本，不会修改原始文件。"
+            "value" : "选择包含 config.json、分词器文件和权重的文件夹。dictum 会保存副本，不会修改原始文件。"
           }
         }
       }
@@ -9767,18 +9767,18 @@
         }
       }
     },
-    "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option." : {
+    "Enter submission is unavailable. Check Accessibility access and restart dictum, or choose another Enter option." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Enter キーで送信できません。アクセシビリティのアクセスを確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。"
+            "value" : "Enter キーで送信できません。アクセシビリティのアクセスを確認して dictum を再起動するか、別の Enter オプションを選択してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法使用 Enter 发送。请检查辅助功能权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+            "value" : "无法使用 Enter 发送。请检查辅助功能权限并重启 dictum，或选择其他 Enter 选项。"
           }
         }
       }
@@ -12445,24 +12445,24 @@
         }
       }
     },
-    "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone." : {
+    "Affects only dictum recordings and transcriptions, not your live meeting microphone." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Betrifft nur Aufnahmen und Transkriptionen von TypeWhisper, nicht dein Live-Mikrofon in Meetings."
+            "value" : "Betrifft nur Aufnahmen und Transkriptionen von dictum, nicht dein Live-Mikrofon in Meetings."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper の録音および文字起こしのみに適用され、会議中のライブマイクには適用されません。"
+            "value" : "dictum の録音および文字起こしのみに適用され、会議中のライブマイクには適用されません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "仅影响 TypeWhisper 的录音和转录，不会影响你会议中正在使用的实时麦克风。"
+            "value" : "仅影响 dictum 的录音和转录，不会影响你会议中正在使用的实时麦克风。"
           }
         }
       }
@@ -13827,24 +13827,24 @@
         }
       }
     },
-    "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery audio files. History audio is controlled separately, and cloud engines may still receive audio for transcription." : {
+    "Recovery recordings are stored only on this Mac. Immediately prevents dictum from creating local recovery audio files. History audio is controlled separately, and cloud engines may still receive audio for transcription." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wiederherstellungsaufnahmen werden nur auf diesem Mac gespeichert. „Sofort“ verhindert, dass TypeWhisper lokale Wiederherstellungs-Audiodateien erstellt. Verlaufs-Audio wird separat gesteuert und Cloud-Engines können weiterhin Audio zur Transkription erhalten."
+            "value" : "Wiederherstellungsaufnahmen werden nur auf diesem Mac gespeichert. „Sofort“ verhindert, dass dictum lokale Wiederherstellungs-Audiodateien erstellt. Verlaufs-Audio wird separat gesteuert und Cloud-Engines können weiterhin Audio zur Transkription erhalten."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "復元用録音はこのMacにのみ保存されます。「すぐに」を選ぶと、TypeWhisperはローカルの復元用音声ファイルを作成しません。履歴の音声保存は別に管理され、クラウドエンジンは文字起こしのために音声を受信する場合があります。"
+            "value" : "復元用録音はこのMacにのみ保存されます。「すぐに」を選ぶと、dictumはローカルの復元用音声ファイルを作成しません。履歴の音声保存は別に管理され、クラウドエンジンは文字起こしのために音声を受信する場合があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "恢复录音仅存储在这台 Mac 上。选择“立即”后，TypeWhisper 不会创建本地恢复音频文件。历史记录中的音频由单独的设置控制，云端引擎仍可能接收音频以进行转录。"
+            "value" : "恢复录音仅存储在这台 Mac 上。选择“立即”后，dictum 不会创建本地恢复音频文件。历史记录中的音频由单独的设置控制，云端引擎仍可能接收音频以进行转录。"
           }
         }
       }
@@ -14474,18 +14474,18 @@
         }
       }
     },
-    "Browse add-ons on the TypeWhisper website and install them directly here." : {
+    "Browse add-ons on the dictum website and install them directly here." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperのウェブサイトでアドオンを探し、ここから直接インストールします。"
+            "value" : "dictumのウェブサイトでアドオンを探し、ここから直接インストールします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在 TypeWhisper 网站上浏览扩展插件，然后直接在此处安装。"
+            "value" : "在 dictum 网站上浏览扩展插件，然后直接在此处安装。"
           }
         }
       }
@@ -14882,24 +14882,24 @@
         }
       }
     },
-    "Choose a cloud-synced folder for TypeWhisper." : {
+    "Choose a cloud-synced folder for dictum." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wähle einen Cloud-synchronisierten Ordner für TypeWhisper."
+            "value" : "Wähle einen Cloud-synchronisierten Ordner für dictum."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper用のクラウド同期フォルダを選択してください。"
+            "value" : "dictum用のクラウド同期フォルダを選択してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "为 TypeWhisper 选择一个云同步文件夹。"
+            "value" : "为 dictum 选择一个云同步文件夹。"
           }
         }
       }
@@ -16659,18 +16659,18 @@
         }
       }
     },
-    "Create and manage the workflows TypeWhisper should actively run." : {
+    "Create and manage the workflows dictum should actively run." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperがアクティブに実行するワークフローを作成および管理します。"
+            "value" : "dictumがアクティブに実行するワークフローを作成および管理します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "创建和管理由 TypeWhisper 主动运行的工作流。"
+            "value" : "创建和管理由 dictum 主动运行的工作流。"
           }
         }
       }
@@ -17452,7 +17452,7 @@
       }
     },
     "Delete Sync Folder" : {
-      "comment" : "A button that deletes the private folder used by TypeWhisper for syncing.",
+      "comment" : "A button that deletes the private folder used by dictum for syncing.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
@@ -17469,38 +17469,38 @@
         }
       }
     },
-    "Delete the private TypeWhisper sync folder?" : {
+    "Delete the private dictum sync folder?" : {
       "comment" : "A confirmation dialog asking the user to delete the private folder used for syncing with their iCloud account.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要删除 TypeWhisper 的专用同步文件夹吗？"
+            "value" : "要删除 dictum 的专用同步文件夹吗？"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper専用の非公開同期フォルダを削除しますか？"
+            "value" : "dictum専用の非公開同期フォルダを削除しますか？"
           }
         }
       }
     },
-    "Delete TypeWhisper Account?" : {
+    "Delete dictum Account?" : {
       "comment" : "A confirmation dialog title.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要删除 TypeWhisper 账户吗？"
+            "value" : "要删除 dictum 账户吗？"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperアカウントを削除しますか？"
+            "value" : "dictumアカウントを削除しますか？"
           }
         }
       }
@@ -17607,7 +17607,7 @@
       }
     },
     "Devices" : {
-      "comment" : "A label displayed in the settings view that describes the number of devices that use TypeWhisper.",
+      "comment" : "A label displayed in the settings view that describes the number of devices that use dictum.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
@@ -19025,18 +19025,18 @@
         }
       }
     },
-    "Enter any TypeWhisper key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise." : {
+    "Enter any dictum key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ここにTypeWhisperのキーを入力してください。アプリがSupporter、Individual、Team、Enterpriseのいずれであるかを自動的に検出します。"
+            "value" : "ここにdictumのキーを入力してください。アプリがSupporter、Individual、Team、Enterpriseのいずれであるかを自動的に検出します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在此输入任意 TypeWhisper 密钥。应用会自动识别其属于支持者版、个人版、团队版还是企业版。"
+            "value" : "在此输入任意 dictum 密钥。应用会自动识别其属于支持者版、个人版、团队版还是企业版。"
           }
         }
       }
@@ -19603,24 +19603,24 @@
         }
       }
     },
-    "External plugin bundle %@ was kept for an older TypeWhisper line." : {
+    "External plugin bundle %@ was kept for an older dictum line." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das externe Plugin-Bundle %@ wurde für eine ältere TypeWhisper-Linie beibehalten."
+            "value" : "Das externe Plugin-Bundle %@ wurde für eine ältere dictum-Linie beibehalten."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "外部プラグインバンドル %@ は以前の TypeWhisper バージョン用に保持されました。"
+            "value" : "外部プラグインバンドル %@ は以前の dictum バージョン用に保持されました。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "外部插件包 %@ 已保留，供旧版 TypeWhisper 使用。"
+            "value" : "外部插件包 %@ 已保留，供旧版 dictum 使用。"
           }
         }
       }
@@ -20968,24 +20968,24 @@
         }
       }
     },
-    "I use TypeWhisper" : {
+    "I use dictum" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ich nutze TypeWhisper"
+            "value" : "Ich nutze dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "私はTypeWhisperを使用しています"
+            "value" : "私はdictumを使用しています"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "我的 TypeWhisper 用途"
+            "value" : "我的 dictum 用途"
           }
         }
       }
@@ -21882,40 +21882,40 @@
         }
       }
     },
-    "Installing %@ %@ will replace an older external plugin bundle (%@) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement." : {
+    "Installing %@ %@ will replace an older external plugin bundle (%@) that was kept for another dictum runtime. Older app versions may stop using that bundle after this replacement." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Installing %1$@ %2$@ will replace an older external plugin bundle (%3$@) that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement."
+            "value" : "Installing %1$@ %2$@ will replace an older external plugin bundle (%3$@) that was kept for another dictum runtime. Older app versions may stop using that bundle after this replacement."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ %@のインストールは、別のTypeWhisperランタイム用に保持されていた古い外部プラグインバンドル(%@)を置き換えます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
+            "value" : "%@ %@のインストールは、別のdictumランタイム用に保持されていた古い外部プラグインバンドル(%@)を置き換えます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装 %1$@ %2$@ 将替换为其他 TypeWhisper 运行环境保留的旧外部插件包（%3$@）。替换后，旧版应用可能无法继续使用该插件包。"
+            "value" : "安装 %1$@ %2$@ 将替换为其他 dictum 运行环境保留的旧外部插件包（%3$@）。替换后，旧版应用可能无法继续使用该插件包。"
           }
         }
       }
     },
-    "Installing this plugin will replace an older external bundle that was kept for another TypeWhisper runtime. Older app versions may stop using that bundle after this replacement." : {
+    "Installing this plugin will replace an older external bundle that was kept for another dictum runtime. Older app versions may stop using that bundle after this replacement." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプラグインをインストールすると、別のTypeWhisperランタイム用に保持されていた古い外部バンドルが置き換えられます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
+            "value" : "このプラグインをインストールすると、別のdictumランタイム用に保持されていた古い外部バンドルが置き換えられます。この置き換え後、古いアプリバージョンはそのバンドルの使用を停止する可能性があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装此插件将替换为其他 TypeWhisper 运行环境保留的旧外部插件包。替换后，旧版应用可能无法继续使用该插件包。"
+            "value" : "安装此插件将替换为其他 dictum 运行环境保留的旧外部插件包。替换后，旧版应用可能无法继续使用该插件包。"
           }
         }
       }
@@ -24137,24 +24137,24 @@
         }
       }
     },
-    "Missing SDK compatibility metadata for this TypeWhisper runtime." : {
+    "Missing SDK compatibility metadata for this dictum runtime." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Für diese TypeWhisper-Laufzeit fehlen die SDK-Kompatibilitätsangaben."
+            "value" : "Für diese dictum-Laufzeit fehlen die SDK-Kompatibilitätsangaben."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このTypeWhisperランタイム用のSDK互換性メタデータがありません。"
+            "value" : "このdictumランタイム用のSDK互換性メタデータがありません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "缺少与当前 TypeWhisper 运行环境匹配的 SDK 兼容性元数据。"
+            "value" : "缺少与当前 dictum 运行环境匹配的 SDK 兼容性元数据。"
           }
         }
       }
@@ -25675,25 +25675,25 @@
         }
       }
     },
-    "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access." : {
+    "The microphone sent only silence. Check that it is not muted and dictum has microphone access." : {
       "comment" : "Feedback shown when a dictation contained only digital silence.",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das Mikrofon hat nur Stille geliefert. Prüfe, ob es stummgeschaltet ist und TypeWhisper Mikrofonzugriff hat."
+            "value" : "Das Mikrofon hat nur Stille geliefert. Prüfe, ob es stummgeschaltet ist und dictum Mikrofonzugriff hat."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "マイクから無音しか届きませんでした。ミュートされていないか、TypeWhisperにマイクへのアクセスが許可されているか確認してください。"
+            "value" : "マイクから無音しか届きませんでした。ミュートされていないか、dictumにマイクへのアクセスが許可されているか確認してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "麦克风只传来了静音。请检查麦克风是否被静音，以及 TypeWhisper 是否有麦克风访问权限。"
+            "value" : "麦克风只传来了静音。请检查麦克风是否被静音，以及 dictum 是否有麦克风访问权限。"
           }
         }
       }
@@ -26618,18 +26618,18 @@
         }
       }
     },
-    "Open TypeWhisper add-ons website" : {
+    "Open dictum add-ons website" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperアドオンのウェブサイトを開く"
+            "value" : "dictumアドオンのウェブサイトを開く"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开 TypeWhisper 扩展网站"
+            "value" : "打开 dictum 扩展网站"
           }
         }
       }
@@ -32147,24 +32147,24 @@
         }
       }
     },
-    "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts." : {
+    "Requires the API server to be running. The CLI tool connects to dictum's API for fast transcription without model cold starts." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API für schnelle Transkription ohne Modell-Kaltstart."
+            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit dictums API für schnelle Transkription ohne Modell-Kaltstart."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "稼働中のAPIサーバーが必要です。CLIツールはTypeWhispers APIに接続し、モデルのウォームアップなしで高速な文字起こしを実行します。"
+            "value" : "稼働中のAPIサーバーが必要です。CLIツールはdictumのAPIに接続し、モデルのウォームアップなしで高速な文字起こしを実行します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要先运行 API 服务器。CLI 工具通过 TypeWhisper API 进行快速转录，避免模型冷启动。"
+            "value" : "需要先运行 API 服务器。CLI 工具通过 dictum API 进行快速转录，避免模型冷启动。"
           }
         }
       }
@@ -32235,26 +32235,26 @@
         }
       }
     },
-    "Restart TypeWhisper to finish updating." : {
-      "comment" : "A message that appears when TypeWhisper needs to be restarted to finish updating.",
+    "Restart dictum to finish updating." : {
+      "comment" : "A message that appears when dictum needs to be restarted to finish updating.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperを再起動してアップデートを完了してください。"
+            "value" : "dictumを再起動してアップデートを完了してください。"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Starte TypeWhisper neu, um das Update abzuschließen."
+            "value" : "Starte dictum neu, um das Update abzuschließen."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新启动 TypeWhisper 以完成更新。"
+            "value" : "重新启动 dictum 以完成更新。"
           }
         }
       }
@@ -34494,18 +34494,18 @@
         }
       }
     },
-    "Start with TypeWhisper defaults. You can add term packs later." : {
+    "Start with dictum defaults. You can add term packs later." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperのデフォルトから開始します。用語パックは後から追加できます。"
+            "value" : "dictumのデフォルトから開始します。用語パックは後から追加できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "从 TypeWhisper 默认设置开始，之后可以添加术语包。"
+            "value" : "从 dictum 默认设置开始，之后可以添加术语包。"
           }
         }
       }
@@ -34901,24 +34901,24 @@
         }
       }
     },
-    "Support TypeWhisper" : {
+    "Support dictum" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper unterstützen"
+            "value" : "dictum unterstützen"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperをサポート"
+            "value" : "dictumをサポート"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "支持 TypeWhisper"
+            "value" : "支持 dictum"
           }
         }
       }
@@ -35021,20 +35021,20 @@
         }
       }
     },
-    "Sync data stays in your selected cloud location and never passes through the TypeWhisper account service." : {
+    "Sync data stays in your selected cloud location and never passes through an account service." : {
       "comment" : "A description of how data is synced to iCloud.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同步数据保存在您选择的云端位置，且绝不会经过 TypeWhisper 账户服务。"
+            "value" : "同步数据保存在你选择的云端位置，不会经过账户服务。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同期データは選択したクラウドの保存先に保管され、TypeWhisperのアカウントサービスを経由しません。"
+            "value" : "同期データは選択したクラウドの保存先に保管され、アカウントサービスを経由しません。"
           }
         }
       }
@@ -35415,24 +35415,24 @@
         }
       }
     },
-    "Teach TypeWhisper your corrections and keep dictionaries and snippets in sync across Macs." : {
+    "Teach dictum your corrections and keep dictionaries and snippets in sync across Macs." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Bringe TypeWhisper deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
+            "value" : "Bringe dictum deine Korrekturen bei und halte Wörterbücher und Snippets auf deinen Macs synchron."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "让 TypeWhisper 学习你的纠正习惯，并在多台 Mac 之间同步词典和快捷短语。"
+            "value" : "让 dictum 学习你的纠正习惯，并在多台 Mac 之间同步词典和快捷短语。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperに修正内容を学習させ、複数のMacで辞書とスニペットを同期します。"
+            "value" : "dictumに修正内容を学習させ、複数のMacで辞書とスニペットを同期します。"
           }
         }
       }
@@ -36035,24 +36035,24 @@
         }
       }
     },
-    "The file is not a valid TypeWhisper settings backup." : {
+    "The file is not a valid dictum settings backup." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die Datei ist keine gültige TypeWhisper-Einstellungssicherung."
+            "value" : "Die Datei ist keine gültige dictum-Einstellungssicherung."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "该文件不是有效的 TypeWhisper 设置备份。"
+            "value" : "该文件不是有效的 dictum 设置备份。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このファイルは有効なTypeWhisperの設定バックアップではありません。"
+            "value" : "このファイルは有効なdictumの設定バックアップではありません。"
           }
         }
       }
@@ -36123,24 +36123,24 @@
         }
       }
     },
-    "The language change will take effect after restarting TypeWhisper." : {
+    "The language change will take effect after restarting dictum." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die Sprachänderung wird nach einem Neustart von TypeWhisper wirksam."
+            "value" : "Die Sprachänderung wird nach einem Neustart von dictum wirksam."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "言語の変更はTypeWhisperを再起動した後に反映されます。"
+            "value" : "言語の変更はdictumを再起動した後に反映されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重新启动 TypeWhisper 后，语言更改才会生效。"
+            "value" : "重新启动 dictum 后，语言更改才会生效。"
           }
         }
       }
@@ -36453,25 +36453,25 @@
         }
       }
     },
-    "These plugins could not be updated: %@. Successful updates remain installed. TypeWhisper was not restarted." : {
+    "These plugins could not be updated: %@. Successful updates remain installed. dictum was not restarted." : {
       "comment" : "An alert message listing failed plugin updates and explaining why the app did not restart. The argument is a comma-separated list of plugin names.",
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diese Plugins konnten nicht aktualisiert werden: %1$@. Erfolgreiche Updates bleiben installiert. TypeWhisper wurde nicht neu gestartet."
+            "value" : "Diese Plugins konnten nicht aktualisiert werden: %1$@. Erfolgreiche Updates bleiben installiert. dictum wurde nicht neu gestartet."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "次のプラグインを更新できませんでした：%1$@。成功した更新はインストールされたままです。TypeWhisperは再起動されませんでした。"
+            "value" : "次のプラグインを更新できませんでした：%1$@。成功した更新はインストールされたままです。dictumは再起動されませんでした。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以下插件无法更新：%1$@。成功的更新仍保持已安装状态。TypeWhisper 未重新启动。"
+            "value" : "以下插件无法更新：%1$@。成功的更新仍保持已安装状态。dictum 未重新启动。"
           }
         }
       }
@@ -36690,18 +36690,18 @@
         }
       }
     },
-    "This key could not be matched to a known TypeWhisper entitlement." : {
+    "This key could not be matched to a known dictum entitlement." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このキーを既知のTypeWhisperエンタイトルメントと照合できませんでした。"
+            "value" : "このキーを既知のdictumエンタイトルメントと照合できませんでした。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法将此密钥匹配到已知的 TypeWhisper 授权。"
+            "value" : "无法将此密钥匹配到已知的 dictum 授权。"
           }
         }
       }
@@ -36754,18 +36754,18 @@
         }
       }
     },
-    "This microphone can't be used by TypeWhisper for preview or recording." : {
+    "This microphone can't be used by dictum for preview or recording." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このマイクは、プレビューまたは録音のためにTypeWhisperで使用することはできません。"
+            "value" : "このマイクは、プレビューまたは録音のためにdictumで使用することはできません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 无法使用此麦克风进行预览或录音。"
+            "value" : "dictum 无法使用此麦克风进行预览或录音。"
           }
         }
       }
@@ -38202,116 +38202,116 @@
         }
       }
     },
-    "TypeWhisper" : {
+    "dictum" : {
       "comment" : "The title of the application.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper"
+            "value" : "dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper"
+            "value" : "dictum"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper"
+            "value" : "dictum"
           }
         }
       }
     },
-    "TypeWhisper can watch the target text field briefly after direct dictation insertion and learn only confident corrections. Ambiguous edits are skipped." : {
+    "dictum can watch the target text field briefly after direct dictation insertion and learn only confident corrections. Ambiguous edits are skipped." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
+            "value" : "dictum kann das Ziel-Textfeld kurz nach direktem Diktat-Einfügen beobachten und nur sichere Korrekturen lernen. Uneindeutige Bearbeitungen werden übersprungen."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 可在直接听写插入后短暂监视目标文本框，仅学习明确可信的纠正。含义不明确的编辑会被跳过。"
+            "value" : "dictum 可在直接听写插入后短暂监视目标文本框，仅学习明确可信的纠正。含义不明确的编辑会被跳过。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは音声入力を直接挿入した後、入力欄を短時間確認し、確実に判断できる修正のみを学習します。判断が曖昧な編集は学習しません。"
+            "value" : "dictumは音声入力を直接挿入した後、入力欄を短時間確認し、確実に判断できる修正のみを学習します。判断が曖昧な編集は学習しません。"
           }
         }
       }
     },
-    "TypeWhisper Dev" : {
+    "dictum Dev" : {
       "comment" : "The name of the app in development mode.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper Dev"
+            "value" : "dictum Dev"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper Dev"
+            "value" : "dictum Dev"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper Dev"
+            "value" : "dictum Dev"
           }
         }
       }
     },
-    "TypeWhisper gets better with every workflow" : {
+    "dictum gets better with every workflow" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper wird mit jedem Workflow besser"
+            "value" : "dictum wird mit jedem Workflow besser"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通过工作流，让 TypeWhisper 更贴合你的使用方式"
+            "value" : "通过工作流，让 dictum 更贴合你的使用方式"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "使うたびにTypeWhisperが使いやすくなります"
+            "value" : "使うたびにdictumが使いやすくなります"
           }
         }
       }
     },
-    "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder." : {
+    "dictum hides both icons until a window opens. To reopen Settings later, launch dictum from Spotlight or the Applications folder." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte TypeWhisper über Spotlight oder den Programme-Ordner."
+            "value" : "dictum blendet beide Symbole aus, bis wieder ein Fenster geöffnet wird. Um die Einstellungen später erneut zu öffnen, starte dictum über Spotlight oder den Programme-Ordner."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは、再度ウィンドウを開くまで両方のシンボルを非表示にします。後で設定を開きたい場合は、SpotlightまたはアプリケーションフォルダーからTypeWhisperを起動してください。"
+            "value" : "dictumは、再度ウィンドウを開くまで両方のシンボルを非表示にします。後で設定を開きたい場合は、Spotlightまたはアプリケーションフォルダーからdictumを起動してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 会隐藏两个图标，直到窗口打开。如需再次打开设置，请从 Spotlight 或“应用程序”文件夹启动 TypeWhisper。"
+            "value" : "dictum 会隐藏两个图标，直到窗口打开。如需再次打开设置，请从 Spotlight 或“应用程序”文件夹启动 dictum。"
           }
         }
       }
@@ -38360,256 +38360,256 @@
         }
       }
     },
-    "TypeWhisper is ready to help you work faster." : {
+    "dictum is ready to help you work faster." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperで作業を効率化する準備が整いました。"
+            "value" : "dictumで作業を効率化する準備が整いました。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 已准备就绪，可以帮助你提高效率。"
+            "value" : "dictum 已准备就绪，可以帮助你提高效率。"
           }
         }
       }
     },
-    "TypeWhisper is ready to use in any app." : {
+    "dictum is ready to use in any app." : {
       "comment" : "A message displayed below the success screen in the try it out step of the setup wizard.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper kann jetzt in jeder App verwendet werden."
+            "value" : "dictum kann jetzt in jeder App verwendet werden."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは今やどのアプリでも使用可能です。"
+            "value" : "dictumは今やどのアプリでも使用可能です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 已准备就绪，可在任何应用中使用。"
+            "value" : "dictum 已准备就绪，可在任何应用中使用。"
           }
         }
       }
     },
-    "TypeWhisper learns confident corrections after direct insertion, without asking for every edit." : {
+    "dictum learns confident corrections after direct insertion, without asking for every edit." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
+            "value" : "dictum lernt sichere Korrekturen nach direktem Einfügen, ohne bei jeder Bearbeitung nachzufragen."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 在直接插入后会自动学习明确可信的纠正，无需询问每次编辑。"
+            "value" : "dictum 在直接插入后会自动学习明确可信的纠正，无需询问每次编辑。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは直接入力後の修正のうち、確実に判断できるものを学習します。編集のたびに確認することはありません。"
+            "value" : "dictumは直接入力後の修正のうち、確実に判断できるものを学習します。編集のたびに確認することはありません。"
           }
         }
       }
     },
-    "TypeWhisper needs access to work on your Mac." : {
+    "dictum needs access to work on your Mac." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperをMacで動作させるにはアクセス権が必要です。"
+            "value" : "dictumをMacで動作させるにはアクセス権が必要です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 需要以下权限才能在你的 Mac 上运行。"
+            "value" : "dictum 需要以下权限才能在你的 Mac 上运行。"
           }
         }
       }
     },
-    "TypeWhisper only inserts the dictated text." : {
+    "dictum only inserts the dictated text." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperはディクテーションしたテキストのみを挿入します。"
+            "value" : "dictumはディクテーションしたテキストのみを挿入します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 仅插入听写文本。"
+            "value" : "dictum 仅插入听写文本。"
           }
         }
       }
     },
-    "TypeWhisper private iCloud container" : {
+    "dictum private iCloud container" : {
       "comment" : "The name of the iCloud folder used for automatic iCloud syncing.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 专用 iCloud 容器"
+            "value" : "dictum 专用 iCloud 容器"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper専用の非公開iCloud領域"
+            "value" : "dictum専用の非公開iCloud領域"
           }
         }
       }
     },
-    "TypeWhisper Setup" : {
+    "dictum Setup" : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper セットアップ"
+            "value" : "dictum セットアップ"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 设置"
+            "value" : "dictum 设置"
           }
         }
       }
     },
-    "TypeWhisper stays accessible via the Dock icon." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper bleibt über das Dock-Symbol erreichbar."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisperはドックのシンボルを通じてアクセス可能です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你可以随时通过程序坞图标打开 TypeWhisper。"
-          }
-        }
-      }
-    },
-    "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open." : {
+    "dictum stays accessible via the Dock icon." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
+            "value" : "dictum bleibt über das Dock-Symbol erreichbar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperはメニューバーに表示され、ウィンドウが開いていない間はドックのシンボルを非表示にします。"
+            "value" : "dictumはドックのシンボルを通じてアクセス可能です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有窗口打开时，TypeWhisper 会保留在菜单栏中并隐藏程序坞图标。"
+            "value" : "你可以随时通过程序坞图标打开 dictum。"
           }
         }
       }
     },
-    "TypeWhisper user data is unavailable." : {
+    "dictum stays in the menu bar and hides its Dock icon while no window is open." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper-Benutzerdaten sind nicht verfügbar."
+            "value" : "dictum bleibt in der Menüleiste und blendet sein Dock-Symbol aus, solange kein Fenster geöffnet ist."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperのユーザー情報が利用できません。"
+            "value" : "dictumはメニューバーに表示され、ウィンドウが開いていない間はドックのシンボルを非表示にします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无法访问 TypeWhisper 用户数据。"
+            "value" : "没有窗口打开时，dictum 会保留在菜单栏中并隐藏程序坞图标。"
           }
         }
       }
     },
-    "TypeWhisper will start automatically when you log in." : {
+    "dictum user data is unavailable." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper startet automatisch bei der Anmeldung."
+            "value" : "dictum-Benutzerdaten sind nicht verfügbar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ログイン時にTypeWhisperを自動起動します。"
+            "value" : "dictumのユーザー情報が利用できません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录系统时，TypeWhisper 将自动启动。"
+            "value" : "无法访问 dictum 用户数据。"
           }
         }
       }
     },
-    "TypeWhisper works with Raycast. Start dictation and more directly from your launcher." : {
+    "dictum will start automatically when you log in." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper funktioniert mit Raycast. Starte Diktat und mehr direkt aus deinem Launcher."
+            "value" : "dictum startet automatisch bei der Anmeldung."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperはRaycastと連携します。ランチャーから直接音声入力やその他の機能を起動できます。"
+            "value" : "ログイン時にdictumを自動起動します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 支持 Raycast，可直接从启动器开始听写并使用更多功能。"
+            "value" : "登录系统时，dictum 将自动启动。"
           }
         }
       }
     },
-    "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running." : {
+    "dictum works with Raycast. Start dictation and more directly from your launcher." : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dictum funktioniert mit Raycast. Starte Diktat und mehr direkt aus deinem Launcher."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperはRaycastと連携できます。ランチャーから直接ディクテーションなどを開始できます。APIサーバーが実行中である必要があります。"
+            "value" : "dictumはRaycastと連携します。ランチャーから直接音声入力やその他の機能を起動できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 支持 Raycast，可直接从启动器开始听写并使用更多功能。使用时需要运行 API 服务器。"
+            "value" : "dictum 支持 Raycast，可直接从启动器开始听写并使用更多功能。"
+          }
+        }
+      }
+    },
+    "dictum works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dictumはRaycastと連携できます。ランチャーから直接ディクテーションなどを開始できます。APIサーバーが実行中である必要があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dictum 支持 Raycast，可直接从启动器开始听写并使用更多功能。使用时需要运行 API 服务器。"
           }
         }
       }
@@ -38987,7 +38987,7 @@
       }
     },
     "Update All and Restart" : {
-      "comment" : "A button that updates every eligible installed plugin and restarts TypeWhisper after success.",
+      "comment" : "A button that updates every eligible installed plugin and restarts dictum after success.",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -39646,7 +39646,7 @@
       }
     },
     "Voice-powered typing for your Mac" : {
-      "comment" : "A description of TypeWhisper's primary feature.",
+      "comment" : "A description of dictum's primary feature.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
         "de" : {
@@ -40581,46 +40581,46 @@
         }
       }
     },
-    "Welcome to TypeWhisper" : {
+    "Welcome to dictum" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Willkommen bei TypeWhisper"
+            "value" : "Willkommen bei dictum"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperへようこそ"
+            "value" : "dictumへようこそ"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "欢迎使用 TypeWhisper"
+            "value" : "欢迎使用 dictum"
           }
         }
       }
     },
-    "Welcome to TypeWhisper!" : {
+    "Welcome to dictum!" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Willkommen bei TypeWhisper!"
+            "value" : "Willkommen bei dictum!"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperへようこそ！"
+            "value" : "dictumへようこそ！"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "欢迎使用 TypeWhisper！"
+            "value" : "欢迎使用 dictum！"
           }
         }
       }
@@ -40647,40 +40647,40 @@
         }
       }
     },
-    "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording." : {
+    "When disabled, dictum skips live transcript requests for the indicator and only runs the final transcription after you stop recording." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無効にすると、TypeWhisperはインジケーター用のライブテキストリクエストをスキップし、録音を停止した後にのみ最終的なテキスト生成が実行されます。"
+            "value" : "無効にすると、dictumはインジケーター用のライブテキストリクエストをスキップし、録音を停止した後にのみ最終的なテキスト生成が実行されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "禁用后，TypeWhisper 会跳过为指示器进行的实时转录请求，仅在你停止录音后运行最终转录。"
+            "value" : "禁用后，dictum 会跳过为指示器进行的实时转录请求，仅在你停止录音后运行最终转录。"
           }
         }
       }
     },
-    "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow." : {
+    "When enabled, dictum uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn aktiviert, nutzt TypeWhisper Regeln der Ziel-App und verfügbaren Cursor-Kontext für intelligenteres Einfügen. Die Ausgabeformat-Einstellungen des Workflows bestimmen weiterhin das eingefügte Format für jeden Workflow."
+            "value" : "Wenn aktiviert, nutzt dictum Regeln der Ziel-App und verfügbaren Cursor-Kontext für intelligenteres Einfügen. Die Ausgabeformat-Einstellungen des Workflows bestimmen weiterhin das eingefügte Format für jeden Workflow."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有効にすると、TypeWhisper は対象アプリのルールと利用可能なカーソルの文脈を使って、よりスマートに挿入します。ワークフローの出力形式設定は、各ワークフローで挿入する形式を引き続き決定します。"
+            "value" : "有効にすると、dictum は対象アプリのルールと利用可能なカーソルの文脈を使って、よりスマートに挿入します。ワークフローの出力形式設定は、各ワークフローで挿入する形式を引き続き決定します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "启用后，TypeWhisper 会结合目标应用规则和可用的光标上下文，更智能地插入文本。每个工作流最终仍按其输出格式设置插入内容。"
+            "value" : "启用后，dictum 会结合目标应用规则和可用的光标上下文，更智能地插入文本。每个工作流最终仍按其输出格式设置插入内容。"
           }
         }
       }
@@ -41612,25 +41612,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper startet die Aufnahme, sobald du diesem Meeting beitrittst."
+            "value" : "dictum startet die Aufnahme, sobald du diesem Meeting beitrittst."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper will start recording when you join this meeting."
+            "value" : "dictum will start recording when you join this meeting."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このミーティングに参加すると、TypeWhisperが録音を開始します。"
+            "value" : "このミーティングに参加すると、dictumが録音を開始します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "加入此会议后，TypeWhisper 会开始录音。"
+            "value" : "加入此会议后，dictum 会开始录音。"
           }
         }
       }
@@ -42452,25 +42452,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kalenderdaten bleiben auf diesem Mac. TypeWhisper erkennt nur, ob Meeting-Audio oder eine Kamera aktiv ist, und liest keine Audio- oder Bildinhalte. Titel werden nur in lokalen Mitteilungen, Einstellungen und Dateinamen verwendet."
+            "value" : "Kalenderdaten bleiben auf diesem Mac. dictum erkennt nur, ob Meeting-Audio oder eine Kamera aktiv ist, und liest keine Audio- oder Bildinhalte. Titel werden nur in lokalen Mitteilungen, Einstellungen und Dateinamen verwendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Calendar data stays on this Mac. TypeWhisper detects only whether meeting audio or a camera is active and never reads audio or video content. Titles are used only in local notifications, settings, and recording filenames."
+            "value" : "Calendar data stays on this Mac. dictum detects only whether meeting audio or a camera is active and never reads audio or video content. Titles are used only in local notifications, settings, and recording filenames."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "カレンダーデータはこのMacにのみ保存されます。TypeWhisperはミーティング音声またはカメラが使用中かどうかだけを検出し、音声や映像の内容を読み取りません。タイトルはローカル通知、設定、録音ファイル名にのみ使用されます。"
+            "value" : "カレンダーデータはこのMacにのみ保存されます。dictumはミーティング音声またはカメラが使用中かどうかだけを検出し、音声や映像の内容を読み取りません。タイトルはローカル通知、設定、録音ファイル名にのみ使用されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日历数据保留在这台 Mac 上。TypeWhisper 只检测会议音频或摄像头是否处于活动状态，不会读取音频或视频内容。标题仅用于本地通知、设置和录音文件名。"
+            "value" : "日历数据保留在这台 Mac 上。dictum 只检测会议音频或摄像头是否处于活动状态，不会读取音频或视频内容。标题仅用于本地通知、设置和录音文件名。"
           }
         }
       }
@@ -42648,13 +42648,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper fordert vollständigen Kalenderzugriff an, um unterstützte Meeting-Links in ausgewählten Kalendern zu finden. Danach wird die Mitteilungsberechtigung für Hinweise angefragt."
+            "value" : "dictum fordert vollständigen Kalenderzugriff an, um unterstützte Meeting-Links in ausgewählten Kalendern zu finden. Danach wird die Mitteilungsberechtigung für Hinweise angefragt."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper will request full calendar access to find supported meeting links in your selected calendars. Notification permission is requested afterward for reminders."
+            "value" : "dictum will request full calendar access to find supported meeting links in your selected calendars. Notification permission is requested afterward for reminders."
           }
         },
         "ja" : {
@@ -42666,7 +42666,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 将请求完整日历访问权限，以便在所选日历中查找支持的会议链接。之后会请求通知权限用于提醒。"
+            "value" : "dictum 将请求完整日历访问权限，以便在所选日历中查找支持的会议链接。之后会请求通知权限用于提醒。"
           }
         }
       }
@@ -43102,7 +43102,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Get a reminder for a scheduled meeting, or start recording after TypeWhisper confirms that you joined."
+            "value" : "Get a reminder for a scheduled meeting, or start recording after dictum confirms that you joined."
           }
         },
         "ja" : {
@@ -43114,7 +43114,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "获取预定会议提醒，或在 TypeWhisper 确认你已加入后开始录音。"
+            "value" : "获取预定会议提醒，或在 dictum 确认你已加入后开始录音。"
           }
         }
       }
@@ -44664,25 +44664,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Synchronisierte Inhalte bleiben in deinem gewählten Cloud-Speicher und werden nicht über den TypeWhisper-Kontodienst übertragen."
+            "value" : "Synchronisierte Inhalte bleiben in deinem gewählten Cloud-Speicher und werden nicht über einen Kontodienst übertragen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Synced content stays in your chosen cloud storage and does not pass through the TypeWhisper account service."
+            "value" : "Synced content stays in your chosen cloud storage and does not pass through an account service."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同期内容は選択したクラウドストレージに保存され、TypeWhisperのアカウントサービスを経由しません。"
+            "value" : "同期内容は選択したクラウドストレージに保存され、アカウントサービスを経由しません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同步内容保留在你选择的云存储中，不会经过 TypeWhisper 账户服务。"
+            "value" : "同步内容保留在你选择的云存储中，不会经过账户服务。"
           }
         }
       }
@@ -44804,25 +44804,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper-Konto löschen?"
+            "value" : "dictum-Konto löschen?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete TypeWhisper Account?"
+            "value" : "Delete dictum Account?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperアカウントを削除しますか？"
+            "value" : "dictumアカウントを削除しますか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要删除 TypeWhisper 账户吗？"
+            "value" : "要删除 dictum 账户吗？"
           }
         }
       }
@@ -44944,25 +44944,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper merkt sich nur eindeutige Änderungen und überspringt unsichere Bearbeitungen."
+            "value" : "dictum merkt sich nur eindeutige Änderungen und überspringt unsichere Bearbeitungen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper remembers only clear edits and skips uncertain changes."
+            "value" : "dictum remembers only clear edits and skips uncertain changes."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperは明確な修正だけを記憶し、不確かな変更はスキップします。"
+            "value" : "dictumは明確な修正だけを記憶し、不確かな変更はスキップします。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 仅记住明确的修改，并跳过不确定的更改。"
+            "value" : "dictum 仅记住明确的修改，并跳过不确定的更改。"
           }
         }
       }
@@ -44972,25 +44972,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Nach dem direkten Einfügen beobachtet TypeWhisper nur, ob du den Text eindeutig korrigierst."
+            "value" : "Nach dem direkten Einfügen beobachtet dictum nur, ob du den Text eindeutig korrigierst."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "After direct insertion, TypeWhisper only checks whether you make a clear correction."
+            "value" : "After direct insertion, dictum only checks whether you make a clear correction."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "直接挿入後、TypeWhisperは明確な修正が行われたかだけを確認します。"
+            "value" : "直接挿入後、dictumは明確な修正が行われたかだけを確認します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "直接插入后，TypeWhisper 只会检查你是否进行了明确的修正。"
+            "value" : "直接插入后，dictum 只会检查你是否进行了明确的修正。"
           }
         }
       }
@@ -45028,13 +45028,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gelernte Muster helfen TypeWhisper bei zukünftigen Einfügungen."
+            "value" : "Gelernte Muster helfen dictum bei zukünftigen Einfügungen."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Learned patterns help TypeWhisper with future insertions."
+            "value" : "Learned patterns help dictum with future insertions."
           }
         },
         "ja" : {
@@ -45046,7 +45046,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "学到的模式可帮助 TypeWhisper 改进今后的插入。"
+            "value" : "学到的模式可帮助 dictum 改进今后的插入。"
           }
         }
       }
@@ -46064,25 +46064,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Privater TypeWhisper-iCloud-Container"
+            "value" : "Privater dictum-iCloud-Container"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper private iCloud container"
+            "value" : "dictum private iCloud container"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperのプライベートiCloudコンテナ"
+            "value" : "dictumのプライベートiCloudコンテナ"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisper 专用 iCloud 容器"
+            "value" : "dictum 专用 iCloud 容器"
           }
         }
       }
@@ -46456,25 +46456,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Privaten TypeWhisper-Sync-Ordner löschen?"
+            "value" : "Privaten dictum-Sync-Ordner löschen?"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Delete the private TypeWhisper sync folder?"
+            "value" : "Delete the private dictum sync folder?"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TypeWhisperのプライベート同期フォルダを削除しますか？"
+            "value" : "dictumのプライベート同期フォルダを削除しますか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要删除 TypeWhisper 的专用同步文件夹吗？"
+            "value" : "要删除 dictum 的专用同步文件夹吗？"
           }
         }
       }
@@ -46736,13 +46736,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gilt für Termine, zu denen niemand sonst eingeladen ist, etwa private Termine mit Anruf-Link. TypeWhisper erinnert dich stattdessen und nimmt erst nach deiner Bestätigung auf."
+            "value" : "Gilt für Termine, zu denen niemand sonst eingeladen ist, etwa private Termine mit Anruf-Link. dictum erinnert dich stattdessen und nimmt erst nach deiner Bestätigung auf."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Applies to events nobody else is invited to, such as private appointments with a call link. TypeWhisper reminds you instead and records only after you confirm."
+            "value" : "Applies to events nobody else is invited to, such as private appointments with a call link. dictum reminds you instead and records only after you confirm."
           }
         },
         "ja" : {
@@ -46754,7 +46754,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "适用于没有邀请其他人的日历事件，例如带通话链接的私人日程。TypeWhisper 会改为提醒你，并在你确认后才开始录音。"
+            "value" : "适用于没有邀请其他人的日历事件，例如带通话链接的私人日程。dictum 会提醒你，并在你确认后才开始录音。"
           }
         }
       }
@@ -46764,13 +46764,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wähle die Meeting-Apps, für die TypeWhisper Termine erkennen darf."
+            "value" : "Wähle die Meeting-Apps, für die dictum Termine erkennen darf."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose the meeting apps TypeWhisper may recognize from calendar events."
+            "value" : "Choose the meeting apps dictum may recognize from calendar events."
           }
         },
         "ja" : {
@@ -46782,7 +46782,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选择 TypeWhisper 可从日历事件中识别的会议应用。"
+            "value" : "选择 dictum 可从日历事件中识别的会议应用。"
           }
         }
       }
@@ -46899,7 +46899,7 @@
     "This removes the selected history from every synchronized device. This cannot be undone." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dadurch wird der ausgewählte Verlauf von allen synchronisierten Geräten entfernt. Dies kann nicht rückgängig gemacht werden."}},"ja":{"stringUnit":{"state":"translated","value":"選択した履歴がすべての同期デバイスから削除されます。この操作は取り消せません。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"这会从所有已同步设备中移除所选历史记录，且无法撤销。"}}}},
     "This removes the selected history from this Mac. This cannot be undone." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dadurch wird der ausgewählte Verlauf von diesem Mac entfernt. Dies kann nicht rückgängig gemacht werden."}},"ja":{"stringUnit":{"state":"translated","value":"選択した履歴がこのMacから削除されます。この操作は取り消せません。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"这会从此 Mac 中移除所选历史记录，且无法撤销。"}}}},
     "With Audio" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mit Audio"}},"ja":{"stringUnit":{"state":"translated","value":"音声あり"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"含音频"}}}},
-    "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled TypeWhisper devices." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gespeicherter Text und der Posteingangsstatus werden deinem privaten Sync-Ordner hinzugefügt und auf deinen anderen aktivierten TypeWhisper-Geräten verfügbar."}},"ja":{"stringUnit":{"state":"translated","value":"保存済みのテキストと受信箱の状態がプライベート同期フォルダに追加され、有効化した他のTypeWhisperデバイスでも利用できるようになります。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已保存的文本和收件箱状态将添加到你的私人同步文件夹，并可在其他已启用的 TypeWhisper 设备上使用。"}}}},
+    "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled dictum devices." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gespeicherter Text und der Posteingangsstatus werden deinem privaten Sync-Ordner hinzugefügt und auf deinen anderen aktivierten dictum-Geräten verfügbar."}},"ja":{"stringUnit":{"state":"translated","value":"保存済みのテキストと受信箱の状態がプライベート同期フォルダに追加され、有効化した他のdictumデバイスでも利用できるようになります。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已保存的文本和收件箱状态将添加到你的私人同步文件夹，并可在其他已启用的 dictum 设备上使用。"}}}},
     "Your saved transcriptions will appear here." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine gespeicherten Transkriptionen erscheinen hier."}},"ja":{"stringUnit":{"state":"translated","value":"保存した文字起こしがここに表示されます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你保存的转录会显示在这里。"}}}},
     "iPhone & iPad" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iPhone & iPad"}},"ja":{"stringUnit":{"state":"translated","value":"iPhoneとiPad"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iPhone 和 iPad"}}}},
     "Choose an entry to read and edit its text or inspect its details." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle einen Eintrag aus, um seinen Text zu lesen und zu bearbeiten oder seine Details anzusehen."}},"ja":{"stringUnit":{"state":"translated","value":"項目を選択してテキストを読んだり編集したり、詳細を確認したりできます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择一个条目以阅读和编辑文本，或查看其详细信息。"}}}},

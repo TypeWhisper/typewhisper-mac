@@ -16,7 +16,7 @@ struct UserDataLocations: Sendable {
     /// per-user temporary directory: API uploads, recorder tracks, import
     /// scratch copies and export staging. Release and dev builds share that
     /// directory, so the bundle identifier keeps their items apart.
-    static let temporaryItemPrefix = "TypeWhisper-\(Bundle.main.bundleIdentifier ?? "com.typewhisper.mac")-"
+    static let temporaryItemPrefix = "dictum-\(Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum")-"
 
     static func temporaryItemURL(_ name: String, isDirectory: Bool = false) -> URL {
         FileManager.default.temporaryDirectory
@@ -31,7 +31,7 @@ struct UserDataLocations: Sendable {
     var preferencesDomain: String
 
     static func current(fileManager: FileManager = .default) -> UserDataLocations {
-        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+        let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum"
         let library = fileManager.urls(for: .libraryDirectory, in: .userDomainMask)[0]
 
         var auxiliaryItems: [URL] = [
@@ -158,7 +158,7 @@ enum UserDataExportService {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        return "TypeWhisper Data \(formatter.string(from: date)).zip"
+        return "dictum Data \(formatter.string(from: date)).zip"
     }
 
     /// Snapshots preferences on the calling actor, then copies files and builds
@@ -375,7 +375,7 @@ enum UserDataExportService {
     }
 
     private static let readme = """
-        TypeWhisper data export
+        dictum data export
 
         settings-backup.json
           Workflows, dictionary, snippets, profiles, prompt actions, hotkeys,

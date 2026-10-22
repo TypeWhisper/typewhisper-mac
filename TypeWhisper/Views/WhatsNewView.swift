@@ -15,7 +15,7 @@ struct WhatsNewView: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("New in TypeWhisper")
+                    Text("New in dictum")
                         .font(.system(size: 26, weight: .bold))
                         .accessibilityAddTraits(.isHeader)
                     Text("A few improvements for your everyday dictation.")
@@ -95,7 +95,7 @@ final class WhatsNewWindowController: NSWindowController, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = String(localized: "New in TypeWhisper")
+        window.title = String(localized: "New in dictum")
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isMovableByWindowBackground = true

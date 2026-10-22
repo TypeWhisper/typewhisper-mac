@@ -21,7 +21,7 @@ enum AppConstants {
 
     /// Preferences domain of screenshot runs, also for their managed preferences. The fastlane
     /// screenshot lane uses it as the bundle identifier; see `ScreenshotPreferencesIsolation`.
-    static let screenshotPreferencesDomain = "com.typewhisper.mac.screenshots"
+    static let screenshotPreferencesDomain = "com.schneidervvv.dictum.screenshots"
 
     /// The domain whose managed preferences (configuration profiles) apply to this process.
     static let managedPreferencesDomain = resolveManagedPreferencesDomain(
@@ -33,7 +33,7 @@ enum AppConstants {
         if isScreenshotAutomation {
             return screenshotPreferencesDomain
         }
-        return bundleIdentifier ?? "com.typewhisper.mac"
+        return bundleIdentifier ?? "com.schneidervvv.dictum"
     }
 
     /// The persistent domain `UserDefaults.standard` writes to; the app's own domain unless a
@@ -45,7 +45,7 @@ enum AppConstants {
         if isScreenshotAutomation {
             return screenshotPreferencesDomain
         }
-        return Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+        return Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum"
     }
 
     static let screenshotState: String? = {
@@ -157,28 +157,28 @@ enum AppConstants {
 
     static let appSupportDirectoryName: String = {
         #if DEBUG
-        return "TypeWhisper-Dev"
+        return "dictum-Dev"
         #else
-        return "TypeWhisper"
+        return "dictum"
         #endif
     }()
 
     static let keychainServicePrefix: String = {
         if isScreenshotAutomation {
-            return "com.typewhisper.mac.screenshots.apikey."
+            return "com.schneidervvv.dictum.screenshots.apikey."
         }
         // Tests must neither read nor delete the API keys of the installed app.
         if isRunningTests {
-            return "com.typewhisper.mac.tests.apikey."
+            return "com.schneidervvv.dictum.tests.apikey."
         }
         #if APPSTORE && DEBUG
         return "com.typewhisper.typewhisper-app.dev.apikey."
         #elseif APPSTORE
         return "com.typewhisper.typewhisper-app.apikey."
         #elseif DEBUG
-        return "com.typewhisper.mac.dev.apikey."
+        return "com.schneidervvv.dictum.apikey."
         #else
-        return "com.typewhisper.mac.apikey."
+        return "com.schneidervvv.dictum.apikey."
         #endif
     }()
 
@@ -212,7 +212,7 @@ enum AppConstants {
         #endif
     }
 
-    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum"
 
     static var appSupportDirectory: URL {
         if let override = testAppSupportDirectoryOverride {
@@ -278,7 +278,7 @@ enum AppConstants {
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
     private static let githubReleaseTagsURL = URL(
-        string: "https://github.com/TypeWhisper/typewhisper-mac/releases/tag"
+        string: "https://github.com/schneidervvv/dictum/releases/tag"
     )!
     static let currentReleaseFingerprint: String = {
         let channel = bundledReleaseChannel()
@@ -479,7 +479,7 @@ enum AppConstants {
     }
 }
 
-private let factoryLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SwiftDataStoreFactory")
+private let factoryLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SwiftDataStoreFactory")
 
 @MainActor
 struct SwiftDataStoreFactory {

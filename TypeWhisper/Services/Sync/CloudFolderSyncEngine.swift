@@ -342,7 +342,7 @@ enum CloudFolderSyncError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingStore:
-            String(localized: "TypeWhisper user data is unavailable.")
+            String(localized: "dictum user data is unavailable.")
         case .notEntitled:
             String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
         case .incompleteMigrationHistory:
@@ -1342,7 +1342,7 @@ enum CloudFolderSyncEngine {
     ) throws {
         let manifest = CloudFolderSyncManifest(
             schemaVersion: 1,
-            createdBy: "TypeWhisper",
+            createdBy: "dictum",
             updatedAt: now
         )
         try writeJSON(manifest, to: packageURL.appendingPathComponent(manifestFileName))

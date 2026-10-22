@@ -3,7 +3,7 @@ import SwiftData
 import Combine
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "ProfileService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "ProfileService")
 
 enum RuleMatchKind: String, Sendable {
     case appAndWebsite

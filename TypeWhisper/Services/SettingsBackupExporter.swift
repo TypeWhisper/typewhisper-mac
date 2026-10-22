@@ -334,7 +334,7 @@ enum SettingsBackupExporter {
         var errorDescription: String? {
             switch self {
             case .invalidFile:
-                return String(localized: "The file is not a valid TypeWhisper settings backup.")
+                return String(localized: "The file is not a valid dictum settings backup.")
             }
         }
     }

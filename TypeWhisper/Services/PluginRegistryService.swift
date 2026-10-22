@@ -2,7 +2,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginRegistry")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PluginRegistry")
 
 enum PluginDownloadError: LocalizedError {
     case httpStatus(Int)
@@ -639,7 +639,7 @@ final class PluginRegistryService: ObservableObject {
                     ?? pluginId
                 accessibilityAnnouncementService.announceError("\(name): \(message)")
             case .restartRequired:
-                accessibilityAnnouncementService.announce(String(localized: "Restart TypeWhisper to finish updating."))
+                accessibilityAnnouncementService.announce(String(localized: "Restart dictum to finish updating."))
             case .downloading, .extracting:
                 break
             }

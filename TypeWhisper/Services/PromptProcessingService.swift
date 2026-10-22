@@ -4,7 +4,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PromptProcessingService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PromptProcessingService")
 
 @MainActor
 protocol ProcessActivityManaging {

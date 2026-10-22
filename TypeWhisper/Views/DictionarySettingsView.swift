@@ -753,8 +753,8 @@ private struct DictionaryTrainingSheet: View {
                 localizedAppText("Choose the target word", de: "Zielwort auswählen"),
                 systemImage: "character.cursor.ibeam",
                 description: Text(localizedAppText(
-                    "TypeWhisper will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
-                    de: "TypeWhisper nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
+                    "dictum will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
+                    de: "dictum nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
                 ))
             )
 

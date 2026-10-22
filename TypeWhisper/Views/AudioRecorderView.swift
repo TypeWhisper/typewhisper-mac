@@ -204,7 +204,7 @@ struct AudioRecorderView: View {
                     || viewModel.trackMode == .separate
                 )
 
-                Text(String(localized: "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone."))
+                Text(String(localized: "Affects only dictum recordings and transcriptions, not your live meeting microphone."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

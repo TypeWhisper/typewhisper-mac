@@ -145,7 +145,7 @@ struct SetupWizardView: View {
 
     private var header: some View {
         VStack(spacing: 16) {
-            Text(localizedAppText("TypeWhisper Setup", de: "TypeWhisper Setup"))
+            Text(localizedAppText("dictum Setup", de: "dictum Setup"))
                 .font(.headline.weight(.semibold))
                 .foregroundStyle(.primary)
 
@@ -1338,7 +1338,7 @@ struct SetupWizardView: View {
     }
 
     private var trialSuccessMessage: String {
-        localizedAppText("TypeWhisper is ready to help you work faster.", de: "TypeWhisper ist bereit, damit du schneller arbeiten kannst.")
+        localizedAppText("dictum is ready to help you work faster.", de: "dictum ist bereit, damit du schneller arbeiten kannst.")
     }
 
     private var finishStep: some View {
@@ -1902,7 +1902,7 @@ private enum SetupWizardStep: Int, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .welcome:
-            localizedAppText("Welcome to TypeWhisper", de: "Willkommen bei TypeWhisper")
+            localizedAppText("Welcome to dictum", de: "Willkommen bei dictum")
         case .permissions:
             localizedAppText("Permissions", de: "Berechtigungen")
         case .hotkey:
@@ -1919,7 +1919,7 @@ private enum SetupWizardStep: Int, CaseIterable, Identifiable {
         case .welcome:
             localizedAppText("Set up voice typing in a few simple steps.", de: "Richte Voice Typing in wenigen Schritten ein.")
         case .permissions:
-            localizedAppText("TypeWhisper needs access to work on your Mac.", de: "TypeWhisper braucht Zugriff, um auf deinem Mac zu funktionieren.")
+            localizedAppText("dictum needs access to work on your Mac.", de: "dictum braucht Zugriff, um auf deinem Mac zu funktionieren.")
         case .hotkey:
             localizedAppText("Start and stop dictation without leaving your app.", de: "Starte und stoppe Diktat, ohne deine App zu verlassen.")
         case .engineAI:

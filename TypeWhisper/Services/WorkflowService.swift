@@ -4,7 +4,7 @@ import Combine
 import os.log
 
 private let workflowLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "WorkflowService"
 )
 

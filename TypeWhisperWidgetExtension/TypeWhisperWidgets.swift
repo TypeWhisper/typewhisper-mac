@@ -2,7 +2,7 @@ import WidgetKit
 import SwiftUI
 import os.log
 
-private let logger = Logger(subsystem: "com.typewhisper.mac.dev.widgets", category: "Timeline")
+private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum.widgets", category: "Timeline")
 
 struct TypeWhisperEntry: TimelineEntry {
     let date: Date

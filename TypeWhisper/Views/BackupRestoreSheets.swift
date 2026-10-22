@@ -90,7 +90,7 @@ struct BackupImportSheet: View {
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
                     Text(backup == nil
-                         ? localizedAppText("Choose a TypeWhisper settings backup file.", de: "Wähle eine TypeWhisper-Sicherungsdatei aus.")
+                         ? localizedAppText("Choose a dictum settings backup file.", de: "Wähle eine dictum-Sicherungsdatei aus.")
                          : localizedAppText("Choose what to restore from this file.", de: "Wähle aus, was aus dieser Datei wiederhergestellt werden soll."))
                         .font(.caption)
                         .foregroundStyle(.secondary)

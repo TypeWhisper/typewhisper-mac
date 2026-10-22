@@ -3,7 +3,7 @@ import Foundation
 import os
 
 private let clipboardFormatterLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "ClipboardContentFormatter"
 )
 

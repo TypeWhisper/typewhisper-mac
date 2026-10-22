@@ -6,7 +6,7 @@ struct StatsWidgetView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("TypeWhisper", systemImage: "mic.fill")
+            Label("dictum", systemImage: "mic.fill")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 

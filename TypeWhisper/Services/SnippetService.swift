@@ -3,7 +3,7 @@ import SwiftData
 import Combine
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SnippetService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SnippetService")
 
 @MainActor
 final class SnippetService: ObservableObject {

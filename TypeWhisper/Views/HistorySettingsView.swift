@@ -106,7 +106,7 @@ struct HistorySettingsView: View {
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
-            Text(String(localized: "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled TypeWhisper devices."))
+                    Text(String(localized: "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled dictum devices."))
         }
         .confirmationDialog(
             String(localized: "Delete All History?"),

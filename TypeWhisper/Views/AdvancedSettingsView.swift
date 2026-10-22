@@ -37,14 +37,14 @@ struct AdvancedSettingsView: View {
     private var browserExtensionInfoText: String {
         if browserExtensionConnected {
             return localizedAppText(
-                "A browser extension has connected to TypeWhisper. It reports the active website, so website workflows match the page you are on.",
-                de: "Eine Browser-Erweiterung hat sich mit TypeWhisper verbunden. Sie meldet die aktive Website, damit Website-Workflows zur geöffneten Seite passen."
+                "A browser extension has connected to dictum. It reports the active website, so website workflows match the page you are on.",
+                de: "Eine Browser-Erweiterung hat sich mit dictum verbunden. Sie meldet die aktive Website, damit Website-Workflows zur geöffneten Seite passen."
             )
         }
 #if APPSTORE
         return localizedAppText(
-            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because TypeWhisper cannot read browser addresses itself. Requires the API server to be running.",
-            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil TypeWhisper Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
+            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because dictum cannot read browser addresses itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil dictum Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
         )
 #else
         return localizedAppText(
@@ -163,8 +163,8 @@ struct AdvancedSettingsView: View {
                     }
 
                     SettingsInfoButton(text: localizedAppText(
-                        "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
-                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
+                        "Export creates a ZIP archive with everything dictum stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits dictum.",
+                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was dictum auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet dictum."
                     ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据"))
                 }
                 .confirmationDialog(
@@ -176,8 +176,8 @@ struct AdvancedSettingsView: View {
                     }
                 } message: {
                     Text(localizedAppText(
-                        "TypeWhisper deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded and imported models, API keys and license activation on this Mac, then quits. Imported models are not part of the data export. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
-                        de: "TypeWhisper löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene und importierte Modelle, API-Schlüssel und die Lizenzaktivierung auf diesem Mac und beendet sich danach. Importierte Modelle sind nicht im Datenexport enthalten. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
+                        "dictum deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded and imported models and API keys on this Mac, then quits. Imported models are not part of the data export. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
+                        de: "dictum löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene und importierte Modelle und API-Schlüssel auf diesem Mac und beendet sich danach. Importierte Modelle sind nicht im Datenexport enthalten. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
                     ))
                 }
             }
@@ -475,10 +475,10 @@ struct AdvancedSettingsView: View {
                     SettingsInfoLabel(
                         title: String(localized: "Require API Token"),
                         info: localizedAppText(
-                            "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in TypeWhisper's Application Support folder.",
-                            de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von TypeWhisper.",
-                            ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、TypeWhisper の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
-                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 TypeWhisper 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
+                            "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in dictum's Application Support folder.",
+                            de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von dictum.",
+                            ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、dictum の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
+                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 dictum 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
                         )
                     )
                 }
@@ -588,7 +588,7 @@ struct AdvancedSettingsView: View {
                         }
 
                         SettingsInfoButton(
-                            text: String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."),
+                            text: String(localized: "Requires the API server to be running. The CLI tool connects to dictum's API for fast transcription without model cold starts."),
                             topic: String(localized: "Command Line Tool")
                         )
                     }
@@ -630,7 +630,7 @@ struct AdvancedSettingsView: View {
                             .accessibilityLabel(learnMoreAccessibilityLabel(about: raycastTitle))
 
                             SettingsInfoButton(
-                                text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."),
+                                text: String(localized: "dictum works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."),
                                 topic: raycastTitle
                             )
                         }
@@ -641,7 +641,7 @@ struct AdvancedSettingsView: View {
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
                         Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
-                            NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
+                            NSWorkspace.shared.open(URL(string: "https://github.com/schneidervvv/dictum")!)
                         }
                         .accessibilityLabel(learnMoreAccessibilityLabel(about: browserExtensionTitle))
 

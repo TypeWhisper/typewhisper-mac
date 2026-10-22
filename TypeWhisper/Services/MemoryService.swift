@@ -2,7 +2,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MemoryService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "MemoryService")
 
 enum MemoryCaptureScope: String, CaseIterable, Identifiable, Hashable {
     case allDictations

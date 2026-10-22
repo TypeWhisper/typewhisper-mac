@@ -210,8 +210,8 @@ private struct MyWorkflowsPage: View {
         SettingsPageHeader(
             localizedAppText("Workflows", de: "Workflows"),
             summary: localizedAppText(
-                "Create and manage the workflows TypeWhisper should actively run.",
-                de: "Erstelle und verwalte die Workflows, die TypeWhisper aktiv ausführen soll."
+                "Create and manage the workflows dictum should actively run.",
+                de: "Erstelle und verwalte die Workflows, die dictum aktiv ausführen soll."
             )
         ) {
             Button {
@@ -2263,8 +2263,8 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 10) {
             #if APPSTORE
             Text(localizedAppText(
-                "Matches in browsers with the TypeWhisper extension.",
-                de: "Greift in Browsern mit der TypeWhisper-Erweiterung."
+                "Matches in browsers with the dictum extension.",
+                de: "Greift in Browsern mit der dictum-Erweiterung."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)

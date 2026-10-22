@@ -6,7 +6,7 @@ struct WidgetData: Codable {
     var recentHistory: [WidgetHistoryItem]
     var lastUpdated: Date
 
-    static let groupIdentifier = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String ?? "2D8ALY3LCL.com.typewhisper.mac"
+    static let groupIdentifier = Bundle.main.object(forInfoDictionaryKey: "AppGroupIdentifier") as? String ?? "com.schneidervvv.dictum"
     static let fileName = "widgetData.json"
 
     static var empty: WidgetData {
@@ -25,7 +25,7 @@ struct WidgetData: Codable {
     }
 
     // Serial so overlapping saves are written in submission order.
-    private static let saveQueue = DispatchQueue(label: "com.typewhisper.widgetdata.save", qos: .utility)
+    private static let saveQueue = DispatchQueue(label: "com.schneidervvv.dictum.widgetdata.save", qos: .utility)
 
     static func load() -> WidgetData {
         guard let url = sharedFileURL,

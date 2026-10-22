@@ -126,7 +126,7 @@ struct ManagedSettingsSection: View {
                         Text(String(localized: "Last checked \(snapshot.readAt.formatted(date: .omitted, time: .standard))"))
                             .font(.caption)
                     }
-                    Text(String(localized: "TypeWhisper checks again every 30 seconds and when it becomes active."))
+                    Text(String(localized: "dictum checks again every 30 seconds and when it becomes active."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

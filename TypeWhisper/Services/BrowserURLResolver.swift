@@ -3,7 +3,7 @@ import Foundation
 import os
 
 private let browserURLResolverLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "BrowserURLResolver"
 )
 private let browserURLResolutionQueue = DispatchQueue(

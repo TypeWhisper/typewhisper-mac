@@ -111,8 +111,8 @@ enum UserDataEraser {
     /// the wipe, and they could write the deleted data back.
     private static func presentFailuresAfterExit(_ failures: [Failure]) {
         let title = localizedAppText(
-            "Some TypeWhisper data could not be deleted",
-            de: "Einige TypeWhisper-Daten konnten nicht gelöscht werden"
+            "Some dictum data could not be deleted",
+            de: "Einige dictum-Daten konnten nicht gelöscht werden"
         )
         let message = failures
             .map { "\($0.item): \($0.message)" }

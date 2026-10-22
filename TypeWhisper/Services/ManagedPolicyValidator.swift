@@ -184,9 +184,9 @@ enum ManagedPolicyValidator {
 
         for name in section.keys.sorted() where ManagedPolicyKeys.definition(named: name) == nil {
             let message = if let match = ManagedPolicyKeys.caseInsensitiveMatch(for: name) {
-                "\(name) is not a TypeWhisper managed setting; keys are case-sensitive (did you mean \(match)?)."
+                "\(name) is not a dictum managed setting; keys are case-sensitive (did you mean \(match)?)."
             } else {
-                "\(name) is not a TypeWhisper managed setting and is not applied as one."
+                "\(name) is not a dictum managed setting and is not applied as one."
             }
             issues.append(ManagedPolicyIssue(key: name, scope: scope, message: message))
         }

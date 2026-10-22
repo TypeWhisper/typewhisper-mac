@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "AppFormatterService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "AppFormatterService")
 
 enum WorkflowOutputFormatResolver {
     static let automaticFormat = "auto"

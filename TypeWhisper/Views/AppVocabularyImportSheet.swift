@@ -144,7 +144,7 @@ struct AppVocabularyImportSheet: View {
                 Text(String(localized: "No compatible entries found. Nothing was changed."))
             }
             if model.destination == .snippets {
-                Text(String(localized: "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text."))
+                Text(String(localized: "Snippets containing dictum dynamic placeholders are excluded to preserve literal text."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

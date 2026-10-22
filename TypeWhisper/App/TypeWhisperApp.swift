@@ -125,7 +125,7 @@ struct SetupManagedAppWindowScene: Scene {
     let content: AnyView
 
     var body: some Scene {
-        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
+        Window(String(localized: "dictum Setup"), id: "setup") {
             content
                 .disablesManagedAppWindowRestoration()
         }
@@ -314,7 +314,7 @@ private struct MenuBarExtraLabel: View {
     @StateObject private var icon = MenuBarIconModel()
 
     private var title: String {
-        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+        AppConstants.isDevelopment ? "dictum Dev" : "dictum"
     }
 
     private var isRecordingActive: Bool {
@@ -1461,7 +1461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let title = window.title
         return title == String(localized: "Settings")
-            || title == String(localized: "TypeWhisper Setup")
+            || title == String(localized: "dictum Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
     }

@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Transcribe with TypeWhisper</string>
+	<string>Transcribe with dictum</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -33,7 +33,7 @@
 			<key>NSExtensionServiceFinderPreviewIconName</key>
 			<string>FinderActionIcon</string>
 			<key>NSExtensionServiceFinderPreviewLabel</key>
-			<string>Transcribe with TypeWhisper</string>
+			<string>Transcribe with dictum</string>
 			<key>NSExtensionServiceRoleType</key>
 			<string>NSExtensionServiceRoleTypeViewer</string>
 		</dict>

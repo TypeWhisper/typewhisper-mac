@@ -59,11 +59,11 @@ struct AppearanceSettingsView: View {
     private var appVisibilityDescription: LocalizedStringKey {
         switch appVisibilityMode {
         case .menuBar:
-            "TypeWhisper stays in the menu bar and hides its Dock icon while no window is open."
+            "dictum stays in the menu bar and hides its Dock icon while no window is open."
         case .dock:
-            "TypeWhisper stays accessible via the Dock icon."
+            "dictum stays accessible via the Dock icon."
         case .dockWhileWindowOpen:
-            "TypeWhisper hides both icons until a window opens. To reopen Settings later, launch TypeWhisper from Spotlight or the Applications folder."
+            "dictum hides both icons until a window opens. To reopen Settings later, launch dictum from Spotlight or the Applications folder."
         }
     }
 
@@ -154,7 +154,7 @@ struct AppearanceSettingsView: View {
                         .disabled(!dictation.indicatorTranscriptPreviewEnabled)
 
                         if !dictation.indicatorTranscriptPreviewEnabled {
-                            Text(String(localized: "When disabled, TypeWhisper skips live transcript requests for the indicator and only runs the final transcription after you stop recording."))
+                            Text(String(localized: "When disabled, dictum skips live transcript requests for the indicator and only runs the final transcription after you stop recording."))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

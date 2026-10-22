@@ -1391,7 +1391,7 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
                 ))
 
-                Text(String(localized: "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
+                Text(String(localized: "When enabled, dictum uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

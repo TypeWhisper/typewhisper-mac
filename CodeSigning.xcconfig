@@ -1,4 +1,4 @@
-// TypeWhisper Code Signing Configuration
+// dictum 签名配置
 //
 // To use your own signing identity, create CodeSigning.local.xcconfig:
 //   echo 'DEVELOPMENT_TEAM = YOUR_TEAM_ID' > CodeSigning.local.xcconfig
@@ -6,6 +6,6 @@
 // Find your Team ID: Xcode > Settings > Accounts > select team
 
 #include? "CodeSigning.local.xcconfig"
-APP_GROUP_ID = $(DEVELOPMENT_TEAM).com.typewhisper.mac
+APP_GROUP_ID = $(DEVELOPMENT_TEAM).com.schneidervvv.dictum
 TYPEWHISPER_RELEASE_CHANNEL = stable
 TYPEWHISPER_RELEASE_TAG =

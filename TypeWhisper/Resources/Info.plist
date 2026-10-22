@@ -14,15 +14,15 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
-			<string>com.typewhisper.mac.community</string>
+			<string>com.schneidervvv.dictum</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>typewhisper</string>
+				<string>dictum</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleName</key>
-	<string>TypeWhisper</string>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
@@ -44,21 +44,21 @@
 		<string>_typewhisper._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>TypeWhisper lets your paired iPhone and iPad use this Mac for transcription over the local network.</string>
+	<string>dictum lets your paired iPhone and iPad use this Mac for transcription over the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
+	<string>dictum needs microphone access for speech-to-text transcription.</string>
 	<key>NSServices</key>
 	<array>
 		<dict>
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Transcribe with TypeWhisper</string>
+				<string>Transcribe with dictum</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>transcribeFiles</string>
 			<key>NSPortName</key>
-			<string>TypeWhisper</string>
+			<string>dictum</string>
 			<key>NSRequiredContext</key>
 			<dict>
 				<key>NSApplicationIdentifier</key>
@@ -70,13 +70,13 @@
 				<string>public.movie</string>
 			</array>
 			<key>NSServiceDescription</key>
-			<string>Queue selected audio and video files for transcription in TypeWhisper.</string>
+			<string>Queue selected audio and video files for transcription in dictum.</string>
 		</dict>
 	</array>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
+	<string>dictum detects the current browser URL to apply language profiles automatically.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>TypeWhisper uses your selected calendars to remind you about meetings and, when enabled, start recordings after a matching live join signal.</string>
+	<string>dictum uses your selected calendars to remind you about meetings and, when enabled, start recordings after a matching live join signal.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

@@ -2,14 +2,14 @@ import Foundation
 
 enum PremiumICloudBridgeConstants {
     static let productionServiceBundleIdentifier =
-        "com.typewhisper.typewhisper-mac"
-    static let productionContainerIdentifier = "iCloud.com.typewhisper.sync"
+        "com.schneidervvv.dictum.icloudbridge"
+    static let productionContainerIdentifier = "iCloud.com.schneidervvv.dictum"
     static let serviceBundleIdentifierInfoKey =
         "TypeWhisperICloudBridgeServiceIdentifier"
     static let containerIdentifierInfoKey = "TypeWhisperICloudContainer"
-    static let packageDirectoryName = "typewhisper-sync"
+    static let packageDirectoryName = "dictum-sync"
     /// Hidden, so the mirror never copies it into the package.
-    static let mirrorStateFileName = ".typewhisper-sync-mirror-state.json"
+    static let mirrorStateFileName = ".dictum-sync-mirror-state.json"
 
     static func serviceBundleIdentifier(
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary
@@ -59,7 +59,7 @@ enum PremiumICloudBridgeConstants {
         let root = container
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Application Support", isDirectory: true)
-            .appendingPathComponent("TypeWhisper", isDirectory: true)
+            .appendingPathComponent("dictum", isDirectory: true)
             .appendingPathComponent("ICloudBridge", isDirectory: true)
         guard let namespace = localMirrorNamespace(
             infoDictionary: bundle.infoDictionary
@@ -114,7 +114,7 @@ enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
         case .serviceUnavailable:
             "The private iCloud sync helper is unavailable."
         case .appGroupUnavailable:
-            "The shared TypeWhisper container is unavailable."
+            "The shared dictum container is unavailable."
         case .iCloudUnavailable:
             "Sign in to iCloud and enable iCloud Drive to use automatic sync."
         case let .operationFailed(message):

@@ -2,7 +2,7 @@ import Foundation
 import os.log
 
 private let logger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "WorkflowSegmentedPostProcessing"
 )
 
