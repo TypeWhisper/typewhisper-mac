@@ -24503,12 +24503,20 @@ extension TypeWhisperIntegrationTests {
         )
     }
 
+    /// Without countdowns and indicator, a meeting still starts and stops at the
+    /// same deadlines, with nothing on screen (#1079).
+    @MainActor
+    func testHiddenMeetingRecordingStartsAndStopsWithoutCountdowns() async throws {
+        try await exerciseMeetingAutoStopWithoutNotifications(adHoc: false, browser: false, showsIndicator: false)
+    }
+
     @MainActor
     private func exerciseMeetingAutoStopWithoutNotifications(
         adHoc: Bool, browser: Bool, deferForComparison: Bool = false,
         nativeBundleIdentifier: String = "us.zoom.xos",
         meetingTabURL: URL = URL(string: "https://meet.google.com/abc-defg-hij")!,
-        storedProviderIDs: [String]? = nil
+        storedProviderIDs: [String]? = nil,
+        showsIndicator: Bool = true
     ) async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         let suite = "MeetingRuntime-\(UUID().uuidString)"
@@ -24523,6 +24531,9 @@ extension TypeWhisperIntegrationTests {
         defaults.set(adHoc, forKey: UserDefaultsKeys.calendarMeetingDetectAdHoc)
         if let storedProviderIDs {
             defaults.set(storedProviderIDs, forKey: UserDefaultsKeys.calendarMeetingEnabledProviderIDs)
+        }
+        if !showsIndicator {
+            defaults.set(false, forKey: UserDefaultsKeys.calendarMeetingShowsIndicator)
         }
         let context = Self.makeDictationContext(appSupportDirectory: directory)
         let recorderService = AudioRecorderService()
@@ -24583,7 +24594,11 @@ extension TypeWhisperIntegrationTests {
         await controller.testingActivity(MeetingActivitySnapshot(capturedAt: now, availability: .available, processes: [process]))
         now = initialTime.addingTimeInterval(adHoc ? (browser ? 20 : 5) : 3)
         await controller.testingAdvanceTime()
-        XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        if showsIndicator {
+            XCTAssertEqual(countdown.presentation?.kind.isStart, true)
+        } else {
+            XCTAssertNil(countdown.presentation)
+        }
         if deferForComparison {
             HistoryRetranscriptionActivity.recordID = UUID()
         }
@@ -24604,6 +24619,8 @@ extension TypeWhisperIntegrationTests {
         }
         XCTAssertEqual(recorder.state, .recording)
         XCTAssertNil(countdown.presentation)
+        XCTAssertEqual(recorder.isIndicatorHidden, !showsIndicator)
+        XCTAssertEqual(recorder.indicatorState, showsIndicator ? .recording : .idle)
 
         // Switching away from the meeting did not prevent the start; removing
         // its background tab is observed even though browser audio is unchanged.
@@ -24618,6 +24635,15 @@ extension TypeWhisperIntegrationTests {
             XCTAssertNil(countdown.presentation)
             now = now.addingTimeInterval(90)
             await controller.testingAdvanceTime()
+        }
+        if !showsIndicator {
+            XCTAssertNil(countdown.presentation)
+            XCTAssertEqual(notifications.autoStopAttempts, 0)
+            now = now.addingTimeInterval(60)
+            await controller.testingAdvanceTime()
+            XCTAssertNotEqual(recorder.state, .recording, "The hidden recording stops at the deadline")
+            XCTAssertFalse(recorder.isIndicatorHidden)
+            return
         }
         XCTAssertEqual(countdown.presentation?.kind, .autoStop)
         XCTAssertEqual(notifications.autoStopAttempts, 1)

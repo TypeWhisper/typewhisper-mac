@@ -47,6 +47,24 @@ struct CalendarMeetingSettingsSection: View {
                     Text(String(localized: "calendarMeeting.settings.startModeHelp"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if controller.startMode != .off {
+                        Divider()
+
+                        Toggle(
+                            String(localized: "calendarMeeting.settings.showIndicator"),
+                            isOn: Binding(
+                                get: { controller.showsMeetingIndicator },
+                                set: { controller.setShowsMeetingIndicator($0) }
+                            )
+                        )
+                        .toggleStyle(.switch)
+                        .accessibilityIdentifier("calendarMeeting.showIndicator")
+
+                        Text(String(localized: "calendarMeeting.settings.showIndicatorHelp"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
