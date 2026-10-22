@@ -9,6 +9,7 @@
     "description": "LLM provider and cloud speech transcription via Mistral AI API. Requires API key.",
     "descriptions": {
         "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key.",
+        "es": "Proveedor de LLM y transcripción de voz en la nube con la API de Mistral AI. Requiere una clave de API.",
         "ja": "Mistral AI APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
     },
     "category": "transcription",

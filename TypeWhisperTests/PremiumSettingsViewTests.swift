@@ -46,6 +46,10 @@ final class PremiumSettingsViewTests: XCTestCase {
             simplifiedChinese.map(\.after),
             ["应该", "再次"]
         )
+
+        let spanish = PremiumCorrectionExamples.examples(for: "es-MX")
+        XCTAssertEqual(spanish.map(\.before), ["nesecito", "haiga"])
+        XCTAssertEqual(spanish.map(\.after), ["necesito", "haya"])
     }
 
     @MainActor

@@ -349,7 +349,8 @@ struct LanguageChip: View {
                     "\(title), position \(priority)",
                     de: "\(title), Position \(priority)",
                     ja: "\(title)、\(priority)番目",
-                    zh: "\(title)，第 \(priority) 位"
+                    zh: "\(title)，第 \(priority) 位",
+                    es: "\(title), posición \(priority)"
                 ))
                 .accessibilityActions {
                     if canMoveEarlier {
@@ -371,7 +372,8 @@ struct LanguageChip: View {
                 "Move \(title) earlier",
                 de: "\(title) nach vorne verschieben",
                 ja: "\(title)を前に移動",
-                zh: "将 \(title) 前移"
+                zh: "将 \(title) 前移",
+                es: "Mover \(title) antes"
             ))
 
             Button(action: moveLaterAction) {
@@ -385,7 +387,8 @@ struct LanguageChip: View {
                 "Move \(title) later",
                 de: "\(title) nach hinten verschieben",
                 ja: "\(title)を後ろに移動",
-                zh: "将 \(title) 后移"
+                zh: "将 \(title) 后移",
+                es: "Mover \(title) después"
             ))
 
             Button(action: removeAction) {

@@ -9,6 +9,12 @@
             "value": "%@ löschen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Modelle aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "%@ sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -119,6 +149,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +171,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "Add Profile": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agregar perfil"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -201,6 +255,12 @@
     },
     "Delete": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eliminar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -223,6 +283,12 @@
     },
     "Profile Name": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del perfil"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -245,6 +311,12 @@
     },
     "Profile name": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del perfil"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -267,6 +339,12 @@
     },
     "Profiles": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Perfiles"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -289,6 +367,12 @@
     },
     "Select a profile": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Selecciona un perfil"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -311,6 +395,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -339,6 +429,12 @@
             "value": "API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -359,6 +455,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Version"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión de la API"
           }
         },
         "ja": {
@@ -383,6 +485,12 @@
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -403,6 +511,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto"
           }
         },
         "ja": {
@@ -427,6 +541,12 @@
             "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um den ausgewählten Batch-Transkriptionsendpunkt zu verwenden."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto solo usa la transmisión en tiempo real para los ID de modelo en tiempo real conocidos (gpt-live-transcribe, gpt-realtime-whisper) y, si no, la subida por lotes. Elige En tiempo real para forzar la transmisión con cualquier servidor compatible con OpenAI que admita la API WebSocket /v1/realtime, incluidos los alias de implementación personalizados (p. ej., una implementación de gpt-live-transcribe en Azure OpenAI o Microsoft Foundry); algunos proveedores, como Azure, requieren una versión preliminar de la API para la transcripción en tiempo real. Elige Por lotes para usar el endpoint de transcripción por lotes seleccionado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -447,6 +567,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Einige Server erfordern eine API-Version. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version; Echtzeitendpunkte möglicherweise eine Vorschauversion. Leer lassen, wenn der Server keine Version erfordert."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Algunos servidores requieren una versión de la API. Los endpoints por lotes de una implementación concreta requieren una versión con fecha; los endpoints en tiempo real pueden requerir una versión preliminar. Déjalo en blanco si el servidor no la requiere."
           }
         },
         "ja": {
@@ -471,6 +597,12 @@
             "value": "Batch"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por lotes"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -491,6 +623,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Endpunkt für Batch-Transkription"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endpoint de transcripción por lotes"
           }
         },
         "ja": {
@@ -515,6 +653,12 @@
             "value": "Verbunden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -535,6 +679,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verbindung fehlgeschlagen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error de conexión"
           }
         },
         "ja": {
@@ -559,6 +709,12 @@
             "value": "z.B. http://localhost:11434"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "p. ej. http://localhost:11434"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -581,6 +737,12 @@
             "value": "LLM-Modell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -601,6 +763,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Zeitlimit für LLM-Anfrage"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tiempo de espera de las solicitudes al LLM"
           }
         },
         "ja": {
@@ -631,6 +799,12 @@
             "value": "Thinking Mode"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de razonamiento"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -651,6 +825,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modellname"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nombre del modelo"
           }
         },
         "ja": {
@@ -675,6 +855,12 @@
             "value": "Modelle"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelos"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -695,6 +881,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine Modelle gefunden. Modellnamen manuell eingeben."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se encontraron modelos. Introduce el nombre del modelo manualmente."
           }
         },
         "ja": {
@@ -719,6 +911,12 @@
             "value": "Keines"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguno"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -739,6 +937,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Optional für lokale Server wie Ollama oder LM Studio"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional para servidores locales como Ollama o LM Studio"
           }
         },
         "ja": {
@@ -763,6 +967,12 @@
             "value": "Optional, z. B. preview"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional, p. ej. preview"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -783,6 +993,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
           }
         },
         "ja": {
@@ -807,6 +1023,12 @@
             "value": "Echtzeit"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En tiempo real"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -827,6 +1049,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         },
         "ja": {
@@ -851,6 +1079,12 @@
             "value": "Sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -871,6 +1105,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sekunden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segundos"
           }
         },
         "ja": {
@@ -895,6 +1135,12 @@
             "value": "Sekunden, die auf die LLM-Antwort gewartet wird. Erhöhen Sie den Wert für lokale Server (LM Studio, Ollama), die bei großen Prompts lange brauchen. Höhere Werte warten länger, bevor die Anfrage fehlschlägt. Standard 30."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Segundos que se espera la respuesta del LLM. Auméntalo para servidores locales (LM Studio, Ollama) que tardan mucho con prompts grandes. Los valores más altos esperan más antes de fallar. Valor predeterminado: 30."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -915,6 +1161,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server-URL"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL del servidor"
           }
         },
         "ja": {
@@ -939,6 +1191,12 @@
             "value": "Verbindung testen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probar conexión"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -959,6 +1217,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird getestet ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Probando..."
           }
         },
         "ja": {
@@ -983,6 +1247,12 @@
             "value": "Transkriptionsmodell"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo de transcripción"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1003,6 +1273,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriptionsmodus"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transporte de la transcripción"
           }
         },
         "ja": {
@@ -1027,6 +1303,12 @@
             "value": "Fügt das nicht standardisierte Thinking-Feld für Chat Completions nur hinzu, wenn es aktiviert ist. Deaktiviert lassen, sofern Ihr Anbieter die Unterstützung nicht dokumentiert."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agrega el campo de razonamiento no estándar de Chat Completions solo cuando está activado. Déjalo desactivado a menos que tu proveedor documente que lo admite."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1044,6 +1326,12 @@
     "Chat Completions": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat Completions"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "Chat Completions"
@@ -1071,6 +1359,12 @@
             "value": "Bereitstellungsbezogen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Por implementación"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1091,6 +1385,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standard v1"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estándar v1"
           }
         },
         "ja": {
@@ -1115,6 +1415,12 @@
             "value": "Standard v1 verwendet /v1/audio/transcriptions. Bereitstellungsbezogen verwendet /deployments/{model}/audio/transcriptions und erfordert eine datierte API-Version. Die Echtzeittranskription verwendet weiterhin /v1/realtime."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estándar v1 usa /v1/audio/transcriptions. Por implementación usa /deployments/{model}/audio/transcriptions y requiere una versión de la API con fecha. La transcripción en tiempo real sigue usando /v1/realtime."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1135,6 +1441,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto"
           }
         },
         "ja": {
@@ -1159,6 +1471,12 @@
             "value": "LLM-API"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API del LLM"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1179,6 +1497,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Niedrig"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bajo"
           }
         },
         "ja": {
@@ -1203,6 +1527,12 @@
             "value": "Maximum"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1223,6 +1553,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mittel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medio"
           }
         },
         "ja": {
@@ -1247,6 +1583,12 @@
             "value": "Anbieterstandard"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1267,6 +1609,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bei Anbieterstandard wird reasoning weggelassen. Andere Werte senden reasoning: { effort: ... } an /v1/responses."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor omite el razonamiento. Los demás valores envían reasoning: { effort: ... } a /v1/responses."
           }
         },
         "ja": {
@@ -1291,6 +1639,12 @@
             "value": "Thinking-Erweiterung des Anbieters"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Extensión de razonamiento del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1313,6 +1667,12 @@
             "value": "Reasoning-Aufwand"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esfuerzo de razonamiento"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1330,6 +1690,12 @@
     "Responses": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Responses"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "Responses"
@@ -1357,6 +1723,12 @@
             "value": "Temperaturüberschreibungen werden weggelassen, wenn für Responses ein Reasoning-Aufwand konfiguriert ist."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los ajustes de temperatura se omiten cuando hay un esfuerzo de razonamiento configurado para Responses."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1377,6 +1749,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verwendet /v1/chat/completions für breite Kompatibilität mit bestehenden Anbietern."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa /v1/chat/completions para una amplia compatibilidad con los proveedores existentes."
           }
         },
         "ja": {
@@ -1401,6 +1779,12 @@
             "value": "Verwendet /v1/responses mit OpenAI-kompatiblen Eingabe-, Ausgabe- und Reasoning-Feldern."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa /v1/responses con campos de entrada, salida y razonamiento compatibles con OpenAI."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1421,6 +1805,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sehr hoch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muy alto"
           }
         },
         "ja": {
@@ -1445,6 +1835,12 @@
             "value": "Servertyp"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tipo de servidor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1467,6 +1863,12 @@
     },
     "Generic": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genérico"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1495,6 +1897,12 @@
             "value": "Ollama"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1509,6 +1917,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wähle Ollama, um installierte Modelle über den nativen /api/tags-Endpunkt des Servers zu finden. Allgemeine Server nutzen nur den OpenAI-kompatiblen /v1/models-Endpunkt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige Ollama para descubrir los modelos instalados mediante el endpoint nativo /api/tags del servidor. Los servidores genéricos solo usan el endpoint /v1/models compatible con OpenAI."
           }
         },
         "ja": {
@@ -1533,6 +1947,12 @@
     },
     "The server URL is invalid.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La URL del servidor no es válida."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1561,6 +1981,12 @@
             "value": "Der Ollama-Server ist nicht erreichbar. Prüfe, ob er läuft und die URL stimmt."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo acceder al servidor de Ollama. Comprueba que esté en ejecución y que la URL sea correcta."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1583,6 +2009,12 @@
     },
     "The server rejected the request (unauthorized). Check the API key.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor rechazó la solicitud (no autorizada). Revisa la clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1605,6 +2037,12 @@
     },
     "The server returned an unexpected error.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor devolvió un error inesperado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1627,6 +2065,12 @@
     },
     "The server reported no installed models. Pull a model with `ollama pull <model>` first.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor no informó de ningún modelo instalado. Descarga primero un modelo con `ollama pull <model>`."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1653,6 +2097,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Antwort des Servers war keine gültige Ollama-/api/tags-Antwort."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La respuesta del servidor no era una respuesta /api/tags de Ollama válida."
           }
         },
         "ja": {
@@ -1683,6 +2133,12 @@
             "value": "Upload-Format"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Formato de subida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1700,6 +2156,12 @@
     "WAV": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "WAV"
@@ -1725,6 +2187,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Auto komprimiert Batch-Uploads als M4A und versucht es bei Bedarf erneut mit WAV. WAV lädt direkt hoch, wenn der Server M4A nicht unterstützt."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto comprime las subidas por lotes como M4A y, si hace falta, vuelve a intentarlo como WAV. WAV sube directamente para servidores que no aceptan M4A."
           }
         },
         "ja": {

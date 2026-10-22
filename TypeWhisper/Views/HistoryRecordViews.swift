@@ -547,14 +547,16 @@ struct HistoryRecordDetailView: View {
                     "(Removed: \(text))",
                     de: "(Entfernt: \(text))",
                     ja: "（削除: \(text)）",
-                    zh: "（已删除：\(text)）"
+                    zh: "（已删除：\(text)）",
+                    es: "(Eliminado: \(text))"
                 )
             case .added(let text):
                 localizedAppText(
                     "(Added: \(text))",
                     de: "(Hinzugefügt: \(text))",
                     ja: "（追加: \(text)）",
-                    zh: "（已添加：\(text)）"
+                    zh: "（已添加：\(text)）",
+                    es: "(Agregado: \(text))"
                 )
             }
         }
@@ -641,7 +643,8 @@ enum HistoryAccessibilityText {
             "Duration \(spoken)",
             de: "Dauer \(spoken)",
             ja: "長さ \(spoken)",
-            zh: "时长 \(spoken)"
+            zh: "时长 \(spoken)",
+            es: "Duración \(spoken)"
         )
     }
 }

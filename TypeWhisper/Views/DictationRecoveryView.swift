@@ -65,7 +65,8 @@ struct DictationRecoveryView: View {
                 "\(message) (\(count) recordings)",
                 de: "\(message) (\(count) Aufnahmen)",
                 ja: "\(message)（\(count)件の録音）",
-                zh: "\(message)（\(count) 个录音）"
+                zh: "\(message)（\(count) 个录音）",
+                es: "\(message) (\(count) grabaciones)"
             )
         }
     }
@@ -150,7 +151,8 @@ struct DictationRecoveryView: View {
                             } message: {
                                 Text(localizedAppText(
                                     "This will permanently delete all \(viewModel.recoveries.count) recovery recordings.",
-                                    de: "Dadurch werden alle \(viewModel.recoveries.count) Wiederherstellungsaufnahmen dauerhaft gelöscht."
+                                    de: "Dadurch werden alle \(viewModel.recoveries.count) Wiederherstellungsaufnahmen dauerhaft gelöscht.",
+                                    es: "Esto eliminará de forma permanente las \(viewModel.recoveries.count) grabaciones de recuperación."
                                 ))
                             }
                         }
@@ -253,7 +255,8 @@ struct DictationRecoveryView: View {
                         ) {
                             Text(localizedAppText(
                                 "\(hedgeThresholdLabelValue) seconds",
-                                de: "\(hedgeThresholdLabelValue) Sekunden"
+                                de: "\(hedgeThresholdLabelValue) Sekunden",
+                                es: "\(hedgeThresholdLabelValue) segundos"
                             ))
                         }
                         // One element: the text in front of the stepper names it.
@@ -267,7 +270,8 @@ struct DictationRecoveryView: View {
                             "\(hedgeThresholdLabelValue) seconds",
                             de: "\(hedgeThresholdLabelValue) Sekunden",
                             ja: "\(hedgeThresholdLabelValue) 秒",
-                            zh: "\(hedgeThresholdLabelValue) 秒"
+                            zh: "\(hedgeThresholdLabelValue) 秒",
+                            es: "\(hedgeThresholdLabelValue) segundos"
                         ))
                     }
                     .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
@@ -377,7 +381,8 @@ struct DictationRecoveryView: View {
             .disabled(viewModel.isProcessing)
             .accessibilityLabel(localizedAppText(
                 "Discard \(recovery.fileName)",
-                de: "\(recovery.fileName) verwerfen"
+                de: "\(recovery.fileName) verwerfen",
+                es: "Descartar \(recovery.fileName)"
             ))
         }
     }

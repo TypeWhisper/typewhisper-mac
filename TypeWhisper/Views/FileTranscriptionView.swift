@@ -185,7 +185,8 @@ struct FileTranscriptionView: View {
                                     "Processing \(processing)",
                                     de: "\(processing) wird verarbeitet",
                                     ja: "\(processing)を処理中",
-                                    zh: "正在处理\(processing)"
+                                    zh: "正在处理\(processing)",
+                                    es: "Procesando \(processing)"
                                 ))
                         }
                     }
@@ -476,7 +477,8 @@ struct FileTranscriptionView: View {
                 "Copy transcript of \(item.fileName)",
                 de: "Transkript von \(item.fileName) kopieren",
                 ja: "\(item.fileName)の文字起こしをコピー",
-                zh: "复制\(item.fileName)的转录"
+                zh: "复制\(item.fileName)的转录",
+                es: "Copiar la transcripción de \(item.fileName)"
             ))
 
             if let result = item.result, !result.segments.isEmpty {
@@ -495,7 +497,8 @@ struct FileTranscriptionView: View {
                     "Export subtitles for \(item.fileName)",
                     de: "Untertitel für \(item.fileName) exportieren",
                     ja: "\(item.fileName)の字幕を書き出し",
-                    zh: "导出\(item.fileName)的字幕"
+                    zh: "导出\(item.fileName)的字幕",
+                    es: "Exportar subtítulos de \(item.fileName)"
                 ))
             }
         }
@@ -629,7 +632,8 @@ struct FileTranscriptionView: View {
             "\(processed) of \(total) files processed",
             de: "\(processed) von \(total) Dateien verarbeitet",
             ja: "\(total)件中\(processed)件のファイルを処理済み",
-            zh: "已处理 \(processed)/\(total) 个文件"
+            zh: "已处理 \(processed)/\(total) 个文件",
+            es: "\(processed) de \(total) archivos procesados"
         )
     }
 

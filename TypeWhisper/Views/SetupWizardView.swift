@@ -118,7 +118,8 @@ struct SetupWizardView: View {
             "\(currentWizardStep.title). Step \(currentStep + 1) of \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             de: "\(currentWizardStep.title). Schritt \(currentStep + 1) von \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)",
             ja: "\(currentWizardStep.title)。\(SetupWizardStep.allCases.count)ステップ中\(currentStep + 1)。\(currentWizardStep.subtitle)",
-            zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)"
+            zh: "\(currentWizardStep.title)。第 \(currentStep + 1) 步，共 \(SetupWizardStep.allCases.count) 步。\(currentWizardStep.subtitle)",
+            es: "\(currentWizardStep.title). Paso \(currentStep + 1) de \(SetupWizardStep.allCases.count). \(currentWizardStep.subtitle)"
         ))
     }
 
@@ -130,7 +131,8 @@ struct SetupWizardView: View {
             "Step \(index) of \(count)",
             de: "Schritt \(index) von \(count)",
             ja: "ステップ \(index)/\(count)",
-            zh: "第 \(index) 步，共 \(count) 步"
+            zh: "第 \(index) 步，共 \(count) 步",
+            es: "Paso \(index) de \(count)"
         )
     }
 
@@ -207,7 +209,8 @@ struct SetupWizardView: View {
             "Step \(step.rawValue + 1) of \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             de: "Schritt \(step.rawValue + 1) von \(SetupWizardStep.allCases.count), \(step.progressTitle)",
             ja: "\(SetupWizardStep.allCases.count)ステップ中\(step.rawValue + 1)、\(step.progressTitle)",
-            zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)"
+            zh: "第 \(step.rawValue + 1) 步，共 \(SetupWizardStep.allCases.count) 步，\(step.progressTitle)",
+            es: "Paso \(step.rawValue + 1) de \(SetupWizardStep.allCases.count), \(step.progressTitle)"
         ))
         .accessibilityValue(progressAccessibilityStatus(for: step))
         .accessibilityAddTraits(step == currentWizardStep ? .isSelected : [])
@@ -799,7 +802,8 @@ struct SetupWizardView: View {
             #if APPSTORE
             let message = localizedAppText(
                 "\(recommendedName) will be set when you continue. Click the shortcut to record another one.",
-                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen."
+                de: "\(recommendedName) wird beim Fortfahren gesetzt. Klicke auf den Shortcut, um einen anderen aufzunehmen.",
+                es: "Se configurará \(recommendedName) al continuar. Haz clic en el atajo para grabar otro."
             )
             #else
             let message = localizedAppText("Fn will be set automatically when you continue.", de: "Fn wird beim Fortfahren automatisch gesetzt.")
@@ -817,7 +821,8 @@ struct SetupWizardView: View {
                 localizedAppText(
                     "\(recommendedName) is already used by \(hotkeyModeTitle(for: slot)). Record another shortcut to continue.",
                     de: "\(recommendedName) wird bereits von \(hotkeyModeTitle(for: slot)) verwendet. Nimm einen anderen Shortcut auf, um fortzufahren.",
-                    ja: "\(recommendedName)はすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。"
+                    ja: "\(recommendedName)はすでに\(hotkeyModeTitle(for: slot))で使用されています。続行するには別のショートカットを録音してください。",
+                    es: "\(hotkeyModeTitle(for: slot)) ya usa \(recommendedName). Graba otro atajo para continuar."
                 ),
                 "exclamationmark.triangle.fill",
                 .orange
@@ -1248,7 +1253,7 @@ struct SetupWizardView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(localizedAppText("Download progress", de: "Download-Fortschritt", ja: "ダウンロードの進行状況", zh: "下载进度"))
-        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)"))
+        .accessibilityValue(localizedAppText("\(percent) percent", de: "\(percent) Prozent", ja: "\(percent)パーセント", zh: "百分之 \(percent)", es: "\(percent) por ciento"))
         .accessibilityAddTraits([.isStaticText, .updatesFrequently])
     }
 

@@ -198,7 +198,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 - **Auto-update** - Built-in updates via Sparkle with stable, release-candidate, and daily channels
 - **Universal binary** - Runs natively on Apple Silicon and Intel Macs
 - **Widgets** - Desktop widgets for usage stats, last transcription, activity chart, and transcription history
-- **Multilingual UI** - English, German, Japanese, and Simplified Chinese
+- **Multilingual UI** - English, German, Japanese, Simplified Chinese, and Spanish
 - **Launch at Login** - Start automatically with macOS
 
 ## Install

@@ -9,6 +9,7 @@
     "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",
     "descriptions": {
         "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server für Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr.",
+        "es": "Conéctate a cualquier servidor de API compatible con OpenAI para transcripción y LLM. Funciona con Ollama, LM Studio, vLLM y más.",
         "ja": "文字起こしとLLM用に任意のOpenAI互換APIサーバーへ接続します。Ollama、LM Studio、vLLMなどで動作します。"
     },
     "category": "transcription",

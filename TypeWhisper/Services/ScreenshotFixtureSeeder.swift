@@ -893,6 +893,7 @@ private enum ScreenshotFixtureLanguage: String {
     case german = "de"
     case japanese = "ja"
     case simplifiedChinese = "zh-Hans"
+    case spanish = "es"
 
     static var current: ScreenshotFixtureLanguage {
         let preferred = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
@@ -902,6 +903,7 @@ private enum ScreenshotFixtureLanguage: String {
         if normalized.hasPrefix("de") { return .german }
         if normalized.hasPrefix("ja") { return .japanese }
         if normalized.hasPrefix("zh") { return .simplifiedChinese }
+        if normalized.hasPrefix("es") { return .spanish }
         return .english
     }
 
@@ -915,6 +917,8 @@ private enum ScreenshotFixtureLanguage: String {
             [("チームカレンダー", "Google Workspace"), ("個人用カレンダー", "iCloud")]
         case .simplifiedChinese:
             [("团队日历", "Google Workspace"), ("个人日历", "iCloud")]
+        case .spanish:
+            [("Calendario del equipo", "Google Workspace"), ("Calendario personal", "iCloud")]
         }
 
         return [
@@ -1046,6 +1050,35 @@ private enum ScreenshotFixtureLanguage: String {
                     .init(name: "润色听写", template: .cleanedText, trigger: .global(), instruction: "保持表达直接，并保留产品名称。"),
                     .init(name: "会议记录", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "提取决定事项、负责人和后续步骤。"),
                     .init(name: "翻译成英语", template: .translation, trigger: .manual(), instruction: "自然地翻译成英语。"),
+                ]
+            )
+
+        case .spanish:
+            ScreenshotFixtureContent(
+                history: [
+                    .init(appName: "Notas", bundleIdentifier: "com.apple.Notes", text: "Termina las notas de la versión y revisa todas las capturas localizadas antes de publicarlas."),
+                    .init(appName: "Mail", bundleIdentifier: "com.apple.mail", text: "Envía al equipo el resumen actualizado del lanzamiento antes de la revisión de mañana."),
+                    .init(appName: "Safari", bundleIdentifier: "com.apple.Safari", text: "Compara la página del producto en todos los idiomas compatibles y reúne los últimos comentarios."),
+                    .init(appName: "Xcode", bundleIdentifier: "com.apple.dt.Xcode", text: "Ejecuta las pruebas de macOS y confirma que la compilación final no tiene advertencias."),
+                    .init(appName: "Slack", bundleIdentifier: "com.tinyspeck.slackmacgap", text: "La versión candidata está lista. Avisa si algo debería bloquear el lanzamiento."),
+                    .init(appName: "Pages", bundleIdentifier: "com.apple.iWork.Pages", text: "Convierte las notas de la reunión en un resumen breve con responsables y próximos pasos."),
+                    .init(appName: "Terminal", bundleIdentifier: "com.apple.Terminal", text: "Crea el archivo final, verifica su firma y anota la suma de comprobación."),
+                ],
+                terms: ["TypeWhisper", "Fastlane", "SwiftUI", "App Store Connect", "versión candidata"],
+                corrections: [
+                    .init(original: "Type Whisper", replacement: "TypeWhisper"),
+                    .init(original: "fast lane", replacement: "Fastlane"),
+                    .init(original: "swift UI", replacement: "SwiftUI"),
+                ],
+                snippets: [
+                    .init(trigger: "/gracias", replacement: "Gracias por los comentarios detallados. Los reviso hoy mismo."),
+                    .init(trigger: "/reunion", replacement: "Notas de la reunión del {date}:\n\n- Decisión\n- Responsable\n- Próximo paso"),
+                    .init(trigger: "/version", replacement: "La versión candidata está lista para la revisión final."),
+                ],
+                workflows: [
+                    .init(name: "Pulir dictado", template: .cleanedText, trigger: .global(), instruction: "Mantén un tono directo y conserva los nombres de productos."),
+                    .init(name: "Notas de reunión", template: .meetingNotes, trigger: .app("com.apple.Notes"), instruction: "Extrae decisiones, responsables y próximos pasos."),
+                    .init(name: "Traducir al inglés", template: .translation, trigger: .manual(), instruction: "Traduce al inglés de forma natural."),
                 ]
             )
         }

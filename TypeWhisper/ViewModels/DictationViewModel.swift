@@ -170,7 +170,8 @@ final class DictationViewModel: ObservableObject {
             let primaryDescription = primaryError.localizedDescription
             return localizedAppText(
                 "Primary transcription failed: \(primaryDescription). Recovery fallback failed: \(fallbackDescription)",
-                de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
+                de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)",
+                es: "Falló la transcripción principal: \(primaryDescription). Falló el respaldo de recuperación: \(fallbackDescription)"
             )
         }
     }
@@ -185,7 +186,8 @@ final class DictationViewModel: ObservableObject {
             let rounded = Int(seconds.rounded())
             return localizedAppText(
                 "Transcription timed out after \(rounded) seconds.",
-                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten."
+                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten.",
+                es: "Se agotó el tiempo de espera de la transcripción después de \(rounded) segundos."
             )
         }
     }
@@ -3328,7 +3330,8 @@ final class DictationViewModel: ObservableObject {
                     errorLogService.addEntry(
                         message: localizedAppText(
                             "\(postProcessingFallback.failedStep) post-processing failed. Raw transcription fallback selected. \(postProcessingFallback.reason)",
-                            de: "\(postProcessingFallback.failedStep)-Nachbearbeitung fehlgeschlagen. Rohtext-Fallback ausgewählt. \(postProcessingFallback.reason)"
+                            de: "\(postProcessingFallback.failedStep)-Nachbearbeitung fehlgeschlagen. Rohtext-Fallback ausgewählt. \(postProcessingFallback.reason)",
+                            es: "Falló el posprocesamiento de \(postProcessingFallback.failedStep). Se eligió el respaldo con la transcripción sin procesar. \(postProcessingFallback.reason)"
                         ),
                         category: "prompt"
                     )
@@ -4742,7 +4745,8 @@ final class DictationViewModel: ObservableObject {
                 base = localizedAppText(
                     "This workflow applies because \(appDescriptor) was detected together with \(domain).",
                     de: "Dieser Workflow greift, weil \(appDescriptor) zusammen mit \(domain) erkannt wurde.",
-                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。"
+                    ja: "\(appDescriptor) と \(domain) が一緒に検出されたため、このワークフローが適用されます。",
+                    es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor) junto con \(domain)."
                 )
             } else {
                 base = localizedAppText(
@@ -4756,7 +4760,8 @@ final class DictationViewModel: ObservableObject {
                 base = localizedAppText(
                     "This workflow applies because \(domain) was detected.",
                     de: "Dieser Workflow greift, weil \(domain) erkannt wurde.",
-                    ja: "\(domain) が検出されたため、このワークフローが適用されます。"
+                    ja: "\(domain) が検出されたため、このワークフローが適用されます。",
+                    es: "Este flujo de trabajo se aplica porque se detectó \(domain)."
                 )
             } else {
                 base = localizedAppText(
@@ -4769,7 +4774,8 @@ final class DictationViewModel: ObservableObject {
             base = localizedAppText(
                 "This workflow applies because \(appDescriptor) was detected.",
                 de: "Dieser Workflow greift, weil \(appDescriptor) erkannt wurde.",
-                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。"
+                ja: "\(appDescriptor) が検出されたため、このワークフローが適用されます。",
+                es: "Este flujo de trabajo se aplica porque se detectó \(appDescriptor)."
             )
         case .globalFallback:
             base = localizedAppText(

@@ -9,6 +9,7 @@
     "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark. Requires a Meta Model API key.",
     "descriptions": {
         "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schlüssel.",
+        "es": "Transcripción en tiempo real y de archivos con Muse Voice Transcribe, detección de hablantes opcional y procesamiento de prompts con Muse Spark. Requiere una clave de Meta Model API.",
         "ja": "Muse Voice Transcribeによるリアルタイム・ファイル文字起こし、オプションの話者分離、Muse Sparkによるプロンプト処理に対応します。Meta Model APIキーが必要です。"
     },
     "category": "transcription",

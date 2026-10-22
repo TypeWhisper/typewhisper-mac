@@ -140,7 +140,8 @@ struct AudioRecorderView: View {
                             "Warning: \(warning)",
                             de: "Warnung: \(warning)",
                             ja: "警告: \(warning)",
-                            zh: "警告：\(warning)"
+                            zh: "警告：\(warning)",
+                            es: "Advertencia: \(warning)"
                         ))
                 }
             }
@@ -488,7 +489,8 @@ private struct LevelMeterRow: View {
             "\(label) input level",
             de: "Eingangspegel \(label)",
             ja: "\(label)の入力レベル",
-            zh: "\(label)输入电平"
+            zh: "\(label)输入电平",
+            es: "Nivel de entrada de \(label)"
         ))
         .accessibilityValue(accessibilityLevelValue)
         .accessibilityAddTraits(.updatesFrequently)
@@ -599,7 +601,8 @@ private struct RecordingRow: View {
                                 "Duration \(recorderSpokenDuration(item.duration))",
                                 de: "Dauer \(recorderSpokenDuration(item.duration))",
                                 ja: "長さ \(recorderSpokenDuration(item.duration))",
-                                zh: "时长 \(recorderSpokenDuration(item.duration))"
+                                zh: "时长 \(recorderSpokenDuration(item.duration))",
+                                es: "Duración \(recorderSpokenDuration(item.duration))"
                             ))
                         Label(viewModel.formattedFileSize(item.fileSize), systemImage: "doc")
                         if item.transcript != nil {
@@ -632,13 +635,15 @@ private struct RecordingRow: View {
                                 "Hide transcript of \(item.fileName)",
                                 de: "Transkript von \(item.fileName) ausblenden",
                                 ja: "\(item.fileName)の文字起こしを非表示",
-                                zh: "隐藏\(item.fileName)的转录"
+                                zh: "隐藏\(item.fileName)的转录",
+                                es: "Ocultar la transcripción de \(item.fileName)"
                             )
                             : localizedAppText(
                                 "Show transcript of \(item.fileName)",
                                 de: "Transkript von \(item.fileName) anzeigen",
                                 ja: "\(item.fileName)の文字起こしを表示",
-                                zh: "显示\(item.fileName)的转录"
+                                zh: "显示\(item.fileName)的转录",
+                                es: "Mostrar la transcripción de \(item.fileName)"
                             ))
 
                         Button {
@@ -653,7 +658,8 @@ private struct RecordingRow: View {
                             "Copy transcript of \(item.fileName)",
                             de: "Transkript von \(item.fileName) kopieren",
                             ja: "\(item.fileName)の文字起こしをコピー",
-                            zh: "复制\(item.fileName)的转录"
+                            zh: "复制\(item.fileName)的转录",
+                            es: "Copiar la transcripción de \(item.fileName)"
                         ))
                         .accessibilityIdentifier("recorder.recording.copyTranscript")
                     }
@@ -707,7 +713,8 @@ private struct RecordingRow: View {
                             "Re-transcribe \(item.fileName)",
                             de: "\(item.fileName) erneut transkribieren",
                             ja: "\(item.fileName)を再文字起こし",
-                            zh: "重新转录\(item.fileName)"
+                            zh: "重新转录\(item.fileName)",
+                            es: "Volver a transcribir \(item.fileName)"
                         ))
                     }
 
@@ -723,7 +730,8 @@ private struct RecordingRow: View {
                         "Show \(item.fileName) in Finder",
                         de: "\(item.fileName) im Finder anzeigen",
                         ja: "\(item.fileName)をFinderで表示",
-                        zh: "在访达中显示\(item.fileName)"
+                        zh: "在访达中显示\(item.fileName)",
+                        es: "Mostrar \(item.fileName) en el Finder"
                     ))
 
                     Button(role: .destructive) {
@@ -739,7 +747,8 @@ private struct RecordingRow: View {
                         "Delete \(item.fileName)",
                         de: "\(item.fileName) löschen",
                         ja: "\(item.fileName)を削除",
-                        zh: "删除\(item.fileName)"
+                        zh: "删除\(item.fileName)",
+                        es: "Eliminar \(item.fileName)"
                     ))
                 }
             }

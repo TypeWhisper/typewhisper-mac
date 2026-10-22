@@ -9,6 +9,12 @@
             "value": "Fehler"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Key ausblenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Stimmen aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar voces"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Key entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Key speichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Key anzeigen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "Eigene Voice-ID verwenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar un ID de voz personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Key"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "API-Keys werden sicher im Schlüsselbund gespeichert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Key konnte nicht geprüft werden. Prüfe die Verbindung und versuche es erneut."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo validar la clave de API. Comprueba tu conexión y vuelve a intentarlo."
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Eigene Voice-ID"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ID de voz personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -249,6 +315,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standardstimme"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz predeterminada"
           }
         },
         "ja": {
@@ -273,6 +345,12 @@
             "value": "Ungültiger API-Key"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -293,6 +371,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
           }
         },
         "ja": {
@@ -317,6 +401,12 @@
             "value": "Entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -337,6 +427,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -361,6 +457,12 @@
             "value": "Spracherkennung"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconocimiento de voz"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -381,6 +483,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sprache: %@; Stimme: %@; Cartesia"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reconocimiento: %@; Voz: %@; Cartesia"
           }
         },
         "ja": {
@@ -405,6 +513,12 @@
             "value": "Gesprochene Sprache"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idioma hablado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -425,6 +539,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gesprochene Sprache ist die Sprache der Audioquelle. Wähle Englisch nur, wenn die Aufnahme selbst Englisch ist."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El idioma hablado es el idioma del audio de origen. Elige inglés solo cuando el propio audio esté en inglés."
           }
         },
         "ja": {
@@ -449,6 +569,12 @@
             "value": "Text-zu-Sprache-Stimme"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz de texto a voz"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -469,6 +595,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verwenden"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usar"
           }
         },
         "ja": {
@@ -493,6 +625,12 @@
             "value": "Gültiger API-Key"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -513,6 +651,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird geprüft..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
           }
         },
         "ja": {

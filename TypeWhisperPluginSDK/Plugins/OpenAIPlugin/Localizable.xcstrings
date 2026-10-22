@@ -9,6 +9,12 @@
             "value": "API-Schlüssel ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modelle aktualisieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar modelos LLM"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "API-Schlüssel entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ChatGPT-Login entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar el inicio de sesión de ChatGPT"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "API-Schlüssel sichern"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -119,6 +149,12 @@
             "value": "API-Schlüssel anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -135,6 +171,12 @@
     },
     "Voice instructions": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instrucciones para la voz"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -157,6 +199,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modo de temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +227,12 @@
     },
     "ChatGPT login uses the supported ChatGPT/Codex model list. Use API Key mode for the full OpenAI API catalog.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El inicio de sesión de ChatGPT usa la lista de modelos compatibles de ChatGPT/Codex. Usa el modo Clave de API para el catálogo completo de la API de OpenAI."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -201,6 +255,12 @@
     },
     "Could not refresh models. Keeping the current list.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudieron actualizar los modelos. Se mantiene la lista actual."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -223,6 +283,12 @@
     },
     "Custom": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personalizado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -245,6 +311,12 @@
     },
     "Custom temperature is ignored for the selected GPT-5 reasoning configuration.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La temperatura personalizada se ignora con la configuración de razonamiento de GPT-5 seleccionada."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -267,6 +339,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Predeterminado del proveedor"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -289,6 +367,12 @@
     },
     "Refreshing": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizando"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -311,6 +395,12 @@
     },
     "Refreshing OpenAI models...": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizando los modelos de OpenAI..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -333,6 +423,12 @@
     },
     "Temperature": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatura"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +451,12 @@
     },
     "Text-to-Speech Voice": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voz de texto a voz"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -377,6 +479,12 @@
     },
     "Updated ChatGPT/Codex model list.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lista de modelos de ChatGPT/Codex actualizada."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -399,6 +507,12 @@
     },
     "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription and text-to-speech still require an API key.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa tu inicio de sesión actual de ChatGPT Plus/Pro o Codex para procesar prompts. La transcripción y la conversión de texto a voz siguen requiriendo una clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -427,6 +541,12 @@
             "value": "API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -447,6 +567,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las claves de API se guardan de forma segura en el llavero"
           }
         },
         "ja": {
@@ -471,6 +597,12 @@
             "value": "Erweitert"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Avanzado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -491,6 +623,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ChatGPT-Login"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inicio de sesión de ChatGPT"
           }
         },
         "ja": {
@@ -515,6 +653,12 @@
             "value": "ChatGPT-Login verbunden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sesión de ChatGPT conectada"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -535,6 +679,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ChatGPT-Login verbunden."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sesión de ChatGPT conectada."
           }
         },
         "ja": {
@@ -559,6 +709,12 @@
             "value": "Der ChatGPT-Login zeigt nur die unterstützten ChatGPT-/Codex-Modelle an."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El inicio de sesión de ChatGPT solo muestra los modelos compatibles de ChatGPT/Codex."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -579,6 +735,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Schliessen Sie den OpenAI-Login im Browser ab. TypeWhisper verbindet den Account danach automatisch."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Completa el inicio de sesión de OpenAI en tu navegador. TypeWhisper terminará la conexión automáticamente."
           }
         },
         "ja": {
@@ -603,6 +765,12 @@
             "value": "Verbundener Plan: %@"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plan conectado: %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -623,6 +791,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verbindungsmethode"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Método de conexión"
           }
         },
         "ja": {
@@ -647,6 +821,12 @@
             "value": "Beschreiben Sie Thema, Umgebung oder relevanten Kontext der Aufnahme."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Describe el tema, el entorno o el contexto relevante de la grabación."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -667,6 +847,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "GPT-4o-Modelle unterstützen Whisper Translate (Übersetzung ins Englische) nicht."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los modelos GPT-4o no admiten Whisper Translate (traducción al inglés)."
           }
         },
         "ja": {
@@ -691,6 +877,12 @@
             "value": "Sprachhinweise und Wörterbucheinträge werden automatisch ergänzt."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Las sugerencias de idioma y los términos del diccionario se agregan automáticamente."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -711,6 +903,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verzögerung der Live-Transkription"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retraso de la transcripción en vivo"
           }
         },
         "ja": {
@@ -735,6 +933,12 @@
             "value": "Eine niedrigere Verzögerung zeigt Teiltext früher; eine höhere gibt dem Modell mehr Audiokontext."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un retraso menor muestra antes el texto parcial; uno mayor da al modelo más contexto de audio."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -755,6 +959,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Minimal"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mínimo"
           }
         },
         "ja": {
@@ -779,6 +989,12 @@
             "value": "Maximum"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máximo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -799,6 +1015,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Keine"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ninguno"
           }
         },
         "ja": {
@@ -823,6 +1045,12 @@
             "value": "Die Echtzeittranskription streamt 24-kHz-PCM über die Realtime API von OpenAI."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La transcripción en tiempo real transmite PCM a 24 kHz a través de la API Realtime de OpenAI."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -843,6 +1071,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriptionskontext"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contexto de la transcripción"
           }
         },
         "ja": {
@@ -867,6 +1101,12 @@
             "value": "Für Übersetzungen ist Whisper 1 erforderlich."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Traducir requiere Whisper 1."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -887,6 +1127,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sehr hoch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muy alto"
           }
         },
         "ja": {
@@ -911,6 +1157,12 @@
             "value": "Bestehender Codex-Login importiert."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se importó tu inicio de sesión actual de Codex."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -931,6 +1183,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codex-Login importieren"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importar inicio de sesión de Codex"
           }
         },
         "ja": {
@@ -955,6 +1213,12 @@
             "value": "Ungültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API no válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -975,6 +1239,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo LLM"
           }
         },
         "ja": {
@@ -999,6 +1269,12 @@
             "value": "Steuert, wie viel Denkzeit sich das Modell vor der Antwort nimmt."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Controla cuánto tiempo de razonamiento dedica el modelo antes de responder."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1013,24 +1289,30 @@
         }
       }
     },
-    "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gilt, wenn ein Workflow den Denkaufwand auf „Anbieterstandard“ lässt. Höhere Stufen sind langsamer und verbrauchen mehr Ausgabe-Tokens."
+    "Applies when a workflow leaves effort on Provider Default. Higher levels are slower and use more output tokens." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gilt, wenn ein Workflow den Denkaufwand auf „Anbieterstandard“ lässt. Höhere Stufen sind langsamer und verbrauchen mehr Ausgabe-Tokens."
           }
         },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ワークフローで思考負荷が「プロバイダーのデフォルト」のままの場合に適用されます。レベルが高いほど遅くなり、出力トークンも多く消費します。"
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se aplica cuando un flujo de trabajo deja el esfuerzo en Predeterminado del proveedor. Los niveles más altos son más lentos y usan más tokens de salida."
           }
         },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローで思考負荷が「プロバイダーのデフォルト」のままの場合に適用されます。レベルが高いほど遅くなり、出力トークンも多く消費します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当工作流的推理力度保持为“提供商默认”时生效。级别越高，速度越慢，消耗的输出 token 也越多。"
           }
         }
       }
@@ -1041,6 +1323,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hoch"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alto"
           }
         },
         "ja": {
@@ -1065,6 +1353,12 @@
             "value": "Niedrig"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bajo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1085,6 +1379,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mittel"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medio"
           }
         },
         "ja": {
@@ -1109,6 +1409,12 @@
             "value": "Aktualisieren"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualizar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1129,6 +1435,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
           }
         },
         "ja": {
@@ -1153,6 +1465,12 @@
             "value": "Denkaufwand"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esfuerzo de razonamiento"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1173,6 +1491,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
           }
         },
         "ja": {
@@ -1197,6 +1521,12 @@
             "value": "Im Browser anmelden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar sesión en el navegador"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1217,6 +1547,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriptionsmodell"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo de transcripción"
           }
         },
         "ja": {
@@ -1241,6 +1577,12 @@
             "value": "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login für Prompt-Verarbeitung. Für Transkription ist weiterhin ein API-Schlüssel nötig."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Usa tu inicio de sesión actual de ChatGPT Plus/Pro o Codex para procesar prompts. La transcripción sigue requiriendo una clave de API."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1261,6 +1603,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se están usando los modelos predeterminados. Presiona Actualizar para obtener todos los modelos disponibles."
           }
         },
         "ja": {
@@ -1285,6 +1633,12 @@
             "value": "Gültiger API-Schlüssel"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clave de API válida"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1307,6 +1661,12 @@
             "value": "Wird überprüft ..."
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando..."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1327,6 +1687,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Warte auf OpenAI-Login ..."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esperando el inicio de sesión de OpenAI..."
           }
         },
         "ja": {

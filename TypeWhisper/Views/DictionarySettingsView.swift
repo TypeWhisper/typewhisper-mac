@@ -17,14 +17,16 @@ private func dictionaryCorrectionAccessibilityText(original: String, replacement
             "\(original), removed",
             de: "\(original), wird entfernt",
             ja: "\(original)、削除",
-            zh: "\(original)，删除"
+            zh: "\(original)，删除",
+            es: "\(original), se elimina"
         )
     }
     return localizedAppText(
         "\(original), replaced with \(replacement)",
         de: "\(original), ersetzt durch \(replacement)",
         ja: "\(original)を\(replacement)に置き換え",
-        zh: "\(original)，替换为\(replacement)"
+        zh: "\(original)，替换为\(replacement)",
+        es: "\(original), reemplazado por \(replacement)"
     )
 }
 
@@ -34,7 +36,8 @@ private func dictionaryBoostingAccessibilityText(label: String, value: String) -
         "Boosting: \(setting)",
         de: "Boosting: \(setting)",
         ja: "認識の優先度調整: \(setting)",
-        zh: "增强：\(setting)"
+        zh: "增强：\(setting)",
+        es: "Refuerzo: \(setting)"
     )
 }
 
@@ -429,17 +432,20 @@ struct DictionarySettingsView: View {
         case .clearAutoLearnedCorrections:
             return localizedAppText(
                 "This deletes \(request.autoLearnedCorrectionCount) auto-learned corrections. Manual entries and term packs remain unchanged. This cannot be undone.",
-                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                es: "Esto elimina \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Las entradas manuales y los paquetes de términos no cambian. Esta acción no se puede deshacer."
             )
         case .resetCustomDictionary:
             return localizedAppText(
                 "This deletes \(request.termCount) custom terms, \(request.manualCorrectionCount) manual corrections, and \(request.autoLearnedCorrectionCount) auto-learned corrections. \(request.activePackCount) active term packs and their entries remain unchanged. This cannot be undone.",
-                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden.",
+                es: "Esto elimina \(request.termCount) términos personalizados, \(request.manualCorrectionCount) correcciones manuales y \(request.autoLearnedCorrectionCount) correcciones aprendidas automáticamente. Los \(request.activePackCount) paquetes de términos activos y sus entradas no cambian. Esta acción no se puede deshacer."
             )
         case .deactivateAllTermPacks:
             return localizedAppText(
                 "This deactivates \(request.activePackCount) term packs and removes \(request.termCount) pack terms and \(request.correctionCount) pack corrections. Custom and auto-learned entries remain unchanged.",
-                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert."
+                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert.",
+                es: "Esto desactiva \(request.activePackCount) paquetes de términos y quita \(request.termCount) términos y \(request.correctionCount) correcciones de los paquetes. Las entradas personalizadas y las aprendidas automáticamente no cambian."
             )
         }
     }
@@ -805,21 +811,24 @@ private struct DictionaryTrainingSheet: View {
                             "Engine: \(snapshot.engineName)",
                             de: "Engine: \(snapshot.engineName)",
                             ja: "エンジン: \(snapshot.engineName)",
-                            zh: "引擎：\(snapshot.engineName)"
+                            zh: "引擎：\(snapshot.engineName)",
+                            es: "Motor: \(snapshot.engineName)"
                         ))
                     Label(snapshot.modelName, systemImage: "shippingbox")
                         .accessibilityLabel(localizedAppText(
                             "Model: \(snapshot.modelName)",
                             de: "Modell: \(snapshot.modelName)",
                             ja: "モデル: \(snapshot.modelName)",
-                            zh: "模型：\(snapshot.modelName)"
+                            zh: "模型：\(snapshot.modelName)",
+                            es: "Modelo: \(snapshot.modelName)"
                         ))
                     Label(languageName, systemImage: "globe")
                         .accessibilityLabel(localizedAppText(
                             "Language: \(languageName)",
                             de: "Sprache: \(languageName)",
                             ja: "言語: \(languageName)",
-                            zh: "语言：\(languageName)"
+                            zh: "语言：\(languageName)",
+                            es: "Idioma: \(languageName)"
                         ))
                 }
                 .font(.caption)
@@ -1006,7 +1015,8 @@ private struct DictionaryTrainingSheet: View {
             .labelsHidden()
             .accessibilityLabel(localizedAppText(
                 "Include \(candidate.original) as a correction",
-                de: "\(candidate.original) als Korrektur einschließen"
+                de: "\(candidate.original) als Korrektur einschließen",
+                es: "Incluir \(candidate.original) como corrección"
             ))
             .disabled(candidate.disposition != .available)
 
@@ -1042,7 +1052,8 @@ private struct DictionaryTrainingSheet: View {
             if let snapshot = service.engineSnapshot {
                 Text(localizedAppText(
                     "Candidates were produced by \(snapshot.engineName) / \(snapshot.modelName). Corrections remain global.",
-                    de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global."
+                    de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global.",
+                    es: "Los candidatos los generó \(snapshot.engineName) / \(snapshot.modelName). Las correcciones siguen siendo globales."
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -1112,7 +1123,8 @@ private struct DictionaryTrainingSheet: View {
             : localizedAppText("The target word already existed.", de: "Das Zielwort war bereits vorhanden.")
         return termText + " " + localizedAppText(
             "Added \(summary.addedCorrections.count) corrections, skipped \(summary.duplicateCorrections.count) duplicates and \(summary.conflictingCorrections.count) conflicts.",
-            de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen."
+            de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen.",
+            es: "Se agregaron \(summary.addedCorrections.count) correcciones; se omitieron \(summary.duplicateCorrections.count) duplicados y \(summary.conflictingCorrections.count) conflictos."
         )
     }
 
@@ -1174,7 +1186,7 @@ private struct DictionaryTrainingSheet: View {
                 .foregroundStyle(.secondary)
         case .conflict(let replacement):
             Label(
-                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)"),
+                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)", es: "Conflicto: \(replacement)"),
                 systemImage: "exclamationmark.triangle"
             )
             .foregroundStyle(.orange)
@@ -1786,7 +1798,8 @@ private struct DictionaryCorrectionGroupCardView: View {
 
                     Text(localizedAppText(
                         "\(group.aliases.count) variants",
-                        de: "\(group.aliases.count) Varianten"
+                        de: "\(group.aliases.count) Varianten",
+                        es: "\(group.aliases.count) variantes"
                     ))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
@@ -1808,7 +1821,8 @@ private struct DictionaryCorrectionGroupCardView: View {
                 "Add alias for \(group.replacementDisplayText)",
                 de: "Variante für \(group.replacementDisplayText) hinzufügen",
                 ja: "\(group.replacementDisplayText)の別表記を追加",
-                zh: "为\(group.replacementDisplayText)添加变体"
+                zh: "为\(group.replacementDisplayText)添加变体",
+                es: "Agregar variante para \(group.replacementDisplayText)"
             ))
         }
         .padding(.horizontal, 10)

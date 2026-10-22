@@ -9,6 +9,12 @@
             "value": "%@ herunterladen und laden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ wird heruntergeladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando %@"
           }
         },
         "ja": {
@@ -53,6 +65,12 @@
             "value": "Hugging-Face-Token ausblenden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +91,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
           }
         },
         "ja": {
@@ -97,6 +121,12 @@
             "value": "%@ laden"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -117,6 +147,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geladen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargado"
           }
         },
         "ja": {
@@ -141,6 +177,12 @@
             "value": "%@ wird geladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargando %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -161,6 +203,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ entfernen"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar %@"
           }
         },
         "ja": {
@@ -185,6 +233,12 @@
             "value": "Hugging-Face-Token entfernen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -205,6 +259,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging-Face-Token speichern"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar token de Hugging Face"
           }
         },
         "ja": {
@@ -229,6 +289,12 @@
             "value": "Hugging-Face-Token anzeigen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -251,6 +317,12 @@
             "value": "%@ entladen"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar %@"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -267,6 +339,12 @@
     },
     "14 languages with explicit selection: English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek, Arabic, Japanese, Chinese, Vietnamese, and Korean.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 idiomas con selección explícita: inglés, francés, alemán, español, italiano, portugués, neerlandés, polaco, griego, árabe, japonés, chino, vietnamita y coreano."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -289,6 +367,12 @@
     },
     "A private on-device GGUF and Metal provider for Cohere Transcribe 03-2026. Audio stays on this Mac.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un proveedor privado en el dispositivo, con GGUF y Metal, para Cohere Transcribe 03-2026. El audio se queda en este Mac."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -311,6 +395,12 @@
     },
     "Cancel": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -333,6 +423,12 @@
     },
     "Capabilities and limits": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funciones y limitaciones"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +451,12 @@
     },
     "Cohere model license": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licencia del modelo de Cohere"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -383,6 +485,12 @@
             "value": "Cohere Transcribe (Lokal)"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe (local)"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -393,6 +501,12 @@
     },
     "CrispASR license and notices": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licencia y avisos de CrispASR"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -415,6 +529,12 @@
     },
     "Done": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -437,6 +557,12 @@
     },
     "Download & Load": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargar y cargar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -459,6 +585,12 @@
     },
     "Downloaded": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -481,6 +613,12 @@
     },
     "Downloading": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -503,6 +641,12 @@
     },
     "Downloading Cohere model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Descargando el modelo de Cohere"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -525,6 +669,12 @@
     },
     "Error": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -547,6 +697,12 @@
     },
     "Hugging Face Token": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -569,6 +725,12 @@
     },
     "Invalid Hugging Face Token": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face no válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -591,6 +753,12 @@
     },
     "Load": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cargar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -613,6 +781,12 @@
     },
     "LOCAL · BATCH": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LOCAL · POR LOTES"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -635,6 +809,12 @@
     },
     "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin detección automática de idioma, transcripción en tiempo real, marcas de tiempo, identificación de hablantes, traducción ni refuerzo del diccionario."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -657,6 +837,12 @@
     },
     "Model weights are downloaded from a pinned Apache-2.0 GGUF revision. CrispASR and the VAD model are MIT-licensed.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los pesos del modelo se descargan de una revisión GGUF fijada con licencia Apache-2.0. CrispASR y el modelo VAD tienen licencia MIT."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -679,6 +865,12 @@
     },
     "Not Downloaded": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No descargado"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -701,6 +893,12 @@
     },
     "Optional. Increases download rate limits and may speed up the model download. The token is stored securely in Keychain.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opcional. Aumenta los límites de descarga y puede acelerar la descarga del modelo. El token se guarda de forma segura en el llavero."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -723,6 +921,12 @@
     },
     "Preparing": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparando"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -745,6 +949,12 @@
     },
     "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciando CrispASR con Metal y precalentando el modelo. El dictado estará listo cuando termine."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -767,6 +977,12 @@
     },
     "Ready": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -789,6 +1005,12 @@
     },
     "Running Cohere locally with Metal…": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ejecutando Cohere localmente con Metal…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -811,6 +1033,12 @@
     },
     "Remove": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -833,6 +1061,12 @@
     },
     "Remove downloaded model?": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "¿Quitar el modelo descargado?"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -855,6 +1089,12 @@
     },
     "Remove Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quitar modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -877,6 +1117,12 @@
     },
     "Save": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guardar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -899,6 +1145,12 @@
     },
     "The model stays resident while loaded. Metal is warmed up before the provider becomes ready, keeping the first transcription responsive.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo permanece en memoria mientras está cargado. Metal se precalienta antes de que el proveedor esté listo, para que la primera transcripción responda rápido."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -921,6 +1173,12 @@
     },
     "Unload": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liberar"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -943,6 +1201,12 @@
     },
     "Valid Hugging Face Token": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token de Hugging Face válido"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -965,6 +1229,12 @@
     },
     "Validating token…": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Validando el token…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -987,6 +1257,12 @@
     },
     "VAD model license": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Licencia del modelo VAD"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1009,6 +1285,12 @@
     },
     "Voice activity detection runs before every transcription to suppress silence and low-noise hallucinations.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antes de cada transcripción se ejecuta una detección de actividad de voz para suprimir los silencios y las alucinaciones con ruido bajo."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1037,6 +1319,12 @@
             "value": "1,51 GB"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,51 GB"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1048,6 +1336,12 @@
     "1.74 GB": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,74 GB"
+          }
+        },
+        "es": {
           "stringUnit": {
             "state": "translated",
             "value": "1,74 GB"
@@ -1069,6 +1363,12 @@
             "value": "1,98 GB"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,98 GB"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1085,6 +1385,12 @@
             "value": "2,42 GB"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2,42 GB"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1095,6 +1401,12 @@
     },
     "8 GB+ Mac": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac con 8 GB o más"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1117,6 +1429,12 @@
     },
     "16 GB+ recommended": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se recomiendan 16 GB o más"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1139,6 +1457,12 @@
     },
     "Best tested balance of size, speed, and accuracy": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El mejor equilibrio probado entre tamaño, velocidad y precisión"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1161,6 +1485,12 @@
     },
     "Choose Compact Q4_K for the smallest download, Fast Q5_0 for the recommended default, Q6_K for higher numeric precision, or experimental Q8_0 for maximum numeric precision. Only the selected model is loaded.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Elige Compacto Q4_K para la descarga más pequeña, Rápido Q5_0 para el valor predeterminado recomendado, Q6_K para una mayor precisión numérica o el experimental Q8_0 para la máxima precisión numérica. Solo se carga el modelo seleccionado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1183,6 +1513,12 @@
     },
     "Cohere asset verification failed for:": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error en la verificación de los recursos de Cohere para:"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1205,6 +1541,12 @@
     },
     "Cohere Transcribe does not support translation.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe no admite traducción."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1227,6 +1569,12 @@
     },
     "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe requiere un idioma compatible seleccionado explícitamente. La detección automática de idioma no está disponible. Idiomas compatibles:"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1255,6 +1603,12 @@
             "value": "Kompakt (Q4_K · Metal)"
           }
         },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Compacto (Q4_K · Metal)"
+          }
+        },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
@@ -1265,6 +1619,12 @@
     },
     "CrispASR did not become ready within five minutes.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR no estuvo listo en cinco minutos."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1287,6 +1647,12 @@
     },
     "CrispASR exited while starting.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR se cerró durante el inicio."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1309,6 +1675,12 @@
     },
     "Fast (Q5_0 · Recommended)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rápido (Q5_0 · recomendado)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1331,6 +1703,12 @@
     },
     "Higher precision (Q6_K · Metal)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mayor precisión (Q6_K · Metal)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1353,6 +1731,12 @@
     },
     "Intermediate quantization between recommended Q5_0 and Q8_0": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cuantización intermedia entre el Q5_0 recomendado y Q8_0"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1375,6 +1759,12 @@
     },
     "Largest quantization; no overall accuracy gain measured yet": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cuantización más grande; todavía no se ha medido una mejora general de la precisión"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1397,6 +1787,12 @@
     },
     "Maximum precision (Q8_0 · Experimental)": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Máxima precisión (Q8_0 · experimental)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1419,6 +1815,12 @@
     },
     "Model": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelo"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1441,6 +1843,12 @@
     },
     "Smallest download and memory footprint": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La descarga y el uso de memoria más pequeños"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1463,6 +1871,12 @@
     },
     "The Cohere model download completed without all required model files.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La descarga del modelo de Cohere terminó sin todos los archivos de modelo necesarios."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1485,6 +1899,12 @@
     },
     "The Cohere Transcribe model is not downloaded.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo Cohere Transcribe no está descargado."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1507,6 +1927,12 @@
     },
     "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El modelo Cohere Transcribe no está cargado. Abre los ajustes del plugin y cárgalo primero."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1529,6 +1955,12 @@
     },
     "The CrispASR runtime could not be extracted.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo extraer el entorno de ejecución de CrispASR."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1551,6 +1983,12 @@
     },
     "The CrispASR runtime download failed.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Error al descargar el entorno de ejecución de CrispASR."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1573,6 +2011,12 @@
     },
     "The local CrispASR server URL is invalid.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La URL del servidor local de CrispASR no es válida."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1595,6 +2039,12 @@
     },
     "The pinned Cohere model repository identifier is invalid.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El identificador del repositorio fijado del modelo de Cohere no es válido."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1617,6 +2067,12 @@
     },
     "The verified CrispASR runtime archive is incomplete.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El archivo verificado del entorno de ejecución de CrispASR está incompleto."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1639,6 +2095,12 @@
     },
     "This removes %@. Shared runtime files remain while another variant is installed.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esto quita %@. Los archivos de ejecución compartidos se conservan mientras haya otra variante instalada."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1661,6 +2123,12 @@
     },
     "TypeWhisper could not reserve a local port for Cohere Transcribe.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper no pudo reservar un puerto local para Cohere Transcribe."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1683,6 +2151,12 @@
     },
     "Starting and warming up Cohere with Metal": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciando y precalentando Cohere con Metal"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1705,6 +2179,12 @@
     },
     "Working…": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Procesando…"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1727,6 +2207,12 @@
     },
     "Loads on demand": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se carga cuando se necesita"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -1749,6 +2235,12 @@
     },
     "Auto-unload model is set to Immediate.": {
       "localizations": {
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Liberar el modelo automáticamente” está en “Inmediato”."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

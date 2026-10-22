@@ -844,7 +844,8 @@ private struct SettingsSidebarRow: View {
                 "\(badge) updates",
                 de: "\(badge) Updates",
                 ja: "\(badge)件の更新",
-                zh: "\(badge) 个更新"
+                zh: "\(badge) 个更新",
+                es: "\(badge) actualizaciones"
             ))
         }
         return parts.joined(separator: ", ")
@@ -1141,7 +1142,8 @@ struct RecordingSettingsView: View {
                 "Remove \(deviceName)",
                 de: "\(deviceName) entfernen",
                 ja: "\(deviceName)を削除",
-                zh: "移除\(deviceName)"
+                zh: "移除\(deviceName)",
+                es: "Quitar \(deviceName)"
             ))
         }
         .padding(.vertical, 3)
@@ -1177,7 +1179,8 @@ struct RecordingSettingsView: View {
             "Priority \(index + 1) of \(audioDevice.inputDevicePriorityList.count)",
             de: "Priorität \(index + 1) von \(audioDevice.inputDevicePriorityList.count)",
             ja: "優先順位 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
-            zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)"
+            zh: "优先级 \(index + 1)/\(audioDevice.inputDevicePriorityList.count)",
+            es: "Prioridad \(index + 1) de \(audioDevice.inputDevicePriorityList.count)"
         )
         guard !isAvailable else { return position }
         return "\(position), \(String(localized: "Disconnected"))"
@@ -1689,7 +1692,8 @@ private struct SoundEventPicker: View {
                 "Preview sound for \(event.displayName)",
                 de: "Sound für „\(event.displayName)“ abspielen",
                 ja: "「\(event.displayName)」の音を再生",
-                zh: "预览“\(event.displayName)”的声音"
+                zh: "预览“\(event.displayName)”的声音",
+                es: "Escuchar el sonido de \(event.displayName)"
             ))
 
             Button {
@@ -1703,7 +1707,8 @@ private struct SoundEventPicker: View {
                 "Add custom sound for \(event.displayName)",
                 de: "Eigenen Sound für „\(event.displayName)“ hinzufügen",
                 ja: "「\(event.displayName)」にカスタム音を追加",
-                zh: "为“\(event.displayName)”添加自定义声音"
+                zh: "为“\(event.displayName)”添加自定义声音",
+                es: "Agregar un sonido personalizado para \(event.displayName)"
             ))
         }
     }

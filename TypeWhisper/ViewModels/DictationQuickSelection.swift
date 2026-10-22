@@ -123,7 +123,8 @@ enum DictationQuickSelection {
                     ? deviceTitle(device)
                     : localizedAppText(
                         "\(deviceTitle(device)) (unavailable)",
-                        de: "\(deviceTitle(device)) (nicht verfügbar)"
+                        de: "\(deviceTitle(device)) (nicht verfügbar)",
+                        es: "\(deviceTitle(device)) (no disponible)"
                     ),
                 isSelected: device.uid == selectedDeviceUID,
                 isEnabled: isAvailable
@@ -139,7 +140,8 @@ enum DictationQuickSelection {
                 value: .device(uid: item.uid),
                 title: localizedAppText(
                     "\(item.name) (disconnected)",
-                    de: "\(item.name) (getrennt)"
+                    de: "\(item.name) (getrennt)",
+                    es: "\(item.name) (desconectado)"
                 ),
                 isEnabled: false
             ))
@@ -208,7 +210,8 @@ enum DictationQuickSelection {
                         ? language.name
                         : localizedAppText(
                             "\(language.name) (not supported by the model)",
-                            de: "\(language.name) (vom Modell nicht unterstützt)"
+                            de: "\(language.name) (vom Modell nicht unterstützt)",
+                            es: "\(language.name) (el modelo no lo admite)"
                         ),
                     isSelected: language.code == selectedCode
                 )
@@ -277,7 +280,8 @@ enum DictationQuickSelection {
                 value: DictationModelChoice(providerId: engine.providerId, modelId: nil),
                 title: localizedAppText(
                     "\(engine.displayName) (unavailable)",
-                    de: "\(engine.displayName) (nicht verfügbar)"
+                    de: "\(engine.displayName) (nicht verfügbar)",
+                    es: "\(engine.displayName) (no disponible)"
                 ),
                 isSelected: isSelectedProvider,
                 isEnabled: false
@@ -383,13 +387,14 @@ enum DictationQuickSelection {
     /// Dictation fails instead of falling back when a workflow names an engine that is
     /// disabled, uninstalled or lacks access, so the menu says so.
     static func unavailableEngineSummary(engineName: String) -> String {
-        localizedAppText("\(engineName) (unavailable)", de: "\(engineName) (nicht verfügbar)")
+        localizedAppText("\(engineName) (unavailable)", de: "\(engineName) (nicht verfügbar)", es: "\(engineName) (no disponible)")
     }
 
     static func workflowNote(workflowName: String, summary: String) -> String {
         localizedAppText(
             "Workflow “\(workflowName)” uses \(summary) here",
-            de: "Workflow „\(workflowName)“ verwendet hier \(summary)"
+            de: "Workflow „\(workflowName)“ verwendet hier \(summary)",
+            es: "El flujo de trabajo “\(workflowName)” usa aquí \(summary)"
         )
     }
 }
@@ -515,7 +520,7 @@ enum IndicatorModelMenu {
             if !group.setupRequiredOptions.isEmpty {
                 let count = group.setupRequiredOptions.count
                 entries.append(.moreModels(
-                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))"),
+                    title: localizedAppText("More Models (\(count))", de: "Weitere Modelle (\(count))", es: "Más modelos (\(count))"),
                     options: group.setupRequiredOptions.map(option)
                 ))
             }

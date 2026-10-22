@@ -9,6 +9,7 @@
     "description": "LLM provider via Anthropic Claude API. Requires API key.",
     "descriptions": {
         "de": "LLM-Anbieter über die Anthropic Claude API. Erfordert API-Key.",
+        "es": "Proveedor de LLM con la API de Anthropic Claude. Requiere una clave de API.",
         "ja": "Anthropic Claude APIによるLLMプロバイダーです。APIキーが必要です。"
     },
     "category": "llm",

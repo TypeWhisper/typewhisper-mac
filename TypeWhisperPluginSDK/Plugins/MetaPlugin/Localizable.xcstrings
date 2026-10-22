@@ -9,6 +9,12 @@
             "value" : "API-Schlüssel ausblenden"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ocultar clave de API"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -29,6 +35,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "API-Schlüssel entfernen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar clave de API"
           }
         },
         "ja" : {
@@ -53,6 +65,12 @@
             "value" : "API-Schlüssel anzeigen"
           }
         },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mostrar clave de API"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -70,6 +88,12 @@
     "API Key" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "API-Schlüssel" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clave de API"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "APIキー" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥" } }
       }
@@ -77,6 +101,12 @@
     "Connected" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbunden" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conectado"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続済み" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已连接" } }
       }
@@ -84,6 +114,12 @@
     "Connection Failed" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindung fehlgeschlagen" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error de conexión"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "接続に失敗しました" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接失败" } }
       }
@@ -91,6 +127,12 @@
     "Contributor models may use prompts and completions to train future Meta models." : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Contributor-Modelle dürfen Prompts und Antworten zum Training zukünftiger Meta-Modelle verwenden." } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los modelos Contributor pueden usar los prompts y las respuestas para entrenar futuros modelos de Meta."
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Contributorモデルでは、将来のMetaモデルの学習にプロンプトと応答が使用される場合があります。" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Contributor 模型可能会使用提示词和生成内容来训练未来的 Meta 模型。" } }
       }
@@ -98,6 +140,12 @@
     "Meta Model API" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meta Model API"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Meta Model API" } }
       }
@@ -105,6 +153,12 @@
     "Models are loaded dynamically from Meta and cached for offline settings access." : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Modelle werden dynamisch von Meta geladen und für den Offline-Zugriff in den Einstellungen zwischengespeichert." } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los modelos se cargan dinámicamente desde Meta y se guardan en caché para acceder a los ajustes sin conexión."
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "モデルはMetaから動的に取得され、オフライン設定用にキャッシュされます。" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "模型从 Meta 动态加载，并会缓存，以便离线访问设置。" } }
       }
@@ -112,6 +166,12 @@
     "Prompt Model" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Prompt-Modell" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo de prompts"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロンプトモデル" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示词模型" } }
       }
@@ -119,6 +179,12 @@
     "Remove" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Entfernen" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quitar"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "削除" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除" } }
       }
@@ -126,6 +192,12 @@
     "Realtime transcription streams 16 kHz PCM over Meta's WebSocket API. Speaker diarization applies to both realtime and uploaded audio." : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Echtzeittranskription streamt 16-kHz-PCM über Metas WebSocket-API. Die Sprechererkennung gilt sowohl für Echtzeit- als auch für hochgeladene Audiodateien." } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La transcripción en tiempo real transmite PCM a 16 kHz a través de la API WebSocket de Meta. La detección de hablantes se aplica tanto al audio en tiempo real como al audio subido."
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "リアルタイム文字起こしはMetaのWebSocket APIを通じて16 kHz PCMをストリーミングします。話者分離はリアルタイム音声とアップロード音声の両方に適用されます。" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "实时转录通过 Meta 的 WebSocket API 流式传输 16 kHz PCM 音频。说话人分离同时适用于实时音频和上传的音频。" } }
       }
@@ -133,6 +205,12 @@
     "Save and Refresh Models" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Speichern und Modelle laden" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar y actualizar modelos"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "保存してモデルを更新" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "保存并刷新模型" } }
       }
@@ -140,6 +218,12 @@
     "The API key is stored securely in the macOS Keychain." : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Der API-Schlüssel wird sicher im macOS-Schlüsselbund gespeichert." } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La clave de API se guarda de forma segura en el llavero de macOS."
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "APIキーはmacOSキーチェーンに安全に保存されます。" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "API 密钥安全存储在 macOS 钥匙串中。" } }
       }
@@ -147,6 +231,12 @@
     "Speaker diarization" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Sprechererkennung" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detección de hablantes"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "話者分離" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "说话人分离" } }
       }
@@ -154,6 +244,12 @@
     "Transcription Model" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Transkriptionsmodell" } },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modelo de transcripción"
+          }
+        },
         "ja" : { "stringUnit" : { "state" : "translated", "value" : "文字起こしモデル" } },
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "转录模型" } }
       }
