@@ -283,6 +283,16 @@ final class DictationViewModel: ObservableObject {
                 completion: completion
             )
         }
+
+        func with(text: String) -> UndeliveredTranscript {
+            UndeliveredTranscript(
+                text: text,
+                rawTranscript: rawTranscript,
+                outputFormat: outputFormat,
+                reason: reason,
+                completion: completion
+            )
+        }
     }
 
     /// Long enough to focus another text field before clicking Insert. Hovering pauses it.
@@ -4949,7 +4959,10 @@ final class DictationViewModel: ObservableObject {
     func triggerCorrectLastDictation() {
         promptPaletteHandler.hide()
         recentTranscriptionPaletteHandler.hide()
-        lastDictationCorrectionHandler.toggle(currentState: state)
+        // A running workflow or Insert also shows the inserting state, and its paste would land
+        // in the editor, which takes the keyboard focus.
+        let isPasting = isProcessingStandaloneWorkflow || isInsertingUndeliveredTranscript
+        lastDictationCorrectionHandler.toggle(currentState: isPasting ? .processing : state)
     }
 
     func pasteLastTranscription() {
@@ -5051,6 +5064,11 @@ final class DictationViewModel: ObservableObject {
             pendingPostInsertionDictations[index].finalText = correctedText
         }
         updateCompletedDictationSessionText(id: id, text: correctedText)
+        // A pending Insert offer for this dictation inserts the corrected text.
+        if case .insertUndeliveredTranscript(let transcript)? = actionFeedbackAction,
+           transcript.completion.id == id {
+            actionFeedbackAction = .insertUndeliveredTranscript(transcript.with(text: correctedText))
+        }
         // Read Back follows the corrected text, unless a newer dictation has finished since.
         if recentTranscriptionStore.sessionEntries.first?.id == id {
             lastTranscribedText = correctedText

@@ -8637,6 +8637,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 ? expectation(description: "Queued dictation started") : nil
             let failure = NSError(domain: "WorkflowFeedbackTest", code: 1,
                                   userInfo: [NSLocalizedDescriptionKey: "Workflow failed"])
+            let correctionPresenter = LastDictationCorrectionPresenterSpy()
             var context: DictationContext? = Self.makeDictationContext(
                 appSupportDirectory: directory,
                 workflowTextProcessingService: WorkflowTextProcessingService(
@@ -8648,7 +8649,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                         return "Processed selection"
                     },
                     appleTranslator: nil
-                )
+                ),
+                lastDictationCorrectionPresenter: correctionPresenter
             )
             defer {
                 releaseContinuation.finish()
@@ -8694,6 +8696,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             viewModel.dismissActionFeedback()
             XCTAssertEqual(viewModel.state, .inserting, scenario)
             XCTAssertEqual(viewModel.actionFeedbackMessage, "Delayed workflow...", scenario)
+            // The editor would take the keyboard focus the workflow result is pasted into.
+            viewModel.triggerCorrectLastDictation()
+            XCTAssertFalse(correctionPresenter.isEditorVisible, scenario)
+            XCTAssertEqual(correctionPresenter.notices, [LastDictationCorrectionCopy.busyNotice], scenario)
             if scenario == "queuedDictation" {
                 services.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
                 for _ in 0..<10 { await Task.yield() }
@@ -11665,6 +11671,93 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(viewModel.actionFeedbackActionTitle)
         // The verified Insert counts as the dictation's successful insertion.
         XCTAssertEqual(viewModel.lastSuccessfulDictationInsertion?.id, sessionID)
+    }
+
+    /// Correcting a dictation while the indicator still offers to insert it updates the offer,
+    /// so Insert pastes the corrected text.
+    @MainActor
+    func testCorrectingAnUndeliveredDictationUpdatesTheInsertOffer() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let keys = [UserDefaultsKeys.preserveClipboard, UserDefaultsKeys.liveFieldTranscriptEnabled]
+        let savedDefaults = keys.map { ($0, UserDefaults.standard.object(forKey: $0)) }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            for (key, value) in savedDefaults { Self.restoreUserDefault(value, forKey: key) }
+            TestSupport.remove(appSupportDirectory)
+        }
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.preserveClipboard)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+
+        let presenter = LastDictationCorrectionPresenterSpy()
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            lastDictationCorrectionPresenter: presenter
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let viewModel = context.dictationViewModel
+        viewModel.preserveClipboard = false
+        viewModel.soundFeedbackEnabled = false
+        viewModel.spokenFeedbackEnabled = false
+        let insertionPasteboard = NSPasteboard.withUniqueName()
+        let clipboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        var isTextFieldFocused = false
+        var pastedTexts: [String] = []
+        context.textInsertionService.pasteboardProvider = { insertionPasteboard }
+        viewModel.pasteboardProvider = { clipboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Finder", "com.apple.finder", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteVerificationPollingDelay = .milliseconds(1)
+        context.textInsertionService.pendingPasteSettleWindow = .milliseconds(1)
+        context.textInsertionService.focusedTextElementOverride = { isTextFieldFocused ? element : nil }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            // The focused field is empty until Insert pastes into it.
+            let value = isTextFieldFocused && pastedTexts.count > 1 ? (pastedTexts.last ?? "") : ""
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+        context.textInsertionService.pasteSimulatorOverride = {
+            pastedTexts.append(insertionPasteboard.string(forType: .string) ?? "")
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        let insertTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Insert")
+        let insertedMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Text inserted")
+
+        let sessionID = viewModel.apiStartRecording()
+        await viewModel.testingWaitForRecordingStart()
+        _ = viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if viewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               viewModel.actionFeedbackActionTitle == insertTitle {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        await viewModel.testingWaitForPostInsertionPersistence()
+        XCTAssertEqual(pastedTexts, ["transcribed"])
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle)
+
+        viewModel.triggerCorrectLastDictation()
+        XCTAssertEqual(presenter.shownTargets.first?.id, sessionID)
+        presenter.confirm("transcribed and corrected")
+        XCTAssertEqual(viewModel.actionFeedbackActionTitle, insertTitle, "The offer stays")
+
+        isTextFieldFocused = true
+        viewModel.performActionFeedbackAction()
+        for _ in 0..<80 {
+            if viewModel.actionFeedbackMessage == insertedMessage {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(viewModel.actionFeedbackMessage, insertedMessage)
+        XCTAssertEqual(pastedTexts, ["transcribed", "transcribed and corrected"])
     }
 
     @MainActor

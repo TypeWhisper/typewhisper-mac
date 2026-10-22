@@ -584,6 +584,9 @@ final class LastDictationCorrectionHandlerTests: XCTestCase {
         }
         let failedID = fixture.addDictation(rawText: "Failed dictation", recordsSessionEntry: false)
         try XCTUnwrap(fixture.historyService.record(withID: failedID)).processingState = .failed
+        // History sync imports another Mac's dictations with the Mac source and that Mac's device.
+        let otherMacID = fixture.addDictation(rawText: "Dictated on another Mac", recordsSessionEntry: false)
+        try XCTUnwrap(fixture.historyService.record(withID: otherMacID)).originDeviceID = "other-mac"
         XCTAssertTrue(fixture.historyService.addSpeakerRecord(
             id: UUID(),
             text: "Speaker one talks.",

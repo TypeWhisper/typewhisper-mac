@@ -136,7 +136,7 @@ final class LastDictationCorrectionHandler {
 
         let candidates = recentTranscriptionStore.sessionEntries.map {
             Candidate(id: $0.id, timestamp: $0.timestamp, sessionEntry: $0)
-        } + records.filter { $0.source == .mac }.map {
+        } + records.filter { $0.source == .mac && historyService.isFromThisMac($0) }.map {
             Candidate(id: $0.id, timestamp: $0.timestamp, sessionEntry: nil)
         }
         // Newest first. On equal timestamps the session entry, listed first, wins.
