@@ -656,7 +656,7 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
             if let ownID = numbering[SpeakerChannelAttribution.ownSpeakerLabel],
                transcript.speakerIDs.contains(ownID),
                historyService.record(withID: recordID)?.speakerNames?.displayName(for: ownID) == nil {
-                historyService.setSpeakerName(String(localized: "speakers.me"), for: ownID, inRecordID: recordID)
+                historyService.setSpeakerName(SpeakerOwnName.current(), for: ownID, inRecordID: recordID)
             }
             // Embeddings are keyed by provider labels; the transcript uses numbered speakers.
             var embeddings: [String: [Float]] = [:]

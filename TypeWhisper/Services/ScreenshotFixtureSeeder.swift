@@ -428,6 +428,8 @@ extension ServiceContainer {
             modelUsed: "Parakeet TDT 0.6B v3",
             timedText: timedText,
             granularity: .segment,
+            // The microphone channel carries S2, as in a call recorded by the Recorder.
+            ownSpeech: lines.filter { $0.speaker == "S2" }.map { $0.start...$0.end },
             transcript: transcript
         ) else { return }
         historyService.setSpeakerName("Anna", for: "S1", inRecordID: recordID)

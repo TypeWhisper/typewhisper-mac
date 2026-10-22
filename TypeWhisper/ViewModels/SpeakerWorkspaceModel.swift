@@ -46,16 +46,23 @@ final class SpeakerWorkspaceModel: ObservableObject {
     private let recordID: UUID
     private let historyService: HistoryService
     private let voices: SpeakerVoiceProfileService?
+    private let defaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
     private var lastSelectedTurn: Int?
     /// Word timing of the recording, by start time; empty without it.
     private var words: [TranscriptionWord] = []
     private var wordTokens: [Int: [WordToken]] = [:]
 
-    init(recordID: UUID, historyService: HistoryService, voices: SpeakerVoiceProfileService? = nil) {
+    init(
+        recordID: UUID,
+        historyService: HistoryService,
+        voices: SpeakerVoiceProfileService? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         self.recordID = recordID
         self.historyService = historyService
         self.voices = voices
+        self.defaults = defaults
         playback.clock.$time
             .sink { [weak self] time in self?.updateActivePosition(at: time) }
             .store(in: &cancellables)
@@ -77,11 +84,17 @@ final class SpeakerWorkspaceModel: ObservableObject {
 
     /// True for the user's own speaker, whose turns show on the right: the
     /// speaker heard on the microphone channel of a Recorder recording, or
-    /// one named as the user ("Me" in the app's language).
+    /// one named as the user ("Me" in the app's language, or their own name).
     func isOwnSpeaker(_ speakerID: String) -> Bool {
         if speakerID == microphoneSpeakerID { return true }
-        guard let name = names?.displayName(for: speakerID)?.trimmingCharacters(in: .whitespaces) else { return false }
-        return name.compare(String(localized: "speakers.me"), options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        guard let name = names?.displayName(for: speakerID) else { return false }
+        return SpeakerOwnName.isOwnName(name, defaults: defaults)
+    }
+
+    /// True for the speaker heard on the microphone channel, whose new name
+    /// also names the user in later recordings.
+    func isMicrophoneSpeaker(_ speakerID: String) -> Bool {
+        speakerID == microphoneSpeakerID
     }
 
     /// The speaker whose turns are mostly where the microphone carried the
@@ -335,8 +348,29 @@ final class SpeakerWorkspaceModel: ObservableObject {
             return
         }
         table.setName(name, for: speakerID, profileID: keepsVoice ? table.profileID(for: speakerID) : nil)
-        guard table != names else { return }
-        apply(transcript, names: table, actionName: String(localized: "speakers.rename.help"), undoManager: undoManager)
+        let isMicrophone = speakerID == microphoneSpeakerID
+        guard table != names else {
+            // "Me" again resets the user's name even where this recording still says "Me".
+            if isMicrophone, SpeakerOwnName.storedValue(for: name) == nil {
+                setOwnName(nil, undoManager: undoManager)
+            }
+            return
+        }
+        guard apply(transcript, names: table, actionName: String(localized: "speakers.rename.help"), undoManager: undoManager)
+        else { return }
+        if isMicrophone {
+            setOwnName(SpeakerOwnName.storedValue(for: name), undoManager: undoManager)
+        }
+    }
+
+    /// Stores the user's name for later recordings; undo restores the one before.
+    private func setOwnName(_ value: String?, undoManager: UndoManager?) {
+        let previous = defaults.string(forKey: UserDefaultsKeys.speakerOwnName)
+        guard previous != value else { return }
+        SpeakerOwnName.store(value, defaults: defaults)
+        undoManager?.registerUndo(withTarget: self) { model in
+            model.setOwnName(previous, undoManager: undoManager)
+        }
     }
 
     // MARK: - Voice profiles
@@ -428,6 +462,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
 
     /// - Parameter savedVoices: The voices stored for `transcript` before, when
     ///   undo or redo brings it back; moving them along again would lose some.
+    @discardableResult
     private func apply(
         _ transcript: SpeakerTranscript,
         names: SpeakerNameTable?,
@@ -435,7 +470,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         updatesText: Bool = false,
         actionName: String,
         undoManager: UndoManager?
-    ) {
+    ) -> Bool {
         let previous = (transcript: self.transcript, names: historyService.record(withID: recordID)?.speakerNames)
         guard historyService.updateSpeakerTranscript(
             transcript,
@@ -444,7 +479,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
             updatesText: updatesText
         ) else {
             reload()
-            return
+            return false
         }
         // Read after the update, which may first stamp them with the previous transcript.
         let previousVoices = voices?.storedVoices(ofRecordID: recordID)
@@ -452,7 +487,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         if let old = previous.transcript, let new = self.transcript, old != new {
             voices?.transcriptCorrected(recordID: recordID, from: old, to: new, restoring: savedVoices)
         }
-        guard let undoManager, let previousTranscript = previous.transcript else { return }
+        guard let undoManager, let previousTranscript = previous.transcript else { return true }
         undoManager.registerUndo(withTarget: self) { model in
             model.apply(
                 previousTranscript,
@@ -464,6 +499,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
             )
         }
         undoManager.setActionName(actionName)
+        return true
     }
 
     // MARK: - Copy and export
@@ -492,4 +528,39 @@ final class SpeakerWorkspaceModel: ObservableObject {
 @MainActor
 final class SpeakerWordHighlight: ObservableObject {
     @Published fileprivate(set) var index: Int?
+}
+
+/// The name of the user's own speaker in new recordings: "Me" in the app's
+/// language, or the name the user gave their microphone speaker once.
+enum SpeakerOwnName {
+    static var defaultName: String { String(localized: "speakers.me") }
+
+    static func current(defaults: UserDefaults = .standard) -> String {
+        let stored = defaults.string(forKey: UserDefaultsKeys.speakerOwnName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? defaultName : stored
+    }
+
+    /// The value to store for a new name; nil for an empty name or "Me", which go back to "Me".
+    static func storedValue(for name: String) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty || matches(trimmed, defaultName) ? nil : trimmed
+    }
+
+    static func store(_ value: String?, defaults: UserDefaults = .standard) {
+        if let value {
+            defaults.set(value, forKey: UserDefaultsKeys.speakerOwnName)
+        } else {
+            defaults.removeObject(forKey: UserDefaultsKeys.speakerOwnName)
+        }
+    }
+
+    static func isOwnName(_ name: String, defaults: UserDefaults = .standard) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return matches(trimmed, defaultName) || matches(trimmed, current(defaults: defaults))
+    }
+
+    private static func matches(_ a: String, _ b: String) -> Bool {
+        a.compare(b, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
 }

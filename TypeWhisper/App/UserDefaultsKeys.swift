@@ -115,6 +115,8 @@ enum UserDefaultsKeys {
     static let calendarMeetingAutoStopEnabled = "calendarMeetingAutoStopEnabled"
     /// Off records meetings without countdowns or the Recorder indicator (#1079). Default on.
     static let calendarMeetingShowsIndicator = "calendarMeetingShowsIndicator"
+    /// Name the user gave their own microphone speaker; empty means "Me".
+    static let speakerOwnName = "speakerOwnName"
     static let calendarMeetingDetectAdHoc = "calendarMeetingDetectAdHoc"
     static let calendarMeetingConfirmSoloEvents = "calendarMeetingConfirmSoloEvents"
     static let calendarMeetingSelectedCalendarIDs = "calendarMeetingSelectedCalendarIDs"
