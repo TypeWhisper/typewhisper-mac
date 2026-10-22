@@ -343,7 +343,7 @@ final class GroqPluginTests: XCTestCase {
             ],
             secrets: ["api-key": "test-key"]
         )
-        let plugin = GroqPlugin(llmModelFetcher: { _ in await fetch.models() })
+        let plugin = GroqPlugin(llmModelFetcher: { apiKey in await fetch.models(for: apiKey) })
         plugin.activate(host: host)
         let refresh = try XCTUnwrap(plugin.llmModelRefreshTask)
         await fetch.waitUntilRequested()
@@ -364,7 +364,7 @@ final class GroqPluginTests: XCTestCase {
             defaults: [GroqPlugin.fetchedLLMModelsKey: try Self.cachedModelList(["llama-3.3-70b-versatile"])],
             secrets: ["api-key": "test-key"]
         )
-        let plugin = GroqPlugin(llmModelFetcher: { _ in await fetch.models() })
+        let plugin = GroqPlugin(llmModelFetcher: { apiKey in await fetch.models(for: apiKey) })
         plugin.activate(host: host)
         let refresh = try XCTUnwrap(plugin.llmModelRefreshTask)
         await fetch.waitUntilRequested()
@@ -376,6 +376,57 @@ final class GroqPluginTests: XCTestCase {
 
         XCTAssertEqual(plugin.supportedModels.map(\.id), ["llama-3.3-70b-versatile"])
         XCTAssertNil(host.userDefault(forKey: GroqPlugin.fetchedLLMModelsDateKey))
+    }
+
+    func testSettingsModelFetchAppliesTheListWhileItsKeyIsSaved() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [GroqPlugin.selectedLLMModelKey: "llama-3.3-70b-versatile"],
+            secrets: ["api-key": "test-key"]
+        )
+        let fetched = try Self.fetchedModels(["llama-3.3-70b-versatile", "openai/gpt-oss-120b"])
+        let plugin = GroqPlugin(llmModelFetcher: { apiKey in apiKey == "test-key" ? fetched : [] })
+        plugin.activate(host: host)
+        XCTAssertNil(plugin.preferredModelId, "The built-in list lacks the saved model")
+
+        // As the settings view does after saving a key or on Refresh.
+        let models = await plugin.fetchLLMModels(for: "test-key")
+        XCTAssertTrue(plugin.applyFetchedLLMModels(models, fetchedWith: "test-key"))
+
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["llama-3.3-70b-versatile", "openai/gpt-oss-120b"])
+        XCTAssertNotNil(host.userDefault(forKey: GroqPlugin.fetchedLLMModelsKey) as? Data)
+        XCTAssertNotNil(host.userDefault(forKey: GroqPlugin.fetchedLLMModelsDateKey) as? Date)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+        // The kept saved model applies again once the account's list offers it.
+        XCTAssertEqual(plugin.preferredModelId, "llama-3.3-70b-versatile")
+    }
+
+    func testSettingsModelFetchFinishingAfterTheKeyChangedOrThePluginStoppedChangesNothing() async throws {
+        let interruptions: [(name: String, apply: (GroqPlugin) -> Void)] = [
+            ("key replaced", { $0.setApiKey("other-test-key") }),
+            ("key removed", { $0.removeApiKey() }),
+            ("plugin deactivated", { $0.deactivate() }),
+        ]
+        for interruption in interruptions {
+            let fetch = HeldModelFetch()
+            let host = try PluginTestHostServices(secrets: ["api-key": "test-key"])
+            let plugin = GroqPlugin(llmModelFetcher: { apiKey in await fetch.models(for: apiKey) })
+            plugin.activate(host: host)
+            let lateModels = try Self.fetchedModels(["openai/gpt-oss-120b"])
+
+            // As the settings view does after saving a key or on Refresh.
+            async let fetched = plugin.fetchLLMModels(for: "test-key")
+            await fetch.waitUntilRequested()
+            interruption.apply(plugin)
+            await fetch.release(lateModels)
+            let models = await fetched
+
+            XCTAssertFalse(plugin.applyFetchedLLMModels(models, fetchedWith: "test-key"), interruption.name)
+            XCTAssertEqual(plugin.supportedModels.map(\.id), GroqPlugin.fallbackLLMModels.map(\.id), interruption.name)
+            XCTAssertNil(host.userDefault(forKey: GroqPlugin.fetchedLLMModelsKey), interruption.name)
+            XCTAssertNil(host.userDefault(forKey: GroqPlugin.fetchedLLMModelsDateKey), interruption.name)
+            let requestedKeys = await fetch.requestedKeys
+            XCTAssertEqual(requestedKeys, ["test-key"], interruption.name)
+        }
     }
 
     /// Trimmed GET /openai/v1/models response with the models Groq listed in October 2026.
@@ -415,9 +466,11 @@ final class GroqPluginTests: XCTestCase {
 private actor HeldModelFetch {
     private var pending: CheckedContinuation<[GroqFetchedModel], Never>?
     private var requestWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var requestedKeys: [String] = []
 
-    func models() async -> [GroqFetchedModel] {
-        await withCheckedContinuation { continuation in
+    func models(for apiKey: String) async -> [GroqFetchedModel] {
+        requestedKeys.append(apiKey)
+        return await withCheckedContinuation { continuation in
             pending = continuation
             requestWaiters.forEach { $0.resume() }
             requestWaiters.removeAll()

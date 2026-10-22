@@ -304,11 +304,10 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             let models = await fetcher(apiKey)
             guard !Task.isCancelled, !models.isEmpty, let self else { return }
             await MainActor.run {
-                // Drop a result that arrives after deactivation, reactivation or a key change.
-                guard self.llmModelRefreshGeneration == generation,
-                      self.host != nil,
-                      self._apiKey == apiKey else { return }
-                self.setFetchedLLMModels(models)
+                // Drop a result that arrives after deactivation or reactivation.
+                // applyFetchedLLMModels drops it after a key change.
+                guard self.llmModelRefreshGeneration == generation else { return }
+                self.applyFetchedLLMModels(models, fetchedWith: apiKey)
             }
         }
     }
@@ -319,9 +318,21 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         llmModelRefreshTask = nil
     }
 
-    fileprivate func fetchLLMModels() async -> [GroqFetchedModel] {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else { return [] }
+    /// Fetches the model list with the given key rather than the key saved
+    /// when the request starts. Pass the same key to `applyFetchedLLMModels`.
+    func fetchLLMModels(for apiKey: String) async -> [GroqFetchedModel] {
+        guard !apiKey.isEmpty else { return [] }
         return await llmModelFetcher(apiKey)
+    }
+
+    /// Caches a fetched list only while the plugin is active and the key it
+    /// was fetched with is still the saved one, so a slow response for a
+    /// replaced or removed key cannot overwrite the list and its fetch date.
+    @discardableResult
+    func applyFetchedLLMModels(_ models: [GroqFetchedModel], fetchedWith apiKey: String) -> Bool {
+        guard !models.isEmpty, host != nil, _apiKey == apiKey else { return false }
+        setFetchedLLMModels(models)
+        return true
     }
 
     static func fetchLLMModels(apiKey: String) async -> [GroqFetchedModel] {
@@ -511,15 +522,22 @@ private struct GroqSettingsView: View {
                         .accessibilityLabel(Text("Refresh LLM models", bundle: bundle))
                     }
 
-                    Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
+                    // Saves only a model the user picks. Syncing the picker on
+                    // appear or after a refresh must not replace a saved model
+                    // the current list lacks; the plugin uses it again once
+                    // a later list offers it.
+                    Picker(String(localized: "LLM Model", bundle: bundle), selection: Binding(
+                        get: { selectedLLMModel },
+                        set: { modelId in
+                            selectedLLMModel = modelId
+                            plugin.selectLLMModel(modelId)
+                        }
+                    )) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
                     }
                     .labelsHidden()
-                    .onChange(of: selectedLLMModel) {
-                        plugin.selectLLMModel(selectedLLMModel)
-                    }
 
                     if fetchedLLMModels.isEmpty {
                         Text("Using default models. Press Refresh to fetch all available models.", bundle: bundle)
@@ -573,7 +591,7 @@ private struct GroqSettingsView: View {
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
             sendDictionaryTerms = plugin.sendDictionaryTerms
-            selectedLLMModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
+            showSelectedLLMModel()
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
@@ -591,13 +609,11 @@ private struct GroqSettingsView: View {
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
-                let models = await plugin.fetchLLMModels()
+                let models = await plugin.fetchLLMModels(for: trimmedKey)
                 await MainActor.run {
                     isValidating = false
                     validationResult = true
-                    if !models.isEmpty {
-                        applyFetchedLLMModels(models)
-                    }
+                    showFetchedLLMModels(models, fetchedWith: trimmedKey)
                 }
             } else {
                 await MainActor.run {
@@ -609,25 +625,27 @@ private struct GroqSettingsView: View {
     }
 
     private func refreshLLMModels() {
+        guard let apiKey = plugin._apiKey, !apiKey.isEmpty else { return }
         Task {
-            let models = await plugin.fetchLLMModels()
+            let models = await plugin.fetchLLMModels(for: apiKey)
             await MainActor.run {
-                if !models.isEmpty {
-                    applyFetchedLLMModels(models)
-                }
+                showFetchedLLMModels(models, fetchedWith: apiKey)
             }
         }
     }
 
-    /// Moves the picker off a model the new list no longer offers, to the
-    /// recommended default rather than the alphabetically first model.
-    private func applyFetchedLLMModels(_ models: [GroqFetchedModel]) {
+    /// Shows a fetched list once the plugin cached it. The plugin drops a list
+    /// fetched with a key that was replaced or removed in the meantime.
+    private func showFetchedLLMModels(_ models: [GroqFetchedModel], fetchedWith apiKey: String) {
+        guard plugin.applyFetchedLLMModels(models, fetchedWith: apiKey) else { return }
         fetchedLLMModels = models
-        plugin.setFetchedLLMModels(models)
-        if !models.contains(where: { $0.id == selectedLLMModel }),
-           let fallbackModelId = plugin.defaultLLMModelId {
-            selectedLLMModel = fallbackModelId
-            plugin.selectLLMModel(fallbackModelId)
-        }
+        showSelectedLLMModel()
+    }
+
+    /// Shows the model requests use: the saved one while the list offers it,
+    /// otherwise the recommended default rather than the alphabetically first
+    /// model. Showing it does not save it.
+    private func showSelectedLLMModel() {
+        selectedLLMModel = plugin.selectedLLMModelId ?? plugin.defaultLLMModelId ?? ""
     }
 }
