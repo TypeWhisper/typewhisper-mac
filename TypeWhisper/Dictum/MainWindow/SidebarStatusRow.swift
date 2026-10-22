@@ -1,8 +1,10 @@
 import SwiftUI
+import os
 
 struct SidebarStatusRow: View {
     let action: () -> Void
-    @State private var status: SidebarStatus = .noModel
+    @State private var status = SidebarStatus.current()
+    private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SidebarStatus")
 
     var body: some View {
         Button(action: action) {
@@ -22,7 +24,11 @@ struct SidebarStatusRow: View {
         .accessibilityIdentifier("dictum.sidebar.status")
         .task {
             while !Task.isCancelled {
-                status = SidebarStatus.current()
+                let current = SidebarStatus.current()
+                if status != current {
+                    logger.notice("Sidebar speech status=\(String(describing: current), privacy: .public)")
+                    status = current
+                }
                 do { try await Task.sleep(for: .milliseconds(500)) } catch { return }
             }
         }

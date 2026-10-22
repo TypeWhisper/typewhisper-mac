@@ -2,6 +2,7 @@ import SwiftUI
 import AVFoundation
 import Combine
 import Foundation
+import Carbon
 import os
 import TypeWhisperPluginSDK
 
@@ -114,6 +115,7 @@ struct SettingsManagedAppWindowScene: Scene {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1050, height: 600)
+        .handlesExternalEvents(matching: [])
     }
 }
 
@@ -128,6 +130,7 @@ struct SetupManagedAppWindowScene: Scene {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(width: 820, height: 560)
+        .handlesExternalEvents(matching: [])
     }
 }
 
@@ -141,6 +144,7 @@ struct HistoryManagedAppWindowScene: Scene {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 1180, height: 760)
+        .handlesExternalEvents(matching: [])
     }
 }
 
@@ -154,23 +158,28 @@ struct ErrorLogManagedAppWindowScene: Scene {
         }
         .windowResizability(.contentMinSize)
         .defaultSize(width: 500, height: 400)
+        .handlesExternalEvents(matching: [])
     }
 }
 
 @MainActor
 protocol ManagedAppWindowSceneConfiguration {
+    associatedtype MainScene: Scene
     associatedtype SettingsScene: Scene
     associatedtype SetupScene: Scene
     associatedtype HistoryScene: Scene
     associatedtype ErrorLogScene: Scene
 
     static func settings(content: AnyView) -> SettingsScene
+    static func main() -> MainScene
     static func setup(content: AnyView) -> SetupScene
     static func history(content: AnyView) -> HistoryScene
     static func errorLog(content: AnyView) -> ErrorLogScene
 }
 
 enum LegacyManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func main() -> some Scene { DictumMainWindow() }
+
     static func settings(content: AnyView) -> some Scene {
         SettingsManagedAppWindowScene(content: content)
     }
@@ -201,6 +210,10 @@ struct SuppressedManagedAppWindowScene<Content: Scene>: Scene {
 
 @available(macOS 15.0, *)
 enum SuppressedManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func main() -> some Scene {
+        SuppressedManagedAppWindowScene(content: DictumMainWindow())
+    }
+
     static func settings(content: AnyView) -> some Scene {
         SuppressedManagedAppWindowScene(content: SettingsManagedAppWindowScene(content: content))
     }
@@ -469,7 +482,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             }
         }
 
-        DictumMainWindow()
+        WindowConfiguration.main()
         WindowConfiguration.settings(content: AnyView(settingsContent))
         WindowConfiguration.setup(content: AnyView(setupContent))
         WindowConfiguration.history(content: AnyView(historyContent))
@@ -570,6 +583,7 @@ final class ManagedAppWindowOpener {
     static let shared = ManagedAppWindowOpener()
 
     var openWindow: OpenWindowAction?
+    var prepareToOpenWindow: ((String) -> Void)?
 
     func open(id: String) {
         open(id: id, remainingAttempts: 10)
@@ -577,7 +591,7 @@ final class ManagedAppWindowOpener {
 
     private func open(id: String, remainingAttempts: Int) {
         let sourceApplication = sourceApplicationForActivation()
-        NSApp.setActivationPolicy(.regular)
+        prepareToOpenWindow?(id)
 
         if let existingWindow = managedWindow(id: id) {
             reopenExistingWindow(existingWindow, sourceApplication: sourceApplication)
@@ -664,6 +678,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var workspaceSleepObserver: NSObjectProtocol?
     private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
+    private var launchedAtLogin = false
+    private let windowLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "WindowLifecycle")
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
     private let finderTranscriptionService = FinderTranscriptionService()
 
@@ -678,6 +694,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shouldShowDockIcon: Bool {
         if showMenuBarIconPreference {
             return UserDefaults.standard.dictumShowInDock || hasInteractiveForegroundContent
+                || NSApp.windows.contains { $0.identifier?.rawValue.contains("setup") == true && $0.isVisible }
         }
         return DockIconVisibility.shouldShowDockIcon(
             showMenuBarIcon: showMenuBarIconPreference,
@@ -707,7 +724,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ])
     }
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        launchedAtLogin = Self.isLoginItemLaunch(event)
+        ManagedAppWindowOpener.shared.prepareToOpenWindow = { [weak self] id in
+            self?.prepareToOpenManagedWindow(id: id)
+        }
+    }
+
+    static func isLoginItemLaunch(_ event: NSAppleEventDescriptor?) -> Bool {
+        event?.eventID == kAEOpenApplication
+            && event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        launchedAtLogin = launchedAtLogin || Self.isLoginItemLaunch(event)
+        windowLogger.notice("Launch source loginItem=\(self.launchedAtLogin, privacy: .public)")
         Self.registerDefaultUserDefaults()
 
         guard !AppConstants.isRunningTests else {
@@ -892,13 +925,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
-            return true
+            return false
         }
         DictumNavigation.shared.open()
         if ManagedLaunchGate.isSetupWizardRequired {
             openSetupWindow()
         }
-        return true
+        return false
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
@@ -913,9 +946,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentInitialWindow() {
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-            DictumNavigation.shared.open()
             if ManagedLaunchGate.isSetupWizardRequired {
                 openSetupWindow()
+            } else if !launchedAtLogin {
+                DictumNavigation.shared.open()
+            } else {
+                windowLogger.notice("Login item launch keeps main window closed")
             }
         }
     }
@@ -1110,10 +1146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.windows.contains { isManagedWindow($0) && $0.isVisible }
     }
 
-    private func applyActivationPolicy(activate: Bool = false) {
-        let targetPolicy: NSApplication.ActivationPolicy = shouldShowDockIcon ? .regular : .accessory
+    func prepareToOpenManagedWindow(id: String) {
+        applyActivationPolicy(openingSetup: id == "setup")
+        windowLogger.notice("Open window id=\(id, privacy: .public) policy=\(NSApp.activationPolicy().rawValue, privacy: .public)")
+    }
+
+    private func applyActivationPolicy(activate: Bool = false, openingSetup: Bool = false) {
+        let targetPolicy: NSApplication.ActivationPolicy = shouldShowDockIcon || openingSetup ? .regular : .accessory
         if NSApp.activationPolicy() != targetPolicy {
             NSApp.setActivationPolicy(targetPolicy)
+            windowLogger.notice("Activation policy=\(targetPolicy.rawValue, privacy: .public)")
         }
 
         if activate {
@@ -1126,6 +1168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isManagedWindow(window), window.isVisible else { return }
             self.applyActivationPolicy(activate: true)
+            self.windowLogger.notice("Key window id=\(window.identifier?.rawValue ?? "", privacy: .public) policy=\(NSApp.activationPolicy().rawValue, privacy: .public)")
         }
     }
 
