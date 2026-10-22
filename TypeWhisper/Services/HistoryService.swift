@@ -594,6 +594,7 @@ final class HistoryService: ObservableObject {
         }
         save()
         refreshRecentRecords()
+        if updatesText { emitPluginSyncEvent(for: record) }
         return true
     }
 
@@ -693,6 +694,26 @@ final class HistoryService: ObservableObject {
         refreshRecentRecords()
     }
 
+    /// Removes a name a voice profile suggested and keeps that profile from
+    /// being suggested for the speaker again. Like the suggestion, this stays
+    /// on this device, so nothing new syncs.
+    func rejectSpeakerSuggestion(for speakerID: String, inRecordID id: UUID) {
+        guard let record = record(withID: id), var names = record.speakerNames,
+              names.isSuggestion(for: speakerID) else { return }
+        let previousData = record.speakerNamesData
+        do {
+            try onSpeakerNamesWillChange?(record)
+            names.rejectSuggestion(for: speakerID)
+            record.speakerNames = names
+            try speakerNameWriter(modelContext)
+        } catch {
+            record.speakerNamesData = previousData
+            logger.error("Speaker suggestion could not be rejected: \(error.localizedDescription)")
+            return
+        }
+        refreshRecentRecords()
+    }
+
     /// Speaker detection does not survive a quit; such records can be retried.
     func failInterruptedSpeakerTranscripts() {
         let pending = SpeakerTranscriptState.pending.rawValue
@@ -735,6 +756,11 @@ final class HistoryService: ObservableObject {
         record.contentUpdatedAt = Date()
         save()
         refreshRecentRecords()
+        emitPluginSyncEvent(for: record)
+    }
+
+    /// Tells memory and storage plugins that mirror History about an edited text.
+    private func emitPluginSyncEvent(for record: TranscriptionRecord) {
         let payload = PluginSyncPayload(
             id: record.id,
             rawText: record.rawText,
@@ -1355,6 +1381,7 @@ final class HistoryService: ObservableObject {
                     record.speakerTranscriptData = nil
                     record.speakerTranscriptStateRaw = nil
                     record.speakerNamesData = nil
+                    record.pendingSpeakerNamesData = nil
                     record.timedTextData = nil
                     record.timedTextGranularityRaw = nil
                     record.speakerWordsData = nil
@@ -1422,40 +1449,18 @@ final class HistoryService: ObservableObject {
                       transcript.isValid else { continue }
                 let record = remoteRecord(for: transcript.recordID, timestamp: transcript.updatedAt)
                 guard transcript.updatedAt >= record.speakerTranscriptUpdatedAt else { continue }
+                let replacedRevision = record.speakerTranscript?.revision
                 record.speakerTranscript = transcript.speakerTranscript
                 record.speakerTranscriptState = .ready
                 record.speakerTranscriptUpdatedAt = transcript.updatedAt
+                if replacedRevision != transcript.revision {
+                    applyWaitingSpeakerNames(to: record, revision: transcript.revision)
+                }
             case .upsertHistorySpeakers(let speakers):
                 guard historySyncPreferences?.isSuppressed(speakers.recordID) != true,
                       speakers.isValid else { continue }
                 let record = remoteRecord(for: speakers.recordID, timestamp: speakers.updatedAt)
-                // Read the stored table directly: the names may arrive before their transcript.
-                let local = record.speakerNamesData.flatMap {
-                    try? JSONDecoder().decode(SpeakerNameTable.self, from: $0)
-                }
-                if var merged = local, merged.transcriptRevision == speakers.transcriptRevision {
-                    // Same transcript: merge name by name, so concurrent names
-                    // for different speakers on two devices both survive.
-                    let publishes = merged.merge(
-                        names: speakers.entries,
-                        cleared: speakers.cleared,
-                        remoteDate: speakers.updatedAt,
-                        localDate: record.speakerNamesUpdatedAt
-                    )
-                    record.speakerNamesData = try? JSONEncoder().encode(merged)
-                    let newest = max(record.speakerNamesUpdatedAt, speakers.updatedAt)
-                    // Holding a name the sender lacks: publish the merged table
-                    // with a newer date so the sender converges.
-                    record.speakerNamesUpdatedAt = publishes
-                        ? max(newest, Date(), speakers.updatedAt.addingTimeInterval(0.001))
-                        : newest
-                } else {
-                    guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { continue }
-                    record.speakerNamesData = try? JSONEncoder().encode(
-                        speakers.nameTable(keepingSuggestionsFrom: local)
-                    )
-                    record.speakerNamesUpdatedAt = speakers.updatedAt
-                }
+                applySynchronizedSpeakerNames(speakers, to: record)
             case .deleteHistory(let recordID):
                 if let record = record(withID: recordID) {
                     deleteAudioFile(for: record)
@@ -1473,6 +1478,100 @@ final class HistoryService: ObservableObject {
         try modelContext.save()
         refreshRecentRecords()
         if !deletedIDs.isEmpty { onRecordsDeleted?(deletedIDs) }
+    }
+
+    /// Names another device gave. Names for another transcript than the
+    /// current one, an outdated one or one still on its way, wait apart and
+    /// leave the current names alone.
+    private func applySynchronizedSpeakerNames(
+        _ speakers: UserDataSyncHistorySpeakersV1,
+        to record: TranscriptionRecord
+    ) {
+        // Read the stored table directly: the names may arrive before their transcript.
+        let local = record.speakerNamesData.flatMap {
+            try? JSONDecoder().decode(SpeakerNameTable.self, from: $0)
+        }
+        if let local, local.transcriptRevision == speakers.transcriptRevision {
+            // Same transcript: merge name by name, so concurrent names for
+            // different speakers on two devices both survive.
+            mergeSpeakerNames(speakers.entries, cleared: speakers.cleared, at: speakers.updatedAt, into: local, of: record)
+            return
+        }
+        let remote = speakers.nameTable(keepingSuggestionsFrom: nil)
+        let current = record.speakerTranscript?.revision
+        if let current, current != speakers.transcriptRevision {
+            record.pendingSpeakerNames = PendingSpeakerNames.adding(
+                remote, at: speakers.updatedAt, to: record.pendingSpeakerNames
+            )
+            return
+        }
+        if let local {
+            // The stored names belong to another revision. Names for the
+            // current transcript replace them, however recent they are;
+            // before any transcript is there the newer names come first.
+            guard current != nil || speakers.updatedAt >= record.speakerNamesUpdatedAt else {
+                record.pendingSpeakerNames = PendingSpeakerNames.adding(
+                    remote, at: speakers.updatedAt, to: record.pendingSpeakerNames
+                )
+                return
+            }
+            record.pendingSpeakerNames = PendingSpeakerNames.adding(
+                local, at: record.speakerNamesUpdatedAt, to: record.pendingSpeakerNames
+            )
+        } else {
+            guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { return }
+        }
+        record.speakerNamesData = try? JSONEncoder().encode(remote)
+        record.speakerNamesUpdatedAt = speakers.updatedAt
+    }
+
+    /// Names that waited for a transcript become its names when it arrives;
+    /// the names they replace wait in turn, should their transcript come back.
+    private func applyWaitingSpeakerNames(to record: TranscriptionRecord, revision: UUID) {
+        var waiting = record.pendingSpeakerNames
+        guard let index = waiting.firstIndex(where: { $0.table.transcriptRevision == revision }) else { return }
+        let names = waiting.remove(at: index)
+        let local = record.speakerNamesData.flatMap {
+            try? JSONDecoder().decode(SpeakerNameTable.self, from: $0)
+        }
+        if let local, local.transcriptRevision == revision {
+            mergeSpeakerNames(
+                names.table.confirmedEntries,
+                cleared: names.table.cleared,
+                at: names.updatedAt,
+                into: local,
+                of: record
+            )
+        } else {
+            if let local {
+                waiting = PendingSpeakerNames.adding(local, at: record.speakerNamesUpdatedAt, to: waiting)
+            }
+            record.speakerNamesData = try? JSONEncoder().encode(names.table)
+            record.speakerNamesUpdatedAt = names.updatedAt
+        }
+        record.pendingSpeakerNames = waiting
+    }
+
+    /// Merges another device's names into the stored ones for the same
+    /// transcript. Holding a name the other device lacks dates the merged
+    /// table newer than its names, so it is published and that device converges.
+    private func mergeSpeakerNames(
+        _ names: [SpeakerNameTable.Entry],
+        cleared: [SpeakerNameTable.ClearedName],
+        at date: Date,
+        into local: SpeakerNameTable,
+        of record: TranscriptionRecord
+    ) {
+        var merged = local
+        let publishes = merged.merge(
+            names: names,
+            cleared: cleared,
+            remoteDate: date,
+            localDate: record.speakerNamesUpdatedAt
+        )
+        record.speakerNamesData = try? JSONEncoder().encode(merged)
+        let newest = max(record.speakerNamesUpdatedAt, date)
+        record.speakerNamesUpdatedAt = publishes ? max(newest, Date(), date.addingTimeInterval(0.001)) : newest
     }
 
     func installSynchronizedAudio(recordID: UUID, sourceURL: URL) throws {

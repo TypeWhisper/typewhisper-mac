@@ -378,20 +378,34 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         let updatedAt: Date
     }
 
+    /// A voice profile the user said is not this speaker. Like suggestions it
+    /// stays on this device; the profile is not suggested for the speaker again.
+    struct RejectedProfile: Codable, Equatable, Sendable {
+        let speakerID: String
+        let profileID: UUID
+    }
+
     static let maximumNameLength = 100
 
     let transcriptRevision: UUID
     private(set) var entries: [Entry]
     private(set) var cleared: [ClearedName]
+    private(set) var rejected: [RejectedProfile]
 
-    init(transcriptRevision: UUID, entries: [Entry] = [], cleared: [ClearedName] = []) {
+    init(
+        transcriptRevision: UUID,
+        entries: [Entry] = [],
+        cleared: [ClearedName] = [],
+        rejected: [RejectedProfile] = []
+    ) {
         self.transcriptRevision = transcriptRevision
         self.entries = entries
         self.cleared = cleared
+        self.rejected = rejected
     }
 
     private enum CodingKeys: String, CodingKey {
-        case transcriptRevision, entries, cleared
+        case transcriptRevision, entries, cleared, rejected
     }
 
     init(from decoder: Decoder) throws {
@@ -399,6 +413,7 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         transcriptRevision = try container.decode(UUID.self, forKey: .transcriptRevision)
         entries = try container.decode([Entry].self, forKey: .entries)
         cleared = try container.decodeIfPresent([ClearedName].self, forKey: .cleared) ?? []
+        rejected = try container.decodeIfPresent([RejectedProfile].self, forKey: .rejected) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -406,17 +421,19 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         try container.encode(transcriptRevision, forKey: .transcriptRevision)
         try container.encode(entries, forKey: .entries)
         if !cleared.isEmpty { try container.encode(cleared, forKey: .cleared) }
+        if !rejected.isEmpty { try container.encode(rejected, forKey: .rejected) }
     }
 
     /// Confirmed names, the ones that sync; suggestions stay on this device.
     var confirmedEntries: [Entry] { entries.filter { $0.isSuggestion != true } }
 
-    /// Nothing to keep: no names and no removals other devices must learn of.
-    var isEmpty: Bool { entries.isEmpty && cleared.isEmpty }
+    /// Nothing to keep: no names, no removals other devices must learn of,
+    /// and no rejected suggestions.
+    var isEmpty: Bool { entries.isEmpty && cleared.isEmpty && rejected.isEmpty }
 
     /// The same names and removals, regardless of when they were made.
     func hasSameNames(as other: SpeakerNameTable?) -> Bool {
-        guard let other else { return isEmpty }
+        guard let other else { return entries.isEmpty && cleared.isEmpty }
         return transcriptRevision == other.transcriptRevision
             && entries.count == other.entries.count
             && zip(entries, other.entries).allSatisfy { $0.isSameName(as: $1) }
@@ -433,6 +450,27 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
 
     func isSuggestion(for speakerID: String) -> Bool {
         entries.first { $0.speakerID == speakerID }?.isSuggestion == true
+    }
+
+    /// Voice profiles the user rejected as this speaker's name.
+    func rejectedProfileIDs(for speakerID: String) -> Set<UUID> {
+        Set(rejected.filter { $0.speakerID == speakerID }.map(\.profileID))
+    }
+
+    /// Removes a name a voice profile suggested and remembers that profile
+    /// as not this speaker.
+    mutating func rejectSuggestion(for speakerID: String) {
+        guard let entry = entries.first(where: { $0.speakerID == speakerID }),
+              entry.isSuggestion == true else { return }
+        entries.removeAll { $0.speakerID == speakerID }
+        if let profileID = entry.profileID {
+            remember(RejectedProfile(speakerID: speakerID, profileID: profileID))
+        }
+    }
+
+    private mutating func remember(_ rejection: RejectedProfile) {
+        guard !rejected.contains(rejection) else { return }
+        rejected.append(rejection)
     }
 
     /// Sets or clears a name. Blank names remove the entry; names are trimmed
@@ -457,8 +495,8 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         entries.sort { ($0.speakerNumber ?? .max) < ($1.speakerNumber ?? .max) }
     }
 
-    /// Moves names to renumbered speaker IDs and drops names of speakers
-    /// that a correction removed.
+    /// Moves names and rejected suggestions to renumbered speaker IDs and
+    /// drops those of speakers that a correction removed.
     func renamingSpeakers(_ newSpeakerIDs: [String: String]) -> SpeakerNameTable {
         var table = SpeakerNameTable(transcriptRevision: transcriptRevision)
         for entry in entries {
@@ -470,7 +508,21 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
                 isSuggestion: entry.isSuggestion == true
             )
         }
+        for rejection in rejected {
+            guard let newID = newSpeakerIDs[rejection.speakerID] else { continue }
+            table.remember(RejectedProfile(speakerID: newID, profileID: rejection.profileID))
+        }
         return table
+    }
+
+    /// Takes this device's suggestions from `local` for speakers this table
+    /// has no name for, and the suggestions rejected there.
+    mutating func keepSuggestions(of local: SpeakerNameTable?) {
+        guard let local, local.transcriptRevision == transcriptRevision else { return }
+        for entry in local.entries where entry.isSuggestion == true && displayName(for: entry.speakerID) == nil {
+            setName(entry.displayName, for: entry.speakerID, profileID: entry.profileID, isSuggestion: true)
+        }
+        for rejection in local.rejected { remember(rejection) }
     }
 
     /// Names only count for the transcript revision they were given for.

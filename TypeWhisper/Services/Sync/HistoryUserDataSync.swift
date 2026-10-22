@@ -414,17 +414,48 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
     }
 
     /// The name table these names make, keeping this device's pending
-    /// suggestions for speakers the names do not cover.
+    /// suggestions for speakers the names do not cover and its rejected ones.
     func nameTable(keepingSuggestionsFrom local: SpeakerNameTable?) -> SpeakerNameTable {
         var table = SpeakerNameTable(transcriptRevision: transcriptRevision)
         _ = table.merge(names: entries, cleared: cleared, remoteDate: updatedAt, localDate: updatedAt)
-        if let local, local.transcriptRevision == transcriptRevision {
-            for entry in local.entries
-            where entry.isSuggestion == true && table.displayName(for: entry.speakerID) == nil {
-                table.setName(entry.displayName, for: entry.speakerID, profileID: entry.profileID, isSuggestion: true)
-            }
-        }
+        table.keepSuggestions(of: local)
         return table
+    }
+}
+
+/// Speaker names another device sent for a transcript revision that is not
+/// the record's current one: an outdated transcript that device still showed,
+/// or a newer one whose transcript has not arrived yet. Sync counts every
+/// operation it read as applied, so such names wait here instead of
+/// replacing the current names or getting lost. Never synced or exported.
+struct PendingSpeakerNames: Codable, Equatable, Sendable {
+    var table: SpeakerNameTable
+    /// When the names last changed, like `speakerNamesUpdatedAt`.
+    var updatedAt: Date
+
+    /// How many revisions wait at most; the most recently named ones stay.
+    static let limit = 4
+
+    /// Adds names to the waiting ones. Names for a revision that already
+    /// waits merge with them one speaker at a time.
+    static func adding(
+        _ table: SpeakerNameTable,
+        at date: Date,
+        to waiting: [PendingSpeakerNames]
+    ) -> [PendingSpeakerNames] {
+        var waiting = waiting
+        if let index = waiting.firstIndex(where: { $0.table.transcriptRevision == table.transcriptRevision }) {
+            _ = waiting[index].table.merge(
+                names: table.confirmedEntries,
+                cleared: table.cleared,
+                remoteDate: date,
+                localDate: waiting[index].updatedAt
+            )
+            waiting[index].updatedAt = max(waiting[index].updatedAt, date)
+        } else {
+            waiting.append(PendingSpeakerNames(table: table, updatedAt: date))
+        }
+        return Array(waiting.sorted { $0.updatedAt > $1.updatedAt }.prefix(limit))
     }
 }
 
