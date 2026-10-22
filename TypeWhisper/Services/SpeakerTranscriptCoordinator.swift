@@ -381,8 +381,21 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     /// Saves a recording with its audio to History. Speaker labels the engine
     /// returned itself are used as they are; otherwise detection is queued.
+    /// A Recorder recording that already has its record keeps that record,
+    /// whose ID is returned.
     func addRecording(_ input: SpeakerRecordingInput) async -> UUID? {
         guard premiumAccess() else { return nil }
+        if let recordingID = input.recorderRecordingID {
+            do {
+                if let existing = try historyService.speakerRecord(forRecorderRecordingID: recordingID) {
+                    return existing.id
+                }
+            } catch {
+                // Without the lookup a second record for the same recording could be saved.
+                speakerLogger.error("Failed to look up the speaker record of a recording: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
+        }
         let segments = input.result.segments
         let timedText = SpeakerTranscriptBuilder.timedText(from: segments)
         let providerTranscript = SpeakerTranscriptBuilder.providerTranscript(

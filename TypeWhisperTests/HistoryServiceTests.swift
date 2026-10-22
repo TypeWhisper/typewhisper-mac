@@ -148,6 +148,28 @@ final class HistoryServiceTests: XCTestCase {
         viewModel.deactivate()
     }
 
+    /// Issue #1558: the Speakers page lists 30 recordings, an inactive History
+    /// keeps the 20 newest records, and a mailbox can hide the record.
+    @MainActor
+    func testSpeakersPageOpensARecordOutsideTheLoadedHistoryPage() async throws {
+        let fixture = try makeRecordNavigationFixture(recordCount: 30)
+        defer { TestSupport.remove(fixture.directory) }
+        let viewModel = fixture.viewModel
+        let target = fixture.records[2]
+        XCTAssertFalse(viewModel.records.contains { $0.id == target.id })
+        viewModel.requestNavigationSelection(.smartMailbox(.failed))
+        var openedWindows = 0
+
+        SpeakerNavigation.openInHistory(target.id, in: viewModel) { openedWindows += 1 }
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(openedWindows, 1)
+        XCTAssertEqual(viewModel.navigationSelection, .smartMailbox(.all))
+        XCTAssertEqual(viewModel.selectedRecord?.id, target.id)
+        XCTAssertEqual(viewModel.recordScrollRequest?.recordID, target.id)
+        viewModel.deactivate()
+    }
+
     @MainActor
     func testOpeningRecentRecordHonorsUnsavedDraftCancellationAndDiscard() async throws {
         let fixture = try makeRecordNavigationFixture()

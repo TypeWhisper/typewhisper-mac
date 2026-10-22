@@ -87,6 +87,13 @@ final class FileTranscriptionViewModel: ObservableObject {
         case cancelled
     }
 
+    /// A transcribed file that could not be saved to History with speaker
+    /// detection, for example after Premium expired during the transcription
+    /// or without the speaker detection plugin.
+    private struct SpeakerRecordNotSaved: LocalizedError {
+        var errorDescription: String? { String(localized: "speakers.page.file.notSaved") }
+    }
+
     private final class CancellationFlag: @unchecked Sendable {
         private let lock = OSAllocatedUnfairLock(initialState: false)
 
@@ -585,6 +592,8 @@ final class FileTranscriptionViewModel: ObservableObject {
                     if let recordID { speakerRecordRemoval?(recordID) }
                     throw CancellationError()
                 }
+                // Without a record the file failed, so it can be tried again.
+                guard let recordID else { throw SpeakerRecordNotSaved() }
                 files[index].historyRecordID = recordID
             }
             files[index].state = .done

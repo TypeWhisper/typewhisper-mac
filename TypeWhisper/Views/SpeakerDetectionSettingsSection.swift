@@ -279,9 +279,14 @@ private struct VoiceProfileRow: View {
 
 @MainActor
 enum SpeakerNavigation {
-    /// Opens the History window with the record selected.
-    static func openInHistory(_ recordID: UUID) {
-        ManagedAppWindowOpener.shared.open(id: "history")
-        HistoryViewModel.shared.requestRecordSelection([recordID])
+    /// Opens the History window with the record selected, also when it is
+    /// outside the loaded page or hidden by the mailbox or filters.
+    static func openInHistory(
+        _ recordID: UUID,
+        in history: HistoryViewModel = .shared,
+        openWindow: @MainActor () -> Void = { ManagedAppWindowOpener.shared.open(id: "history") }
+    ) {
+        history.requestOpenRecord(withID: recordID)
+        openWindow()
     }
 }
