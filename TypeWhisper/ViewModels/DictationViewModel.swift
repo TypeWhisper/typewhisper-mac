@@ -3518,7 +3518,9 @@ final class DictationViewModel: ObservableObject {
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
-        return plugin is any LiveTranscriptionCapablePlugin
+        // A model without live sessions previewed in batches; its preview never becomes the transcript.
+        let modelId = modelManager.effectiveModelOverride(streamingParams.cloudModelOverride)
+        return plugin.liveTranscriptionPlugin(forModelId: modelId) != nil
     }
 
     private func transcribeFinalAudio(
@@ -4423,7 +4425,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func engineSupportsPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
-        if engine is any LiveTranscriptionCapablePlugin, engine.supportsStreaming { return true }
+        if engine.liveTranscriptionPlugin(forModelId: nil) != nil, engine.supportsStreaming { return true }
         let allowsFallback = (engine as? any TranscriptPreviewFallbackPolicyProviding)?
             .allowsTranscriptPreviewFallback ?? true
         return allowsFallback

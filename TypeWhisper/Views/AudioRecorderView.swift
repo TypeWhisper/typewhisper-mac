@@ -306,7 +306,10 @@ struct AudioRecorderView: View {
 
                 if viewModel.livePreviewEnabled {
                     if let engine = viewModel.resolvedEngine,
-                       !modelManager.supportsLiveTranscriptionSession(engineOverrideId: engine.providerId) {
+                       !modelManager.supportsLiveTranscriptionSession(
+                           engineOverrideId: engine.providerId,
+                           cloudModelOverride: viewModel.availableSelectedModel
+                       ) {
                         Label(
                             String(localized: "recorder.livePreviewLightweightHint"),
                             systemImage: "info.circle"

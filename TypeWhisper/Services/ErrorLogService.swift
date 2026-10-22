@@ -548,7 +548,7 @@ final class ErrorLogService: ObservableObject {
                 selectedModelId: engine?.selectedModelId,
                 isConfigured: engine?.isConfigured,
                 supportsStreaming: engine?.supportsStreaming,
-                supportsLiveTranscriptionSession: engine.map { $0 is LiveTranscriptionCapablePlugin },
+                supportsLiveTranscriptionSession: engine.map { $0.liveTranscriptionPlugin(forModelId: nil) != nil },
                 allowsTranscriptPreviewFallback: allowsTranscriptPreviewFallback,
                 storedSelectedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedModel")),
                 storedLoadedModelId: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "loadedModel")),

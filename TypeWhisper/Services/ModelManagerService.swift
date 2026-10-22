@@ -554,12 +554,12 @@ final class ModelManagerService: ObservableObject {
         return plugin.supportsStreaming
     }
 
-    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil) -> Bool {
+    func supportsLiveTranscriptionSession(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId),
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
             return false
         }
-        return plugin is LiveTranscriptionCapablePlugin
+        return plugin.liveTranscriptionPlugin(forModelId: effectiveModelOverride(cloudModelOverride)) != nil
     }
 
     func usesMeteredStreamingFallback(engineOverrideId: String? = nil) -> Bool {
@@ -583,8 +583,8 @@ final class ModelManagerService: ObservableObject {
         guard let policy = plugin as? any TranscriptPreviewFallbackPolicyProviding else {
             return true
         }
-        guard plugin is any LiveTranscriptionCapablePlugin else {
-            // Keep batch-only engines' policy checks free of model-load side effects.
+        guard plugin.liveTranscriptionPlugin(forModelId: cloudModelOverride) != nil else {
+            // Keep batch-only engines' and models' policy checks free of model-load side effects.
             return policy.allowsTranscriptPreviewFallback
         }
 
@@ -599,7 +599,7 @@ final class ModelManagerService: ObservableObject {
     /// live session, so dictation should stream even when no transcript preview is shown.
     func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
         guard let providerId = effectiveEngineId(engineOverrideId ?? selectedProviderId),
-              PluginManager.shared.transcriptionEngine(for: providerId) is any LiveTranscriptionCapablePlugin,
+              PluginManager.shared.transcriptionEngine(for: providerId)?.liveTranscriptionPlugin(forModelId: nil) != nil,
               let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
             return false
         }
@@ -1018,7 +1018,8 @@ final class ModelManagerService: ObservableObject {
         // against the model that will actually transcribe.
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
-        guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
+        // Preparation selected the model that transcribes, so nil asks about that model.
+        guard let livePlugin = plugin.liveTranscriptionPlugin(forModelId: nil) else {
             restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
             return nil
         }
