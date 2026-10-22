@@ -163,6 +163,9 @@ enum AppConstants {
         #endif
     }()
 
+    static let devKeychainServicePrefix = "com.schneidervvv.dictum.dev.apikey."
+    static let releaseKeychainServicePrefix = "com.schneidervvv.dictum.apikey."
+
     static let keychainServicePrefix: String = {
         if isScreenshotAutomation {
             return "com.schneidervvv.dictum.screenshots.apikey."
@@ -176,9 +179,9 @@ enum AppConstants {
         #elseif APPSTORE
         return "com.typewhisper.typewhisper-app.apikey."
         #elseif DEBUG
-        return "com.schneidervvv.dictum.apikey."
+        return devKeychainServicePrefix
         #else
-        return "com.schneidervvv.dictum.apikey."
+        return releaseKeychainServicePrefix
         #endif
     }()
 

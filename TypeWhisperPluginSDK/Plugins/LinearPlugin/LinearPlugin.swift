@@ -448,7 +448,7 @@ private struct LinearSettingsView: View {
                         Picker(String(localized: "Team", bundle: bundle), selection: $selectedTeamId) {
                             Text("Select team...", bundle: bundle).tag("")
                             ForEach(teams) { team in
-                                Text("\(team.key) - \(team.name)").tag(team.id)
+                                Text(verbatim: "\(team.key) - \(team.name)").tag(team.id)
                             }
                         }
                         .onChange(of: selectedTeamId) { _, newValue in

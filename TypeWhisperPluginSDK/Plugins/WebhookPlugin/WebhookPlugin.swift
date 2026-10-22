@@ -618,7 +618,7 @@ private struct WebhookRow: View {
                     .font(.body.weight(.medium))
 
                 if !webhook.url.isEmpty {
-                    Text("\(webhook.httpMethod) \(webhook.url)")
+                    Text(verbatim: "\(webhook.httpMethod) \(webhook.url)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -696,7 +696,7 @@ private struct DeliveryLogRow: View {
             }
             Spacer()
             if let code = entry.statusCode {
-                Text("\(code)")
+                Text(verbatim: "\(code)")
                     .font(.caption)
                     .monospacedDigit()
             }
@@ -762,8 +762,8 @@ private struct ExampleWebhookEditView: View {
                             String(localized: "Method", bundle: bundle),
                             selection: $editorState.webhook.httpMethod
                         ) {
-                            Text("POST", bundle: bundle).tag("POST")
-                            Text("PUT", bundle: bundle).tag("PUT")
+                            Text(verbatim: "POST").tag("POST")
+                            Text(verbatim: "PUT").tag("PUT")
                         }
                     }
 

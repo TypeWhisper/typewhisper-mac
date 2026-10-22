@@ -1008,7 +1008,7 @@ private struct R2T2SettingsView: View {
                 Text(model == .recommended
                     ? String(localized: "\(model.displayName) (recommended)", bundle: bundle)
                     : model.displayName)
-                Text("\(ByteCountFormatter.string(fromByteCount: model.fileSize, countStyle: .file)) · \(summary(model))")
+                Text(verbatim: "\(ByteCountFormatter.string(fromByteCount: model.fileSize, countStyle: .file)) · \(summary(model))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

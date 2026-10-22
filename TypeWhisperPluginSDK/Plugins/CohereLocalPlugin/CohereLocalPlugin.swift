@@ -984,7 +984,7 @@ private struct CohereLocalSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(CohereLocalPlugin.localizedString(model.displayName, bundle: bundle))
                         .font(.body)
-                    Text(
+                    Text(verbatim:
                         "\(CohereLocalPlugin.localizedString(model.sizeDescription, bundle: bundle)) · \(CohereLocalPlugin.localizedString(model.ramRequirement, bundle: bundle))"
                     )
                     .font(.caption)
@@ -1045,7 +1045,7 @@ private struct CohereLocalSettingsView: View {
                 ProgressView(value: progress)
                     .frame(width: 80)
                     .accessibilityLabel(Text(String.localizedStringWithFormat(String(localized: "Downloading %@", bundle: bundle), modelName(model))))
-                Text("\(Int(progress * 100))%")
+                Text(verbatim: "\(Int(progress * 100))%")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)

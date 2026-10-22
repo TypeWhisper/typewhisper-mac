@@ -1307,7 +1307,7 @@ private struct Qwen3SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Qwen3 ASR (MLX)")
+            Text(verbatim: "Qwen3 ASR (MLX)")
                 .font(.headline)
 
             Text("Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.", bundle: bundle)
@@ -1505,7 +1505,7 @@ private struct Qwen3SettingsView: View {
                     }
                 }
 
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

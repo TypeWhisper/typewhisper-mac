@@ -1,6 +1,30 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Imported File" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Imported File" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "导入的文件" } }
+      }
+    },
+    "Version %@ (%@)" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Version %1$@ (%2$@)" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "版本 %1$@（%2$@）" } }
+      }
+    },
+    "Strip final period from standalone values" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Strip final period from standalone values" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除独立值末尾的句号" } }
+      }
+    },
+    "Removes a model-added period when a dictated email address, URL, number, or version string is inserted on its own, keeping the value usable in form fields. Abbreviations, dates, and sentences are left alone." : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Removes a model-added period when a dictated email address, URL, number, or version string is inserted on its own, keeping the value usable in form fields. Abbreviations, dates, and sentences are left alone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "单独插入听写的电子邮箱、网址、数字或版本号时，移除模型添加的句号，方便在表单中使用。缩写、日期和句子保持原样。" } }
+      }
+    },
     "Billing" : {
       "localizations" : {
         "ja" : {
@@ -38566,28 +38590,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "dictum 支持 Raycast，可直接从启动器开始听写并使用更多功能。使用时需要运行 API 服务器。"
-          }
-        }
-      }
-    },
-    "TYPEWHISPER-xxxx-xxxx" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TYPEWHISPER-xxxx-xxxx"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TYPEWHISPER-xxxx-xxxx"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TYPEWHISPER-xxxx-xxxx"
           }
         }
       }

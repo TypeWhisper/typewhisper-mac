@@ -642,11 +642,6 @@ struct AdvancedSettingsView: View {
                 let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
-                        Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
-                            NSWorkspace.shared.open(URL(string: "https://github.com/schneidervvv/dictum")!)
-                        }
-                        .accessibilityLabel(learnMoreAccessibilityLabel(about: browserExtensionTitle))
-
                         SettingsInfoButton(text: browserExtensionInfoText, topic: browserExtensionTitle)
                     }
                 }

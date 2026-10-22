@@ -404,7 +404,7 @@ private struct SupertonicSettingsView: View {
                     ProgressView(value: progress)
                         .frame(width: 160)
                         .accessibilityLabel(Text("Downloading model", bundle: bundle))
-                    Text("\(Int(progress * 100))%")
+                    Text(verbatim: "\(Int(progress * 100))%")
                         .font(.caption)
                         .monospacedDigit()
                         .accessibilityHidden(true)

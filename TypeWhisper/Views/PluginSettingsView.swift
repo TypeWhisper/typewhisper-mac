@@ -1244,8 +1244,8 @@ struct PluginSettingsView: View {
             discoverHeroContent
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Open dictum add-ons website", de: "dictum-Add-ons-Webseite öffnen"))
-        .accessibilityLabel(localizedAppText("Open dictum add-ons website", de: "dictum-Add-ons-Webseite öffnen"))
+        .help(localizedAppText("Open dictum on GitHub", de: "dictum auf GitHub öffnen", ja: "GitHub で dictum を開く", zh: "在 GitHub 上打开 dictum"))
+        .accessibilityLabel(localizedAppText("Open dictum on GitHub", de: "dictum auf GitHub öffnen", ja: "GitHub で dictum を開く", zh: "在 GitHub 上打开 dictum"))
     }
 
     private var discoverHeroContent: some View {
@@ -1307,7 +1307,7 @@ struct PluginSettingsView: View {
     }
 
     private var discoverHeroCompactLink: some View {
-        Label(localizedAppText("Open online catalog", de: "Online-Katalog öffnen"), systemImage: "arrow.up.right.square")
+        Label(localizedAppText("Open GitHub", de: "GitHub öffnen", ja: "GitHub を開く", zh: "打开 GitHub"), systemImage: "arrow.up.right.square")
             .labelStyle(.titleAndIcon)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)

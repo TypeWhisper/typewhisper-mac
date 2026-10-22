@@ -277,7 +277,7 @@ private struct CohereSettingsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Model", bundle: bundle)
                         .font(.headline)
-                    Text("Cohere Transcribe (cohere-transcribe-03-2026)")
+                    Text(verbatim: "Cohere Transcribe (cohere-transcribe-03-2026)")
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }

@@ -1754,7 +1754,7 @@ private struct DictionaryCorrectionAliasRow: View {
 
 private struct DictionaryRegexBadge: View {
     var body: some View {
-        Text(".*")
+        Text(verbatim: ".*")
             .font(.caption2.monospaced())
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

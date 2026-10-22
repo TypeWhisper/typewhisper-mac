@@ -11,9 +11,6 @@ final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindow
     static let pluginVersion = "0.1.0"
     static let consentVersion = "contribution-text-v1"
     static let defaultServiceURL: URL? = nil
-    static let contributionPolicyURL = URL(
-        string: "https://github.com/schneidervvv/dictum"
-    )!
 
     @Published private(set) var records: [ContributionRecord] = []
     @Published private(set) var activityMessage: String?

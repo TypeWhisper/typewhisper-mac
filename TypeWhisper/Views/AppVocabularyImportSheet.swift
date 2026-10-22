@@ -209,8 +209,8 @@ private struct SetupWizardImportDialog: View {
                             .foregroundStyle(.secondary)
                     }
                     Picker(String(localized: "Source"), selection: $selectedSource) {
-                        Text("Wispr Flow").tag(AppVocabularyImport.Source.wisprFlow)
-                        Text("Handy").tag(AppVocabularyImport.Source.handy)
+                        Text(verbatim: "Wispr Flow").tag(AppVocabularyImport.Source.wisprFlow)
+                        Text(verbatim: "Handy").tag(AppVocabularyImport.Source.handy)
                     }
                     HStack {
                         Button(String(localized: "Cancel")) { dismiss() }

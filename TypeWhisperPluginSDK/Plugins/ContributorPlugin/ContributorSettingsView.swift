@@ -88,17 +88,6 @@ struct ContributorSettingsView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-                Link(destination: ContributorPlugin.contributionPolicyURL) {
-                    Label(
-                        contributorText(
-                            "Contribution and privacy policy",
-                            de: "Beitrags- und Datenschutzregeln",
-                            ja: "提供とプライバシーに関する方針"
-                        ),
-                        systemImage: "arrow.up.right.square"
-                    )
-                }
-                .font(.caption)
             }
 
             Spacer(minLength: 16)

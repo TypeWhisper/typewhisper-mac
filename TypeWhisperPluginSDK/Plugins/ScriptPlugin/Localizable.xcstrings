@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Rules: %@": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Rules: %@" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "规则：%@" } }
+      }
+    },
     "Delete %@": {
       "localizations": {
         "de": {

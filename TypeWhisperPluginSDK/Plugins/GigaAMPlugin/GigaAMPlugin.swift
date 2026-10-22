@@ -736,7 +736,7 @@ private struct GigaAMSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -13,10 +13,6 @@ final class ContributorPluginTests: XCTestCase {
     func testPluginIdentity() {
         XCTAssertEqual(ContributorPlugin.pluginId, "com.typewhisper.improve")
         XCTAssertEqual(ContributorPlugin.pluginName, "Text Contributions")
-        XCTAssertEqual(
-            ContributorPlugin.contributionPolicyURL.absoluteString,
-            "https://github.com/schneidervvv/dictum"
-        )
     }
 
     func testQueuePersistsOnlyCorrectionPayload() throws {

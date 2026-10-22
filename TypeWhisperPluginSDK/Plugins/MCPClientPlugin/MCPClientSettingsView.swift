@@ -176,7 +176,7 @@ struct MCPClientSettingsView: View {
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(action.name).font(.headline)
-                            Text("\(serverName(for: action.serverID)) · \(action.toolName)")
+                            Text(verbatim: "\(serverName(for: action.serverID)) · \(action.toolName)")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

@@ -1405,11 +1405,11 @@ final class HistoryViewModel: ObservableObject {
     private static func fallbackDeviceTitle(platform: String, isCurrent: Bool) -> String {
         if isCurrent { return String(localized: "This Mac") }
         let normalized = platform.lowercased()
-        if normalized.contains("ipad") { return String(localized: "iPad") }
+        if normalized.contains("ipad") { return "iPad" }
         if normalized.contains("ios") || normalized.contains("iphone") || normalized.contains("watch") {
-            return String(localized: "iPhone")
+            return "iPhone"
         }
-        if normalized.contains("mac") { return String(localized: "Mac") }
+        if normalized.contains("mac") { return "Mac" }
         return String(localized: "Device")
     }
 

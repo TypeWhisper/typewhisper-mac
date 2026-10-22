@@ -224,7 +224,7 @@ enum IndustryPreset: String, CaseIterable, Identifiable {
     var description: String {
         switch self {
         case .general:
-            String(localized: "Start with TypeWhisper defaults. You can add term packs later.")
+            String(localized: "Start with dictum defaults. You can add term packs later.")
         case .realEstate:
             String(localized: "Prepare property, viewing, and client vocabulary.")
         case .architecture:

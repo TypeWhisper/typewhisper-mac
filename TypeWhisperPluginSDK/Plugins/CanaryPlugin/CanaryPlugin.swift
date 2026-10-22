@@ -815,7 +815,7 @@ private struct CanarySettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Canary Speech (MLX)")
+            Text(verbatim: "Canary Speech (MLX)")
                 .font(.headline)
 
             Text("Local Canary speech recognition on Apple Silicon, including Sophea for Greek and English. Select an explicit source language in Dictation settings.", bundle: bundle)
@@ -970,7 +970,7 @@ private struct CanarySettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

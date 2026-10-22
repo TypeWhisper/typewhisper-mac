@@ -205,7 +205,7 @@ struct LocalLLMSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -223,7 +223,7 @@ struct LocalLLMSettingsView: View {
                         ProgressView(value: downloadProgress)
                             .frame(width: 80)
                             .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
-                        Text("\(Int(downloadProgress * 100))%")
+                        Text(verbatim: "\(Int(downloadProgress * 100))%")
                             .font(.caption)
                             .monospacedDigit()
                             .accessibilityHidden(true)

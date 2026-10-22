@@ -389,8 +389,8 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
         switch self {
         case .never:
             localizedAppText(
-                "TypeWhisper only inserts the dictated text.",
-                de: "TypeWhisper fügt nur den diktierten Text ein."
+                "dictum only inserts the dictated text.",
+                de: "dictum fügt nur den diktierten Text ein."
             )
         case .spokenCommand:
             localizedAppText(
@@ -400,8 +400,8 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
 #if APPSTORE
         case .duringDictation:
             localizedAppText(
-                "Not available in this edition because TypeWhisper cannot keep Enter from reaching the app. Dictations are inserted without pressing Enter.",
-                de: "In dieser Edition nicht verfügbar, weil TypeWhisper Enter nicht von der App fernhalten kann. Diktate werden ohne Enter eingefügt."
+                "Not available in this edition because dictum cannot keep Enter from reaching the app. Dictations are inserted without pressing Enter.",
+                de: "In dieser Edition nicht verfügbar, weil dictum Enter nicht von der App fernhalten kann. Diktate werden ohne Enter eingefügt."
             )
 #else
         case .duringDictation:

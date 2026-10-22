@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Fetched %lld OpenAI API models.": {
+      "localizations": {
+        "en": { "stringUnit": { "state": "translated", "value": "Fetched %lld OpenAI API models." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "已获取 %lld 个 OpenAI API 模型。" } }
+      }
+    },
     "Hide API key": {
       "localizations": {
         "de": {

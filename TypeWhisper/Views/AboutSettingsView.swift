@@ -63,7 +63,7 @@ struct AboutSettingsView: View {
                 }
                 Section {
                     VStack(spacing: 4) {
-                        Text(String(localized: "\u{00A9} 2024-2026 TypeWhisper Contributors"))
+                        Text(verbatim: "\u{00A9} 2024-2026 TypeWhisper Contributors")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Link("based on TypeWhisper", destination: URL(string: "https://github.com/TypeWhisper/typewhisper-mac")!)

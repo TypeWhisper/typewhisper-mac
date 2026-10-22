@@ -1279,7 +1279,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         try? FileManager.default.removeItem(at: cache)
     }
 
-    /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
+    /// 仅迁移 dictum 自己的旧模型目录，保留上游应用的数据。
     private func migrateOldModels(for modelDef: WhisperModelDef) {
         let fm = FileManager.default
         let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -1291,7 +1291,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         removeIncompleteModelIfNeeded(at: destination)
 
         // Check both production and dev paths
-        for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
+        for dirName in ["dictum", "dictum-Dev"] {
             let legacyRoots = [
                 appSupport
                     .appendingPathComponent(dirName)
@@ -1571,7 +1571,7 @@ private struct WhisperKitSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("WhisperKit", bundle: bundle)
+            Text(verbatim: "WhisperKit")
                 .font(.headline)
 
             Text("Local speech-to-text using OpenAI Whisper via CoreML. 99+ languages, streaming, translation to English.", bundle: bundle)
@@ -1753,7 +1753,7 @@ private struct WhisperKitSettingsView: View {
                             .foregroundStyle(.blue)
                     }
                 }
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1801,7 +1801,7 @@ private struct WhisperKitSettingsView: View {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
                     .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
-                Text("\(Int(downloadProgress * 100))%")
+                Text(verbatim: "\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
                     .accessibilityHidden(true)

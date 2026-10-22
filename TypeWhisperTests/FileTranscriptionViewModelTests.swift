@@ -833,7 +833,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(didReportProgress, "Timed out waiting for loading progress callback")
 
         let item = try XCTUnwrap(viewModel.files.first)
-        XCTAssertEqual(item.phaseDescription, "Loading audio 25%")
+        XCTAssertEqual(item.phaseDescription, String(localized: "Loading audio \(25)%"))
         XCTAssertNotNil(viewModel.elapsedTime(for: item))
 
         await finishLoading.open()

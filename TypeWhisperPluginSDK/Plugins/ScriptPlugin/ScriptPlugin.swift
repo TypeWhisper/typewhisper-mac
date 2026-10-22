@@ -508,7 +508,7 @@ private struct ScriptRow: View {
                         .lineLimit(1)
                 }
                 if !script.profileFilter.isEmpty {
-                    Text("Rules: \(script.profileFilter.joined(separator: ", "))")
+                    Text("Rules: \(script.profileFilter.joined(separator: ", "))", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
@@ -571,7 +571,7 @@ private struct ExecutionLogRow: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text("\(entry.durationMs)ms")
+            Text(verbatim: "\(entry.durationMs)ms")
                 .font(.caption)
                 .monospacedDigit()
             if let error = entry.errorMessage {

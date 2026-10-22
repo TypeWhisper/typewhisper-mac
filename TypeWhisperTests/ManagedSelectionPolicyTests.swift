@@ -392,7 +392,7 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         let hotkeyService = HotkeyService()
         var draft = WorkflowDraft(template: .dictation)
         draft.transcriptionEngineId = "removed-engine"
-        let missingEngine = "The selected transcription engine is not installed."
+        let missingEngine = String(localized: "The selected transcription engine is not installed.")
 
         let unmanaged = draft.validationError(
             hotkeyService: hotkeyService, workflowService: workflowService, pluginManager: manager, existingWorkflowId: nil

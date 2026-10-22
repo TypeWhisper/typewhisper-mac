@@ -768,7 +768,7 @@ private struct LiveTranscriptSettingsView: View {
                                 plugin.updateFontSizePreference(newValue)
                             }
                             .accessibilityLabel(Text("Font size", bundle: bundle))
-                        Text("\(Int(fontSize))pt")
+                        Text(verbatim: "\(Int(fontSize))pt")
                             .monospacedDigit()
                             .frame(width: 40, alignment: .trailing)
                     }
@@ -793,7 +793,7 @@ private struct LiveTranscriptSettingsView: View {
                             step: 20
                         )
                             .accessibilityLabel(Text("Width", bundle: bundle))
-                        Text("\(Int(plugin._windowWidth))")
+                        Text(verbatim: "\(Int(plugin._windowWidth))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
@@ -811,7 +811,7 @@ private struct LiveTranscriptSettingsView: View {
                             step: 20
                         )
                             .accessibilityLabel(Text("Height", bundle: bundle))
-                        Text("\(Int(plugin._windowHeight))")
+                        Text(verbatim: "\(Int(plugin._windowHeight))")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }
@@ -829,7 +829,7 @@ private struct LiveTranscriptSettingsView: View {
                             }
                             .accessibilityLabel(Text("Background opacity", bundle: bundle))
                             .accessibilityValue(Text(backgroundOpacity, format: .percent.precision(.fractionLength(0))))
-                        Text("\(Int(backgroundOpacity * 100))%")
+                        Text(verbatim: "\(Int(backgroundOpacity * 100))%")
                             .monospacedDigit()
                             .frame(width: 44, alignment: .trailing)
                     }

@@ -4358,7 +4358,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let stopJSON = try Self.jsonObject(stopResponse)
         XCTAssertEqual(stopResponse.status, 409)
-        XCTAssertEqual((stopJSON["error"] as? [String: Any])?["message"] as? String, String(localized: "Not recording"))
+        XCTAssertEqual((stopJSON["error"] as? [String: Any])?["message"] as? String, "Not recording")
 
         let transcriptionResponse = await router.route(
             HTTPRequest(
@@ -9587,12 +9587,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(stopPolicies, [AudioRecordingService.StopPolicy.immediate.logDescription])
         XCTAssertEqual(
             context.dictationViewModel.actionFeedbackMessage,
-            "Recording discarded because additional keys were pressed"
+            String(localized: "Recording discarded because additional keys were pressed")
         )
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
         XCTAssertEqual(
             context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
-            "Recording discarded because additional keys were pressed"
+            String(localized: "Recording discarded because additional keys were pressed")
         )
     }
 
@@ -17177,6 +17177,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(AppConstants.keychainServicePrefix, "com.schneidervvv.dictum.tests.apikey.")
     }
 
+    func testDevAndReleaseKeychainItemsAreIsolated() {
+        let dev = AppConstants.devKeychainServicePrefix
+        let release = AppConstants.releaseKeychainServicePrefix
+        XCTAssertEqual(dev, "com.schneidervvv.dictum.dev.apikey.")
+        XCTAssertEqual(release, "com.schneidervvv.dictum.apikey.")
+        XCTAssertNotEqual(dev, release)
+        XCTAssertFalse(dev.hasPrefix(release))
+        XCTAssertFalse(release.hasPrefix(dev))
+    }
+
     func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {
         XCTAssertTrue(Bundle(for: TestHostDefaultsGuard.self).principalClass == TestHostDefaultsGuard.self)
 
@@ -19529,7 +19539,7 @@ extension TypeWhisperIntegrationTests {
         let sessionID = harness.viewModel.apiStartRecording()
         XCTAssertEqual(
             harness.viewModel.apiDictationSession(id: sessionID)?.error,
-            "Microphone permission required."
+            String(localized: "Microphone permission required.")
         )
 
         let output = try await harness.viewModel.transcribeFinalAudioForTesting(primaryEngineId: "primary")
@@ -21890,7 +21900,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     func testSideSpecificModifierComboDisplayNameIncludesSides() throws {
         let hotkey = try rightCommandRightOptionComboHotkey()
 
-        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Right Command + Right Option")
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "\(String(localized: "Right Command")) + \(String(localized: "Right Option"))")
     }
 
     @MainActor
@@ -21902,7 +21912,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             modifierKeyCodes: [0x36]
         )
 
-        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Fn + Right Command")
+        XCTAssertEqual(HotkeyService.displayName(for: hotkey), "Fn + \(String(localized: "Right Command"))")
     }
 
     @MainActor

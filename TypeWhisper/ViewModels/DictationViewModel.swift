@@ -1444,7 +1444,7 @@ final class DictationViewModel: ObservableObject {
         if usedBluetoothInput {
             return String(localized: "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it.")
         }
-        return String(localized: "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access.")
+        return String(localized: "The microphone sent only silence. Check that it is not muted and dictum has microphone access.")
     }
 
     private func prepareRecordingStartCue(playsSound: Bool) {
@@ -2662,14 +2662,14 @@ final class DictationViewModel: ObservableObject {
         guard effectiveAutoEnterMode == .duringDictation, !hotkeyService.canSuppressExternalKeyEvents else { return true }
         let message = AccessibilityPermissionPane.text(
             legacy: localizedAppText(
-                "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte TypeWhisper neu oder wähle eine andere Enter-Option."
+                "Enter submission is unavailable. Check Accessibility access and restart dictum, or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte dictum neu oder wähle eine andere Enter-Option."
             ),
             deviceControl: localizedAppText(
-                "Enter submission is unavailable. Check the Device Control and Data Access permission and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte TypeWhisper neu oder wähle eine andere Enter-Option.",
-                ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。",
-                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+                "Enter submission is unavailable. Check the Device Control and Data Access permission and restart dictum, or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte dictum neu oder wähle eine andere Enter-Option.",
+                ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して dictum を再起動するか、別の Enter オプションを選択してください。",
+                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 dictum，或选择其他 Enter 选项。"
             )
         )
         abortActiveRecordingImmediately(sessionMessage: message)

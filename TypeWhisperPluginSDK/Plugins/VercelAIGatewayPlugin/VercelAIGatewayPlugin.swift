@@ -1064,7 +1064,7 @@ private struct VercelAIGatewaySettingsView: View {
                     let models = filteredLLMModels
                     Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                         ForEach(models, id: \.id) { model in
-                            Text("\(model.name) - \(model.formattedPricing)").tag(model.id)
+                            Text(verbatim: "\(model.name) - \(model.formattedPricing)").tag(model.id)
                         }
                     }
                     .labelsHidden()

@@ -749,7 +749,7 @@ private struct GraniteSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Granite Speech (MLX)")
+            Text(verbatim: "Granite Speech (MLX)")
                 .font(.headline)
 
             Text("Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.", bundle: bundle)
@@ -904,7 +904,7 @@ private struct GraniteSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

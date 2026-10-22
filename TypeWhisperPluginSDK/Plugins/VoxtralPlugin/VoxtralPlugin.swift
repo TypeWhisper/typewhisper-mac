@@ -774,7 +774,7 @@ private struct VoxtralSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Voxtral (MLX)")
+            Text(verbatim: "Voxtral (MLX)")
                 .font(.headline)
 
             Text("Local speech-to-text by Mistral, powered by MLX on Apple Silicon. 15 languages, no API key required.", bundle: bundle)
@@ -929,7 +929,7 @@ private struct VoxtralSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
                     .font(.body)
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

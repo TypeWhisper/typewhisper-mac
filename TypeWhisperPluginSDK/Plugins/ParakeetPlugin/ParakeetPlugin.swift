@@ -1937,7 +1937,7 @@ private struct ParakeetSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(version.modelDef.displayName)
                     .font(.body)
-                Text("\(version.modelDef.sizeDescription) - RAM: \(version.modelDef.ramRequirement)")
+                Text(verbatim: "\(version.modelDef.sizeDescription) - RAM: \(version.modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Text(version.settingsDescription(bundle: bundle))
@@ -1982,7 +1982,7 @@ private struct ParakeetSettingsView: View {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
                     .accessibilityLabel(Text("Downloading \(version.modelDef.displayName)", bundle: bundle))
-                Text("\(Int(downloadProgress * 100))%")
+                Text(verbatim: "\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
                     .accessibilityHidden(true)
