@@ -97,6 +97,14 @@ find_machos() {
     done
 }
 
+# Prints the executable of a framework bundle when it exists and is Mach-O.
+framework_executable() {
+    local name
+    name=$(plist_value "$1/Resources/Info.plist" CFBundleExecutable)
+    [[ -n "$name" ]] || name=$(basename "$1" .framework)
+    [[ -f "$1/$name" ]] && is_macho "$1/$name" && printf '%s' "$1/$name"
+}
+
 # Whether a file belongs to one of PLUGIN_ONLY_FRAMEWORKS.
 in_plugin_only_framework() {
     local framework
@@ -221,19 +229,22 @@ done
 [[ "$linked_forbidden" -eq 0 ]] && pass "no Sparkle or MediaRemote references in ${#all_machos[@]} Mach-O files"
 
 # Plugin bundles load @rpath frameworks from the app's Contents/Frameworks or
-# their own. The app does not link the plugin-only ones, so a missing one
-# would only fail when the plugin is installed.
+# their own. The app does not link the plugin-only ones, so a missing one, or
+# one without its executable, would only fail when the plugin is installed.
 missing_framework=0
+onnx_framework_linked=0
 for plugin in "${plugin_bundles[@]}"; do
     while IFS= read -r -d '' binary; do
         while IFS= read -r framework; do
-            [[ -d "$contents/Frameworks/$framework" || -d "$plugin/Contents/Frameworks/$framework" ]] && continue
-            fail "$(relative "$binary") links $framework, which is not in Contents/Frameworks"
+            [[ "$framework" == "TypeWhisperONNXRuntime.framework" ]] && onnx_framework_linked=1
+            [[ -n "$(framework_executable "$contents/Frameworks/$framework")" ]] && continue
+            [[ -n "$(framework_executable "$plugin/Contents/Frameworks/$framework")" ]] && continue
+            fail "$(relative "$binary") links $framework, which is not in Contents/Frameworks or has no Mach-O executable"
             missing_framework=1
         done < <(otool -L "$binary" 2>/dev/null | sed -nE 's#^[[:space:]]+@rpath/([^/]+\.framework)/.*#\1#p' | sort -u)
     done < <(find_machos "$plugin")
 done
-[[ "$missing_framework" -eq 0 ]] && pass "every @rpath framework of the plugin bundles is embedded"
+[[ "$missing_framework" -eq 0 ]] && pass "every @rpath framework of the plugin bundles is embedded with its executable"
 
 linked_plugin_only=0
 for binary in "${all_machos[@]}"; do
@@ -252,13 +263,27 @@ done
 [[ "$linked_plugin_only" -eq 0 ]] && pass "the app and its extensions link no plugin-only framework (${PLUGIN_ONLY_FRAMEWORKS[*]})"
 
 # GigaAM and Supertonic share TypeWhisperONNXRuntime.framework. A plugin that
-# linked the static ONNX Runtime package itself would add another copy.
+# linked the static ONNX Runtime package itself would add another copy. When
+# the framework is embedded or linked, its executable must be the one binary
+# that exports the runtime.
+onnx_framework="$contents/Frameworks/TypeWhisperONNXRuntime.framework"
 onnx_runtimes=()
+onnx_in_framework=0
 for binary in "${all_machos[@]}"; do
     exports=$(nm -gUj "$binary" 2>/dev/null)
-    grep -qx '_OrtGetApiBase' <<<"$exports" && onnx_runtimes+=("$(relative "$binary")")
+    grep -qx '_OrtGetApiBase' <<<"$exports" || continue
+    onnx_runtimes+=("$(relative "$binary")")
+    [[ "$binary" == "$onnx_framework/"* ]] && onnx_in_framework=1
 done
-if [[ ${#onnx_runtimes[@]} -gt 1 ]]; then
+if [[ -d "$onnx_framework" || "$onnx_framework_linked" -eq 1 ]]; then
+    if [[ -z "$(framework_executable "$onnx_framework")" ]]; then
+        fail "$(relative "$onnx_framework") is missing or has no Mach-O executable"
+    elif [[ ${#onnx_runtimes[@]} -ne 1 || "$onnx_in_framework" -ne 1 ]]; then
+        fail "ONNX Runtime must be exported once, by $(relative "$onnx_framework"); found ${#onnx_runtimes[@]}: ${onnx_runtimes[*]:-none}"
+    else
+        pass "ONNX Runtime is exported once, by ${onnx_runtimes[0]}"
+    fi
+elif [[ ${#onnx_runtimes[@]} -gt 1 ]]; then
     fail "ONNX Runtime is linked into ${#onnx_runtimes[@]} binaries: ${onnx_runtimes[*]}"
 else
     pass "ONNX Runtime is linked at most once: ${onnx_runtimes[*]:-not linked}"
