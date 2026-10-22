@@ -561,6 +561,13 @@ private struct SpeakerChip: View {
         .accessibilityValue(accessibilityState(isFiltered: isFiltered))
         .accessibilityAddTraits(isFiltered ? .isSelected : [])
         .onHover { isHovered = $0 }
+        .onAppear {
+            // Screenshots of the user's own speaker open its details.
+            guard AppConstants.isScreenshotAutomation,
+                  ProcessInfo.processInfo.arguments.contains("--screenshot-own-speaker-details"),
+                  model.isOwnSpeaker(speakerID) else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { showsDetails = true }
+        }
         .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
             SpeakerInspectorRow(
                 model: model,
@@ -655,6 +662,13 @@ private struct SpeakerInspectorRow: View {
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if model.isMicrophoneSpeaker(speakerID) {
+                Text(String(localized: "speakers.rename.ownNameHelp"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if voiceState == .suggestion {

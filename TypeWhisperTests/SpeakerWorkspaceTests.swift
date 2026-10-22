@@ -341,7 +341,11 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         TestSupport.remove(directory)
     }
 
-    private func makeModel(words: [TranscriptionWord] = []) throws -> SpeakerWorkspaceModel {
+    private func makeModel(
+        words: [TranscriptionWord] = [],
+        ownSpeech: [ClosedRange<TimeInterval>] = [],
+        defaults: UserDefaults = .standard
+    ) throws -> SpeakerWorkspaceModel {
         try SpeakerAudioWriter.writeAAC(
             samples: [Float](repeating: 0, count: 16_000),
             to: history.speakerAudioFileURL(forRecordID: recordID)
@@ -362,10 +366,11 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
             timedText: [],
             granularity: .segment,
             words: words,
+            ownSpeech: ownSpeech,
             transcript: transcript
         ))
         history.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
-        return SpeakerWorkspaceModel(recordID: recordID, historyService: history)
+        return SpeakerWorkspaceModel(recordID: recordID, historyService: history, defaults: defaults)
     }
 
     func testAssignMergeAndEditAreStoredAndUndone() throws {
@@ -487,6 +492,27 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
 
         XCTAssertTrue(model.isOwnSpeaker("S2"))
         XCTAssertFalse(model.isOwnSpeaker("S1"))
+    }
+
+    /// Renaming the microphone speaker names the user in later recordings too;
+    /// "Me" goes back to the default.
+    func testRenamingTheMicrophoneSpeakerKeepsTheNameForNewRecordings() throws {
+        let suite = "SpeakerOwnName-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let model = try makeModel(ownSpeech: [5.9...7], defaults: defaults)
+        XCTAssertTrue(model.isMicrophoneSpeaker("S2"))
+        XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), SpeakerOwnName.defaultName)
+
+        model.rename("S1", to: "Bob", undoManager: nil)
+        XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), SpeakerOwnName.defaultName, "Other speakers don't name the user")
+
+        model.rename("S2", to: " Yuri Vos ", undoManager: nil)
+        XCTAssertEqual(SpeakerOwnName.current(defaults: defaults), "Yuri Vos")
+        XCTAssertTrue(SpeakerOwnName.isOwnName("yuri vos", defaults: defaults))
+
+        model.rename("S2", to: SpeakerOwnName.defaultName, undoManager: nil)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.speakerOwnName))
     }
 
     func testSpeakerOnTheMicrophoneIsOwnSpeechWhateverItsName() {

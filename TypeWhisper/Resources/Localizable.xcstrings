@@ -8839,6 +8839,40 @@
         }
       }
     },
+    "speakers.rename.ownNameHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Mikrofon: Neue Aufnahmen verwenden diesen Namen auch für dich. Mit „Ich“ wird es wieder zurückgesetzt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your microphone: new recordings use this name for you too. Name it “Me” to go back."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu micrófono: las grabaciones nuevas también usarán este nombre para ti. Escribe «Yo» para volver al nombre predeterminado."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "あなたのマイク：新しい録音でもこの名前があなたに使われます。「自分」にすると元に戻ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的麦克风：新的录音也会用这个名字指代你。改回“我”即可恢复。"
+          }
+        }
+      }
+    },
     "speakers.rename.help" : {
       "localizations" : {
         "de" : {

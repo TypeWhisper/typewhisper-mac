@@ -46,16 +46,23 @@ final class SpeakerWorkspaceModel: ObservableObject {
     private let recordID: UUID
     private let historyService: HistoryService
     private let voices: SpeakerVoiceProfileService?
+    private let defaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
     private var lastSelectedTurn: Int?
     /// Word timing of the recording, by start time; empty without it.
     private var words: [TranscriptionWord] = []
     private var wordTokens: [Int: [WordToken]] = [:]
 
-    init(recordID: UUID, historyService: HistoryService, voices: SpeakerVoiceProfileService? = nil) {
+    init(
+        recordID: UUID,
+        historyService: HistoryService,
+        voices: SpeakerVoiceProfileService? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         self.recordID = recordID
         self.historyService = historyService
         self.voices = voices
+        self.defaults = defaults
         playback.clock.$time
             .sink { [weak self] time in self?.updateActivePosition(at: time) }
             .store(in: &cancellables)
@@ -77,11 +84,17 @@ final class SpeakerWorkspaceModel: ObservableObject {
 
     /// True for the user's own speaker, whose turns show on the right: the
     /// speaker heard on the microphone channel of a Recorder recording, or
-    /// one named as the user ("Me" in the app's language).
+    /// one named as the user ("Me" in the app's language, or their own name).
     func isOwnSpeaker(_ speakerID: String) -> Bool {
         if speakerID == microphoneSpeakerID { return true }
-        guard let name = names?.displayName(for: speakerID)?.trimmingCharacters(in: .whitespaces) else { return false }
-        return name.compare(String(localized: "speakers.me"), options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+        guard let name = names?.displayName(for: speakerID) else { return false }
+        return SpeakerOwnName.isOwnName(name, defaults: defaults)
+    }
+
+    /// True for the speaker heard on the microphone channel, whose new name
+    /// also names the user in later recordings.
+    func isMicrophoneSpeaker(_ speakerID: String) -> Bool {
+        speakerID == microphoneSpeakerID
     }
 
     /// The speaker whose turns are mostly where the microphone carried the
@@ -337,6 +350,9 @@ final class SpeakerWorkspaceModel: ObservableObject {
         table.setName(name, for: speakerID, profileID: keepsVoice ? table.profileID(for: speakerID) : nil)
         guard table != names else { return }
         apply(transcript, names: table, actionName: String(localized: "speakers.rename.help"), undoManager: undoManager)
+        if speakerID == microphoneSpeakerID {
+            SpeakerOwnName.remember(name, defaults: defaults)
+        }
     }
 
     // MARK: - Voice profiles
@@ -492,4 +508,35 @@ final class SpeakerWorkspaceModel: ObservableObject {
 @MainActor
 final class SpeakerWordHighlight: ObservableObject {
     @Published fileprivate(set) var index: Int?
+}
+
+/// The name of the user's own speaker in new recordings: "Me" in the app's
+/// language, or the name the user gave their microphone speaker once.
+enum SpeakerOwnName {
+    static var defaultName: String { String(localized: "speakers.me") }
+
+    static func current(defaults: UserDefaults = .standard) -> String {
+        let stored = defaults.string(forKey: UserDefaultsKeys.speakerOwnName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? defaultName : stored
+    }
+
+    /// Keeps a new name for the user; an empty name or "Me" goes back to "Me".
+    static func remember(_ name: String, defaults: UserDefaults = .standard) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || matches(trimmed, defaultName) {
+            defaults.removeObject(forKey: UserDefaultsKeys.speakerOwnName)
+        } else {
+            defaults.set(trimmed, forKey: UserDefaultsKeys.speakerOwnName)
+        }
+    }
+
+    static func isOwnName(_ name: String, defaults: UserDefaults = .standard) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        return matches(trimmed, defaultName) || matches(trimmed, current(defaults: defaults))
+    }
+
+    private static func matches(_ a: String, _ b: String) -> Bool {
+        a.compare(b, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+    }
 }
