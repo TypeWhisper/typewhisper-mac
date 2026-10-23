@@ -317,20 +317,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 try audio.samples.withUnsafeBytes { Data($0) }.write(
                     to: diagnosticDirectory.appendingPathComponent("\(diagnosticID).f32")
                 )
-                if FileManager.default.fileExists(atPath: diagnosticDirectory.appendingPathComponent("capture-normalization").path) {
-                    let parameters = Dictionary(uniqueKeysWithValues: model.parameters().flattened())
-                    let weight = parameters["audio_tower.layers.0.self_attn_layer_norm.weight"]!
-                    let bias = parameters["audio_tower.layers.0.self_attn_layer_norm.bias"]!
-                    let rows = min(55, audio.samples.count / weight.size)
-                    guard rows > 0 else { throw CocoaError(.coderInvalidValue) }
-                    let input = MLXArray(Array(audio.samples.prefix(rows * weight.size))).reshaped(rows, weight.size)
-                    for index in 0..<2 {
-                        let norm = MLXFast.layerNorm(input, weight: weight, bias: bias, eps: 1e-5)
-                        try norm.asArray(Float.self).withUnsafeBytes { Data($0) }.write(to: diagnosticDirectory.appendingPathComponent("\(diagnosticID)-norm-\(index).f32"))
-                        let cpuNorm = MLXFast.layerNorm(input, weight: weight, bias: bias, eps: 1e-5, stream: .cpu)
-                        try cpuNorm.asArray(Float.self).withUnsafeBytes { Data($0) }.write(to: diagnosticDirectory.appendingPathComponent("\(diagnosticID)-cpunorm-\(index).f32"))
-                    }
-                }
             }
 #endif
 
@@ -390,9 +376,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             if let diagnosticDirectory {
                 let metadata: [String: Any] = [
                     "samples": audio.samples.count, "sampleRate": 16_000, "channels": 1,
-                    "model": loadedModelId ?? "", "language": language ?? "auto", "text": cleanedText,
-                    "bfloat16Parameters": model.parameters().flattened().filter { $0.1.dtype == .bfloat16 }.count,
-                    "float32Parameters": model.parameters().flattened().filter { $0.1.dtype == .float32 }.count
+                    "model": loadedModelId ?? "", "language": language ?? "auto", "text": cleanedText
                 ]
                 try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys]).write(
                     to: diagnosticDirectory.appendingPathComponent("\(diagnosticID).json")

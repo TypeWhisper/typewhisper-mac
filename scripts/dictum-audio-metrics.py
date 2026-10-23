@@ -4,7 +4,6 @@
 import argparse
 import json
 from pathlib import Path
-import sys
 
 import numpy as np
 from scipy import signal
@@ -14,7 +13,6 @@ from scipy.io import wavfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("reference", type=Path)
 parser.add_argument("directory", type=Path)
-parser.add_argument("--check-normalization", action="store_true")
 args = parser.parse_args()
 rate, reference = wavfile.read(args.reference)
 if rate != 16_000 or reference.ndim != 1:
@@ -42,23 +40,3 @@ for path in sorted(args.directory.glob("*.f32")):
         "correlation": float(np.corrcoef(actual, expected)[0, 1]),
         "maxAbsoluteError": float(np.max(np.abs(actual - expected))),
     }, ensure_ascii=False))
-
-if args.check_normalization:
-    paths = sorted(args.directory.glob("*-norm-0.f32"))
-    if not paths:
-        sys.exit("缺少归一化记录，请先创建 capture-normalization 标记并执行真实转录。")
-    passed = True
-    for path in paths:
-        prefix = path.name.removesuffix("-norm-0.f32")
-        first = np.fromfile(path, dtype="<f4")
-        second = np.fromfile(args.directory / f"{prefix}-norm-1.f32", dtype="<f4")
-        cpu = np.fromfile(args.directory / f"{prefix}-cpunorm-0.f32", dtype="<f4")
-        finite = bool(np.isfinite(first).all() and np.isfinite(second).all() and np.isfinite(cpu).all())
-        repeated_error = float(np.max(np.abs(first - second))) if finite else None
-        cpu_error = float(np.max(np.abs(first - cpu))) if finite else None
-        valid = finite and repeated_error <= 1e-4 and cpu_error <= 1e-4
-        passed = passed and valid
-        print(json.dumps({"normalization": prefix, "finite": finite,
-                          "repeatMaximumAbsoluteError": repeated_error,
-                          "cpuMaximumAbsoluteError": cpu_error, "passed": valid}))
-    sys.exit(0 if passed else 1)
