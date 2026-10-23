@@ -1250,7 +1250,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(session.text)
         XCTAssertTrue(session.error?.contains("HTTP 413") == true)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(
             recording.url.resolvingSymlinksInPath().path,
@@ -1312,7 +1312,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNotNil(session.outputFile)
         XCTAssertNil(session.text)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         let failure = try XCTUnwrap(recording.transcriptionFailure)
@@ -1363,7 +1363,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(session.text)
         XCTAssertEqual(livePlugin.batchTranscriptionCount, 1)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         XCTAssertEqual(recording.transcriptionFailure?.phase, .finalTranscription)
@@ -1423,7 +1423,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(session.text, "complete transcript")
         XCTAssertEqual(livePlugin.batchTranscriptionSamples, finalizedFileSamples)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcript != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.transcript, "complete transcript")
         XCTAssertNil(recording.transcriptionFailure)
@@ -1509,7 +1509,11 @@ final class AudioRecorderViewModelTests: XCTestCase {
         )
         try viewModel.stopCalendarMeetingRecording(handle: handle)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        // A load that runs while the transcript files are installed can see the
+        // .txt before the calendar transcript document.
+        try await waitForRecordingsToLoad(viewModel, count: 1) {
+            $0.transcript != nil && $0.calendarEvent != nil
+        }
 
         XCTAssertEqual(loadedURL?.standardizedFileURL, handle.outputURL.standardizedFileURL)
         let plugin = try XCTUnwrap(
@@ -1566,7 +1570,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             transcriptMetadata: metadata
         )
         try viewModel.stopCalendarMeetingRecording(handle: handle)
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
 
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
@@ -1795,7 +1799,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .failed)
         XCTAssertNil(session.text)
         XCTAssertTrue(session.error?.contains("segment 2 of 3") == true)
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNotNil(recording.transcriptionFailure)
         XCTAssertFalse(FileManager.default.fileExists(atPath: recording.url.deletingPathExtension().appendingPathExtension("txt").path))
@@ -1824,7 +1828,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(session.text)
         XCTAssertEqual(plugin.requests.count, 2)
         XCTAssertTrue(session.error?.contains("segment 2 of 3") == true)
-        try await waitForRecordingsToLoad(viewModel, count: 1)
+        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcriptionFailure != nil }
         XCTAssertNotNil(viewModel.recordings.first?.transcriptionFailure)
     }
 
