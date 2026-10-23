@@ -363,7 +363,7 @@ Apps not covered use the global style. A per-app row wins over a group that cont
 3. **翻译目标语言 Translation languages.** Reorderable list with drag grips; the first row carries a `默认` badge; hover shows a remove button; last row `添加语言`. Footer: `第一个是默认目标语言。拖动可以调整顺序，语音条上按这个顺序显示。`
 4. **声音 Sound.** `麦克风` with a 12-segment live level meter and device popup (`自动（{device}）`); `提示音` switch; `听写时暂停其他声音` switch.
 5. **历史与同步 History & Sync.** `同步到 iCloud Drive` switch with status underneath (`2 分钟前已同步 · 1,286 条`, or `已关闭`); `同步文件夹` path (`iCloud Drive › dictum`) with `更改…`; `保留历史` popup (永久 / 1 年 / 1 个月 / 1 周 / 24 小时 / 不保留, default 1 年); `保存录音` switch. Footer: `同步文件夹里只有文字，录音只保存在这台 Mac 上。` Turning sync off asks: `关闭同步后，这台 Mac 上的历史会保留，同步文件夹里的文件不会删除。` Shortening retention asks `将删除 {n} 条早于 {date} 的记录。`
-6. **应用 App.** `开机时启动`, `在 Dock 中显示`, `界面语言` popup (跟随系统 / 简体中文 / English / Deutsch / 日本語), `高级设置` with an `打开 ↗` button that opens the TypeWhisper settings window.
+6. **应用 App.** `开机时启动`, `在 Dock 中显示`, `界面语言` popup (跟随系统 / 简体中文 / English), `高级设置` with an `打开 ↗` button that opens the TypeWhisper settings window.
 
 **Copy.**
 

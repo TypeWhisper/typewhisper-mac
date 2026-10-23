@@ -39,6 +39,8 @@
 	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
+	<key>NSAccentColorName</key>
+	<string>AccentColor</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_typewhisper._tcp</string>

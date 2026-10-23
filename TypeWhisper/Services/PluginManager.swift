@@ -208,7 +208,6 @@ struct LoadedPlugin: Identifiable {
     }
 }
 
-
 enum PluginModelManagementError: LocalizedError {
     case pluginNotFound
     case pluginNotLoaded(String)
@@ -233,7 +232,6 @@ enum PluginModelManagementError: LocalizedError {
 }
 
 // MARK: - Plugin Manager
-
 
 @MainActor
 final class PluginManager: ObservableObject {
@@ -265,7 +263,6 @@ final class PluginManager: ObservableObject {
     private var deletingModelPluginIds = Set<String>()
     private var registryNotificationBatchDepth = 0
     private var registryChangedDuringBatch = false
-
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -311,12 +308,6 @@ final class PluginManager: ObservableObject {
             }
     }
 
-    var ttsProviders: [TTSProviderPlugin] {
-        loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
-            .compactMap { $0.instance as? TTSProviderPlugin }
-    }
-
     /// Engines the managed settings refuse are left out, so pickers and fallbacks never offer them;
     /// `transcriptionPolicyRefusal(forProviderId:)` names the reason for a refused selection.
     var transcriptionEngines: [TranscriptionEnginePlugin] {
@@ -354,7 +345,6 @@ final class PluginManager: ObservableObject {
             .filter { $0.isEnabled && permits($0, .audio) }
             .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
     }
-
 
     // MARK: - Managed settings
 
@@ -697,17 +687,6 @@ final class PluginManager: ObservableObject {
         return false
     }
 
-    func ttsProvider(for providerId: String) -> TTSProviderPlugin? {
-        ttsProviders.first { $0.providerId == providerId }
-    }
-
-    func loadedTTSPlugin(for providerId: String) -> LoadedPlugin? {
-        loadedPlugins.first {
-            guard let provider = $0.instance as? TTSProviderPlugin else { return false }
-            return $0.isEnabled && provider.providerId == providerId
-        }
-    }
-
     func actionPlugin(for actionId: String) -> ActionPlugin? {
         actionPlugins.first { $0.actionId == actionId }
     }
@@ -741,7 +720,6 @@ final class PluginManager: ObservableObject {
             isBundled: isBundled
         )
     }
-
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -1327,7 +1305,6 @@ final class PluginManager: ObservableObject {
         loadedPlugins.remove(at: index)
         logger.info("Removed plugin from runtime registry: \(pluginId)")
     }
-
 
     func bundleURL(for pluginId: String) -> URL? {
         loadedPlugins.first { $0.manifest.id == pluginId }?.sourceURL

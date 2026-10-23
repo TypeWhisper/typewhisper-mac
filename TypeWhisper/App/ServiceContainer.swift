@@ -90,7 +90,6 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
-    let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
     let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
     let speakerVoiceProfileService: SpeakerVoiceProfileService
@@ -200,7 +199,6 @@ final class ServiceContainer: ObservableObject {
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
-        speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         cloudFolderSyncController = CloudFolderSyncController(
             syncStore: userDataSyncStore,
@@ -252,7 +250,6 @@ final class ServiceContainer: ObservableObject {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService,
@@ -520,9 +517,6 @@ final class ServiceContainer: ObservableObject {
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
-
-
-
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

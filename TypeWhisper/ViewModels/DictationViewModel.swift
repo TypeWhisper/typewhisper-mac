@@ -7,12 +7,6 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "DictationViewModel")
 
-private struct CorrectionContributionContext: Sendable {
-    let language: String?
-    let engineId: String
-    let modelId: String?
-}
-
 struct DictationSessionTranscription: Sendable, Equatable {
     var text: String
     let rawText: String
@@ -372,11 +366,6 @@ final class DictationViewModel: ObservableObject {
             applyEffectiveMicrophoneBoostToAudioService()
         }
     }
-    @Published var spokenFeedbackEnabled: Bool {
-        didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
-    }
-    @Published private(set) var lastTranscribedText: String?
-    @Published private(set) var lastTranscriptionLanguage: String?
     /// Updated only by the completed text-insertion path, never by indicator feedback.
     @Published private(set) var lastSuccessfulDictationInsertion: DictationInsertionCompletion?
     @Published var hotkeyLabelsVersion = 0
@@ -463,7 +452,6 @@ final class DictationViewModel: ObservableObject {
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
     private let workflowTextProcessingService: WorkflowTextProcessingService
-    private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
@@ -655,7 +643,6 @@ final class DictationViewModel: ObservableObject {
         appFormatterService: AppFormatterService,
         punctuationStrategyResolver: PunctuationStrategyResolver,
         speechPunctuationService: SpeechPunctuationService,
-        speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
         mediaPlaybackService: MediaPlaybackService,
@@ -697,7 +684,6 @@ final class DictationViewModel: ObservableObject {
                 workflowService: workflowService,
                 vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
             )
-        self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
@@ -787,7 +773,6 @@ final class DictationViewModel: ObservableObject {
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
-        self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -3201,10 +3186,8 @@ final class DictationViewModel: ObservableObject {
                         standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
                             .standaloneValueFinalPeriodCleanupEnabled()
                     )
-                    let shouldObservePostInsertionEdits = (
-                        shouldTrackTargetAppCorrectionLearning
-                            || improveTypeWhisperCaptureEnabled
-                    ) && resolvedOutputFormat == nil
+                    let shouldObservePostInsertionEdits = shouldTrackTargetAppCorrectionLearning
+                        && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
                     var insertionResult: TextInsertionService.InsertionResult?
@@ -3373,17 +3356,9 @@ final class DictationViewModel: ObservableObject {
                 finishLatencyTraceAfterInsertion(sessionID: sessionID)
 
                 if let insertedTextForCorrectionTracking {
-                    let contributionContext: CorrectionContributionContext? = improveTypeWhisperCaptureEnabled
-                        ? CorrectionContributionContext(
-                            language: result.detectedLanguage ?? language,
-                            engineId: result.engineUsed,
-                            modelId: transcription.modelId
-                        )
-                        : nil
                     didTransferAccessibilityObservationLease = startTargetAppCorrectionLearningIfNeeded(
                         insertedText: insertedTextForCorrectionTracking,
                         baseline: targetAppCorrectionBaseline,
-                        contributionContext: contributionContext,
                         accessibilityObservationLease: accessibilityObservationLease
                     )
                 }
@@ -3398,9 +3373,6 @@ final class DictationViewModel: ObservableObject {
                 if let actionResultAnnouncement {
                     accessibilityAnnouncementService.announce(actionResultAnnouncement)
                 }
-                speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
-                lastTranscribedText = text
-                lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
                     let fallbackMessage = localizedAppText(
@@ -4901,11 +4873,6 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.insertLatest(currentState: state)
     }
 
-    func readBackLastTranscription() {
-        guard let text = lastTranscribedText else { return }
-        speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
-    }
-
     // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
 
     /// Deletes the text inserted by the most recent successful dictation.
@@ -4982,7 +4949,6 @@ final class DictationViewModel: ObservableObject {
                 id: session.id, status: session.status, transcription: transcription, error: session.error
             ))
         }
-        lastTranscribedText = rawText
     }
 
     var canRecoverLastRecording: Bool {
@@ -5024,14 +4990,12 @@ final class DictationViewModel: ObservableObject {
     private func startTargetAppCorrectionLearningIfNeeded(
         insertedText: String,
         baseline: TextInsertionService.FocusedTextObservation?,
-        contributionContext: CorrectionContributionContext?,
         accessibilityObservationLease: TargetAppAccessibilityObservationLease?
     ) -> Bool {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
 
-        let shouldLearn = shouldTrackTargetAppCorrectionLearning
-        guard shouldLearn || contributionContext != nil else {
+        guard shouldTrackTargetAppCorrectionLearning else {
             return false
         }
 
@@ -5040,8 +5004,6 @@ final class DictationViewModel: ObservableObject {
                 weak self,
                 baseline,
                 insertedText,
-                contributionContext,
-                shouldLearn,
                 accessibilityObservationLease
             ] in
             defer {
@@ -5057,31 +5019,10 @@ final class DictationViewModel: ObservableObject {
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            if let contributionContext,
-               let correctionObservation = result.correctionObservation {
-                EventBus.shared.emit(.textCorrectionCommitted(TextCorrectionCommittedPayload(
-                    id: UUID(),
-                    capturedAt: Date(),
-                    originalText: insertedText,
-                    correctedText: correctionObservation.correctedInsertedText,
-                    language: contributionContext.language,
-                    engineId: contributionContext.engineId,
-                    modelId: contributionContext.modelId,
-                    appVersion: AppConstants.appVersion,
-                    appBuild: AppConstants.buildVersion,
-                    platformVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    commitSignal: correctionObservation.commitSignal?.contributionPayloadValue,
-                    sourceChannel: AppConstants.isDevelopment ? .development : .production
-                )))
-            }
-            guard shouldLearn, !result.learnedCorrections.isEmpty else { return }
+            guard !result.learnedCorrections.isEmpty else { return }
             self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
         return true
-    }
-
-    private var improveTypeWhisperCaptureEnabled: Bool {
-        UserDefaults.standard.bool(forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
     }
 
     private func cancelTargetAppCorrectionLearning() {
@@ -5097,7 +5038,6 @@ final class DictationViewModel: ObservableObject {
             return
         }
         guard shouldTrackTargetAppCorrectionLearning
-                || improveTypeWhisperCaptureEnabled
                 || liveFieldTranscriptEnabled else {
             return
         }

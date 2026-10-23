@@ -21,8 +21,7 @@ settings; `dependabot.yml` alone does not enable them.
 | `TypeWhisper.xcodeproj/project.pbxproj` and `TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | `swift`, `/` | Committed lockfile submission |
 | `TypeWhisperPluginSDK/Package.swift`, `TypeWhisperPluginSDK/Package.resolved` | `swift`, `/TypeWhisperPluginSDK` | Committed lockfile submission |
 
-Python release-tool updates must preserve wheel-only hash verification and pass
-the release tooling policy tests; see [the update procedure](release-tooling-security.md).
+Python release-tool updates must preserve wheel-only hash verification.
 The custom coverage checks below cover Swift (SBOM) and Ruby (dependency-graph
 compare); confirm Python graph discovery in GitHub after the requirements file
 first reaches main.

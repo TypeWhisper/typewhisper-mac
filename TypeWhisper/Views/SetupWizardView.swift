@@ -1,5 +1,8 @@
+import os
 import SwiftUI
 import TypeWhisperPluginSDK
+
+private let setupWizardLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SetupWizard")
 
 struct SetupWizardView: View {
     @Environment(\.dismiss) private var dismiss
@@ -19,6 +22,7 @@ struct SetupWizardView: View {
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingQwen3 = false
     @State private var qwen3ModelProgress: Double?
+    @State private var qwen3ActivationFailure: String?
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
     @State private var isMovingForward = true
@@ -950,6 +954,13 @@ struct SetupWizardView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
+
+                    if let failure = visibleQwen3ActivationFailure(manifestId: manifestId, availability: availability) {
+                        Label(String(localized: "Qwen3 could not be set up. \(failure)"), systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Spacer()
@@ -982,6 +993,16 @@ struct SetupWizardView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(isSelected ? .isSelected : [])
         }
+    }
+
+    private func visibleQwen3ActivationFailure(
+        manifestId: String,
+        availability: SetupWizardRecommendationAvailability
+    ) -> String? {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId,
+              availability == .setupRequired,
+              !isActivatingQwen3 else { return nil }
+        return qwen3ActivationFailure
     }
 
     /// The card shows its own settings button, which must stay a separate control.
@@ -1017,7 +1038,9 @@ struct SetupWizardView: View {
                     statusPill(localizedAppText("Ready", de: "Bereit"), systemImage: "checkmark.circle.fill", color: .green)
                 }
             case .setupRequired:
-                if manifestId == SetupWizardQwen3Recommendation.manifestId {
+                if visibleQwen3ActivationFailure(manifestId: manifestId, availability: availability) != nil {
+                    statusPill(String(localized: "Retry"), systemImage: "arrow.clockwise.circle.fill", color: .blue)
+                } else if manifestId == SetupWizardQwen3Recommendation.manifestId {
                     statusPill(localizedAppText("Activate", de: "Aktivieren"), systemImage: "play.circle.fill", color: .blue)
                 } else {
                     RecommendationSettingsButton(manifestId: manifestId)
@@ -1052,13 +1075,16 @@ struct SetupWizardView: View {
         availability: SetupWizardRecommendationAvailability,
         isSelected: Bool
     ) -> Bool {
-        guard manifestId == SetupWizardQwen3Recommendation.manifestId, !isSelected else {
+        guard manifestId == SetupWizardQwen3Recommendation.manifestId else {
             return false
         }
 
+        // 激活失败后 Qwen3 仍是已选引擎，卡片要保持可点击才能重试。
         switch availability {
-        case .ready, .setupRequired:
+        case .setupRequired:
             return true
+        case .ready:
+            return !isSelected
         default:
             return false
         }
@@ -1091,6 +1117,7 @@ struct SetupWizardView: View {
         guard !isActivatingQwen3 else { return }
 
         manuallySelectedSetupProviderId = SetupWizardQwen3Recommendation.providerId
+        qwen3ActivationFailure = nil
         isActivatingQwen3 = true
         defer {
             isActivatingQwen3 = false
@@ -1108,23 +1135,13 @@ struct SetupWizardView: View {
 
         modelManager.selectProvider(engine.providerId)
 
-        if !engine.isConfigured {
-            let modelId = engine.selectedModelId
-                ?? SetupWizardQwen3Recommendation.preferredModelId(from: engine.modelCatalog)
-            if let modelId {
-                engine.selectModel(modelId)
+        do {
+            try await SetupWizardQwen3Recommendation.activate(engine) { qwen3ModelProgress = $0 }
+        } catch {
+            setupWizardLogger.error("Qwen3 activation failed: \(error.localizedDescription, privacy: .public)")
+            if case TranscriptionEngineError.modelLoadFailed(let reason) = error {
+                qwen3ActivationFailure = reason
             }
-        }
-
-        // Idle polls time out after 2 minutes; an active model download may take up to 30 minutes.
-        var idlePolls = 0
-        for _ in 0..<3_600 {
-            if Task.isCancelled || engine.isConfigured || idlePolls >= 240 { return }
-            let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
-            if activity?.isError == true { return }
-            qwen3ModelProgress = activity?.progress
-            if activity == nil { idlePolls += 1 }
-            try? await Task.sleep(for: .milliseconds(500))
         }
     }
 
@@ -1944,6 +1961,38 @@ enum SetupWizardQwen3Recommendation {
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
         models.first { $0.id == "qwen3-asr-1.7b-6bit" }?.id
             ?? models.first?.id
+    }
+
+    @MainActor
+    static func activate(
+        _ engine: TranscriptionEnginePlugin,
+        onProgress: @MainActor (Double?) -> Void
+    ) async throws {
+        guard !engine.isConfigured,
+              let modelId = engine.selectedModelId ?? preferredModelId(from: engine.modelCatalog),
+              let plugin = engine as? NSObject else { return }
+        // selectModel 只恢复本机已有的模型，这个请求在模型缺失时会下载。
+        let downloadSelector = NSSelectorFromString("triggerRestoreModelForModel:")
+        guard plugin.responds(to: downloadSelector) else { return }
+        let activityReporter = engine as? any PluginSettingsActivityReporting
+        let isAlreadyRunning = engine.selectedModelId == modelId
+            && activityReporter?.currentSettingsActivity.map { !$0.isError } == true
+        // 新请求会取消正在进行的下载并删除已下载的部分，所以只跟随已有的进度。
+        if !isAlreadyRunning {
+            _ = plugin.perform(downloadSelector, with: modelId as NSString)
+        }
+
+        // 插件报告下载或加载时一直等待；连续 2 分钟没有活动才放弃。
+        var idlePolls = 0
+        while !Task.isCancelled, !engine.isConfigured, idlePolls < 240 {
+            let activity = activityReporter?.currentSettingsActivity
+            if let activity, activity.isError {
+                throw TranscriptionEngineError.modelLoadFailed(activity.message)
+            }
+            onProgress(activity?.progress)
+            idlePolls = activity == nil ? idlePolls + 1 : 0
+            try? await Task.sleep(for: .milliseconds(500))
+        }
     }
 }
 

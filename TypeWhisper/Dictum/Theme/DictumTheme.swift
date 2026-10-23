@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum DictumTheme {
-    static let accent = color(0x3B5BDB, 0x6E8BFF)
+    static let accent = Color("AccentColor")
     static let accentSoft = color(0x3B5BDB, 0x6E8BFF, lightAlpha: 0.10, darkAlpha: 0.16)
     static let live = color(0xF2423A, 0xFF5A50)
     static let translate = color(0x8E4FE8, 0xB383FF)
