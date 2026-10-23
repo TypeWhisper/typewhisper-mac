@@ -138,7 +138,8 @@ final class SpeechPunctuationService {
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
             .joined(separator: #"\s+"#)
-        return #"(?<![\p{L}\p{N}])\#(escapedWords)(?![\p{L}\p{N}])"#
+        // A phrase glued to "#" or "@" is a tag or handle ("#hashtag", "@period"), not a dictated symbol.
+        return #"(?<![\p{L}\p{N}#@])\#(escapedWords)(?![\p{L}\p{N}])"#
     }
 
     private func normalizeSpacing(

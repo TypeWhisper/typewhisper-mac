@@ -70,6 +70,7 @@ final class SpeechPunctuationServiceTests: XCTestCase {
             service.normalize(text: "follow hashtag swift and hash sign ios", language: "en"),
             "follow #swift and #ios"
         )
+        XCTAssertEqual(service.normalize(text: "follow #hashtag", language: "en"), "follow #hashtag")
         XCTAssertEqual(
             service.normalize(text: "C# is \"fine\" open quotes ok end quote", language: "en"),
             "C# is \"fine\" \"ok\""
