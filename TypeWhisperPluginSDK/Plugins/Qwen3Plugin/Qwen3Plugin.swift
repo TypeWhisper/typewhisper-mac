@@ -853,7 +853,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             repoId: "mlx-community/Qwen3-ASR-1.7B-5bit",
             sizeDescription: "~1.8 GB",
             ramRequirement: "16 GB+",
-            usageHint: "Middle ground if the default 6-bit model is tight on memory."
+            usageHint: "Middle ground if the default 8-bit model is tight on memory."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-6bit",
@@ -861,17 +861,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             repoId: "mlx-community/Qwen3-ASR-1.7B-6bit",
             sizeDescription: "~2.0 GB",
             ramRequirement: "16 GB+",
-            usageHint: "Best default for most 16 GB+ Macs.",
-            recommendation: .balanced
+            usageHint: "Lighter pick when memory is tight; MLX peak about 2.8 GiB."
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-8bit",
             displayName: "Qwen3 1.7B (8-bit)",
             repoId: "mlx-community/Qwen3-ASR-1.7B-8bit",
             sizeDescription: "~2.5 GB",
-            ramRequirement: "32 GB+",
-            usageHint: "Higher-quality pick for 32 GB+ Macs.",
-            recommendation: .highQuality
+            ramRequirement: "16 GB+",
+            usageHint: "Default precision; MLX peak about 3.2 GiB.",
+            recommendation: .balanced
         ),
         Qwen3ModelDef(
             id: "qwen3-asr-1.7b-bf16",
@@ -1636,7 +1635,7 @@ private struct Qwen3SettingsView: View {
         case .balanced:
             String(localized: "Recommended", bundle: bundle)
         case .highQuality:
-            String(localized: "32 GB quality", bundle: bundle)
+            String(localized: "Unquantized quality", bundle: bundle)
         }
     }
 
@@ -1647,7 +1646,7 @@ private struct Qwen3SettingsView: View {
         case .balanced:
             String(localized: "Best default", bundle: bundle)
         case .highQuality:
-            String(localized: "Quality / 32 GB", bundle: bundle)
+            String(localized: "Unquantized quality", bundle: bundle)
         }
     }
 
@@ -1666,11 +1665,11 @@ private struct Qwen3SettingsView: View {
         case "qwen3-asr-1.7b-4bit":
             String(localized: "Smallest 1.7B option; use when 6-bit is too heavy.", bundle: bundle)
         case "qwen3-asr-1.7b-5bit":
-            String(localized: "Middle ground if the default 6-bit model is tight on memory.", bundle: bundle)
+            String(localized: "Middle ground if the default 8-bit model is tight on memory.", bundle: bundle)
         case "qwen3-asr-1.7b-6bit":
-            String(localized: "Best default for most 16 GB+ Macs.", bundle: bundle)
+            String(localized: "Lighter pick when memory is tight; MLX peak about 2.8 GiB.", bundle: bundle)
         case "qwen3-asr-1.7b-8bit":
-            String(localized: "Higher-quality pick for 32 GB+ Macs.", bundle: bundle)
+            String(localized: "Default precision; MLX peak about 3.2 GiB.", bundle: bundle)
         case "qwen3-asr-1.7b-bf16":
             String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
         default:

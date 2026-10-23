@@ -281,8 +281,9 @@ final class Qwen3PluginTests: XCTestCase {
         )
 
         XCTAssertEqual(modelsById["qwen3-asr-0.6b-6bit"]?.recommendation, .lowMemory)
-        XCTAssertEqual(modelsById["qwen3-asr-1.7b-6bit"]?.recommendation, .balanced)
-        XCTAssertEqual(modelsById["qwen3-asr-1.7b-8bit"]?.recommendation, .highQuality)
+        XCTAssertNil(modelsById["qwen3-asr-1.7b-6bit"]?.recommendation)
+        XCTAssertEqual(modelsById["qwen3-asr-1.7b-8bit"]?.recommendation, .balanced)
+        XCTAssertFalse(modelsById["qwen3-asr-1.7b-8bit"]!.ramRequirement.contains("32 GB"))
         XCTAssertTrue(Qwen3Plugin.availableModels.allSatisfy { !$0.usageHint.isEmpty })
         XCTAssertEqual(
             Qwen3Plugin.availableModels.filter { $0.recommendation != nil }.map(\.id),
