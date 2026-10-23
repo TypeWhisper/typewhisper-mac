@@ -631,6 +631,57 @@ final class OpenAICompatiblePlugin: NSObject,
 
     // MARK: - Profile Management
 
+    @objc var dictumPresets: [[String: String]] {
+        [
+            ["id": "deepseek", "name": "DeepSeek", "url": "https://api.deepseek.com/v1", "model": "deepseek-flash", "source": "https://api-docs.deepseek.com/"],
+            ["id": "qwen", "name": "通义千问", "url": "https://dashscope.aliyuncs.com/compatible-mode/v1", "model": "qwen-plus", "source": "https://help.aliyun.com/zh/model-studio/compatibility-of-openai-with-dashscope"],
+            ["id": "kimi", "name": "Kimi", "url": "https://api.moonshot.cn/v1", "model": "kimi-k3", "source": "https://platform.kimi.com/docs/api/chat"],
+            ["id": "zhipu", "name": "智谱", "url": "https://open.bigmodel.cn/api/paas/v4", "model": "glm-5.3", "source": "https://docs.bigmodel.cn/api-reference/模型-api/对话补全"],
+            ["id": "siliconflow", "name": "硅基流动", "url": "https://api.siliconflow.cn/v1", "model": "deepseek-ai/DeepSeek-V4-Flash", "source": "https://docs.siliconflow.cn/docs/api/chat-completions-post"]
+        ]
+    }
+
+    // 插件作为独立 bundle 加载，宿主通过 Objective-C 边界配置，避免复制插件的持久化格式。
+    @objc func dictumConfigure(_ values: NSDictionary) -> NSDictionary {
+        guard host != nil else { return ["error": "Plugin unavailable"] }
+        let id: String
+        if let existing = values["id"] as? String {
+            guard profile(for: existing) != nil else { return ["error": "Unknown profile"] }
+            id = existing
+        } else {
+            let preset = dictumPresets.first { $0["id"] == values["preset"] as? String }
+            guard preset != nil || values["preset"] as? String == "custom" else { return ["error": "Unknown preset"] }
+            let created = addProfile(named: preset?["name"] ?? "OpenAI Compatible")
+            id = created.id
+            if let url = preset?["url"] { setBaseURL(url, for: id) }
+            if let model = preset?["model"] { selectLLMModel(model, for: id) }
+        }
+        if let key = values["key"] as? String {
+            do { try host?.storeSecret(key: secretKey(for: id), value: key.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            catch { return ["error": "Keychain write failed"] }
+        }
+        if let url = values["url"] as? String { setBaseURL(url, for: id) }
+        if let model = values["model"] as? String { selectLLMModel(model, for: id) }
+        if values.count > 1 || values["id"] == nil { host?.notifyCapabilitiesChanged() }
+        guard let snapshot = profile(for: id) else { return ["error": "Unknown profile"] }
+        return ["id": id, "name": snapshot.displayName, "url": snapshot.baseURL,
+                "model": snapshot.selectedLLMModelId, "hasKey": hasApiKey(for: id), "modelsKnown": !snapshot.fetchedModels.isEmpty]
+    }
+
+    @objc func dictumRefreshModels(_ profileId: String) {
+        Task { @MainActor in
+            let models = await fetchModels(for: profileId)
+            guard !models.isEmpty else { return }
+            setFetchedModels(models, for: profileId)
+        }
+    }
+
+    @objc func dictumHasCredentials(_ profileId: String) -> NSNumber {
+        guard let profile = profile(for: profileId), let url = URL(string: profile.baseURL) else { return false }
+        let local = ["localhost", "127.0.0.1", "::1"].contains(url.host ?? "")
+        return NSNumber(value: local || hasApiKey(for: profileId))
+    }
+
     var profileSnapshots: [OpenAICompatibleProfile] {
         profiles
     }
@@ -1610,6 +1661,8 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginChatError.invalidApiKey
         case 429:
             throw PluginChatError.rateLimited
+        case 402:
+            throw PluginChatError.apiError("HTTP 402")
         default:
             throw PluginChatError.apiError(Self.chatErrorMessage(from: data, statusCode: httpResponse.statusCode))
         }
@@ -1914,10 +1967,14 @@ final class OpenAICompatiblePlugin: NSObject,
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
-    private static func requestURL(baseURL: String, path: String, apiVersion: String) -> URL? {
+    static func requestURL(baseURL: String, path: String, apiVersion: String) -> URL? {
         guard var components = URLComponents(string: baseURL) else { return nil }
         let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        let requestPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        var requestPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if basePath.range(of: #"(^|/)v\d+$"#, options: .regularExpression) != nil,
+           requestPath.hasPrefix("v1/") {
+            requestPath.removeFirst(3)
+        }
         components.percentEncodedPath = "/" + [basePath, requestPath]
             .filter { !$0.isEmpty }
             .joined(separator: "/")

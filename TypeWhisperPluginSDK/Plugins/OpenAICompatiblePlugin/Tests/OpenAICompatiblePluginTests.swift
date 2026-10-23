@@ -5,6 +5,27 @@ import XCTest
 @testable import OpenAICompatiblePlugin
 
 final class OpenAICompatiblePluginTests: XCTestCase {
+    func testPolishPresetsUseDocumentedChatEndpoints() throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let expected = [
+            "deepseek": "https://api.deepseek.com/v1/chat/completions",
+            "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+            "kimi": "https://api.moonshot.cn/v1/chat/completions",
+            "zhipu": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            "siliconflow": "https://api.siliconflow.cn/v1/chat/completions"
+        ]
+        for (preset, endpoint) in expected {
+            let result = plugin.dictumConfigure(["preset": preset])
+            let id = try XCTUnwrap(result["id"] as? String)
+            let profile = try XCTUnwrap(plugin.profileSnapshot(for: id))
+            XCTAssertEqual(OpenAICompatiblePlugin.requestURL(baseURL: profile.baseURL, path: "/v1/chat/completions", apiVersion: "")?.absoluteString, endpoint)
+            XCTAssertFalse(plugin.dictumHasCredentials(id).boolValue)
+        }
+        XCTAssertEqual(plugin.profileSnapshots.count, 6)
+    }
+
     override func tearDown() {
         PluginHTTPClientTestHarness.reset()
         super.tearDown()
