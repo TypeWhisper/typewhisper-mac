@@ -51,7 +51,7 @@ final class StreamingHandler: @unchecked Sendable {
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
     private static var fallbackPollInterval: Duration {
-        .seconds(previewParameter("--speech-preview-interval", default: 3, range: 0.5...10))
+        .seconds(previewParameter("--speech-preview-interval", default: 1.5, range: 0.5...10))
     }
     private static var fallbackPreviewWindowDuration: TimeInterval {
         previewParameter("--speech-preview-window", default: 10, range: 2...30)
