@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 60;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -1394,9 +1394,20 @@
 			);
 			sourceTree = "<group>";
 		};
+		D1C705A00000000000000001 /* Dictum */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Dictum;
+			sourceTree = "<group>";
+		};
+		D1C705A00000000000000002 /* DictumTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Dictum;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000002 /* TypeWhisper */ = {
 			isa = PBXGroup;
 			children = (
+				D1C705A00000000000000001 /* Dictum */,
 				CC00000000000000000003 /* App */,
 				CC00000000000000000004 /* Models */,
 				CC00000000000000000005 /* Services */,
@@ -1936,6 +1947,7 @@
 		D310CE5CC61C8F01487BBDF4 /* TypeWhisperTests */ = {
 			isa = PBXGroup;
 			children = (
+				D1C705A00000000000000002 /* DictumTests */,
 				CA2F00000000000000000001 /* MeetingLinkParserTests.swift */,
 				CA2F00000000000000000002 /* BrowserURLResolverTests.swift */,
 				CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */,
@@ -2082,6 +2094,9 @@
 		};
 		40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */ = {
 			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				D1C705A00000000000000002 /* DictumTests */,
+			);
 			buildConfigurationList = 52E9F6F513650CA6EC4DDCA3 /* Build configuration list for PBXNativeTarget "TypeWhisperTests" */;
 			buildPhases = (
 				D7199BC8CB6EE00511EFCC10 /* Sources */,
@@ -2110,6 +2125,9 @@
 		};
 		DD00000000000000000001 /* TypeWhisper */ = {
 			isa = PBXNativeTarget;
+			fileSystemSynchronizedGroups = (
+				D1C705A00000000000000001 /* Dictum */,
+			);
 			buildConfigurationList = FF00000000000000000030 /* Build configuration list for PBXNativeTarget "TypeWhisper" */;
 			buildPhases = (
 				FF00000000000000000002 /* Sources */,

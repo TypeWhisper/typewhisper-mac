@@ -5,6 +5,7 @@ struct HotkeyRecorderView: View {
         case row
         case iconButton(systemName: String)
         case compactChip
+        case dictum
     }
 
     let label: String
@@ -48,7 +49,19 @@ struct HotkeyRecorderView: View {
                 iconButtonBody(systemName: systemName)
             case .compactChip:
                 compactChipBody
+            case .dictum:
+                DictumShortcutControl(label: label, isRecording: isRecording) {
+                    if isRecording { cancelRecording() } else { startRecording() }
+                }
             }
+        }
+        .task(id: isRecording) {
+            guard case .dictum = presentation, isRecording else { return }
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            cancelRecording()
+        }
+        .onDisappear {
+            if case .dictum = presentation, isRecording { cancelRecording() }
         }
         .sheet(isPresented: $showVisualKeyboard) {
             VisualShortcutKeyboardView(

@@ -22,7 +22,9 @@ Define these as named colors in the asset catalog with Any/Dark variants. Use sy
 | Token | Light | Dark | SwiftUI |
 |---|---|---|---|
 | `accent` | `#3B5BDB` | `#6E8BFF` | Asset color, also set as app `AccentColor` |
-| `accentSoft` (selected row, info banner) | `#3B5BDB` @ 10% | `#6E8BFF` @ 16% | `accent.opacity(…)` |
+| `accentSoft` (History selection, info banner) | `#3B5BDB` @ 10% | `#6E8BFF` @ 16% | `accent.opacity(…)` |
+| `selected` (sidebar selection, neutral badge) | black @ 7.5% | white @ 9% | Dynamic color |
+| `control` | `#FFFFFF` | `#3A3A3D` | Dynamic color |
 | `live` (recording dot) | `#F2423A` | `#FF5A50` | Asset color |
 | `translate` | `#8E4FE8` | `#B383FF` | Asset color |
 | `translateSoft` | `#8E4FE8` @ 12% | `#B383FF` @ 16% | |
@@ -126,8 +128,10 @@ The selected item tints its symbol with `accent`. A status row is pinned to the 
 |---|---|---|---|---|
 | Ready | success | 就绪 | Ready | engine short name, e.g. `Qwen3-ASR` |
 | Model downloading | warning | 正在下载 | Downloading | `62%` |
+| Model loading or optimizing | warning | 正在加载模型 | Loading model | engine short name |
 | No model | danger | 需要语音模型 | Speech model needed | |
 | Download failed | danger | 下载失败 | Download failed | |
+| Model load failed | danger | 模型加载失败 | Model load failed | |
 | No AI provider | warning | 未接入 AI 模型 | No AI model | |
 | First AI provider failing | warning | 使用备用模型 | Using backup model | |
 
@@ -636,5 +640,16 @@ Advanced Settings (the TypeWhisper window) is reachable with ⌥ held: `设置�
 
 - Build pages in this order so each one can be checked against its prototype: voice bar, Home, History, Dictionary, General, Speech, AI Models, Style, Onboarding, menu bar.
 - Visual comparison: screenshot each SwiftUI screen at 1040 × 680 in light and dark and compare with `prototypes/<page>.html?theme=light|dark` at the same size. The window, sidebar, and toolbar should line up within 2pt.
-- Localize every string through `Localizable.xcstrings` with the English and zh-Hans values from the tables above. Prototype sample data (names, numbers, messages) is illustrative and never ships.
+- Localize every new string through the owning phase's string table with English and zh-Hans values. Prototype sample data is illustrative and never ships.
 - Accessibility: every icon-only button has a label (`取消 Cancel`, `完成 Done`, `复制 Copy`, `删除 Delete`); the voice bar posts `NSAccessibility` announcements for "Recording", "Inserted", and errors through `AccessibilityAnnouncementService`; heatmap cells expose their tooltip text as the accessibility value.
+
+### Use the shell
+
+Phases 1, 2, 3, 4, and 5B own their page files and string tables. Keep shared shell files unchanged when adding page content.
+
+- Wrap a page in `DictumPageFrame(page:actions:content:)`. Put search fields, segmented pickers, buttons, and menus in `actions`. The frame places them at the trailing edge of the 52pt title row. Omit `actions` for a title-only page. `GeneralPage` provides an Open Login Items action when macOS requires approval. `AIModelsPage` provides its working provider picker.
+- Pass `tableName` to `GroupedFormSection`, `GroupedFormToggle`, `DictumPopup`, `Badge`, `Banner`, `EmptyState`, `OptionCard`, `StatTile`, `Toast`, `KeyCapView`, and `DictumShortcutControl`. It defaults to `DictumShell` for existing shell callers. The section's title and footer share that table. `SoundSection` reads its existing title from `Localizable` and its toggles from `DictumShell`.
+- Use `DictumPopup(title:selection:tableName:value:options:)` for a native popup with the prototype's control surface. Tagged options provide the visible title; `value` provides the localized VoiceOver value. Use `DictumControlStyle(kind: .smallButton)` for small neutral buttons.
+- Use your own table for page keys. For example, `GroupedFormSection(title: "Polish strength", tableName: "DictumStyle") { ... }` and `GroupedFormToggle(title: "Enabled", isOn: $enabled, tableName: "DictumStyle")` require no shell resource edits. Pass `LocalizedStringKey` for computed keys. `StatTile.value` is an already formatted value. Key caps accept a key name and an optional caller table for translated key names.
+- Navigate with `DictumNavigation.shared.open(.speech)` or the matching `DictumPage` case. Add files under `TypeWhisper/Dictum/`; Xcode discovers them through the synchronized folder.
+- Check a login launch with `scripts/dictum-verify.sh run --login-item --audio-file <clip>`. This sends the macOS login Apple Event to the app. Normal login launches keep the main window closed. Setup keeps a Dock icon while its window is visible.

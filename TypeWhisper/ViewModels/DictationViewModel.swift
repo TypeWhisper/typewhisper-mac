@@ -815,6 +815,15 @@ final class DictationViewModel: ObservableObject {
         audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] uptimeNanoseconds in
             self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
         }
+        #if DEBUG
+        audioRecordingService.onAudioFileInputFinished = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.apiWaitForRecordingReadiness()
+                if self.state == .recording { _ = self.apiStopRecording() }
+            }
+        }
+        #endif
 
         promptPaletteHandler.onWorkflowProcessingChanged = { [weak self] isProcessing in
             self?.setStandaloneWorkflowProcessing(isProcessing)
