@@ -4,7 +4,7 @@ import ServiceManagement
 import UserNotifications
 import WidgetKit
 
-/// Removes everything dictum stores on this Mac: Keychain items (API
+/// Removes everything dictum stores on this Mac: the secrets file (API
 /// keys and the local API token), the Application
 /// Support folder including plugins and downloaded models, App Group files,
 /// caches, and all preferences. Afterwards the app must quit without running
@@ -107,15 +107,15 @@ enum UserDataEraser {
         locations: UserDataLocations,
         userDefaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
-        deleteKeychainItems: () throws -> Void = UserDataEraser.deleteAppKeychainItems,
+        deleteSecrets: () throws -> Void = UserDataEraser.deleteAppSecrets,
         resetSystemRegistrations: () -> [Failure] = UserDataEraser.resetSystemRegistrations
     ) -> [Failure] {
         var failures: [Failure] = []
 
         do {
-            try deleteKeychainItems()
+            try deleteSecrets()
         } catch {
-            failures.append(Failure(item: "Keychain", message: error.localizedDescription))
+            failures.append(Failure(item: "Secrets", message: error.localizedDescription))
         }
 
         failures += resetSystemRegistrations()
@@ -147,7 +147,7 @@ enum UserDataEraser {
         return failures
     }
 
-    nonisolated static func deleteAppKeychainItems() throws {
+    nonisolated static func deleteAppSecrets() throws {
         try KeychainService.deleteAll(withServicePrefix: "")
     }
 
