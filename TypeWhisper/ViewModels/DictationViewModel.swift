@@ -298,6 +298,25 @@ final class DictationViewModel: ObservableObject {
     }
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
+    @Published private(set) var cancelledRecordingDeadline: Date?
+    private var cancelledRecordingURL: URL?
+    private var cancellationSamples: [Float] = []
+    private var cancellationPeakLevel: Float = 0
+    private var cancellationSamplesObservation: AnyCancellable?
+    private var cancelledRecordingTask: Task<Void, Never>?
+    private var cancelledRecordingRestoreTask: Task<Void, Never>?
+    private var cancelledSessionID: UUID?
+    var voiceBarUndeliveredText: String? {
+        guard case .insertUndeliveredTranscript(let transcript)? = actionFeedbackAction else { return nil }
+        return transcript.text
+    }
+    var voiceBarInsertedText: String? {
+        guard let completion = lastSuccessfulDictationInsertion,
+              let start = recordingStartTime,
+              let entry = recentTranscriptionStore.sessionEntries.first(where: { $0.id == completion.id }),
+              entry.timestamp >= start else { return nil }
+        return entry.finalText
+    }
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
     @Published var isStreaming: Bool = false
@@ -1849,49 +1868,124 @@ final class DictationViewModel: ObservableObject {
         let cancelledMessage = String(localized: "Cancelled")
         clearCancelWarning()
 
-        if state == .processing, recordingStartTask != nil, !isStopInFlight {
-            abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            finishCancellation(message: cancelledMessage)
-            return
-        }
-
-        switch state {
-        case .recording:
-            guard !isStopInFlight else { return }
-            abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            finishCancellation(message: cancelledMessage)
-        case .processing:
-            cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
-            cancelLiveFieldTranscriptSession()
-            let finalizationTask = stopFinalizationTask
-            finalizationTask?.cancel()
-            let previousCleanup = recordingCleanupTask
-            recordingCleanupTask = Task {
-                await previousCleanup?.value
-                await finalizationTask?.value
+        guard state == .recording || state == .processing else { return }
+        cancelledRecordingTask?.cancel()
+        discardCancelledRecording()
+        let cancelledSessionID = activeDictationSessionID
+        self.cancelledSessionID = cancelledSessionID
+        let deadline = Date().addingTimeInterval(3)
+        cancelledRecordingDeadline = deadline
+        let pendingStart = recordingStartTask
+        pendingStart?.cancel()
+        audioRecordingService.cancelPendingRecordingStart()
+        let finalization = stopFinalizationTask
+        finalization?.cancel()
+        let restoration = cancelledRecordingRestoreTask
+        restoration?.cancel()
+        transcriptionTask?.cancel()
+        streamingHandler.stop()
+        cancelIncrementalWorkflowPostProcessing()
+        cancelLiveFieldTranscriptSession()
+        stopRecordingTimer()
+        hotkeyService.cancelDictation()
+        let cleanup = recordingCleanupTask
+        recordingCleanupTask = Task {
+            await cleanup?.value
+            await pendingStart?.value
+            await finalization?.value
+            await restoration?.value
+            let samples = await audioRecordingService.stopRecording(policy: .immediate, bluetoothBehavior: bluetoothStopBehavior)
+            if !samples.isEmpty {
+                cancellationSamples = samples
+                cancellationPeakLevel = audioRecordingService.peakRawAudioLevel
             }
-            stopFinalizationTask = nil
-            streamingHandler.stop()
-            lastStreamingParams = nil
-            cancelIncrementalWorkflowPostProcessing()
-            transcriptionTask?.cancel()
-            transcriptionTask = nil
-            endTargetAppAccessibilityObservation()
-            audioRecordingService.discardActiveRecoveryRecording()
-            finishCancellation(message: cancelledMessage)
-        default:
-            break
+            restoreRecordingSideEffects()
+            cancelledRecordingURL = audioRecordingService.preserveActiveRecoveryRecordingResult().newlyPreservedURL
+        }
+        finishCancellation(message: cancelledMessage)
+        indicatorFeedbackLifetime.start(duration: 3) { [weak self] in
+            self?.finishCancelledRecording(deadline: deadline, sessionID: cancelledSessionID)
+        }
+        cancelledRecordingTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(3)) } catch { return }
+            guard let self, self.cancelledRecordingDeadline == deadline else { return }
+            self.indicatorFeedbackLifetime.finishImmediately()
         }
     }
 
-    private func finishCancellation(message: String) {
-        if cancellationBehavior == .instant {
-            resetDictationState()
-            // The indicator just disappears; the banner path announces itself.
-            accessibilityAnnouncementService.announce(message)
-        } else {
-            showNotchFeedback(message: message, icon: "xmark.circle", duration: 1.5)
+    private func finishCancelledRecording(deadline: Date, sessionID: UUID?) {
+        guard cancelledRecordingDeadline == deadline else { return }
+        cancelledRecordingTask?.cancel()
+        cancelledRecordingTask = Task { [weak self] in
+            guard let self else { return }
+            await self.recordingCleanupTask?.value
+            guard self.cancelledRecordingDeadline == deadline else { return }
+            self.discardCancelledRecording()
+            self.cancellationSamples = []
+            if self.state == .inserting,
+               self.activeDictationSessionID == sessionID || self.activeDictationSessionID == nil {
+                self.cancelActiveDictationSessionIfNeeded()
+                self.resetDictationState()
+            }
         }
+    }
+
+    private func discardCancelledRecording() {
+        if let url = cancelledRecordingURL {
+            audioRecordingService.discardRecoveryRecording(at: url)
+        }
+        cancelledRecordingURL = nil
+        cancelledRecordingDeadline = nil
+    }
+
+    func restoreCancelledRecording() {
+        guard let deadline = cancelledRecordingDeadline, Date() < deadline,
+              state == .inserting, activeDictationSessionID == cancelledSessionID else { return }
+        cancelledRecordingTask?.cancel()
+        cancelledRecordingDeadline = nil
+        indicatorFeedbackLifetime.cancel()
+        state = .processing
+        markActiveDictationSessionProcessingIfNeeded()
+        cancelledRecordingRestoreTask = Task { [weak self] in
+            guard let self else { return }
+            defer { self.cancelledRecordingRestoreTask = nil }
+            await self.recordingCleanupTask?.value
+            guard !Task.isCancelled, self.state == .processing,
+                  self.activeDictationSessionID == self.cancelledSessionID else { return }
+            guard !self.cancellationSamples.isEmpty || self.cancelledRecordingURL != nil else {
+                self.cancelActiveDictationSessionIfNeeded()
+                self.discardCancelledRecording()
+                self.resetDictationState()
+                return
+            }
+            do {
+                let samples: [Float]
+                if !self.cancellationSamples.isEmpty {
+                    samples = self.cancellationSamples
+                } else if let url = self.cancelledRecordingURL {
+                    samples = try await ServiceContainer.shared.audioFileService.loadAudioSamples(from: url)
+                } else { return }
+                guard !Task.isCancelled else { return }
+                self.clearActionFeedbackAction()
+                self.actionFeedbackMessage = nil
+                self.actionFeedbackIcon = nil
+                self.actionFeedbackIsError = false
+                await self.finalizeStopDictation(submitRequested: false, hiddenLiveSessionWasDeferred: false, restoredSamples: samples)
+                self.discardCancelledRecording()
+                self.cancellationSamples = []
+            } catch {
+                self.discardCancelledRecording()
+                self.showError(error.localizedDescription, category: "recording")
+            }
+        }
+    }
+
+    func cancelFromVoiceBar() {
+        cancelCurrentOperation()
+    }
+
+    private func finishCancellation(message: String) {
+        showNotchFeedback(message: message, icon: "xmark.circle", duration: 3)
     }
 
     private func startRecording(
@@ -2672,7 +2766,7 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    private func finalizeStopDictation(submitRequested: Bool, hiddenLiveSessionWasDeferred: Bool) async {
+    private func finalizeStopDictation(submitRequested: Bool, hiddenLiveSessionWasDeferred: Bool, restoredSamples: [Float]? = nil) async {
         var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
@@ -2725,11 +2819,23 @@ final class DictationViewModel: ObservableObject {
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
-        var samples = await audioRecordingService.stopRecording(
-            policy: stopPolicy,
-            bluetoothBehavior: bluetoothStopBehavior
-        )
+        var samples: [Float]
+        if let restoredSamples {
+            samples = restoredSamples
+        } else {
+            samples = await audioRecordingService.stopRecording(
+                policy: stopPolicy,
+                bluetoothBehavior: bluetoothStopBehavior
+            )
+        }
         let recordingUsedBluetoothInput = recordingUsesBluetoothInput
+        cancellationSamples = samples
+        if restoredSamples == nil { cancellationPeakLevel = audioRecordingService.peakRawAudioLevel }
+        if cancellationSamplesObservation == nil {
+            cancellationSamplesObservation = $state.sink { [weak self] state in
+                if state == .idle { self?.cancellationSamples = [] }
+            }
+        }
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
@@ -2778,7 +2884,7 @@ final class DictationViewModel: ObservableObject {
             )))
         }
 
-        let peakLevel = audioRecordingService.peakRawAudioLevel
+        let peakLevel = restoredSamples == nil ? audioRecordingService.peakRawAudioLevel : cancellationPeakLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
         updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = rawDuration }
         if previewFollowedDictationEngine,
@@ -5269,13 +5375,24 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func startRecordingTimer() {
+        cancellationSamples = []
         recordingDuration = 0
         isRecordingInputSilent = false
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let start = self.recordingStartTime else { return }
                 self.recordingDuration = Date().timeIntervalSince(start)
+#if DEBUG
+                if let index = CommandLine.arguments.firstIndex(of: "--dictum-recording-elapsed"),
+                   CommandLine.arguments.indices.contains(index + 1),
+                   let elapsed = TimeInterval(CommandLine.arguments[index + 1]), elapsed.isFinite {
+                    self.recordingDuration += min(540, max(0, elapsed))
+                }
+#endif
                 self.updateRecordingInputSilence()
+                if self.recordingDuration >= 540 {
+                    self.stopDictation()
+                }
             }
         }
     }

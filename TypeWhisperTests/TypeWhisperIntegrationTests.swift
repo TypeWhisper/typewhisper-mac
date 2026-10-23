@@ -8575,17 +8575,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await stopGate.waitForFirstEntry()
         context.dictationViewModel.handleCancelHotkey()
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
-        XCTAssertEqual(
-            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
-            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
-        )
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .processing)
+        XCTAssertNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
 
         await stopGate.release()
 
+        try await Task.sleep(for: .milliseconds(3100))
         for _ in 0..<20 {
             if MockTranscriptionPlugin.transcribeCallCount > 0 || pasteCount > 0 {
                 break
@@ -10866,10 +10863,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
         if scenario == "cancel" {
             context.dictationViewModel.handleCancelHotkey()
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
         } else if scenario == "stop" {
             XCTAssertEqual(context.dictationViewModel.apiStopRecording(), sessionID)
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
         } else if scenario == "focus" {
             foregroundBundleID = "com.apple.TextEdit"
         }
@@ -10882,7 +10879,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             } else {
                 context.hotkeyService.onSubmitDictationPressed?(sessionID)
             }
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
             revalidationGate.signal()
         }
         await context.dictationViewModel.testingWaitForRecordingStart()
@@ -10897,6 +10894,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression", "secureInput", "secureInputTransition"].contains(scenario) {
             await context.dictationViewModel.testingWaitForRecordingCleanup()
+            for _ in 0..<200 where context.dictationViewModel.state == .inserting {
+                try await Task.sleep(for: .milliseconds(20))
+            }
             XCTAssertFalse(context.audioRecordingService.isRecording)
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
@@ -12596,11 +12596,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
 
         audioStartGate.signal()
         await context.dictationViewModel.testingWaitForRecordingStart()
-        try await Task.sleep(for: .milliseconds(20))
+        try await Task.sleep(for: .milliseconds(3100))
 
         XCTAssertFalse(context.audioRecordingService.isRecording)
         XCTAssertTrue(context.audioRecordingService.recoveryRecordingURLs.isEmpty)
@@ -18163,13 +18164,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 }
 
                 XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
-                if behavior == .instant {
-                    XCTAssertEqual(context.dictationViewModel.state, .idle)
-                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-                } else {
-                    XCTAssertEqual(context.dictationViewModel.state, .inserting)
-                    XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
-                }
+                XCTAssertEqual(context.dictationViewModel.state, .inserting)
+                XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
+                XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
                 XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
                 XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 await context.dictationViewModel.testingWaitForRecordingCleanup()
@@ -18275,7 +18272,56 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testInstantCancellationWaitsForOldRecorderBeforeStartingAgain() async throws {
+    func testCancelledRecordingRestoresWithoutPersistedRecoveryAudio() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory); MockTranscriptionPlugin.reset() }
+        MockTranscriptionPlugin.reset()
+        let fixture = try XCTUnwrap(Bundle(for: Self.self).url(forResource: "cancel-restore", withExtension: "wav"))
+        let samples = try await AudioFileService().loadAudioSamples(from: fixture)
+        XCTAssertGreaterThan(samples.count, 16_000)
+        let context = Self.makeDictationContext(
+            appSupportDirectory: directory,
+            audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore(
+                directory: directory.appendingPathComponent("recovery"), retentionPolicy: .immediately
+            )
+        )
+        context.dictationViewModel.cancellationBehavior = .instant
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        var insertedText: String?
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.captureActiveAppOverride = { (nil, nil, nil) }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            insertedText = pasteboard.string(forType: .string)
+        }
+        context.textInsertionService.copySimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {}
+        let session = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.apiWaitForRecordingReadiness()
+        context.dictationViewModel.cancelFromVoiceBar()
+        XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+        context.dictationViewModel.restoreCancelledRecording()
+        for _ in 0..<200 {
+            if context.dictationViewModel.apiDictationSession(id: session)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTAssertNil(context.dictationViewModel.cancelledRecordingDeadline)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: session)?.status, .completed)
+        XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 1)
+        XCTAssertEqual(insertedText, "transcribed")
+        XCTAssertTrue(context.audioRecordingService.recoveryRecordingURLs.isEmpty)
+    }
+
+    @MainActor
+    func testInstantCancellationRetainsUndoWindowAndWaitsForOldRecorder() async throws {
         for cancelDuringProcessing in [false, true] {
             let directory = try TestSupport.makeTemporaryDirectory()
             defer { TestSupport.remove(directory) }
@@ -18299,15 +18345,22 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             }
             context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
             context.dictationViewModel.handleCancelHotkey()
-            XCTAssertEqual(context.dictationViewModel.state, .idle)
-            XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
+            XCTAssertNotNil(context.dictationViewModel.cancelledRecordingDeadline)
             await stopGate.waitForFirstEntry()
 
-            let newSession = context.dictationViewModel.apiStartRecording()
-            // Give a mistakenly unguarded recorder start time to reach the override.
-            try await Task.sleep(for: .milliseconds(50))
+            _ = context.dictationViewModel.apiStartRecording()
             XCTAssertFalse(newCaptureStarted.value)
+            try await Task.sleep(for: .milliseconds(3100))
+            XCTAssertEqual(context.dictationViewModel.state, .inserting)
             await stopGate.release()
+            await context.dictationViewModel.testingWaitForRecordingCleanup()
+            for _ in 0..<100 where context.dictationViewModel.state != .idle {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertNil(context.dictationViewModel.cancelledRecordingDeadline)
+            let newSession = context.dictationViewModel.apiStartRecording()
             await context.dictationViewModel.apiWaitForRecordingReadiness()
             XCTAssertTrue(newCaptureStarted.value)
             XCTAssertEqual(context.dictationViewModel.state, .recording)
@@ -18336,8 +18389,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let session = context.dictationViewModel.apiStartRecording()
         await fulfillment(of: [startEntered], timeout: 1)
         _ = context.dictationViewModel.apiStopRecording()
-        XCTAssertEqual(context.dictationViewModel.state, .idle)
-        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
         startGate.signal()
         await context.dictationViewModel.testingWaitForRecordingCleanup()
         XCTAssertFalse(context.audioRecordingService.isRecording)
@@ -21519,7 +21572,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
         XCTAssertEqual(startCount, 1)
 
-        try await Task.sleep(nanoseconds: 1_150_000_000)
+        try await Task.sleep(for: .milliseconds(400))
 
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         XCTAssertEqual(stopCount, 1)

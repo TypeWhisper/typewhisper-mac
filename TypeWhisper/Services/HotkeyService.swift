@@ -283,7 +283,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var pendingHybridModifierHoldGeneration: UInt64 = 0
     private var activeDelayedHybridModifierHold = false
 
-    private static let toggleThreshold: TimeInterval = 1.0
+    nonisolated static func isHybridTap(heldFor duration: TimeInterval) -> Bool {
+        duration < 0.35
+    }
     private static let doubleTapThreshold: TimeInterval = 0.4
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let escapeKeyCode: UInt16 = 0x35
@@ -3023,7 +3025,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         switch slotType {
         case .hybrid:
             guard let downTime = keyDownTime else { return }
-            if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
+            if Self.isHybridTap(heldFor: Date().timeIntervalSince(downTime)) {
                 currentMode = .toggle
                 activeDelayedHybridModifierHold = false
             } else {
@@ -3099,7 +3101,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         // Hybrid behavior: short press = toggle, long press = PTT
         guard let downTime = keyDownTime else { return }
-        if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
+        if Self.isHybridTap(heldFor: Date().timeIntervalSince(downTime)) {
             currentMode = .toggle
         } else {
             isActive = false
@@ -3173,7 +3175,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard isActive, activeWorkflowId == workflowId else { return }
 
         guard let downTime = keyDownTime else { return }
-        if Date().timeIntervalSince(downTime) < Self.toggleThreshold {
+        if Self.isHybridTap(heldFor: Date().timeIntervalSince(downTime)) {
             currentMode = .toggle
         } else {
             isActive = false
