@@ -1214,9 +1214,7 @@ final class HistoryService: ObservableObject {
 
     func purgeOldRecords(retentionDays: Int = 365) {
         guard retentionDays > 0 else { return }
-        let cutoff = HistoryRetention(rawValue: retentionDays)?.cutoff()
-            ?? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
-        purgeRecords(before: cutoff)
+        applyRetention(HistoryRetention(storedDays: retentionDays))
     }
 
     private func purgeRecords(before cutoff: Date) {

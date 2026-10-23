@@ -9,6 +9,18 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
     case never = -1
 
     var id: Int { rawValue }
+
+    /// 旧版本留下的天数（例如 60、90、180）取不短于它的最近一档，宁可多留也不多删。
+    init(storedDays days: Int) {
+        if let exact = Self(rawValue: days) {
+            self = exact
+        } else if days > 0 {
+            self = [Self.day, .week, .month, .year].first { $0.rawValue >= days } ?? .forever
+        } else {
+            self = .forever
+        }
+    }
+
     var title: String {
         switch self {
         case .forever: String(localized: "Forever", table: "DictumHistory")
@@ -34,7 +46,7 @@ enum HistoryRetention: Int, CaseIterable, Identifiable {
     static func selected(in defaults: UserDefaults = .standard) -> Self {
         if defaults.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool == false { return .never }
         guard defaults.object(forKey: UserDefaultsKeys.historyRetentionDays) != nil else { return .year }
-        return Self(rawValue: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays)) ?? .year
+        return Self(storedDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays))
     }
 
     func save(to defaults: UserDefaults = .standard) {
