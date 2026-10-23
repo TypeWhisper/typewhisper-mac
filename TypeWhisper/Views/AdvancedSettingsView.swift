@@ -443,7 +443,7 @@ struct AdvancedSettingsView: View {
                     if raycastInstalled {
                         HStack {
                             Button(String(localized: "Open in Raycast")) {
-                                NSWorkspace.shared.open(URL(string: "raycast://extensions/SeoFood/typewhisper")!)
+                                NSWorkspace.shared.open(URL(string: "raycast://extensions/schneidervvv/dictum")!)
                             }
 
                             SettingsInfoButton(
@@ -454,7 +454,7 @@ struct AdvancedSettingsView: View {
                     } else {
                         HStack {
                             Button(String(localized: "Learn More")) {
-                                NSWorkspace.shared.open(URL(string: "https://www.raycast.com/SeoFood/typewhisper")!)
+                                NSWorkspace.shared.open(URL(string: "https://github.com/schneidervvv/dictum-raycast")!)
                             }
                             .accessibilityLabel(learnMoreAccessibilityLabel(about: raycastTitle))
 
