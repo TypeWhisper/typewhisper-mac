@@ -29950,62 +29950,6 @@
         }
       }
     },
-    "recorder.liveTranscriptActive" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live-Transkript-Fenster ist aktiv"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live transcript window is active"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ライブテキストウィンドウがアクティブです"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "实时转录窗口已启用"
-          }
-        }
-      }
-    },
-    "recorder.liveTranscriptHint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installiere das Live Transcript Plugin unter Integrations für ein Live-Transkript-Fenster."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install the Live Transcript plugin from Integrations for a live transcript window."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "録音中の文字起こしを表示するには、「プラグイン」でLive Transcriptをインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请从“集成”中安装 Live Transcript 插件，以显示实时转录窗口。"
-          }
-        }
-      }
-    },
     "recorder.liveTranscription" : {
       "localizations" : {
         "de" : {
