@@ -44,7 +44,7 @@ private struct SpeechSettingsForm: View {
                 let qwen = engines.first { $0.providerId == "qwen3" }
                 let qwenActivity = qwen?.speechActivity
                 let qwenModel = qwen?.modelCatalog.first { $0.id == qwen?.selectedModelId }
-                VStack(spacing: 26) {
+                VStack(spacing: 22) {
                     GroupedFormSection(title: "On this Mac", tableName: "DictumSpeech") {
                         if let qwen {
                             localRow(qwen, title: "Qwen3-ASR 1.7B", activity: qwenActivity, model: qwenModel)
@@ -52,7 +52,7 @@ private struct SpeechSettingsForm: View {
                                 Text("Precision", tableName: "DictumSpeech")
                                 Spacer()
                                 DictumPopup(title: "Precision", selection: Binding(get: { qwen.selectedModelId ?? SetupWizardQwen3Recommendation.preferredModelId(from: qwen.modelCatalog) ?? "" }, set: { qwen.selectModel($0) }), tableName: "DictumSpeech",
-                                            value: Text(verbatim: qwen.modelCatalog.first { $0.id == qwen.selectedModelId }?.displayName ?? "")) {
+                                            value: precisionLabel(qwenModel)) {
                                     Text("8-bit · Faster", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-8bit")
                                     Text("bf16 · More accurate", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-bf16")
                                     ForEach(qwen.modelCatalog.filter {
@@ -81,7 +81,9 @@ private struct SpeechSettingsForm: View {
                         }
                     }
                     GroupedFormSection(title: "Cloud", footer: "With cloud recognition, audio is sent to the provider you choose.", tableName: "DictumSpeech") {
-                        ForEach(cloudEngines, id: \.providerId) { engine in cloudRow(engine) }
+                        ForEach(cloudEngines, id: \.providerId) { engine in
+                            cloudRow(engine).opacity(network.isOnline ? 1 : 0.45)
+                        }
                     }
                     if !network.isOnline {
                         Text("You're offline. Cloud recognition is unavailable.", tableName: "DictumSpeech")
@@ -113,9 +115,18 @@ private struct SpeechSettingsForm: View {
         }
     }
 
+    private func precisionLabel(_ model: PluginModelInfo?) -> Text {
+        switch model?.id {
+        case "qwen3-asr-1.7b-8bit": Text("8-bit · Faster", tableName: "DictumSpeech")
+        case "qwen3-asr-1.7b-bf16": Text("bf16 · More accurate", tableName: "DictumSpeech")
+        default: Text(verbatim: model?.displayName ?? "")
+        }
+    }
+
     private func radio(_ engine: any TranscriptionEnginePlugin, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: models.selectedProviderId == engine.providerId ? "largecircle.fill.circle" : "circle")
+                .frame(width: 16, height: 16)
                 .foregroundStyle(models.selectedProviderId == engine.providerId ? DictumTheme.accent : DictumTheme.textTertiary)
         }.buttonStyle(.plain).accessibilityLabel(Text(verbatim: engine.providerDisplayName))
     }
