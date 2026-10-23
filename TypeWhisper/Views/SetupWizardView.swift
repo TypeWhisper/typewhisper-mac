@@ -1947,12 +1947,18 @@ enum SetupWizardQwen3Recommendation {
         // selectModel 只恢复本机已有的模型，这个请求在模型缺失时会下载。
         let downloadSelector = NSSelectorFromString("triggerRestoreModelForModel:")
         guard plugin.responds(to: downloadSelector) else { return }
-        _ = plugin.perform(downloadSelector, with: modelId as NSString)
+        let activityReporter = engine as? any PluginSettingsActivityReporting
+        let isAlreadyRunning = engine.selectedModelId == modelId
+            && activityReporter?.currentSettingsActivity.map { !$0.isError } == true
+        // 新请求会取消正在进行的下载并删除已下载的部分，所以只跟随已有的进度。
+        if !isAlreadyRunning {
+            _ = plugin.perform(downloadSelector, with: modelId as NSString)
+        }
 
         // 插件报告下载或加载时一直等待；连续 2 分钟没有活动才放弃。
         var idlePolls = 0
         while !Task.isCancelled, !engine.isConfigured, idlePolls < 240 {
-            let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            let activity = activityReporter?.currentSettingsActivity
             if let activity, activity.isError {
                 throw TranscriptionEngineError.modelLoadFailed(activity.message)
             }

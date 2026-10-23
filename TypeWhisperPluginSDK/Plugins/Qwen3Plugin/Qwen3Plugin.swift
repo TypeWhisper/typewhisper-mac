@@ -531,6 +531,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 // Superseding an import can keep this already-loaded runtime.
                 modelState = .ready(preferredModelId)
             }
+            // 新任务设置 .loading 之前，调用方不能读到上一次失败的错误。
+            if case .error = modelState { modelState = .notLoaded }
             let generation = activationID
             explicitModelLoadTask = Task {
                 defer {
