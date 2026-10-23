@@ -1,4 +1,5 @@
 import AppKit
+import SwiftData
 import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
@@ -41,6 +42,34 @@ private func assertNoAllCapsWorkflowSafetyProse(
 
 @MainActor
 final class WorkflowServiceTests: XCTestCase {
+    func testLoadingMigratesRemovedProviderAndPersistsDefault() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowMigration")
+        defer { TestSupport.remove(directory) }
+        do {
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [Workflow.self], storeName: "workflows", in: directory
+            )
+            context.insert(Workflow(
+                name: "Legacy", template: .dictation, trigger: .manual(),
+                behavior: WorkflowBehavior(providerId: "appleIntelligence", cloudModel: "legacy")
+            ))
+            context.insert(Workflow(
+                name: "Configured", template: .dictation, trigger: .manual(),
+                behavior: WorkflowBehavior(providerId: "openai", cloudModel: "gpt-5.4")
+            ))
+            try context.save()
+        }
+        for _ in 0..<2 {
+            let service = WorkflowService(appSupportDirectory: directory)
+            let workflow = try XCTUnwrap(service.workflows.first { $0.name == "Legacy" })
+            XCTAssertNil(workflow.behavior.providerId)
+            XCTAssertNil(workflow.behavior.cloudModel)
+            let configured = try XCTUnwrap(service.workflows.first { $0.name == "Configured" })
+            XCTAssertEqual(configured.behavior.providerId, "openai")
+            XCTAssertEqual(configured.behavior.cloudModel, "gpt-5.4")
+        }
+    }
+
     func testAvailableRuleNamesExposeWorkflowsButNotLegacyProfiles() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "WorkflowServiceTests")
         defer { TestSupport.remove(appSupportDirectory) }

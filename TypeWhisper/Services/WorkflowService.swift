@@ -271,6 +271,15 @@ final class WorkflowService: ObservableObject {
 
         do {
             workflows = try modelContext.fetch(descriptor)
+            var migrated = false
+            for workflow in workflows where workflow.behavior.providerId == "appleIntelligence" {
+                var behavior = workflow.behavior
+                behavior.providerId = nil
+                behavior.cloudModel = nil
+                workflow.behavior = behavior
+                migrated = true
+            }
+            if migrated { save() }
         } catch {
             workflows = []
         }
