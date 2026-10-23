@@ -833,7 +833,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(didReportProgress, "Timed out waiting for loading progress callback")
 
         let item = try XCTUnwrap(viewModel.files.first)
-        XCTAssertEqual(item.phaseDescription, "Loading audio 25%")
+        XCTAssertEqual(item.phaseDescription, String(localized: "Loading audio \(25)%"))
         XCTAssertNotNil(viewModel.elapsedTime(for: item))
 
         await finishLoading.open()
@@ -1542,10 +1542,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
         XCTAssertEqual(SettingsView.availableTab(.dictationRecovery), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.fileTranscription), .fileTranscription)
-        XCTAssertEqual(
-            SettingsView.availableTab(.plugin(pluginId: "com.example.player", itemId: "player")),
-            .plugin(pluginId: "com.example.player", itemId: "player")
-        )
     }
 
     func testAutomaticRecoveryFallbackAllowsKnownRecoverableErrors() {
@@ -1604,7 +1600,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
         XCTAssertFalse(
             TranscriptionEngineError.noEngineSelected.localizedDescription.contains("Integrations"),
-            "The sidebar has no Integrations page; errors must name Discover plugins instead."
+            "引擎配置错误应指向听写设置或对应供应商页面。"
         )
     }
 
@@ -1616,13 +1612,13 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             DictationViewModel.settingsTab(
                 forTranscriptionError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil)
             ),
-            .integrations
+            .dictation
         )
-        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .integrations)
-        // An engine that is not installed still leads to Discover plugins.
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .dictation)
+        // 引擎不可用时打开听写设置。
         XCTAssertEqual(
             DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
-            .integrations
+            .dictation
         )
         // The same holds before the plugin system has been set up at all.
         let previousPluginManager = PluginManager.shared
@@ -1630,7 +1626,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         PluginManager.shared = nil
         XCTAssertEqual(
             DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey, providerId: "no-such-provider"),
-            .integrations
+            .dictation
         )
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
@@ -1642,7 +1638,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
                     fallbackDescription: "offline"
                 )
             ),
-            .integrations
+            .dictation
         )
     }
 
@@ -1693,20 +1689,14 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         )
     }
 
-    func testRecoveryAutomaticFallbackRequiresCommercialOrSupporterAccess() throws {
+    func testRecoveryAutomaticFallbackWorksWithoutAnAccount() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
 
         viewModel.selectedEngine = "backup"
         viewModel.selectedModel = "backup-large"
         viewModel.automaticFallbackEnabled = true
-
-        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
-
-        license.licenseStatus = .active
-        license.licenseTier = .individual
 
         XCTAssertEqual(
             viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe),
@@ -1717,10 +1707,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoveryAutomaticFallbackStaysOffUnderAnEnforcedPair() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        license.licenseStatus = .active
-        license.licenseTier = .individual
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
         viewModel.selectedEngine = "backup"
         viewModel.selectedModel = "backup-large"
         viewModel.automaticFallbackEnabled = true
@@ -1735,14 +1722,10 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "primary", task: .transcribe))
     }
 
-    func testRecoveryAutomaticFallbackAllowsSupporterAccessAndRejectsPrimaryEngine() throws {
+    func testRecoveryAutomaticFallbackRejectsPrimaryEngine() throws {
         setupPluginManager()
         let defaults = try makeDefaults()
-        let license = LicenseService(defaults: defaults)
-        let viewModel = makeRecoveryViewModel(defaults: defaults, licenseService: license)
-
-        license.supporterStatus = .active
-        license.supporterTier = .bronze
+        let viewModel = makeRecoveryViewModel(defaults: defaults)
         viewModel.selectedEngine = "backup"
         viewModel.automaticFallbackEnabled = true
 
@@ -1822,8 +1805,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     }
 
     private func makeRecoveryViewModel(
-        defaults: UserDefaults,
-        licenseService: LicenseService
+        defaults: UserDefaults
     ) -> DictationRecoveryViewModel {
         let directory = makeTemporaryDirectory()
         let audioRecordingService = AudioRecordingService(
@@ -1834,7 +1816,6 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             modelManager: ModelManagerService(),
             historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
             audioFileService: AudioFileService(),
-            licenseService: licenseService,
             defaults: defaults
         )
     }

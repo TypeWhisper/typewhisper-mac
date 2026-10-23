@@ -507,24 +507,24 @@
         }
       }
     },
-    "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.": {
+    "Sends active dictum dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Sendet aktive TypeWhisper-Wörterbucheinträge als Erkennungsschlüsselbegriffe an ElevenLabs. ElevenLabs berechnet für Schlüsselbegriffe einen Aufschlag von 20 %."
+            "value": "Sendet aktive dictum-Wörterbucheinträge als Erkennungsschlüsselbegriffe an ElevenLabs. ElevenLabs berechnet für Schlüsselbegriffe einen Aufschlag von 20 %."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "有効なTypeWhisper辞書用語を認識キータームとしてElevenLabsに送信します。ElevenLabsではキータームに20%の追加料金がかかります。"
+            "value": "有効なdictum辞書用語を認識キータームとしてElevenLabsに送信します。ElevenLabsではキータームに20%の追加料金がかかります。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "将启用的 TypeWhisper 词典术语作为识别关键词发送给 ElevenLabs。ElevenLabs 会对关键词提示加收 20% 的费用。"
+            "value": "将启用的 dictum 词典术语作为识别关键词发送给 ElevenLabs。ElevenLabs 会对关键词提示加收 20% 的费用。"
           }
         }
       }
@@ -573,24 +573,24 @@
         }
       }
     },
-    "Use TypeWhisper dictionary terms": {
+    "Use dictum dictionary terms": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisper-Wörterbucheinträge verwenden"
+            "value": "dictum-Wörterbucheinträge verwenden"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "TypeWhisperの辞書用語を使用"
+            "value": "dictumの辞書用語を使用"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "使用 TypeWhisper 词典术语"
+            "value": "使用 dictum 词典术语"
           }
         }
       }

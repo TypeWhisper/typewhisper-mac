@@ -5,7 +5,7 @@ import SwiftUI
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PluginManager")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PluginManager")
 
 enum RuntimeArchitecture {
     nonisolated(unsafe) static var overrideCurrent: String?
@@ -111,7 +111,7 @@ private enum PluginLoadError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .incompatibleHostVersion(let pluginName, let required, let current):
-            return "\(pluginName) requires TypeWhisper \(required) or newer (current: \(current))"
+            return "\(pluginName) requires dictum \(required) or newer (current: \(current))"
         case .failedToCreateBundle(let bundleName):
             return "Failed to create bundle for \(bundleName)"
         case .missingPrincipalClass(let className, let bundleName):
@@ -171,18 +171,30 @@ struct LoadedPlugin: Identifiable {
     let bundle: Bundle
     let sourceURL: URL
     var isEnabled: Bool
+    private let builtInPluginsURL: URL?
+
+    init(
+        manifest: PluginManifest,
+        instance: TypeWhisperPlugin,
+        bundle: Bundle,
+        sourceURL: URL,
+        isEnabled: Bool,
+        builtInPluginsURL: URL? = Bundle.main.builtInPlugInsURL
+    ) {
+        self.manifest = manifest
+        self.instance = instance
+        self.bundle = bundle
+        self.sourceURL = sourceURL
+        self.isEnabled = isEnabled
+        self.builtInPluginsURL = builtInPluginsURL?.resolvingSymlinksInPath().standardizedFileURL
+    }
 
     var id: String { manifest.id }
 
     var isBundled: Bool {
-        #if APPSTORE
-        // App Store plugins ship inside the app but are installed and
-        // uninstalled like downloaded plugins (see AppStorePluginCatalog).
-        return false
-        #else
-        guard let builtInURL = Bundle.main.builtInPlugInsURL else { return false }
-        return sourceURL.path.hasPrefix(builtInURL.path)
-        #endif
+        guard let builtInURL = builtInPluginsURL else { return false }
+        return sourceURL.resolvingSymlinksInPath().deletingLastPathComponent().standardizedFileURL
+            == builtInURL.resolvingSymlinksInPath().standardizedFileURL
     }
 
     var isRuntimeLoaded: Bool {
@@ -193,57 +205,6 @@ struct LoadedPlugin: Identifiable {
     var supportsSettingsWindow: Bool {
         guard isRuntimeLoaded else { return false }
         return instance.settingsView != nil
-    }
-}
-
-struct IncompatibleExternalBundle: Equatable, Sendable {
-    enum Reason: Equatable, Sendable {
-        case sdkCompatibility(expected: String, actual: String?)
-    }
-
-    let pluginId: String
-    let pluginName: String
-    let version: String
-    let bundleURL: URL
-    let reason: Reason
-}
-
-extension IncompatibleExternalBundle.Reason {
-    var diagnosticsValue: String {
-        switch self {
-        case .sdkCompatibility(let expected, let actual):
-            if let actual {
-                return "sdkCompatibility:expected=\(expected),actual=\(actual)"
-            }
-            return "sdkCompatibility:expected=\(expected),actual=missing"
-        }
-    }
-}
-
-enum ExternalBundleNotice: Equatable {
-    case legacyBundlePresent(version: String)
-    case incompatibleWithCurrentRuntime(version: String)
-    case bundledFallbackActive(version: String)
-    case boundaryUpgradeRequired(installedVersion: String, availableVersion: String)
-
-    var requiresConfirmation: Bool {
-        if case .boundaryUpgradeRequired = self {
-            return true
-        }
-        return false
-    }
-
-    var diagnosticsValue: String {
-        switch self {
-        case .legacyBundlePresent(let version):
-            return "legacyBundlePresent:version=\(version)"
-        case .incompatibleWithCurrentRuntime(let version):
-            return "incompatibleWithCurrentRuntime:version=\(version)"
-        case .bundledFallbackActive(let version):
-            return "bundledFallbackActive:version=\(version)"
-        case .boundaryUpgradeRequired(let installedVersion, let availableVersion):
-            return "boundaryUpgradeRequired:installed=\(installedVersion),available=\(availableVersion)"
-        }
     }
 }
 
@@ -273,29 +234,12 @@ enum PluginModelManagementError: LocalizedError {
 // MARK: - Plugin Manager
 
 @MainActor
-struct PluginUserInterfaceContribution {
-    let pluginId: String
-    let pluginName: String
-    let provider: any PluginUserInterfaceProviding
-    let appMenuCommands: [PluginCommandDescriptor]
-    let primaryMenuBarCommands: [PluginCommandDescriptor]
-    let settingsSidebarItems: [PluginSettingsSidebarItemDescriptor]
-
-    var allCommands: [PluginCommandDescriptor] {
-        appMenuCommands + primaryMenuBarCommands
-    }
-}
-
-@MainActor
 final class PluginManager: ObservableObject {
     nonisolated(unsafe) static var shared: PluginManager!
 
     // Registry mutations publish through `registryRevision` (like `@Published`, but a
     // bulk scan coalesces them; see `coalescingRegistryChangeNotifications`).
     var loadedPlugins: [LoadedPlugin] = [] {
-        willSet { publishRegistryChange() }
-    }
-    private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:] {
         willSet { publishRegistryChange() }
     }
     /// Plugins the managed settings refuse as a whole, with the localized reason. They are
@@ -307,54 +251,18 @@ final class PluginManager: ObservableObject {
     private(set) var providerPolicy: ManagedProviderPolicy = .unmanaged
     /// The enforced and recommended provider and model pairs of the managed settings.
     private(set) var selectionPolicy: ManagedSelectionPolicy = .unmanaged
-    /// Advances whenever `loadedPlugins` or `incompatibleExternalBundles` change.
+    /// 注册表变更时递增，批量扫描只发布一次。
     @Published private(set) var registryRevision = 0
     @Published private(set) var readinessRevision = 0
 
     let pluginsDirectory: URL
+    private let builtInPluginsURL: URL?
     private let runtimeLoader: PluginRuntimeLoader
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
     private var deletingModelPluginIds = Set<String>()
-    /// Uninstalled bundles whose code is still mapped into this process.
-    private var bundlesRemovedAfterRelaunch = Set<URL>()
     private var registryNotificationBatchDepth = 0
     private var registryChangedDuringBatch = false
-
-    var userInterfaceContributions: [PluginUserInterfaceContribution] {
-        loadedPlugins.compactMap { plugin in
-            guard plugin.isEnabled,
-                  let provider = plugin.instance as? any PluginUserInterfaceProviding else {
-                return nil
-            }
-            return PluginUserInterfaceContribution(
-                pluginId: plugin.manifest.id,
-                pluginName: plugin.manifest.name,
-                provider: provider,
-                appMenuCommands: provider.appMenuCommands,
-                primaryMenuBarCommands: provider.primaryMenuBarCommands,
-                settingsSidebarItems: provider.settingsSidebarItems
-            )
-        }
-    }
-
-    func settingsSidebarView(pluginId: String, itemId: String) -> AnyView? {
-        guard let contribution = userInterfaceContributions.first(where: { $0.pluginId == pluginId }),
-              contribution.settingsSidebarItems.contains(where: { $0.id == itemId }) else {
-            return nil
-        }
-        return contribution.provider.settingsSidebarView(for: itemId)
-    }
-
-    @discardableResult
-    func performPluginCommand(pluginId: String, commandId: String) -> Bool {
-        guard let contribution = userInterfaceContributions.first(where: { $0.pluginId == pluginId }),
-              contribution.allCommands.contains(where: { $0.id == commandId && $0.isEnabled }) else {
-            return false
-        }
-        contribution.provider.performPluginCommand(commandId)
-        return true
-    }
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -400,12 +308,6 @@ final class PluginManager: ObservableObject {
             }
     }
 
-    var ttsProviders: [TTSProviderPlugin] {
-        loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
-            .compactMap { $0.instance as? TTSProviderPlugin }
-    }
-
     /// Engines the managed settings refuse are left out, so pickers and fallbacks never offer them;
     /// `transcriptionPolicyRefusal(forProviderId:)` names the reason for a refused selection.
     var transcriptionEngines: [TranscriptionEnginePlugin] {
@@ -442,12 +344,6 @@ final class PluginManager: ObservableObject {
         loadedPlugins
             .filter { $0.isEnabled && permits($0, .audio) }
             .compactMap { $0.instance as? any SpeakerDiarizationProviderPlugin }
-    }
-
-    var memoryStoragePlugins: [MemoryStoragePlugin] {
-        loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
-            .compactMap { $0.instance as? MemoryStoragePlugin }
     }
 
     // MARK: - Managed settings
@@ -791,17 +687,6 @@ final class PluginManager: ObservableObject {
         return false
     }
 
-    func ttsProvider(for providerId: String) -> TTSProviderPlugin? {
-        ttsProviders.first { $0.providerId == providerId }
-    }
-
-    func loadedTTSPlugin(for providerId: String) -> LoadedPlugin? {
-        loadedPlugins.first {
-            guard let provider = $0.instance as? TTSProviderPlugin else { return false }
-            return $0.isEnabled && provider.providerId == providerId
-        }
-    }
-
     func actionPlugin(for actionId: String) -> ActionPlugin? {
         actionPlugins.first { $0.actionId == actionId }
     }
@@ -836,58 +721,15 @@ final class PluginManager: ObservableObject {
         )
     }
 
-    static func externalBundleNotice(
-        loadedPlugin: LoadedPlugin?,
-        registryPlugin: RegistryPlugin?,
-        incompatibleExternalBundle: IncompatibleExternalBundle?
-    ) -> ExternalBundleNotice? {
-        guard let incompatibleExternalBundle else { return nil }
-
-        if let registryPlugin {
-            return .boundaryUpgradeRequired(
-                installedVersion: incompatibleExternalBundle.version,
-                availableVersion: registryPlugin.version
-            )
-        }
-
-        if let loadedPlugin, loadedPlugin.isBundled {
-            return .bundledFallbackActive(version: incompatibleExternalBundle.version)
-        }
-
-        switch incompatibleExternalBundle.reason {
-        case .sdkCompatibility(_, let actual):
-            if actual == nil {
-                return .legacyBundlePresent(version: incompatibleExternalBundle.version)
-            }
-            return .incompatibleWithCurrentRuntime(version: incompatibleExternalBundle.version)
-        }
-    }
-
-    func incompatibleExternalBundle(for pluginId: String) -> IncompatibleExternalBundle? {
-        incompatibleExternalBundles[pluginId]
-    }
-
-    func externalBundleNotice(for pluginId: String, registryPlugin: RegistryPlugin? = nil) -> ExternalBundleNotice? {
-        Self.externalBundleNotice(
-            loadedPlugin: loadedPlugins.first(where: { $0.manifest.id == pluginId }),
-            registryPlugin: registryPlugin,
-            incompatibleExternalBundle: incompatibleExternalBundles[pluginId]
-        )
-    }
-
-    func clearIncompatibleExternalBundle(_ pluginId: String) {
-        incompatibleExternalBundles.removeValue(forKey: pluginId)
-    }
-
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        builtInPluginsURL: URL? = Bundle.main.builtInPlugInsURL,
         runtimeLoader: PluginRuntimeLoader = .bundleExecutable
     ) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
         self.runtimeLoader = runtimeLoader
-
-        try? FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+        self.builtInPluginsURL = builtInPluginsURL?.resolvingSymlinksInPath().standardizedFileURL
     }
 
     // MARK: - Registry Change Publication
@@ -933,41 +775,11 @@ final class PluginManager: ObservableObject {
     }
 
     private func loadAllPluginBundles() {
-        incompatibleExternalBundles = [:]
-
         let fm = FileManager.default
-        #if !APPSTORE
-        logger.info("Scanning plugins directory: \(self.pluginsDirectory.path)")
-        guard let contents = try? fm.contentsOfDirectory(at: pluginsDirectory, includingPropertiesForKeys: nil) else {
-            logger.info("No plugins directory or empty")
-            return
-        }
-
-        let bundles = sortedPluginBundleURLs(
-            contents.filter { $0.pathExtension == "bundle" && !isPendingRemoval($0) },
-            isBundledSource: false
-        )
-        logger.info("Found \(bundles.count) plugin bundle(s)")
-
-        for bundleURL in bundles {
-            do {
-                try loadPlugin(at: bundleURL)
-            } catch {
-                logger.error("Failed to load plugin at \(bundleURL.lastPathComponent): \(error.localizedDescription)")
-            }
-        }
-        #endif
-
         // Built-in plugins from app bundle
-        if let builtInURL = Bundle.main.builtInPlugInsURL,
+        if let builtInURL = builtInPluginsURL,
            let builtIn = try? fm.contentsOfDirectory(at: builtInURL, includingPropertiesForKeys: nil) {
-            #if APPSTORE
-            let candidateBundles = builtIn.filter {
-                $0.pathExtension == "bundle" && AppStorePluginCatalog.shouldLoadBundledPlugin(at: $0)
-            }
-            #else
             let candidateBundles = builtIn.filter { $0.pathExtension == "bundle" }
-            #endif
             let builtInBundles = sortedPluginBundleURLs(
                 candidateBundles,
                 isBundledSource: true
@@ -1014,13 +826,17 @@ final class PluginManager: ObservableObject {
         }
 
         let enabledKey = "plugin.\(manifest.id).enabled"
-        let isEnabled = (UserDefaults.standard.object(forKey: enabledKey) as? Bool) ?? isBundledSource
+        let isEnabled = (UserDefaults.standard.object(forKey: enabledKey) as? Bool)
+            ?? (isBundledSource && manifest.category != "post-processor")
         return (isEnabled, url.lastPathComponent.lowercased())
     }
 
     func loadPlugin(at url: URL) throws {
         let manifestURL = url.appendingPathComponent("Contents/Resources/manifest.json")
-        let isBundledSource = Bundle.main.builtInPlugInsURL.map { url.path.hasPrefix($0.path) } ?? false
+        let isBundledSource = builtInPluginsURL.map {
+            url.resolvingSymlinksInPath().deletingLastPathComponent().standardizedFileURL
+                == $0.resolvingSymlinksInPath().standardizedFileURL
+        } ?? false
         let data: Data
         do {
             data = try Data(contentsOf: manifestURL)
@@ -1037,21 +853,6 @@ final class PluginManager: ObservableObject {
             throw error
         }
 
-        guard ScreenshotPluginSourcePolicy.allowsCandidate(
-            isScreenshotAutomation: AppConstants.isScreenshotAutomation,
-            selectedPluginId: AppConstants.screenshotPluginId,
-            manifestId: manifest.id,
-            isBundledSource: isBundledSource,
-            isIsolatedScreenshotSource: url.deletingLastPathComponent()
-                .resolvingSymlinksInPath()
-                .standardizedFileURL == pluginsDirectory
-                .resolvingSymlinksInPath()
-                .standardizedFileURL
-        ) else {
-            logger.info("Skipping external screenshot plugin candidate \(manifest.id, privacy: .public)")
-            return
-        }
-
         if !isManifestCompatible(manifest) {
             let architecture = RuntimeArchitecture.current
             let reason = PluginCompatibility.incompatibilityReason(
@@ -1066,39 +867,22 @@ final class PluginManager: ObservableObject {
         }
 
         if !isManifestSDKCompatible(manifest, isBundled: isBundledSource) {
-            if !isBundledSource {
-                incompatibleExternalBundles[manifest.id] = IncompatibleExternalBundle(
-                    pluginId: manifest.id,
-                    pluginName: manifest.name,
-                    version: manifest.version,
-                    bundleURL: url,
-                    reason: .sdkCompatibility(
-                        expected: PluginSDKCompatibility.currentVersion,
-                        actual: manifest.sdkCompatibilityVersion
-                    )
-                )
-            }
             let reason = PluginSDKCompatibility.incompatibilityReason(
                 manifestVersion: manifest.sdkCompatibilityVersion,
                 isBundled: isBundledSource
-            ) ?? "is not compatible with this TypeWhisper build"
+            ) ?? "is not compatible with this dictum build"
             logger.info(
                 "Skipping plugin \(manifest.id, privacy: .public): \(reason, privacy: .public)"
             )
             return
         }
 
-        if !isBundledSource {
-            incompatibleExternalBundles.removeValue(forKey: manifest.id)
-        }
-
         if let minHostVersion = manifest.minHostVersion {
-            let currentAppVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-            if PluginRegistryService.compareVersions(minHostVersion, currentAppVersion) == .orderedDescending {
+            if PluginVersion.compare(minHostVersion, AppConstants.pluginHostVersion) == .orderedDescending {
                 throw PluginLoadError.incompatibleHostVersion(
                     pluginName: manifest.name,
                     required: minHostVersion,
-                    current: currentAppVersion
+                    current: AppConstants.pluginHostVersion
                 )
             }
         }
@@ -1152,7 +936,8 @@ final class PluginManager: ObservableObject {
         }
 
         let loaded = LoadedPlugin(
-            manifest: manifest, instance: instance, bundle: bundle, sourceURL: url, isEnabled: isEnabled
+            manifest: manifest, instance: instance, bundle: bundle, sourceURL: url, isEnabled: isEnabled,
+            builtInPluginsURL: builtInPluginsURL
         )
         loadedPlugins.append(loaded)
 
@@ -1174,7 +959,7 @@ final class PluginManager: ObservableObject {
             return stored
         }
 
-        if isBundledSource {
+        if isBundledSource && manifest.category != "post-processor" {
             UserDefaults.standard.set(true, forKey: enabledKey)
             return true
         }
@@ -1199,7 +984,8 @@ final class PluginManager: ObservableObject {
             instance: UnloadedPluginPlaceholder(),
             bundle: bundle,
             sourceURL: sourceURL,
-            isEnabled: isEnabled
+            isEnabled: isEnabled,
+            builtInPluginsURL: builtInPluginsURL
         )
     }
 
@@ -1422,10 +1208,6 @@ final class PluginManager: ObservableObject {
         }?.providerId
     }
 
-    func openPluginsFolder() {
-        NSWorkspace.shared.open(pluginsDirectory)
-    }
-
     /// Notify observers that plugin state changed (e.g. a model was loaded/unloaded)
     func notifyPluginStateChanged() {
         readinessRevision += 1
@@ -1524,49 +1306,16 @@ final class PluginManager: ObservableObject {
         logger.info("Removed plugin from runtime registry: \(pluginId)")
     }
 
-    /// Removes the files of an uninstalled bundle, or defers that to the next launch when
-    /// the bundle's code already ran in this process. Plugin work can outlive `deactivate()`
-    /// and still read bundle resources (MLX looks up its Metal library lazily), and missing
-    /// files then abort the app.
-    func removeUninstalledBundle(at bundleURL: URL, codeIsLoaded: Bool) {
-        let fm = FileManager.default
-        guard codeIsLoaded else {
-            logger.info("Removing installed plugin bundle at \(bundleURL.path, privacy: .public)")
-            try? fm.removeItem(at: bundleURL)
-            return
-        }
-
-        bundlesRemovedAfterRelaunch.insert(bundleURL.standardizedFileURL)
-        let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
-        if fm.createFile(atPath: markerURL.path, contents: nil) {
-            logger.info("Deferring removal of loaded plugin bundle until relaunch: \(bundleURL.path, privacy: .public)")
-        } else {
-            // Keeping the files is safer than deleting them under running code; the
-            // bundle then loads again on the next launch.
-            logger.error("Failed to mark loaded plugin bundle for removal, keeping it: \(bundleURL.path, privacy: .public)")
-        }
-    }
-
-    static let pendingRemovalMarkerName = ".typewhisper-pending-removal"
-
-    /// Deletes bundles marked by a previous session and skips those marked in this one.
-    private func isPendingRemoval(_ bundleURL: URL) -> Bool {
-        let markerURL = bundleURL.appendingPathComponent(Self.pendingRemovalMarkerName)
-        guard FileManager.default.fileExists(atPath: markerURL.path) else { return false }
-        guard !bundlesRemovedAfterRelaunch.contains(bundleURL.standardizedFileURL) else { return true }
-
-        logger.info("Removing plugin bundle uninstalled in a previous session: \(bundleURL.path, privacy: .public)")
-        try? FileManager.default.removeItem(at: bundleURL)
-        return true
-    }
-
     func bundleURL(for pluginId: String) -> URL? {
         loadedPlugins.first { $0.manifest.id == pluginId }?.sourceURL
     }
 
     private func shouldReplace(existing: LoadedPlugin, with incomingManifest: PluginManifest, from incomingURL: URL) -> Bool {
-        let incomingIsBundled = Bundle.main.builtInPlugInsURL.map { incomingURL.path.hasPrefix($0.path) } ?? false
-        let versionComparison = PluginRegistryService.compareVersions(incomingManifest.version, existing.manifest.version)
+        let incomingIsBundled = builtInPluginsURL.map {
+            incomingURL.resolvingSymlinksInPath().deletingLastPathComponent().standardizedFileURL
+                == $0.resolvingSymlinksInPath().standardizedFileURL
+        } ?? false
+        let versionComparison = PluginVersion.compare(incomingManifest.version, existing.manifest.version)
 
         if incomingIsBundled != existing.isBundled {
             if incomingIsBundled {
@@ -1576,18 +1325,5 @@ final class PluginManager: ObservableObject {
         }
 
         return versionComparison == .orderedDescending
-    }
-}
-
-enum ScreenshotPluginSourcePolicy {
-    static func allowsCandidate(
-        isScreenshotAutomation: Bool,
-        selectedPluginId: String?,
-        manifestId: String,
-        isBundledSource: Bool,
-        isIsolatedScreenshotSource: Bool
-    ) -> Bool {
-        guard isScreenshotAutomation, selectedPluginId == manifestId else { return true }
-        return isBundledSource || isIsolatedScreenshotSource
     }
 }

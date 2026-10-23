@@ -16,8 +16,8 @@ enum RecordingSource: String, Codable, CaseIterable, Sendable, Hashable {
     var displayName: String {
         switch self {
         case .mac: String(localized: "This Mac")
-        case .iPhone: String(localized: "iPhone")
-        case .iPad: String(localized: "iPad")
+        case .iPhone: "iPhone"
+        case .iPad: "iPad"
         case .appleWatch: String(localized: "Apple Watch")
         case .importedFile: String(localized: "Imported File")
         case .keyboard: String(localized: "iOS Keyboard")

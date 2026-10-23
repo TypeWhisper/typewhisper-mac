@@ -1,13 +1,5 @@
 import Foundation
 
-struct PaidEntitlements: Sendable, Equatable {
-    let canUseCloudFolderSync: Bool
-
-    init(canUseCloudFolderSync: Bool = false) {
-        self.canUseCloudFolderSync = canUseCloudFolderSync
-    }
-}
-
 enum UserDataSyncCollection: String, Codable, Sendable {
     case dictionary
     case snippets

@@ -1,5 +1,4 @@
-# Only universal wheels are permitted. Sources and refresh procedure:
-# docs/release-tooling-security.md
+# Only universal wheels are permitted.
 # https://pypi.org/pypi/dmgbuild/1.6.7/json
 dmgbuild==1.6.7 \
     --hash=sha256:37ee5771c377beb3203d9164aae8046ffed8531c06edf9227f5788b3c599b1bf

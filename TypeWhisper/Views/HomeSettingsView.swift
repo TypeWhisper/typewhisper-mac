@@ -4,10 +4,7 @@ import SwiftUI
 struct HomeSettingsView: View {
     @ObservedObject private var viewModel = HomeViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var license = LicenseService.shared
     @ObservedObject private var statistics = StatisticsViewModel.shared
-    @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
-    @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
     @State private var copiedRecordID: UUID?
     @State private var copyFeedbackTask: Task<Void, Never>?
 
@@ -32,11 +29,6 @@ struct HomeSettingsView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed
-                        && !ManagedPromptPolicy.suppressesOptionalPrompts(managedPolicyService.current) {
-                        workUsageCard
-                    }
-
                     // Row 1: Getting Started or Statistics summary
                     if viewModel.hasAnyTranscriptions {
                         statisticsSummarySection
@@ -157,59 +149,6 @@ struct HomeSettingsView: View {
         // "—" while there is no data is read as "No data", as on the Statistics page.
         .accessibilityLabel(Text("\(title), \(accessibilityValue ?? statisticsSpokenValue(value))"))
         .accessibilityAddTraits(.isButton)
-    }
-
-    private var workUsageCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(localizedAppText("Need commercial license terms?", de: "Brauchst du kommerzielle Lizenzbedingungen?"))
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(localizedAppText(
-                        "Pricing, lifetime options, procurement, and support are clearer on the website.",
-                        de: "Preise, Lifetime-Optionen, Beschaffung und Support sind auf der Website klarer erklärt."
-                    ))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                Button {
-                    workUsagePromptDismissed = true
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Close"))
-            }
-
-            HStack(spacing: 10) {
-                Button {
-                    NSWorkspace.shared.open(AppConstants.Website.pricingURL)
-                } label: {
-                    Label(localizedAppText("See licensing on the website", de: "Lizenzierung auf der Website ansehen"), systemImage: "globe")
-                }
-                .buttonStyle(.borderedProminent)
-
-                Button(localizedAppText("Not now", de: "Später")) {
-                    workUsagePromptDismissed = true
-                }
-                .buttonStyle(.bordered)
-            }
-        }
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
-                .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
-        )
     }
 
     // MARK: - Recent Transcriptions

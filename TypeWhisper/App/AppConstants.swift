@@ -21,7 +21,7 @@ enum AppConstants {
 
     /// Preferences domain of screenshot runs, also for their managed preferences. The fastlane
     /// screenshot lane uses it as the bundle identifier; see `ScreenshotPreferencesIsolation`.
-    static let screenshotPreferencesDomain = "com.typewhisper.mac.screenshots"
+    static let screenshotPreferencesDomain = "com.schneidervvv.dictum.screenshots"
 
     /// The domain whose managed preferences (configuration profiles) apply to this process.
     static let managedPreferencesDomain = resolveManagedPreferencesDomain(
@@ -33,7 +33,7 @@ enum AppConstants {
         if isScreenshotAutomation {
             return screenshotPreferencesDomain
         }
-        return bundleIdentifier ?? "com.typewhisper.mac"
+        return bundleIdentifier ?? "com.schneidervvv.dictum"
     }
 
     /// The persistent domain `UserDefaults.standard` writes to; the app's own domain unless a
@@ -45,7 +45,7 @@ enum AppConstants {
         if isScreenshotAutomation {
             return screenshotPreferencesDomain
         }
-        return Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+        return Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum"
     }
 
     static let screenshotState: String? = {
@@ -105,17 +105,6 @@ enum AppConstants {
         case releaseCandidate = "release-candidate"
         case daily
 
-        var sparkleChannels: Set<String> {
-            switch self {
-            case .stable:
-                return []
-            case .releaseCandidate:
-                return ["release-candidate"]
-            case .daily:
-                return ["release-candidate", "daily"]
-            }
-        }
-
         var selectionDisplayName: String {
             switch self {
             case .stable:
@@ -136,16 +125,6 @@ enum AppConstants {
             }
         }
 
-        var updateDescription: String {
-            switch self {
-            case .stable:
-                return String(localized: "Stable gets production releases only.")
-            case .releaseCandidate:
-                return String(localized: "Release Candidate includes stable and preview builds.")
-            case .daily:
-                return String(localized: "Daily includes stable, release candidate, and daily builds.")
-            }
-        }
     }
 
     struct PreviewRelease: Equatable {
@@ -157,62 +136,35 @@ enum AppConstants {
 
     static let appSupportDirectoryName: String = {
         #if DEBUG
-        return "TypeWhisper-Dev"
+        return "dictum-Dev"
         #else
-        return "TypeWhisper"
+        return "dictum"
         #endif
     }()
 
+    static let devKeychainServicePrefix = "com.schneidervvv.dictum.dev.apikey."
+    static let releaseKeychainServicePrefix = "com.schneidervvv.dictum.apikey."
+
     static let keychainServicePrefix: String = {
         if isScreenshotAutomation {
-            return "com.typewhisper.mac.screenshots.apikey."
+            return "com.schneidervvv.dictum.screenshots.apikey."
         }
         // Tests must neither read nor delete the API keys of the installed app.
         if isRunningTests {
-            return "com.typewhisper.mac.tests.apikey."
+            return "com.schneidervvv.dictum.tests.apikey."
         }
         #if APPSTORE && DEBUG
         return "com.typewhisper.typewhisper-app.dev.apikey."
         #elseif APPSTORE
         return "com.typewhisper.typewhisper-app.apikey."
         #elseif DEBUG
-        return "com.typewhisper.mac.dev.apikey."
+        return devKeychainServicePrefix
         #else
-        return "com.typewhisper.mac.apikey."
+        return releaseKeychainServicePrefix
         #endif
     }()
 
-    static let premiumAccountKeychainService = resolvePremiumAccountKeychainService(
-        isScreenshotAutomation: isScreenshotAutomation,
-        isRunningTests: isRunningTests,
-        isDevelopment: isDevelopment
-    )
-
-    static func resolvePremiumAccountKeychainService(
-        isScreenshotAutomation: Bool,
-        isRunningTests: Bool,
-        isDevelopment: Bool
-    ) -> String {
-        if isScreenshotAutomation {
-            return "com.typewhisper.mac.screenshots.premium-account"
-        }
-        if isRunningTests {
-            return "com.typewhisper.mac.tests.premium-account"
-        }
-        #if APPSTORE
-        if isDevelopment {
-            return "com.typewhisper.typewhisper-app.dev.premium-account"
-        }
-        return "com.typewhisper.typewhisper-app.premium-account"
-        #else
-        if isDevelopment {
-            return "com.typewhisper.mac.dev.premium-account"
-        }
-        return "com.typewhisper.mac.premium-account"
-        #endif
-    }
-
-    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
+    static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.schneidervvv.dictum"
 
     static var appSupportDirectory: URL {
         if let override = testAppSupportDirectoryOverride {
@@ -276,9 +228,10 @@ enum AppConstants {
     }()
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+    static let pluginHostVersion = "1.8.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
     private static let githubReleaseTagsURL = URL(
-        string: "https://github.com/TypeWhisper/typewhisper-mac/releases/tag"
+        string: "https://github.com/schneidervvv/dictum/releases/tag"
     )!
     static let currentReleaseFingerprint: String = {
         let channel = bundledReleaseChannel()
@@ -314,28 +267,9 @@ enum AppConstants {
         bundledPreviewRelease()
     }
 
-    static func selectedUpdateChannel(
-        defaults: UserDefaults = .standard,
-        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
-    ) -> ReleaseChannel {
-        guard let rawValue = defaults.string(forKey: UserDefaultsKeys.updateChannel),
-              let channel = ReleaseChannel(rawValue: rawValue) else {
-            return bundledReleaseChannel(infoDictionary: infoDictionary)
-        }
-        return channel
-    }
-
     static var releaseChannel: ReleaseChannel {
         bundledReleaseChannel()
     }
-
-    static let defaultReleaseChannel: ReleaseChannel = {
-        guard let rawValue = Bundle.main.infoDictionary?["TypeWhisperReleaseChannel"] as? String,
-              let channel = ReleaseChannel(rawValue: rawValue) else {
-            return .stable
-        }
-        return channel
-    }()
 
     static let isRunningTests: Bool = {
         if isScreenshotAutomation {
@@ -364,122 +298,9 @@ enum AppConstants {
         #endif
     }()
 
-    // MARK: - Polar.sh Licensing
-    enum Polar {
-        static let organizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4"
-        /// Pinned license API contract. Unversioned requests follow Polar's Current version.
-        static let apiVersion = "2026-04"
-        static let apiVersionHeader = "Polar-Version"
-        static let checkoutURL = "https://polar.sh/typewhisper"
-        static let customerPortalURL = "https://polar.sh/typewhisper/portal"
-
-        // Business Monthly
-        static let checkoutURLIndividual = "https://buy.polar.sh/polar_cl_Yfw7BSIXSNFESlrNPL0fNG8GHPqX9qhmxGce32wZfYJ"
-        static let checkoutURLTeam = "https://buy.polar.sh/polar_cl_kSqGfvss0Ces3W7R4xw7hr5NdgvEbPbhhUGRH4ad3Hj"
-        static let checkoutURLEnterprise = "https://buy.polar.sh/polar_cl_uzCNIsF0vY9gx2peWljyJU7JQoEzxHUueCPTA0MoOQe"
-
-        // Business Yearly: ten monthly prices for a year. Only Enterprise is
-        // sold yearly; Individual and Team are monthly or Lifetime.
-        static let checkoutURLEnterpriseYearly = "https://buy.polar.sh/polar_cl_LZkXVmog2aWoQqfWhIp19yEsaZNqHc0r3jU020T2oRi"
-
-        // Business Lifetime. Enterprise is sold as a subscription only.
-        static let checkoutURLIndividualLifetime = "https://buy.polar.sh/polar_cl_Uiv5AnvLoQjx4JowO3gGciT7MLOovY4oY4ESz3PIxgI"
-        static let checkoutURLTeamLifetime = "https://buy.polar.sh/polar_cl_GjG4jf1fT9HGQn051cgN6xsWH9Xm6Z7oe0Ke71xq6Po"
-
-        // Private Supporter
-        static let checkoutURLSupporterBronze = "https://buy.polar.sh/polar_cl_yilyo1V90RnuUX59V2PyLUIg45FpzYI8aMhG824wYn8"
-        static let checkoutURLSupporterSilver = "https://buy.polar.sh/polar_cl_lXFAqnanhrrPd1RZ95SCb2L05L3lNrUQIkYVd0ZmK5b"
-        static let checkoutURLSupporterGold = "https://buy.polar.sh/polar_cl_FpojMlLmyF73gOqpXLihSE0lNYnoQoaMxGp724IIor4"
-
-        static func attributedCheckoutURL(
-            baseURL: String,
-            source: String,
-            medium: String,
-            content: String
-        ) -> URL? {
-            guard var components = URLComponents(string: baseURL) else { return nil }
-            var queryItems = components.queryItems ?? []
-            queryItems.removeAll { item in
-                ["utm_source", "utm_medium", "utm_content"].contains(item.name)
-            }
-            queryItems.append(contentsOf: [
-                URLQueryItem(name: "utm_source", value: source),
-                URLQueryItem(name: "utm_medium", value: medium),
-                URLQueryItem(name: "utm_content", value: content),
-            ])
-            components.queryItems = queryItems
-            return components.url
-        }
-
-        static func appCheckoutURL(baseURL: String, content: String) -> URL? {
-            attributedCheckoutURL(
-                baseURL: baseURL,
-                source: "typewhisper_mac",
-                medium: "app",
-                content: "mac_\(content)"
-            )
-        }
-    }
-
-    enum Website {
-        private static var localeSegment: String {
-            let preferred = UserDefaults.standard.string(forKey: UserDefaultsKeys.preferredAppLanguage)
-                ?? Bundle.main.preferredLocalizations.first
-                ?? Locale.preferredLanguages.first
-                ?? "en"
-            return preferred.hasPrefix("de") ? "de" : "en"
-        }
-
-        private static let rootURL = "https://www.typewhisper.com"
-        static let licensingEmailURL = URL(string: "mailto:licensing@typewhisper.com")!
-
-        static var pricingURL: URL {
-            URL(string: "\(rootURL)/\(localeSegment)/pricing/")!
-        }
-
-        static var teamContactURL: URL {
-            URL(string: "\(rootURL)/\(localeSegment)/business/") ?? licensingEmailURL
-        }
-    }
-
-    enum IOSCompanion {
-        static let appStoreURL = URL(string: "https://apps.apple.com/app/id6759319267")!
-        static let promoCampaignIdentifier = "ios-app-store-launch-2026-09"
-    }
-
-    // MARK: - Discord Claim Service
-    enum DiscordClaim {
-        static let defaultBaseURLString = "http://127.0.0.1:8787"
-        static let callbackScheme = "typewhisper"
-        static let callbackHost = "community"
-        static let callbackPath = "/claim-result"
-
-        static var baseURL: URL {
-            let environment = ProcessInfo.processInfo.environment
-            let configured = environment["TYPEWHISPER_DISCORD_CLAIM_BASE_URL"]
-                ?? Bundle.main.object(forInfoDictionaryKey: "TypeWhisperDiscordClaimBaseURL") as? String
-                ?? defaultBaseURLString
-
-            return URL(string: configured) ?? URL(string: defaultBaseURLString)!
-        }
-
-        static var callbackURL: URL {
-            URL(string: "\(callbackScheme)://\(callbackHost)\(callbackPath)")!
-        }
-
-        static var githubSponsorsURL: URL {
-            baseURL.appendingPathComponent("claims").appendingPathComponent("github")
-        }
-
-        static func isCallbackURL(_ url: URL) -> Bool {
-            url.scheme == callbackScheme &&
-                url.host == callbackHost &&
-                url.path == callbackPath
-        }
-    }
 }
 
-private let factoryLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "SwiftDataStoreFactory")
+private let factoryLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SwiftDataStoreFactory")
 
 @MainActor
 struct SwiftDataStoreFactory {

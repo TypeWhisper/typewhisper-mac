@@ -1,44 +1,5 @@
 import SwiftUI
 
-enum PremiumCorrectionExamples {
-    static var current: [(before: String, after: String)] {
-        examples(for: preferredAppLanguageCode())
-    }
-
-    static func examples(for languageCode: String) -> [(before: String, after: String)] {
-        let language = languageCode.lowercased()
-
-        if language.hasPrefix("de") {
-            return [
-                ("Standart", "Standard"),
-                ("wiederspiegeln", "widerspiegeln"),
-            ]
-        }
-        if language.hasPrefix("ja") {
-            return [
-                ("こんにちわ", "こんにちは"),
-                ("すいません", "すみません"),
-            ]
-        }
-        if language.hasPrefix("zh") {
-            return [
-                ("因该", "应该"),
-                ("在次", "再次"),
-            ]
-        }
-
-        return [
-            ("teh", "the"),
-            ("recieve", "receive"),
-        ]
-    }
-
-    static var primaryLine: String {
-        guard let example = current.first else { return "" }
-        return "\(example.before)  →  \(example.after)"
-    }
-}
-
 enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case calendarMeeting
     case correctionLearning
@@ -48,313 +9,90 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    /// Features offered in this edition. Correction learning reads other apps'
-    /// text fields through Accessibility, which the App Sandbox does not allow.
-    static var editionFeatures: [PremiumFeatureID] {
-        #if APPSTORE
-        [.calendarMeeting, .cloudSync, .speakerWorkspace, .pairedDevices]
-        #else
-        allCases
-        #endif
-    }
-}
-
-enum PremiumFeatureRequirement: Equatable, Sendable {
-    case available
-    case commercialOrPremiumAccount
-    case commercialLicense
-    case premiumAccount
-    case linkCommercialLicense
-    case signIn
-}
-
-enum PremiumAccessSummary: Equatable, Sendable {
-    case locked
-    case supporterOnly
-    case commercialLicense
-    case premiumAccount
-    case commercialAndPremiumAccount
-
-    var localizedTitle: String {
+    var title: String {
         switch self {
-        case .locked:
-            String(localized: "premium.hub.access.locked")
-        case .supporterOnly:
-            String(localized: "premium.hub.access.supporter")
-        case .commercialLicense:
-            String(localized: "premium.hub.access.commercial")
-        case .premiumAccount:
-            #if APPSTORE
-            String(localized: "premium.window.access.accountActive")
-            #else
-            String(localized: "premium.hub.access.account")
-            #endif
-        case .commercialAndPremiumAccount:
-            String(localized: "premium.hub.access.both")
+        case .calendarMeeting: String(localized: "calendarMeeting.settings.title")
+        case .correctionLearning: String(localized: "premium.hub.learning.title")
+        case .cloudSync: String(localized: "premium.hub.sync.title")
+        case .speakerWorkspace: String(localized: "speakers.page.title")
+        case .pairedDevices: PairedDevicesPremiumCopy.title
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .calendarMeeting: "calendar"
+        case .correctionLearning: "wand.and.sparkles"
+        case .cloudSync: "cloud"
+        case .speakerWorkspace: "person.wave.2"
+        case .pairedDevices: "iphone.and.ipad"
         }
     }
 }
 
-enum PremiumFeatureCardAction: Equatable, Sendable {
-    case none
-    case openSettings(PremiumSettingsDestination)
-    case manageAccess
-}
-
-struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
-    let hasCommercialLicense: Bool
-    let hasPremiumEntitlement: Bool
-    let isSignedIn: Bool
-    let isSupporter: Bool
-
-    var hasAnyPremiumAccess: Bool {
-        CalendarMeetingPremiumAccess.isGranted(
-            hasCommercialLicense: hasCommercialLicense,
-            hasPremiumEntitlement: hasPremiumEntitlement
-        )
-    }
-
-    var summary: PremiumAccessSummary {
-        #if APPSTORE
-        // App Store Premium and account entitlements both unlock the same features.
-        return hasAnyPremiumAccess ? .premiumAccount : .locked
-        #else
-        switch (hasCommercialLicense, hasPremiumEntitlement) {
-        case (true, true):
-            .commercialAndPremiumAccount
-        case (true, false):
-            .commercialLicense
-        case (false, true):
-            .premiumAccount
-        case (false, false):
-            isSupporter ? .supporterOnly : .locked
-        }
-        #endif
-    }
-
-    func requirement(for feature: PremiumFeatureID) -> PremiumFeatureRequirement {
-        #if APPSTORE
-        guard hasAnyPremiumAccess else { return .commercialOrPremiumAccount }
-        // Sync needs the account to connect devices; the other features work offline.
-        return feature == .cloudSync && !isSignedIn ? .signIn : .available
-        #else
-        switch feature {
-        case .calendarMeeting:
-            return hasAnyPremiumAccess ? .available : .commercialOrPremiumAccount
-        case .correctionLearning:
-            return hasCommercialLicense ? .available : .commercialLicense
-        case .cloudSync:
-            guard hasPremiumEntitlement else {
-                return hasCommercialLicense && isSignedIn
-                    ? .linkCommercialLicense
-                    : .premiumAccount
-            }
-            return isSignedIn ? .available : .signIn
-        case .speakerWorkspace:
-            return SpeakerWorkspacePremiumAccess.isGranted(
-                hasCommercialLicense: hasCommercialLicense,
-                hasPremiumEntitlement: hasPremiumEntitlement
-            ) ? .available : .commercialOrPremiumAccount
-        case .pairedDevices:
-            return hasAnyPremiumAccess ? .available : .commercialOrPremiumAccount
-        }
-        #endif
-    }
-
-    func action(for feature: PremiumFeatureID) -> PremiumFeatureCardAction {
-        guard hasAnyPremiumAccess else { return .none }
-        guard requirement(for: feature) == .available else { return .manageAccess }
-
-        switch feature {
-        case .calendarMeeting:
-            return .openSettings(.calendarMeeting)
-        case .correctionLearning:
-            return .openSettings(.correctionLearning)
-        case .cloudSync:
-            return .openSettings(.cloudSync)
-        case .speakerWorkspace:
-            return .openSettings(.speakerWorkspace)
-        case .pairedDevices:
-            return .openSettings(.pairedDevices)
-        }
-    }
-}
-
-@MainActor
-struct PremiumAccessStatusBar: View {
-    let summary: PremiumAccessSummary
-    let onManageAccess: () -> Void
-
-    private var isActive: Bool {
-        switch summary {
-        case .commercialLicense, .premiumAccount, .commercialAndPremiumAccount:
-            true
-        case .locked, .supporterOnly:
-            false
-        }
-    }
+struct FeatureSettingsLink: View {
+    let feature: PremiumFeatureID
 
     var body: some View {
-        SettingsCard(accent: isActive ? .green : .yellow) {
-            HStack(spacing: 12) {
-                Image(systemName: isActive ? "checkmark.seal.fill" : "lock.fill")
-                    .font(.headline)
-                    .foregroundStyle(isActive ? .green : .yellow)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill((isActive ? Color.green : Color.yellow).opacity(0.12))
-                    )
+        Button {
+            SettingsNavigationCoordinator.shared.navigate(to: feature)
+        } label: {
+            HStack {
+                Label(feature.title, systemImage: feature.icon)
+                Spacer()
+                Image(systemName: "chevron.right")
                     .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "premium.hub.access.title"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Text(summary.localizedTitle)
-                        .font(.callout.weight(.semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("premium.access.status")
-                }
-
-                Spacer(minLength: 12)
-
-                Button(String(localized: "premium.hub.access.manage"), action: onManageAccess)
-                    .accessibilityIdentifier("premium.access.manage")
             }
+            .padding(12)
         }
+        .buttonStyle(.bordered)
     }
 }
 
-@MainActor
-struct PremiumLockedFeatureOverview: View {
-    let isSupporter: Bool
-    /// False while the organization suppresses optional prompts; access stays manageable from the status bar.
-    var showsUnlock = true
-    let onUnlock: () -> Void
+struct SettingsDetailPart<Content: View>: View {
+    let backTitle: String
+    let onBack: () -> Void
+    @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-            SettingsCard(accent: .yellow) {
-                HStack(alignment: .top, spacing: 16) {
-                    Image(systemName: "sparkles")
-                        .font(.system(size: 30, weight: .semibold))
-                        .foregroundStyle(.yellow)
-                        .frame(width: 54, height: 54)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(.yellow.opacity(0.12))
-                        )
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(String(localized: "premium.hub.locked.title"))
-                            .font(.title2.weight(.semibold))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityAddTraits(.isHeader)
-
-                        Text(premiumLockedDescription)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        if showsUnlock {
-                            Button(action: onUnlock) {
-                                Label(
-                                    String(localized: "premium.hub.unlock"),
-                                    systemImage: "lock.open"
-                                )
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .accessibilityIdentifier("premium.unlock")
-                        }
-
-                        if isSupporter {
-                            Label(
-                                String(localized: "premium.hub.supporter.note"),
-                                systemImage: "info.circle"
-                            )
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Spacer(minLength: 8)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Button(action: onBack) {
+                    Label(backTitle, systemImage: "chevron.left")
+                        .font(.callout.weight(.medium))
                 }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .keyboardShortcut(.cancelAction)
+                content
             }
-
-            PremiumFeatureGrid(cards: lockedCards)
+            .padding(SettingsLayoutMetrics.pagePadding)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-    }
-
-    private var lockedCards: [AnyView] {
-        PremiumFeatureID.editionFeatures.map { AnyView(lockedCard(for: $0)) }
-    }
-
-    @ViewBuilder
-    private func lockedCard(for feature: PremiumFeatureID) -> some View {
-        switch feature {
-        case .calendarMeeting:
-            PremiumFeatureCard(
-                feature: .calendarMeeting,
-                icon: "calendar.badge.clock",
-                accent: .blue,
-                title: String(localized: "premium.hub.calendar.title"),
-                description: String(localized: "premium.hub.calendar.description"),
-                status: String(localized: "premium.hub.status.premium"),
-                statusTone: .secondary,
-                previewLines: [String(localized: "premium.hub.calendar.providersPreview")]
-            )
-        case .correctionLearning:
-            PremiumFeatureCard(
-                feature: .correctionLearning,
-                icon: "wand.and.sparkles",
-                accent: .yellow,
-                title: String(localized: "premium.hub.learning.title"),
-                description: String(localized: "premium.hub.learning.description"),
-                status: String(localized: "premium.hub.status.premium"),
-                statusTone: .secondary,
-                previewLines: [PremiumCorrectionExamples.primaryLine]
-            )
-        case .cloudSync:
-            PremiumFeatureCard(
-                feature: .cloudSync,
-                icon: "cloud",
-                accent: .cyan,
-                title: String(localized: "premium.hub.sync.title"),
-                description: String(localized: "premium.hub.sync.description"),
-                status: String(localized: "premium.hub.status.premium"),
-                statusTone: .secondary,
-                previewLines: [String(localized: "premium.hub.sync.preview")]
-            )
-        case .speakerWorkspace:
-            PremiumFeatureCard(
-                feature: .speakerWorkspace,
-                icon: "person.2.wave.2",
-                accent: .purple,
-                title: String(localized: "premium.hub.speakers.title"),
-                description: String(localized: "premium.hub.speakers.description"),
-                status: String(localized: "premium.hub.status.premium"),
-                statusTone: .secondary,
-                previewLines: [String(localized: "premium.hub.speakers.preview")]
-            )
-        case .pairedDevices:
-            PremiumFeatureCard(
-                feature: .pairedDevices,
-                icon: "iphone.radiowaves.left.and.right",
-                accent: .indigo,
-                title: PairedDevicesPremiumCopy.title,
-                description: PairedDevicesPremiumCopy.description,
-                status: String(localized: "premium.hub.status.premium"),
-                statusTone: .secondary,
-                previewLines: [PairedDevicesPremiumCopy.preview]
-            )
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
-/// Copy for the paired-devices Premium feature, translated inline like the
-/// rest of its settings.
+enum PremiumCorrectionExamples {
+    static var current: [(before: String, after: String)] {
+        examples(for: preferredAppLanguageCode())
+    }
+
+    static func examples(for languageCode: String) -> [(before: String, after: String)] {
+        let language = languageCode.lowercased()
+        if language.hasPrefix("de") {
+            return [("Standart", "Standard"), ("wiederspiegeln", "widerspiegeln")]
+        }
+        if language.hasPrefix("ja") {
+            return [("こんにちわ", "こんにちは"), ("すいません", "すみません")]
+        }
+        if language.hasPrefix("zh") {
+            return [("因该", "应该"), ("在次", "再次")]
+        }
+        return [("teh", "the"), ("recieve", "receive")]
+    }
+}
+
 enum PairedDevicesPremiumCopy {
     static var title: String {
         localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad")
@@ -369,677 +107,11 @@ enum PairedDevicesPremiumCopy {
         )
     }
 
-    static var preview: String {
-        localizedAppText(
-            "Pair once, then dictate on the go",
-            de: "Einmal koppeln, dann unterwegs diktieren",
-            ja: "一度ペアリングすれば、外出先でも音声入力",
-            zh: "配对一次，随时随地听写"
-        )
-    }
-
     static func pairedCount(_ count: Int) -> String {
         localizedAppText(
-            "\(count) paired",
-            de: "\(count) gekoppelt",
-            ja: "\(count) 台ペアリング済み",
-            zh: "已配对 \(count) 台"
+            "\(count) paired", de: "\(count) gekoppelt",
+            ja: "\(count) 台ペアリング済み", zh: "已配对 \(count) 台"
         )
-    }
-}
-
-@MainActor
-struct PremiumActiveFeatureOverview: View {
-    @ObservedObject private var license: LicenseService
-    @ObservedObject private var premiumAccount: PremiumAccountService
-    @ObservedObject private var syncController: CloudFolderSyncController
-    @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
-    @ObservedObject private var calendarController: CalendarMeetingAutomationController
-    @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var learningEnabled = false
-
-    private let windowPresenter: any PremiumSettingsWindowPresenting
-    private let features: [PremiumFeatureID]
-    private let showsHeading: Bool
-
-    /// The row of one feature for the Settings page where that feature lives.
-    static func link(to feature: PremiumFeatureID) -> PremiumActiveFeatureOverview {
-        PremiumActiveFeatureOverview(
-            licenseService: .shared,
-            premiumAccount: ServiceContainer.shared.premiumAccountService,
-            syncController: ServiceContainer.shared.cloudFolderSyncController,
-            correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService,
-            calendarController: ServiceContainer.shared.calendarMeetingAutomationController,
-            windowPresenter: PremiumSettingsWindowManager.shared,
-            features: [feature],
-            showsHeading: false
-        )
-    }
-
-    init(
-        licenseService: LicenseService,
-        premiumAccount: PremiumAccountService,
-        syncController: CloudFolderSyncController,
-        correctionLearningService: TargetAppCorrectionLearningService,
-        calendarController: CalendarMeetingAutomationController,
-        windowPresenter: any PremiumSettingsWindowPresenting,
-        features: [PremiumFeatureID] = PremiumFeatureID.editionFeatures,
-        showsHeading: Bool = true
-    ) {
-        self.features = features
-        self.showsHeading = showsHeading
-        self.license = licenseService
-        self.premiumAccount = premiumAccount
-        self.syncController = syncController
-        self.correctionLearningService = correctionLearningService
-        self.calendarController = calendarController
-        self.windowPresenter = windowPresenter
-    }
-
-    @ObservedObject private var speakerCoordinator = ServiceContainer.shared.speakerTranscriptCoordinator
-    @ObservedObject private var remoteLink = ServiceContainer.shared.remoteLinkViewModel
-
-    private var access: PremiumFeatureAccessSnapshot {
-        PremiumFeatureAccessSnapshot(
-            hasCommercialLicense: license.hasCommercialLicense,
-            hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement,
-            isSignedIn: premiumAccount.isSignedIn,
-            isSupporter: license.isSupporter
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if showsHeading {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(String(localized: "premium.hub.active.title"))
-                        .font(.title2.weight(.semibold))
-                        .accessibilityAddTraits(.isHeader)
-                    Text(String(localized: "premium.hub.active.description"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            VStack(spacing: 0) {
-                ForEach(activeRows.indices, id: \.self) { index in
-                    if index > 0 {
-                        Divider().padding(.leading, 58)
-                    }
-                    activeRows[index]
-                }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous))
-        }
-    }
-
-    private var activeRows: [AnyView] {
-        features.map { feature in
-            switch feature {
-            case .calendarMeeting: AnyView(calendarCard)
-            case .correctionLearning: AnyView(learningCard)
-            case .cloudSync: AnyView(syncCard)
-            case .speakerWorkspace: AnyView(speakerCard)
-            case .pairedDevices: AnyView(pairedDevicesCard)
-            }
-        }
-    }
-
-    private var calendarCard: some View {
-        let action = access.action(for: .calendarMeeting)
-        return PremiumFeatureRow(
-            feature: .calendarMeeting,
-            icon: "calendar.badge.clock",
-            accent: .blue,
-            title: String(localized: "premium.hub.calendar.title"),
-            description: String(localized: "premium.hub.calendar.description"),
-            status: calendarStatus,
-            statusTone: calendarStatusTone,
-            previewLines: calendarPreviewLines,
-            actionTitle: actionTitle(for: action),
-            action: { perform(action) }
-        )
-    }
-
-    private var learningCard: some View {
-        let action = access.action(for: .correctionLearning)
-        return PremiumFeatureRow(
-            feature: .correctionLearning,
-            icon: "wand.and.sparkles",
-            accent: .yellow,
-            title: String(localized: "premium.hub.learning.title"),
-            description: String(localized: "premium.hub.learning.description"),
-            status: learningStatus,
-            statusTone: learningStatusTone,
-            previewLines: learningPreviewLines,
-            actionTitle: actionTitle(for: action),
-            action: { perform(action) }
-        )
-    }
-
-    private var syncCard: some View {
-        let action = access.action(for: .cloudSync)
-        return PremiumFeatureRow(
-            feature: .cloudSync,
-            icon: "cloud",
-            accent: .cyan,
-            title: String(localized: "premium.hub.sync.title"),
-            description: String(localized: "premium.hub.sync.description"),
-            status: syncStatus,
-            statusTone: syncStatusTone,
-            previewLines: syncPreviewLines,
-            actionTitle: actionTitle(for: action),
-            action: { perform(action) }
-        )
-    }
-
-    private var pairedDevicesCard: some View {
-        let action = access.action(for: .pairedDevices)
-        let isAvailable = access.requirement(for: .pairedDevices) == .available
-        let isEnabled = remoteLink.isEnabled
-        return PremiumFeatureRow(
-            feature: .pairedDevices,
-            icon: "iphone.radiowaves.left.and.right",
-            accent: .indigo,
-            title: PairedDevicesPremiumCopy.title,
-            description: PairedDevicesPremiumCopy.description,
-            status: isAvailable
-                ? String(localized: isEnabled ? "premium.hub.status.on" : "premium.hub.status.off")
-                : requirementStatus(access.requirement(for: .pairedDevices)),
-            statusTone: isAvailable ? (isEnabled ? .success : .secondary) : .warning,
-            previewLines: [PairedDevicesPremiumCopy.pairedCount(remoteLink.devices.count)],
-            actionTitle: actionTitle(for: action),
-            action: { perform(action) }
-        )
-    }
-
-    private var speakerCard: some View {
-        let action = access.action(for: .speakerWorkspace)
-        let isAvailable = access.requirement(for: .speakerWorkspace) == .available
-        let modelsInstalled = speakerCoordinator.areModelsInstalled
-        return PremiumFeatureRow(
-            feature: .speakerWorkspace,
-            icon: "person.2.wave.2",
-            accent: .purple,
-            title: String(localized: "premium.hub.speakers.title"),
-            description: String(localized: "premium.hub.speakers.description"),
-            status: isAvailable
-                ? String(localized: modelsInstalled ? "premium.hub.status.on" : "premium.hub.speakers.modelMissing")
-                : requirementStatus(access.requirement(for: .speakerWorkspace)),
-            statusTone: isAvailable ? (modelsInstalled ? .success : .secondary) : .warning,
-            previewLines: [String.localizedStringWithFormat(
-                String(localized: "premium.hub.speakers.summaryFormat"),
-                Int64(ServiceContainer.shared.historyService.speakerRecords(limit: 999).count),
-                Int64(ServiceContainer.shared.speakerVoiceProfileService.store.profiles.count)
-            )],
-            actionTitle: actionTitle(for: action),
-            action: { perform(action) }
-        )
-    }
-
-    private var calendarStatus: String {
-        guard access.requirement(for: .calendarMeeting) == .available else {
-            return requirementStatus(access.requirement(for: .calendarMeeting))
-        }
-        if calendarController.startMode != .off,
-           calendarController.calendarAuthorization != .fullAccess,
-           !calendarController.detectAdHocMeetings {
-            return String(localized: "premium.hub.status.actionRequired")
-        }
-        switch calendarController.startMode {
-        case .off:
-            return String(localized: "premium.hub.status.off")
-        case .reminder:
-            return String(localized: "premium.hub.status.remindersOnly")
-        case .automatic:
-            return String(localized: "premium.hub.status.automaticRecording")
-        }
-    }
-
-    private var calendarStatusTone: PremiumFeatureStatusTone {
-        guard access.requirement(for: .calendarMeeting) == .available else { return .warning }
-        if calendarController.startMode != .off,
-           calendarController.calendarAuthorization != .fullAccess,
-           !calendarController.detectAdHocMeetings {
-            return .warning
-        }
-        switch calendarController.startMode {
-        case .off:
-            return .secondary
-        case .reminder:
-            return .accent
-        case .automatic:
-            return .success
-        }
-    }
-
-    private var calendarPreviewLines: [String] {
-        let permission: String
-        switch calendarController.calendarAuthorization {
-        case .fullAccess:
-            permission = String(localized: "premium.hub.calendar.accessGranted")
-        case .notDetermined:
-            permission = String(localized: "premium.hub.calendar.accessNotRequested")
-        case .denied, .restricted, .writeOnly, .unknown:
-            permission = String(localized: "premium.hub.calendar.accessNeeded")
-        }
-        let selection = String.localizedStringWithFormat(
-            String(localized: "premium.hub.calendar.selectionFormat"),
-            Int64(calendarController.selectedCalendarIDs.count),
-            Int64(calendarController.enabledProviders.count)
-        )
-        return [calendarController.detectAdHocMeetings
-            ? String(localized: "calendarMeeting.settings.detectAdHoc") : permission, selection]
-    }
-
-    private var learningStatus: String {
-        let requirement = access.requirement(for: .correctionLearning)
-        guard requirement == .available else { return requirementStatus(requirement) }
-        return learningEnabled
-            ? String(localized: "premium.hub.status.on")
-            : String(localized: "premium.hub.status.off")
-    }
-
-    private var learningStatusTone: PremiumFeatureStatusTone {
-        access.requirement(for: .correctionLearning) == .available
-            ? (learningEnabled ? .success : .secondary)
-            : .warning
-    }
-
-    private var learningPreviewLines: [String] {
-        let activity = correctionLearningService.latestAttempt.map {
-            PremiumCorrectionLearningCopy.outcomeText($0.outcome)
-        } ?? String(localized: "premium.hub.learning.preview")
-        return [activity, PremiumCorrectionExamples.primaryLine]
-    }
-
-    private var syncStatus: String {
-        let requirement = access.requirement(for: .cloudSync)
-        guard requirement == .available else { return requirementStatus(requirement) }
-        if syncController.isSyncing {
-            return String(localized: "premium.window.sync.syncing")
-        }
-        switch syncController.mode {
-        case .off:
-            return String(localized: "premium.hub.status.off")
-        case .automaticICloud:
-            return String(localized: "premium.window.sync.mode.automaticICloud")
-        case .cloudFolder:
-            return syncController.provider.displayName
-        }
-    }
-
-    private var syncStatusTone: PremiumFeatureStatusTone {
-        guard access.requirement(for: .cloudSync) == .available else { return .warning }
-        if syncController.isSyncing { return .accent }
-        return syncController.mode == .off ? .secondary : .success
-    }
-
-    private var syncPreviewLines: [String] {
-        let provider = syncController.mode == .off
-            ? String(localized: "premium.hub.sync.notConfigured")
-            : syncController.provider.displayName
-        let lastSync = syncController.lastSyncDate.map {
-            String.localizedStringWithFormat(
-                String(localized: "premium.hub.sync.lastSyncFormat"),
-                $0.formatted(date: .abbreviated, time: .shortened)
-            )
-        } ?? String(localized: "premium.hub.sync.neverSynced")
-        return [provider, lastSync]
-    }
-
-    private func requirementStatus(_ requirement: PremiumFeatureRequirement) -> String {
-        switch requirement {
-        case .available:
-            String(localized: "premium.hub.status.on")
-        case .commercialOrPremiumAccount:
-            String(localized: "premium.hub.status.premiumRequired")
-        case .commercialLicense:
-            String(localized: "premium.hub.status.commercialRequired")
-        case .premiumAccount:
-            String(localized: "premium.hub.status.accountRequired")
-        case .linkCommercialLicense:
-            String(localized: "premium.hub.status.linkPurchase")
-        case .signIn:
-            String(localized: "premium.hub.status.signInRequired")
-        }
-    }
-
-    private func actionTitle(for action: PremiumFeatureCardAction) -> String? {
-        switch action {
-        case .none:
-            nil
-        case .openSettings:
-            String(localized: "premium.hub.settings")
-        case .manageAccess:
-            String(localized: "premium.hub.access.manage")
-        }
-    }
-
-    private func perform(_ action: PremiumFeatureCardAction) {
-        switch action {
-        case .none:
-            break
-        case .openSettings(let destination):
-            // Each feature's settings live on the page where it is used.
-            SettingsNavigationCoordinator.shared.navigate(to: destination)
-        case .manageAccess:
-            windowPresenter.present(.access)
-        }
-    }
-}
-
-private struct PremiumFeatureGrid: View {
-    let cards: [AnyView]
-
-    var body: some View {
-        PremiumFeatureResponsiveLayout(spacing: 12, minimumColumnWidth: 210) {
-            ForEach(cards.indices, id: \.self) { index in
-                cards[index]
-            }
-        }
-    }
-}
-
-/// Lays the cards out in equal columns and wraps them into balanced rows
-/// when they do not fit side by side: four cards become two rows of two.
-private struct PremiumFeatureResponsiveLayout: Layout {
-    let spacing: CGFloat
-    let minimumColumnWidth: CGFloat
-
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
-        guard !subviews.isEmpty else { return .zero }
-
-        let availableWidth = proposal.width
-            ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max()
-            ?? minimumColumnWidth
-        let heights = rowHeights(width: availableWidth, subviews: subviews)
-        return CGSize(
-            width: availableWidth,
-            height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1))
-        )
-    }
-
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
-        guard !subviews.isEmpty else { return }
-
-        let columns = columnCount(width: bounds.width, count: subviews.count)
-        let width = columnWidth(for: bounds.width, columns: columns)
-        let heights = rowHeights(width: bounds.width, subviews: subviews)
-        var y = bounds.minY
-
-        for (row, height) in heights.enumerated() {
-            var x = bounds.minX
-            for subview in subviews[(row * columns)..<min(subviews.count, (row + 1) * columns)] {
-                subview.place(
-                    at: CGPoint(x: x, y: y),
-                    anchor: .topLeading,
-                    proposal: ProposedViewSize(width: width, height: height)
-                )
-                x += width + spacing
-            }
-            y += height + spacing
-        }
-    }
-
-    /// Every card in a row is as tall as the tallest one in it.
-    private func rowHeights(width: CGFloat, subviews: Subviews) -> [CGFloat] {
-        let columns = columnCount(width: width, count: subviews.count)
-        let columnWidth = columnWidth(for: width, columns: columns)
-        return stride(from: 0, to: subviews.count, by: columns).map { start in
-            subviews[start..<min(subviews.count, start + columns)]
-                .map { $0.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height }
-                .max() ?? 0
-        }
-    }
-
-    private func columnCount(width: CGFloat, count: Int) -> Int {
-        let fitting = max(1, min(count, Int((width + spacing) / (minimumColumnWidth + spacing))))
-        let rows = Int((Double(count) / Double(fitting)).rounded(.up))
-        return Int((Double(count) / Double(rows)).rounded(.up))
-    }
-
-    private func columnWidth(for availableWidth: CGFloat, columns: Int) -> CGFloat {
-        (availableWidth - spacing * CGFloat(max(0, columns - 1))) / CGFloat(columns)
-    }
-}
-
-private enum PremiumFeatureStatusTone {
-    case secondary
-    case accent
-    case success
-    case warning
-
-    var color: Color {
-        switch self {
-        case .secondary:
-            .secondary
-        case .accent:
-            .blue
-        case .success:
-            .green
-        case .warning:
-            .orange
-        }
-    }
-}
-
-private struct PremiumFeatureCard: View {
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
-
-    let feature: PremiumFeatureID
-    let icon: String
-    let accent: Color
-    let title: String
-    let description: String
-    let status: String
-    let statusTone: PremiumFeatureStatusTone
-    let previewLines: [String]
-    var actionTitle: String?
-    var action: (() -> Void)?
-
-    init(
-        feature: PremiumFeatureID,
-        icon: String,
-        accent: Color,
-        title: String,
-        description: String,
-        status: String,
-        statusTone: PremiumFeatureStatusTone,
-        previewLines: [String],
-        actionTitle: String? = nil,
-        action: (() -> Void)? = nil
-    ) {
-        self.feature = feature
-        self.icon = icon
-        self.accent = accent
-        self.title = title
-        self.description = description
-        self.status = status
-        self.statusTone = statusTone
-        self.previewLines = Array(previewLines.prefix(2))
-        self.actionTitle = actionTitle
-        self.action = action
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: icon)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(accent.opacity(0.13))
-                    )
-                    .accessibilityHidden(true)
-
-                Spacer(minLength: 4)
-
-                Text(status)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(statusTone.color)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.trailing)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(statusTone.color.opacity(0.12)))
-            }
-
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.headline)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-
-                Text(description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(previewLines.enumerated()), id: \.offset) { index, line in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: index == 0 ? "checkmark.circle" : "info.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityHidden(true)
-                        Text(line)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .controlSize(.small)
-                    .accessibilityIdentifier("premium.feature.\(feature.rawValue).action")
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 270, maxHeight: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            accent.opacity(0.08),
-                            Color(nsColor: .controlBackgroundColor)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
-                .stroke(
-                    accent.opacity(colorSchemeContrast == .increased ? 0.75 : 0.20),
-                    lineWidth: colorSchemeContrast == .increased ? 2 : 1
-                )
-        )
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(title)
-        .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
-    }
-}
-
-/// One Premium feature as a compact row: what it is, its current state, and
-/// a click through to its settings.
-private struct PremiumFeatureRow: View {
-    let feature: PremiumFeatureID
-    let icon: String
-    let accent: Color
-    let title: String
-    let description: String
-    let status: String
-    let statusTone: PremiumFeatureStatusTone
-    let previewLines: [String]
-    var actionTitle: String?
-    var action: (() -> Void)?
-
-    @State private var isHovered = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        Button {
-            action?()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(accent)
-                    .frame(width: 32, height: 32)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(accent.opacity(0.13))
-                    )
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.body.weight(.medium))
-                        .lineLimit(1)
-                    Text(previewLines.joined(separator: " · "))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 12)
-
-                Text(status)
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(statusTone.color)
-                    .lineLimit(1)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(statusTone.color.opacity(0.12)))
-
-                if actionTitle != nil {
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(isHovered ? AnyShapeStyle(accent) : AnyShapeStyle(.tertiary))
-                        .offset(x: isHovered && !reduceMotion ? 2 : 0)
-                        .accessibilityHidden(true)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(accent.opacity(isHovered && actionTitle != nil ? 0.1 : 0))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(actionTitle == nil)
-        .onHover { hovering in
-            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.15)) { isHovered = hovering }
-        }
-        .help(description)
-        // The status sits in a colored capsule; spell it out after the feature name.
-        .accessibilityLabel(title)
-        .accessibilityValue(([status] + previewLines).joined(separator: ", "))
-        .accessibilityHint(actionTitle ?? "")
-        .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
     }
 }
 
@@ -1048,24 +120,8 @@ struct PremiumSettingsDetailHeader: View {
     let accent: Color
     let title: String
     let description: String
-    let status: String?
-    let statusColor: Color
-
-    init(
-        icon: String,
-        accent: Color,
-        title: String,
-        description: String,
-        status: String? = nil,
-        statusColor: Color = .secondary
-    ) {
-        self.icon = icon
-        self.accent = accent
-        self.title = title
-        self.description = description
-        self.status = status
-        self.statusColor = statusColor
-    }
+    var status: String? = nil
+    var statusColor: Color = .secondary
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
@@ -1073,24 +129,14 @@ struct PremiumSettingsDetailHeader: View {
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(accent)
                 .frame(width: 46, height: 46)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(accent.opacity(0.13))
-                )
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(accent.opacity(0.13)))
                 .accessibilityHidden(true)
-
             VStack(alignment: .leading, spacing: 5) {
-                Text(title)
-                    .font(.title2.weight(.semibold))
-                    .accessibilityAddTraits(.isHeader)
-                Text(description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Text(title).font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                Text(description).font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
             Spacer(minLength: 12)
-
             if let status {
                 Text(status)
                     .font(.caption.weight(.semibold))
@@ -1103,90 +149,46 @@ struct PremiumSettingsDetailHeader: View {
     }
 }
 
-struct PremiumLockedDetailView: View {
-    let message: String
-    let onManageAccess: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PremiumSettingsDetailHeader(
-                icon: "lock.fill",
-                accent: .yellow,
-                title: String(localized: "premium.window.locked.title"),
-                description: message
-            )
-
-            SettingsCard(accent: .yellow) {
-                Button(String(localized: "premium.hub.access.manage"), action: onManageAccess)
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("premium.window.locked.manageAccess")
-            }
-        }
-    }
-}
-
 enum PremiumCorrectionLearningCopy {
     static func outcomeText(_ outcome: TargetAppCorrectionLearningOutcome) -> String {
         switch outcome {
-        case .learned:
-            String(localized: "premium.window.learning.outcome.learned")
-        case .unsupportedTextObservation:
-            String(localized: "premium.window.learning.outcome.unsupportedTextObservation")
-        case .noEdit:
-            String(localized: "premium.window.learning.outcome.noEdit")
-        case .ambiguousEdit:
-            String(localized: "premium.window.learning.outcome.ambiguousEdit")
-        case .noCommitBeforeTimeout:
-            String(localized: "premium.window.learning.outcome.noCommitBeforeTimeout")
-        case .duplicateCorrection:
-            String(localized: "premium.window.learning.outcome.duplicateCorrection")
-        case .awaitingRepeat:
-            String(localized: "premium.window.learning.outcome.awaitingRepeat")
-        case .cancelled:
-            String(localized: "premium.window.learning.outcome.cancelled")
-        case .failed:
-            String(localized: "premium.window.learning.outcome.failed")
+        case .learned: String(localized: "premium.window.learning.outcome.learned")
+        case .unsupportedTextObservation: String(localized: "premium.window.learning.outcome.unsupportedTextObservation")
+        case .noEdit: String(localized: "premium.window.learning.outcome.noEdit")
+        case .ambiguousEdit: String(localized: "premium.window.learning.outcome.ambiguousEdit")
+        case .noCommitBeforeTimeout: String(localized: "premium.window.learning.outcome.noCommitBeforeTimeout")
+        case .duplicateCorrection: String(localized: "premium.window.learning.outcome.duplicateCorrection")
+        case .awaitingRepeat: String(localized: "premium.window.learning.outcome.awaitingRepeat")
+        case .cancelled: String(localized: "premium.window.learning.outcome.cancelled")
+        case .failed: String(localized: "premium.window.learning.outcome.failed")
         }
     }
 
     static func outcomeIcon(_ outcome: TargetAppCorrectionLearningOutcome) -> String {
         switch outcome {
-        case .learned:
-            "checkmark.circle.fill"
-        case .failed:
-            "exclamationmark.triangle.fill"
-        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
-            "info.circle.fill"
-        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled:
-            "minus.circle.fill"
+        case .learned: "checkmark.circle.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout: "info.circle.fill"
+        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled: "minus.circle.fill"
         }
     }
 
     static func outcomeColor(_ outcome: TargetAppCorrectionLearningOutcome) -> Color {
         switch outcome {
-        case .learned:
-            .green
-        case .failed:
-            .red
-        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
-            .yellow
-        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled:
-            .secondary
+        case .learned: .green
+        case .failed: .red
+        case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout: .yellow
+        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled: .secondary
         }
     }
 
     static func commitSignalText(_ signal: TargetAppCorrectionCommitSignal) -> String {
         switch signal {
-        case .returnKey:
-            String(localized: "premium.window.learning.signal.return")
-        case .keypadEnterKey:
-            String(localized: "premium.window.learning.signal.enter")
-        case .tabKey:
-            String(localized: "premium.window.learning.signal.tab")
-        case .focusChanged:
-            String(localized: "premium.window.learning.signal.focusChanged")
-        case .activeApplicationChanged:
-            String(localized: "premium.window.learning.signal.appChanged")
+        case .returnKey: String(localized: "premium.window.learning.signal.return")
+        case .keypadEnterKey: String(localized: "premium.window.learning.signal.enter")
+        case .tabKey: String(localized: "premium.window.learning.signal.tab")
+        case .focusChanged: String(localized: "premium.window.learning.signal.focusChanged")
+        case .activeApplicationChanged: String(localized: "premium.window.learning.signal.appChanged")
         }
     }
 }
@@ -1201,23 +203,14 @@ struct PremiumCorrectionExampleRow: View {
                 .font(.system(.caption, design: .monospaced).weight(.medium))
                 .strikethrough(true, color: .secondary)
                 .foregroundStyle(.secondary)
-
-            Image(systemName: "arrow.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-
-            Text(after)
-                .font(.system(.caption, design: .monospaced).weight(.semibold))
+            Image(systemName: "arrow.right").accessibilityHidden(true)
+            Text(after).fontWeight(.semibold)
         }
+        .font(.system(.caption, design: .monospaced))
         .padding(.horizontal, 9)
         .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-        // The strikethrough marks the wrong spelling only visually.
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color(nsColor: .controlBackgroundColor)))
         .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(localizedAppText(
@@ -1227,12 +220,4 @@ struct PremiumCorrectionExampleRow: View {
             zh: "\(before) 更正为 \(after)"
         ))
     }
-}
-
-private var premiumLockedDescription: String {
-    #if APPSTORE
-    return AppStorePremiumCopy.lockedDescription
-    #else
-    return String(localized: "premium.hub.locked.description")
-    #endif
 }

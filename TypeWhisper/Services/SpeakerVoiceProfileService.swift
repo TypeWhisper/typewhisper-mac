@@ -15,24 +15,18 @@ enum SpeakerVoiceState: String, Equatable {
     case outdated
 }
 
-/// Recognizes named voices in recordings: keeps each recording's speaker
-/// embeddings, suggests names from voice profiles, and creates or improves
-/// profiles when the user asks for it. Everything here needs Premium; names
-/// and profiles are kept without it.
+/// 保存录音的说话人特征并建议姓名，在用户确认后创建或更新声音档案。
 @MainActor
 final class SpeakerVoiceProfileService: ObservableObject {
     let store: VoiceProfileStore
     private let historyService: HistoryService
-    private let premiumAccess: @MainActor () -> Bool
 
     init(
         store: VoiceProfileStore,
-        historyService: HistoryService,
-        premiumAccess: @escaping @MainActor () -> Bool
+        historyService: HistoryService
     ) {
         self.store = store
         self.historyService = historyService
-        self.premiumAccess = premiumAccess
         historyService.onRecordsDeleted = { [weak store] ids in
             store?.removeEmbeddings(forRecordIDs: Set(ids))
         }
@@ -57,7 +51,6 @@ final class SpeakerVoiceProfileService: ObservableObject {
         of transcript: SpeakerTranscript,
         recordID: UUID
     ) {
-        guard premiumAccess() else { return }
         let speakerIDs = Set(transcript.speakerIDs)
         store.storeEmbeddings(
             embeddings.filter { speakerIDs.contains($0.key) },
@@ -103,8 +96,7 @@ final class SpeakerVoiceProfileService: ObservableObject {
     /// that no speaker of it uses yet and the user did not reject for them.
     /// Names the user gave stay untouched.
     private func suggestNames(inRecordID recordID: UUID) {
-        guard premiumAccess(),
-              let record = historyService.record(withID: recordID),
+        guard let record = historyService.record(withID: recordID),
               let transcript = record.speakerTranscript,
               store.hasCurrentEmbeddings(recordID: recordID, transcript: transcript) else { return }
         let names = record.speakerNames
@@ -145,8 +137,7 @@ final class SpeakerVoiceProfileService: ObservableObject {
         of speakerID: String,
         inRecordID recordID: UUID
     ) -> (name: String, profileID: UUID?, embedding: [Float], model: String, seconds: TimeInterval)? {
-        guard premiumAccess(),
-              let record = historyService.record(withID: recordID),
+        guard let record = historyService.record(withID: recordID),
               let transcript = record.speakerTranscript,
               store.hasCurrentEmbeddings(recordID: recordID, transcript: transcript),
               let name = record.speakerNames?.displayName(for: speakerID),
@@ -264,7 +255,6 @@ final class SpeakerVoiceProfileService: ObservableObject {
         let current = stored?.transcriptRevision == transcript.revision && stored?.transcriptVersion == version
         let embeddings = current ? (stored?.embeddings ?? [:]) : [:]
         let model = current ? stored?.embeddingModel : nil
-        let premium = premiumAccess()
         let profiles = Dictionary(uniqueKeysWithValues: store.profiles.map { ($0.id, $0) })
         let nameCounts = Dictionary(grouping: store.profiles, by: { SpeakerTranscriptPresentation.nameKey($0.name) }).mapValues(\.count)
         let entries = Dictionary((names?.entries ?? []).map { ($0.speakerID, $0) }, uniquingKeysWith: { _, last in last })
@@ -276,7 +266,7 @@ final class SpeakerVoiceProfileService: ObservableObject {
             let entry = entries[speakerID]
             let suggestion = entry?.isSuggestion == true
             let profile = entry?.profileID.flatMap { profiles[$0] }
-            let hasVoice = premium && entry != nil && model != nil && model == store.currentEmbeddingModel && embeddings[speakerID] != nil
+            let hasVoice = entry != nil && model != nil && model == store.currentEmbeddingModel && embeddings[speakerID] != nil
             let state: SpeakerVoiceState
             if let profile {
                 state = suggestion ? .suggestion : (store.isOutdated(profile) && hasVoice ? .outdated : .linked)
@@ -343,9 +333,6 @@ final class SpeakerVoiceProfileService: ObservableObject {
         profileID: UUID?, confirming: Bool, createProfile: Bool = false
     ) throws -> AutomationState {
         let record = try automationRecord(recordID: recordID, revision: revision, version: version, speakerID: speakerID)
-        guard premiumAccess() else {
-            throw OperationError(status: 403, code: "premium_required", message: "Learning voice profiles requires Premium")
-        }
         let names = record.speakerNames
         let linkedID = names?.profileID(for: speakerID)
         let suggestion = names?.isSuggestion(for: speakerID) == true

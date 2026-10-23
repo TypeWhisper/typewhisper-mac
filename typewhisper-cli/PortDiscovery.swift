@@ -26,7 +26,7 @@ enum PortDiscovery {
     }
 
     private static func apiDirectory(dev: Bool, applicationSupportDirectory: URL?) -> URL {
-        let dirName = dev ? "TypeWhisper-Dev" : "TypeWhisper"
+        let dirName = dev ? "dictum-Dev" : "dictum"
         let baseDirectory = applicationSupportDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return baseDirectory
             .appendingPathComponent(dirName)

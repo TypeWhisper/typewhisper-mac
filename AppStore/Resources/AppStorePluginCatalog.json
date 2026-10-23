@@ -2,27 +2,6 @@
   "schemaVersion": 1,
   "plugins": [
     {
-      "id": "com.minerale.mistralai",
-      "bundleName": "MistralAIPlugin.bundle",
-      "name": "Mistral AI",
-      "author": "MinerAle",
-      "description": "LLM provider and cloud speech transcription via Mistral AI API. Requires API key.",
-      "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key.",
-        "ja": "Mistral AI APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "llm"
-      ],
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/mistral/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/mistral/logo.svg"
-    },
-    {
       "id": "com.typewhisper.assemblyai",
       "bundleName": "AssemblyAIPlugin.bundle",
       "name": "AssemblyAI",
@@ -35,46 +14,7 @@
       "category": "transcription",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/assemblyai/"
-    },
-    {
-      "id": "com.typewhisper.cartesia",
-      "bundleName": "CartesiaPlugin.bundle",
-      "name": "Cartesia",
-      "author": "TypeWhisper",
-      "description": "Cloud speech-to-text and text-to-speech via Cartesia APIs. Requires a Cartesia API key.",
-      "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key.",
-        "ja": "Cartesia APIによるクラウド音声認識と音声合成です。Cartesia APIキーが必要です。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "tts"
-      ],
-      "iconSystemName": "waveform",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/cartesia/",
-      "homepageURL": "https://www.cartesia.ai/"
-    },
-    {
-      "id": "com.typewhisper.cerebras",
-      "bundleName": "CerebrasPlugin.bundle",
-      "name": "Cerebras",
-      "author": "TypeWhisper",
-      "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
-      "descriptions": {
-        "de": "Ultra-schnelle LLM-Inferenz über die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key.",
-        "ja": "Cerebras APIによる超高速LLM推論です。最大3,000トークン/秒に対応し、APIキーが必要です。"
-      },
-      "category": "llm",
-      "iconSystemName": "bolt.fill",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/cerebras/"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.claude",
@@ -89,42 +29,7 @@
       "category": "llm",
       "iconSystemName": "brain.head.profile",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/claude/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/claude-ai/logo.svg"
-    },
-    {
-      "id": "com.typewhisper.cloudflare-asr",
-      "bundleName": "CloudflareASRPlugin.bundle",
-      "name": "Cloudflare ASR",
-      "author": "yunluyl",
-      "description": "OpenAI-compatible transcription through a Cloudflare tunnel with service token authentication. Credentials stored in macOS Keychain.",
-      "descriptions": {
-        "de": "OpenAI-kompatible Transkription über einen Cloudflare-Tunnel mit Service-Token-Authentifizierung. Zugangsdaten werden im macOS-Schlüsselbund gespeichert.",
-        "ja": "サービストークン認証付きのCloudflareトンネル経由でOpenAI互換の文字起こしを行います。認証情報はmacOSキーチェーンに保存されます。"
-      },
-      "category": "transcription",
-      "iconSystemName": "shield.lefthalf.filled",
-      "locality": "configurable",
-      "detailsURL": "https://www.typewhisper.com/addons/cloudflare-asr/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/cloudflare/logo.svg"
-    },
-    {
-      "id": "com.typewhisper.cohere",
-      "bundleName": "CoherePlugin.bundle",
-      "name": "Cohere",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
-      "descriptions": {
-        "de": "Cloud-Transkription über die Cohere Transcribe API. Beste Genauigkeit für 14 Sprachen. Erfordert API-Key.",
-        "ja": "Cohere Transcribe APIによるクラウド文字起こしです。14言語で高精度に対応し、APIキーが必要です。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.badge.mic",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/cohere/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/cohere/logo.svg"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.deepgram",
@@ -139,8 +44,7 @@
       "category": "transcription",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/deepgram/"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.elevenlabs",
@@ -155,44 +59,7 @@
       "category": "transcription",
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/elevenlabs/"
-    },
-    {
-      "id": "com.typewhisper.filler-words",
-      "bundleName": "FillerWordsPlugin.bundle",
-      "name": "Filler Words",
-      "author": "TypeWhisper",
-      "description": "Removes filler words like \"um\" and \"uh\" from transcribed text.",
-      "descriptions": {
-        "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text.",
-        "ja": "文字起こし結果から「um」「uh」などのつなぎ言葉を取り除きます。"
-      },
-      "category": "post-processor",
-      "iconSystemName": "text.badge.minus",
-      "requiresAPIKey": false,
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/filler-words/"
-    },
-    {
-      "id": "com.typewhisper.fireworks",
-      "bundleName": "FireworksPlugin.bundle",
-      "name": "Fireworks AI",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
-      "descriptions": {
-        "de": "Cloud-Transkription und LLM über Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key.",
-        "ja": "Fireworks AIによるクラウド文字起こしとLLMです。ストリーミング文字起こしと高速推論に対応し、APIキーが必要です。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "llm"
-      ],
-      "iconSystemName": "flame.fill",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/fireworks/"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.gemini",
@@ -211,41 +78,7 @@
       ],
       "iconSystemName": "sparkles",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/gemini/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg"
-    },
-    {
-      "id": "com.typewhisper.gladia",
-      "bundleName": "GladiaPlugin.bundle",
-      "name": "Gladia",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
-      "descriptions": {
-        "de": "Cloud-Transkription über die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming.",
-        "ja": "Gladia Solaria APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応します。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.badge.mic",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/gladia/"
-    },
-    {
-      "id": "com.typewhisper.google-cloud-stt",
-      "bundleName": "GoogleCloudSTTPlugin.bundle",
-      "name": "Google Cloud Speech-to-Text",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
-      "descriptions": {
-        "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
-      },
-      "category": "transcription",
-      "iconSystemName": "globe.badge.chevron.backward",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/google-cloud-stt/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/google-cloud/logo.svg"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.groq",
@@ -264,152 +97,7 @@
       ],
       "iconSystemName": "bolt.fill",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/groq/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg"
-    },
-    {
-      "id": "com.typewhisper.linear",
-      "bundleName": "LinearPlugin.bundle",
-      "name": "Linear",
-      "author": "TypeWhisper",
-      "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
-      "descriptions": {
-        "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key."
-      },
-      "category": "action",
-      "iconSystemName": "list.bullet.rectangle",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/linear/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/linear/logo.svg"
-    },
-    {
-      "id": "com.typewhisper.livetranscript",
-      "bundleName": "LiveTranscriptPlugin.bundle",
-      "name": "Live Transcript",
-      "author": "TypeWhisper",
-      "description": "Show a floating live transcript window during recording.",
-      "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster waehrend der Aufnahme."
-      },
-      "category": "utility",
-      "iconSystemName": "text.bubble",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/live-transcript/"
-    },
-    {
-      "id": "com.typewhisper.local-llm-mlx",
-      "bundleName": "LocalLLMPlugin.bundle",
-      "name": "Local LLM (MLX)",
-      "author": "TypeWhisper",
-      "description": "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
-      "descriptions": {
-        "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
-        "ja": "Apple Silicon上でMLX経由で動作するローカルLLM。Gemma 4、Qwen3.5、LFM2.5モデルに対応。APIキーは不要です。"
-      },
-      "category": "llm",
-      "iconSystemName": "cpu",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/"
-    },
-    {
-      "id": "com.typewhisper.mcp-client",
-      "bundleName": "MCPClientPlugin.bundle",
-      "name": "MCP Client",
-      "author": "TypeWhisper",
-      "description": "Connect TypeWhisper workflows to remote MCP tools over Streamable HTTP.",
-      "descriptions": {
-        "de": "TypeWhisper-Workflows über Streamable HTTP mit entfernten MCP-Tools verbinden.",
-        "ja": "TypeWhisperのワークフローをStreamable HTTP経由でリモートのMCPツールに接続します。",
-        "zh-Hans": "通过 Streamable HTTP 将 TypeWhisper 工作流连接到远程 MCP 工具。"
-      },
-      "category": "action",
-      "iconSystemName": "point.3.connected.trianglepath.dotted",
-      "requiresAPIKey": false,
-      "locality": "configurable"
-    },
-    {
-      "id": "com.typewhisper.memory.file",
-      "bundleName": "FileMemoryPlugin.bundle",
-      "name": "File Memory",
-      "author": "TypeWhisper",
-      "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
-      "descriptions": {
-        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key noetig."
-      },
-      "category": "memory",
-      "iconSystemName": "doc.text",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/file-memory/"
-    },
-    {
-      "id": "com.typewhisper.memory.openai-vector",
-      "bundleName": "OpenAIVectorMemoryPlugin.bundle",
-      "name": "OpenAI Vector Memory",
-      "author": "TypeWhisper",
-      "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
-      "descriptions": {
-        "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
-      },
-      "category": "memory",
-      "iconSystemName": "brain",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/openai-vector-memory/"
-    },
-    {
-      "id": "com.typewhisper.meta",
-      "bundleName": "MetaPlugin.bundle",
-      "name": "Meta",
-      "author": "TypeWhisper",
-      "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark. Requires a Meta Model API key.",
-      "descriptions": {
-        "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schlüssel.",
-        "ja": "Muse Voice Transcribeによるリアルタイム・ファイル文字起こし、オプションの話者分離、Muse Sparkによるプロンプト処理に対応します。Meta Model APIキーが必要です。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "llm"
-      ],
-      "iconSystemName": "waveform.and.sparkles",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/meta/"
-    },
-    {
-      "id": "com.typewhisper.microsoft-ai",
-      "bundleName": "MicrosoftAIPlugin.bundle",
-      "name": "Microsoft AI",
-      "author": "TypeWhisper",
-      "description": "Fast cloud transcription with Microsoft MAI Transcribe, language detection, terminology biasing, transcript styles, and optional speaker diarization. Requires an Azure Speech endpoint and API key.",
-      "descriptions": {
-        "de": "Schnelle Cloud-Transkription mit Microsoft MAI Transcribe, Spracherkennung, Fachbegriffs-Biasing, Transkriptionsstilen und optionaler Sprechererkennung. Erfordert Azure-Speech-Endpunkt und API-Schlüssel.",
-        "ja": "Microsoft MAI Transcribeによる高速クラウド文字起こしです。言語検出、用語バイアス、文字起こしスタイル、オプションの話者分離に対応し、Azure SpeechエンドポイントとAPIキーが必要です。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.and.mic",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/microsoft-ai/"
-    },
-    {
-      "id": "com.typewhisper.obsidian",
-      "bundleName": "ObsidianPlugin.bundle",
-      "name": "Obsidian",
-      "author": "TypeWhisper",
-      "description": "Save transcriptions to your Obsidian vault as Markdown notes. Supports templates, YAML frontmatter, auto-export, and live sync.",
-      "descriptions": {
-        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstützt Vorlagen, YAML-Frontmatter, Auto-Export und Live-Sync.",
-        "ja": "文字起こしをMarkdownノートとしてObsidian Vaultに保存します。テンプレート、YAMLフロントマター、自動エクスポート、ライブ同期に対応します。"
-      },
-      "category": "action",
-      "iconSystemName": "doc.text",
-      "locality": "configurable",
-      "detailsURL": "https://www.typewhisper.com/addons/obsidian/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/obsidian/logo.svg"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.openai",
@@ -430,10 +118,7 @@
       "iconSystemName": "brain",
       "requiresAPIKey": true,
       "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/openai/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/openai/logo-light.svg",
-      "iconDarkURL": "https://www.typewhisper.com/brand-logos/openai/logo-dark.svg"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.openai-compatible",
@@ -451,8 +136,7 @@
         "llm"
       ],
       "iconSystemName": "server.rack",
-      "locality": "configurable",
-      "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"
+      "locality": "configurable"
     },
     {
       "id": "com.typewhisper.openrouter",
@@ -471,28 +155,7 @@
       ],
       "iconSystemName": "globe",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/openrouter/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-light.svg",
-      "iconDarkURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-dark.svg"
-    },
-    {
-      "id": "com.typewhisper.parakeet",
-      "bundleName": "ParakeetPlugin.bundle",
-      "name": "Parakeet",
-      "author": "TypeWhisper",
-      "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
-      "descriptions": {
-        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen.",
-        "ja": "NVIDIA Parakeet TDTによるローカル音声認識です。高速かつ高精度で、25言語に対応します。"
-      },
-      "category": "transcription",
-      "capabilities": [
-        "source-footage-progress"
-      ],
-      "iconSystemName": "bird",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/parakeet/"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.qwen3",
@@ -506,42 +169,7 @@
       },
       "category": "transcription",
       "iconSystemName": "cpu",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/"
-    },
-    {
-      "id": "com.typewhisper.reson8",
-      "bundleName": "Reson8Plugin.bundle",
-      "name": "Reson8",
-      "author": "Y. Vos",
-      "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
-      "descriptions": {
-        "de": "Cloud-Transkription über die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "Reson8音声認識APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.badge.mic",
-      "requiresAPIKey": true,
-      "locality": "configurable",
-      "detailsURL": "https://www.typewhisper.com/addons/reson8/"
-    },
-    {
-      "id": "com.typewhisper.smallest-pulse",
-      "bundleName": "SmallestAIPlugin.bundle",
-      "name": "Smallest Pulse",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription via the Smallest AI Pulse STT API. Requires a Smallest API key.",
-      "descriptions": {
-        "de": "Cloud-Transkription über die Smallest AI Pulse STT API. Erfordert einen Smallest API-Key.",
-        "ja": "Smallest AI Pulse STT APIによるクラウド文字起こしです。Smallest APIキーが必要です。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.badge.mic",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/smallest-pulse/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/smallest/logo.svg"
+      "locality": "local"
     },
     {
       "id": "com.typewhisper.soniox",
@@ -564,8 +192,7 @@
       ],
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/soniox/"
+      "locality": "cloud"
     },
     {
       "id": "com.typewhisper.speaker-diarization",
@@ -594,94 +221,7 @@
       },
       "category": "transcription",
       "iconSystemName": "apple.logo",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/apple-speech/"
-    },
-    {
-      "id": "com.typewhisper.speechmatics",
-      "bundleName": "SpeechmaticsPlugin.bundle",
-      "name": "Speechmatics",
-      "author": "TypeWhisper",
-      "description": "Cloud transcription via Speechmatics API with real-time WebSocket streaming. Requires API key.",
-      "descriptions": {
-        "de": "Cloud-Transkription über die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "Speechmatics APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
-      },
-      "category": "transcription",
-      "iconSystemName": "waveform.badge.mic",
-      "requiresAPIKey": true,
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/speechmatics/"
-    },
-    {
-      "id": "com.typewhisper.tts.supertonic",
-      "bundleName": "SupertonicPlugin.bundle",
-      "name": "Supertonic (Experimental)",
-      "author": "TypeWhisper",
-      "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
-      "descriptions": {
-        "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
-      },
-      "category": "tts",
-      "categories": [
-        "tts"
-      ],
-      "iconSystemName": "waveform.circle.fill",
-      "requiresAPIKey": false,
-      "hosting": "local",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/supertonic/"
-    },
-    {
-      "id": "com.typewhisper.tts.system",
-      "bundleName": "SystemTTSPlugin.bundle",
-      "name": "System Voice",
-      "author": "TypeWhisper",
-      "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
-      "descriptions": {
-        "de": "Text-zu-Sprache ueber die integrierten macOS-AVSpeechSynthesizer-Stimmen fuer gesprochenes Feedback."
-      },
-      "category": "tts",
-      "iconSystemName": "speaker.wave.2.fill",
-      "requiresAPIKey": false,
       "locality": "local"
-    },
-    {
-      "id": "com.typewhisper.vercel-ai-gateway",
-      "bundleName": "VercelAIGatewayPlugin.bundle",
-      "name": "Vercel AI Gateway",
-      "author": "TypeWhisper",
-      "description": "Access speech-to-text models and hundreds of LLMs from OpenAI, Anthropic, Google, xAI and more through Vercel AI Gateway with a single API key. Shows model pricing and credit balance.",
-      "descriptions": {
-        "de": "Zugriff auf Spracherkennungsmodelle und Hunderte LLMs von OpenAI, Anthropic, Google, xAI und mehr über Vercel AI Gateway mit einem einzigen API-Schlüssel. Zeigt Modellpreise und Guthaben.",
-        "ja": "Vercel AI Gateway経由で、OpenAI、Anthropic、Google、xAIなどの音声認識モデルと数百のLLMに1つのAPIキーでアクセスできます。モデル料金とクレジット残高を表示します。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "llm"
-      ],
-      "iconSystemName": "triangle.fill",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/vercel-ai-gateway/",
-      "homepageURL": "https://vercel.com/ai-gateway"
-    },
-    {
-      "id": "com.typewhisper.webhook",
-      "bundleName": "WebhookPlugin.bundle",
-      "name": "Webhook Notifications",
-      "author": "TypeWhisper",
-      "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
-      "descriptions": {
-        "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden.",
-        "ja": "文字起こし済みまたは処理済みのテキストをHTTP POSTで任意のWebhook URLへ送信します。"
-      },
-      "category": "post-processor",
-      "iconSystemName": "arrow.up.forward.app",
-      "locality": "configurable",
-      "detailsURL": "https://www.typewhisper.com/addons/webhook/"
     },
     {
       "id": "com.typewhisper.whisperkit",
@@ -698,32 +238,7 @@
         "source-footage-progress"
       ],
       "iconSystemName": "waveform",
-      "locality": "local",
-      "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"
-    },
-    {
-      "id": "com.typewhisper.xai",
-      "bundleName": "XAIPlugin.bundle",
-      "name": "xAI / Grok",
-      "author": "TypeWhisper",
-      "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
-      "descriptions": {
-        "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech über xAI-Grok-APIs. Erfordert einen xAI API-Key.",
-        "ja": "xAI Grok APIによるクラウドLLM、音声認識、音声合成です。xAI APIキーが必要です。"
-      },
-      "category": "transcription",
-      "categories": [
-        "transcription",
-        "llm",
-        "tts"
-      ],
-      "iconSystemName": "sparkles",
-      "requiresAPIKey": true,
-      "hosting": "cloud",
-      "locality": "cloud",
-      "detailsURL": "https://www.typewhisper.com/addons/xai-grok/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/xai/logo-light.svg",
-      "iconDarkURL": "https://www.typewhisper.com/brand-logos/xai/logo-dark.svg"
+      "locality": "local"
     }
   ]
 }

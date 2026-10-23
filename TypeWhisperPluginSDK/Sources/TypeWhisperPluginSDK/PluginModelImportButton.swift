@@ -39,7 +39,6 @@ private struct PluginModelImportSheet: View {
     @State private var status = ""
     @State private var error: String?
     @State private var importedName: String?
-    @State private var importedModelHint: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -56,9 +55,6 @@ private struct PluginModelImportSheet: View {
                     .foregroundStyle(.green)
                 Text(String(localized: "You can select the engine in Dictation settings and manage the model in Integrations.", bundle: bundle))
                     .foregroundStyle(.secondary)
-                if let importedModelHint {
-                    Text(importedModelHint).foregroundStyle(.secondary)
-                }
             } else {
                 Picker(String(localized: "Source", bundle: bundle), selection: $useFolder) {
                     Text("Hugging Face").tag(false)
@@ -75,7 +71,7 @@ private struct PluginModelImportSheet: View {
                         Button(String(localized: "Choose Folder…", bundle: bundle)) { showFolderPicker = true }
                             .disabled(importTask != nil)
                     }
-                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.", bundle: bundle))
+                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. dictum keeps its own copy; your original files are not changed.", bundle: bundle))
                         .font(.caption).foregroundStyle(.secondary)
                 } else {
                     TextField("https://huggingface.co/owner/model", text: $repository)
@@ -154,9 +150,6 @@ private struct PluginModelImportSheet: View {
                 status = String(localized: "Importing and loading with \(importer.providerDisplayName)…", bundle: bundle)
                 let result = try await importer.importModel(candidate, token: importToken)
                 importedName = result.displayName
-                if candidate.modelType == "canary" {
-                    importedModelHint = String(localized: "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings.", bundle: bundle)
-                }
                 token = ""
             } catch is CancellationError {
                 status = ""

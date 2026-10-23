@@ -215,9 +215,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     var onDictationStart: ((UInt64) -> Void)?
-    /// Delivered on the main thread for a confirmed shortcut, before its action.
-    var onHotkeyAction: (() -> Void)?
-
     /// A Control-only hold is still ambiguous with ordinary keyboard shortcuts.
     /// Startup UI must not appear during this interval, but existing UI stays open.
     var isDictationStartPending: Bool { pendingHybridModifierHoldHotkey != nil }
@@ -2224,7 +2221,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.info(
             "Hybrid modifier hold confirmed: pressToActivationMs=\(String(format: "%.1f", pressToActivationMs), privacy: .public)"
         )
-        onHotkeyAction?()
         onDictationStart?(requestTimestamp)
     }
 
@@ -3030,11 +3026,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         hotkey: UnifiedHotkey,
         requestTimestamp: UInt64 = HotkeyService.requestTimestamp()
     ) {
-        // A bare Control press may belong to an unrelated shortcut. Report the
-        // delayed action only after its hold is confirmed, before recording starts.
-        if isActive || !shouldDelayHybridModifierHold(for: slotType, hotkey: hotkey) {
-            onHotkeyAction?()
-        }
         if slotType == .promptPalette {
             onPromptPaletteToggle?()
             return
@@ -3151,7 +3142,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - Key Down / Up (Profile Slots)
 
     private func handleProfileKeyDown(profileId: UUID) {
-        onHotkeyAction?()
         if isActive {
             // Any hotkey stops active recording
             isActive = false
@@ -3203,7 +3193,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - Key Down / Up (Workflow Slots)
 
     private func handleWorkflowKeyDown(workflowId: UUID, hotkey: UnifiedHotkey, behavior: WorkflowHotkeyBehavior) {
-        onHotkeyAction?()
         guard behavior == .startDictation else {
             guard !isActive else {
                 isActive = false

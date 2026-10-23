@@ -753,8 +753,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             repairSpaceReservation?.release()
         }
         do {
-            // Migrate old models if they exist
-            migrateOldModels(for: modelDef)
             let modelPath = resolvedModelPath(for: modelDef)
 
             let modelFolder: URL
@@ -1279,45 +1277,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         try? FileManager.default.removeItem(at: cache)
     }
 
-    /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
-    private func migrateOldModels(for modelDef: WhisperModelDef) {
-        let fm = FileManager.default
-        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-
-        let destination = resolvedModelPath(for: modelDef)
-        if isUsableDownloadedModel(at: destination) {
-            return
-        }
-        removeIncompleteModelIfNeeded(at: destination)
-
-        // Check both production and dev paths
-        for dirName in ["TypeWhisper", "TypeWhisper-Dev"] {
-            let legacyRoots = [
-                appSupport
-                    .appendingPathComponent(dirName)
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("argmaxinc")
-                    .appendingPathComponent("whisperkit-coreml"),
-                appSupport
-                    .appendingPathComponent(dirName)
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("models")
-                    .appendingPathComponent("argmaxinc")
-                    .appendingPathComponent("whisperkit-coreml"),
-            ]
-
-            for legacyRoot in legacyRoots {
-                let oldPath = legacyRoot.appendingPathComponent(modelDef.id)
-                guard isUsableDownloadedModel(at: oldPath) else { continue }
-                try? fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try? fm.moveItem(at: oldPath, to: destination)
-                if fm.fileExists(atPath: destination.path) {
-                    return
-                }
-            }
-        }
-    }
-
     // MARK: - Settings View
 
     var currentSettingsActivity: PluginSettingsActivity? {
@@ -1571,7 +1530,7 @@ private struct WhisperKitSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("WhisperKit", bundle: bundle)
+            Text(verbatim: "WhisperKit")
                 .font(.headline)
 
             Text("Local speech-to-text using OpenAI Whisper via CoreML. 99+ languages, streaming, translation to English.", bundle: bundle)
@@ -1753,7 +1712,7 @@ private struct WhisperKitSettingsView: View {
                             .foregroundStyle(.blue)
                     }
                 }
-                Text("\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
+                Text(verbatim: "\(modelDef.sizeDescription) - RAM: \(modelDef.ramRequirement)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1801,7 +1760,7 @@ private struct WhisperKitSettingsView: View {
                 ProgressView(value: downloadProgress)
                     .frame(width: 80)
                     .accessibilityLabel(Text("Downloading \(modelDef.displayName)", bundle: bundle))
-                Text("\(Int(downloadProgress * 100))%")
+                Text(verbatim: "\(Int(downloadProgress * 100))%")
                     .font(.caption)
                     .monospacedDigit()
                     .accessibilityHidden(true)

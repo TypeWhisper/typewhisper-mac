@@ -677,7 +677,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private static let systemAudioDetectionGracePeriod: TimeInterval = 2
     private static let systemAudioNonSilentThreshold: Float = 0.0001
 
-    static let recordingsDirectoryName = "TypeWhisper Recordings"
+    static let recordingsDirectoryName = "dictum Recordings"
     static let finalizationChunkFrameCount: AVAudioFrameCount = 8_192
 
     init(

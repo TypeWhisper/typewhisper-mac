@@ -4,8 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, appearance, dictation, hotkeys, recorder, speakers
-    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
-    case plugin(pluginId: String, itemId: String)
+    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, advanced, about
     case installedPlugin(pluginId: String)
 }
 
@@ -17,7 +16,6 @@ private struct SettingsDestination: Identifiable, Hashable {
     var iconURL: URL?
     var darkIconURL: URL?
     var isDimmed = false
-    var hasUpdate = false
 
     var id: SettingsTab { tab }
 }
@@ -31,7 +29,6 @@ struct SettingsView: View {
     @State private var selectedTab: SettingsTab
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var dictationRecovery = DictationRecoveryViewModel.shared
-    @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -58,11 +55,8 @@ struct SettingsView: View {
         case "dictionary", "dictionary-term-packs": return .dictionary
         case "snippets": return .snippets
         case "workflows": return .workflows
-        case "premium": return .premium
-        // "plugins" moves on to the first installed plugin once the plugins are loaded.
-        case "plugins", "integrations-available", "integrations-local": return .integrations
+        case "plugins": return firstPluginTab
         case "advanced": return .advanced
-        case "license": return .license
         case "about": return .about
         default: return .home
         }
@@ -104,33 +98,10 @@ struct SettingsView: View {
                 systemImage: "point.3.connected.trianglepath.dotted",
                 badge: nil
             ),
-            SettingsDestination(
-                tab: .premium,
-                title: localizedAppText("Premium", de: "Premium"),
-                systemImage: "sparkles",
-                badge: nil
-            ),
-            SettingsDestination(
-                tab: .integrations,
-                title: localizedAppText("Discover plugins", de: "Plugins entdecken"),
-                systemImage: "puzzlepiece.extension",
-                badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
-            ),
             SettingsDestination(tab: .advanced, title: String(localized: "Advanced"), systemImage: "gearshape.2", badge: nil),
-            SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
 
-        let pluginDestinations = pluginManager.userInterfaceContributions.flatMap { contribution in
-            contribution.settingsSidebarItems.map { item in
-                SettingsDestination(
-                    tab: .plugin(pluginId: contribution.pluginId, itemId: item.id),
-                    title: item.title,
-                    systemImage: item.systemImageName,
-                    badge: nil
-                )
-            }
-        }
 
         let installedPluginDestinations = pluginManager.loadedPlugins
             // Speaker detection is managed on the Speakers page, not as a plugin.
@@ -141,28 +112,20 @@ struct SettingsView: View {
                 return lhs.manifest.name.localizedCompare(rhs.manifest.name) == .orderedAscending
             }
             .map { plugin in
-                let registryPlugin = registryService.registry.first { $0.id == plugin.id }
                 return SettingsDestination(
                     tab: .installedPlugin(pluginId: plugin.id),
                     title: plugin.manifest.name,
-                    systemImage: registryPlugin?.iconSystemName
-                        ?? plugin.manifest.iconSystemName
+                    systemImage: plugin.manifest.iconSystemName
                         ?? "puzzlepiece.extension",
                     badge: nil,
-                    iconURL: validatedHTTPSURL(registryPlugin?.iconURL)
-                        ?? validatedHTTPSURL(plugin.manifest.iconURL)
+                    iconURL: validatedHTTPSURL(plugin.manifest.iconURL)
                         ?? plugin.iconResourceURL,
-                    darkIconURL: validatedHTTPSURL(registryPlugin?.iconDarkURL)
-                        ?? validatedHTTPSURL(plugin.manifest.iconDarkURL),
-                    isDimmed: !plugin.isEnabled,
-                    hasUpdate: {
-                        if case .updateAvailable = registryService.installInfo(for: plugin.id) { return true }
-                        return false
-                    }()
+                    darkIconURL: validatedHTTPSURL(plugin.manifest.iconDarkURL),
+                    isDimmed: !plugin.isEnabled
                 )
             }
 
-        return builtInDestinations + installedPluginDestinations + pluginDestinations
+        return builtInDestinations + installedPluginDestinations
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -226,7 +189,7 @@ struct SettingsView: View {
         .onChange(of: pluginManager.loadedPlugins.map(\.id)) { _, pluginIds in
             // An uninstalled plugin takes its sidebar entry with it.
             if case .installedPlugin(let pluginId) = selectedTab, !pluginIds.contains(pluginId) {
-                selectedTab = .integrations
+                selectedTab = Self.firstPluginTab
             }
             selectScreenshotPluginPageIfNeeded()
         }
@@ -236,10 +199,20 @@ struct SettingsView: View {
         tab
     }
 
+    static var firstPluginTab: SettingsTab {
+        guard let plugin = PluginManager.shared?.loadedPlugins
+            .filter({ $0.id != SpeakerTranscriptCoordinator.bundledPluginID })
+            .sorted(by: {
+                if $0.isEnabled != $1.isEnabled { return $0.isEnabled }
+                return $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending
+            }).first else { return .dictation }
+        return .installedPlugin(pluginId: plugin.id)
+    }
+
     private func selectScreenshotPluginPageIfNeeded() {
         guard AppConstants.isScreenshotAutomation,
               AppConstants.screenshotState == "plugins",
-              selectedTab == .integrations,
+              selectedTab == .dictation,
               let plugin = pluginManager.loadedPlugins
                 .filter({ $0.isEnabled && $0.supportsSettingsWindow })
                 .min(by: { $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending }) else {
@@ -309,33 +282,13 @@ struct SettingsView: View {
             WorkflowsSettingsView()
         case .prompts:
             WorkflowsSettingsView()
-        case .premium:
-            PremiumSettingsView()
-        case .integrations:
-            PluginSettingsView()
         case .advanced:
             AdvancedSettingsView()
-        case .license:
-            #if APPSTORE
-            PremiumSettingsView()
-            #else
-            LicenseSettingsView()
-            #endif
         case .about:
             AboutSettingsView()
         case .installedPlugin(let pluginId):
             PluginSettingsView(focusedPluginId: pluginId)
                 .id(pluginId)
-        case .plugin(let pluginId, let itemId):
-            if let view = pluginManager.settingsSidebarView(pluginId: pluginId, itemId: itemId) {
-                view
-            } else {
-                ContentUnavailableView(
-                    String(localized: "Integration Unavailable"),
-                    systemImage: "puzzlepiece.extension",
-                    description: Text(String(localized: "Enable the integration to open this page."))
-                )
-            }
         }
     }
 }
@@ -672,32 +625,22 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .statistics),
         settingsDestination(destinations, .dictionary),
         settingsDestination(destinations, .snippets),
-        settingsDestination(destinations, .workflows),
-        settingsDestination(destinations, .premium)
+        settingsDestination(destinations, .workflows)
     ]
 
     let pluginDestinations = destinations.filter {
         switch $0.tab {
-        case .plugin, .installedPlugin: return true
+        case .installedPlugin: return true
         default: return false
         }
     }
 
-    let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
+    let integrationDestinations = pluginDestinations
 
-    #if APPSTORE
-    // Premium is bought on the Premium page, so there is no License page.
     let systemDestinations = [
         settingsDestination(destinations, .advanced),
         settingsDestination(destinations, .about)
     ]
-    #else
-    let systemDestinations = [
-        settingsDestination(destinations, .advanced),
-        settingsDestination(destinations, .license),
-        settingsDestination(destinations, .about)
-    ]
-    #endif
 
     return [
         SettingsDestinationSection(
@@ -799,14 +742,6 @@ private struct SettingsSidebarRow: View {
 
             Spacer(minLength: 8)
 
-            if destination.hasUpdate {
-                Image(systemName: "arrow.down.circle.fill")
-                    .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
-                    .help(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
-                    // Read as the row's value instead.
-                    .accessibilityHidden(true)
-            }
-
             if let badge = destination.badge {
                 SettingsSidebarBadge(count: badge)
                     .accessibilityHidden(true)
@@ -833,9 +768,6 @@ private struct SettingsSidebarRow: View {
         var parts: [String] = []
         if destination.isDimmed {
             parts.append(localizedAppText("Disabled", de: "Deaktiviert", ja: "無効", zh: "已停用"))
-        }
-        if destination.hasUpdate {
-            parts.append(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります", zh: "有可用更新"))
         }
         if let badge = destination.badge {
             parts.append(localizedAppText(
@@ -1200,7 +1132,7 @@ struct RecordingSettingsView: View {
                 Section(String(localized: "Engine")) {
                 let engines = pluginManager.transcriptionEngines
                 if engines.isEmpty {
-                    Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
+                    Text(String(localized: "Enable a transcription engine in its settings."))
                         .foregroundStyle(.secondary)
                 } else {
                     // Shows the engine dictation uses right now, which can be a
@@ -1391,7 +1323,7 @@ struct RecordingSettingsView: View {
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
                 ))
 
-                Text(String(localized: "When enabled, TypeWhisper uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
+                Text(String(localized: "When enabled, dictum uses target-app rules and available cursor context for smarter insertion. Workflow output format settings still choose the inserted format for each workflow."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

@@ -32,7 +32,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
         try write("cache", to: auxiliary.appendingPathComponent("Cache.db"))
 
         userDefaults.set("de", forKey: "selectedLanguage")
-        userDefaults.set("SECRET-LICENSE", forKey: UserDefaultsKeys.managedLicenseKey)
+        userDefaults.set("SECRET-LICENSE", forKey: "ManagedLicenseKey")
         userDefaults.set(Data([1, 2, 3]), forKey: "cloudFolderSync.folderBookmark")
         userDefaults.set(Date(timeIntervalSince1970: 0), forKey: "pluginRegistryLastUpdateCheck")
 
@@ -122,7 +122,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
         let preferencesData = try Data(contentsOf: root.appendingPathComponent("preferences.json"))
         let preferences = try XCTUnwrap(JSONSerialization.jsonObject(with: preferencesData) as? [String: Any])
         XCTAssertEqual(preferences["selectedLanguage"] as? String, "de")
-        XCTAssertNil(preferences[UserDefaultsKeys.managedLicenseKey])
+        XCTAssertNil(preferences["ManagedLicenseKey"])
         XCTAssertEqual(preferences["cloudFolderSync.folderBookmark"] as? String, Data([1, 2, 3]).base64EncodedString())
         XCTAssertEqual(preferences["pluginRegistryLastUpdateCheck"] as? String, "1970-01-01T00:00:00Z")
     }

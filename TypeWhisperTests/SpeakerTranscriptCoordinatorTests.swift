@@ -71,13 +71,11 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
     private var directory: URL!
     private var history: HistoryService!
     private var provider: FakeDiarizationProvider!
-    private var hasPremium = true
 
     override func setUp() async throws {
         directory = try TestSupport.makeTemporaryDirectory()
         history = HistoryService(appSupportDirectory: directory)
         provider = FakeDiarizationProvider()
-        hasPremium = true
     }
 
     override func tearDown() async throws {
@@ -89,8 +87,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         let provider = provider ?? self.provider
         return SpeakerTranscriptCoordinator(
             historyService: history,
-            providerSource: { provider },
-            premiumAccess: { [unowned self] in self.hasPremium }
+            providerSource: { provider }
         )
     }
 
@@ -172,15 +169,15 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(history.totalRecords, 2)
     }
 
-    func testNothingIsSavedOrDetectedWithoutPremium() async throws {
-        hasPremium = false
+    func testRecordingIsSavedWithoutAnAccount() async throws {
         let coordinator = makeCoordinator()
 
         let addedID = await coordinator.addRecording(input())
 
-        XCTAssertNil(addedID)
-        XCTAssertEqual(history.totalRecords, 0)
-        XCTAssertTrue(provider.requests.isEmpty)
+        XCTAssertNotNil(addedID)
+        try await waitUntilIdle(coordinator)
+        XCTAssertEqual(history.totalRecords, 1)
+        XCTAssertEqual(provider.requests.count, 1)
     }
 
     /// Issue #1558: the Recorder hands every transcription of a recording to the
@@ -242,7 +239,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(provider.requests.last?.speakerCount, 2)
     }
 
-    func testRerunWithoutPremiumKeepsTheExistingTranscript() async throws {
+    func testRerunWithoutAnAccountReplacesTheTranscript() async throws {
         provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
         let coordinator = makeCoordinator()
         let addedID = await coordinator.addRecording(input())
@@ -250,13 +247,13 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         try await waitUntilIdle(coordinator)
         let revision = try XCTUnwrap(history.record(withID: id)?.speakerTranscript?.revision)
 
-        hasPremium = false
-        XCTAssertEqual(coordinator.start(recordID: id), .premiumRequired)
+        XCTAssertNil(coordinator.start(recordID: id))
+        try await waitUntilIdle(coordinator)
 
         let record = try XCTUnwrap(history.record(withID: id))
         XCTAssertEqual(record.speakerTranscriptState, .ready)
-        XCTAssertEqual(record.speakerTranscript?.revision, revision)
-        XCTAssertEqual(provider.requests.count, 1)
+        XCTAssertNotEqual(record.speakerTranscript?.revision, revision)
+        XCTAssertEqual(provider.requests.count, 2)
     }
 
     func testMissingModelsAreDownloadedBeforeDetection() async throws {
@@ -725,8 +722,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         let store = VoiceProfileStore(directoryURL: directory.appendingPathComponent("VoiceProfiles"))
         coordinator.voices = SpeakerVoiceProfileService(
             store: store,
-            historyService: history,
-            premiumAccess: { [unowned self] in self.hasPremium }
+            historyService: history
         )
 
         let addedID = await coordinator.addRecording(input())
@@ -744,7 +740,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         provider.embeddings = ["x": [1, 0]]
         let coordinator = makeCoordinator()
         let store = VoiceProfileStore(directoryURL: directory.appendingPathComponent("VoiceProfiles"))
-        coordinator.voices = SpeakerVoiceProfileService(store: store, historyService: history, premiumAccess: { true })
+        coordinator.voices = SpeakerVoiceProfileService(store: store, historyService: history)
         var recording = input()
         recording.ownSpeech = [1...2]
 
@@ -793,7 +789,7 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         )
     }
 
-    func testLabellingNeedsPremiumAndKeepsLabelsAnEngineReturned() async throws {
+    func testLabellingKeepsLabelsAnEngineReturned() async throws {
         let coordinator = makeCoordinator()
         let labelled = input(labels: true)
 
@@ -801,14 +797,6 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(kept.map(\.speakerLabel), ["A", "B", "A"])
         XCTAssertTrue(provider.requests.isEmpty)
 
-        hasPremium = false
-        do {
-            _ = try await coordinator.labelingSpeakers(in: input().result, samples: input().samples)
-            XCTFail("Expected the Premium error")
-        } catch let error as SpeakerTranscriptCoordinator.StartError {
-            XCTAssertEqual(error, .premiumRequired)
-        }
-        XCTAssertTrue(provider.requests.isEmpty)
     }
 
     func testAFixedSpeakerCountDetectsAgainOverEngineLabels() async throws {
@@ -831,19 +819,6 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
             TranscriptionSegment(text: "Hello.", start: 1, end: 2, speakerLabel: "Speaker A"),
         ])
         XCTAssertEqual(text, "Speaker B: Good morning.\n\nSpeaker A: Hello.")
-    }
-
-    func testPremiumChangesRedrawTheSpeakerViews() async {
-        let coordinator = makeCoordinator()
-        let premium = PassthroughSubject<Void, Never>()
-        coordinator.observePremiumChanges([premium.eraseToAnyPublisher()])
-        let redrawn = expectation(description: "objectWillChange")
-        let observation = coordinator.objectWillChange.sink { redrawn.fulfill() }
-
-        premium.send()
-
-        await fulfillment(of: [redrawn], timeout: 1)
-        observation.cancel()
     }
 
     func testPromotionWaitsForQueuedAndRunningSpeakerDetection() async throws {
@@ -944,11 +919,6 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         }
     }
 
-    func testSupporterStatusDoesNotUnlockSpeakerDetection() {
-        XCTAssertFalse(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: false, hasPremiumEntitlement: false))
-        XCTAssertTrue(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: true, hasPremiumEntitlement: false))
-        XCTAssertTrue(SpeakerWorkspacePremiumAccess.isGranted(hasCommercialLicense: false, hasPremiumEntitlement: true))
-    }
 }
 
 private final class FakeDiarizationProvider: SpeakerDiarizationProviderPlugin, @unchecked Sendable {

@@ -151,11 +151,9 @@ struct SpeakerWorkspaceView: View {
             ) {
                 model.select(turn: paragraph.turnIndex, extending: false, toggling: true)
             }
-            if coordinator.hasPremiumAccess {
-                Button(String(localized: "speakers.action.editText")) {
-                    textDraft = paragraph.text
-                    editedParagraph = paragraph
-                }
+            Button(String(localized: "speakers.action.editText")) {
+                textDraft = paragraph.text
+                editedParagraph = paragraph
             }
             Button(String(localized: "speakers.filter.show")) {
                 model.filteredSpeaker = paragraph.speakerID
@@ -230,7 +228,6 @@ struct SpeakerWorkspaceView: View {
 
     @ViewBuilder
     private func paragraphMenu(_ paragraph: SpeakerParagraph, startsTurn: Bool) -> some View {
-        let canCorrect = coordinator.hasPremiumAccess
         let turnIndexes = model.actionTurns(for: paragraph.turnIndex)
         if audioURL != nil {
             Button(String(localized: "speakers.action.playFromHere")) {
@@ -252,7 +249,6 @@ struct SpeakerWorkspaceView: View {
                 model.assign(turns: turnIndexes, to: nil, undoManager: undoManager)
             }
         }
-        .disabled(!canCorrect)
         if !startsTurn {
             Menu(String(localized: "speakers.action.split")) {
                 ForEach(model.speakerIDs.filter { $0 != paragraph.speakerID }, id: \.self) { speakerID in
@@ -265,7 +261,6 @@ struct SpeakerWorkspaceView: View {
                     model.split(at: paragraph, to: nil, undoManager: undoManager)
                 }
             }
-            .disabled(!canCorrect)
         }
         if let turn = model.turnAtPlayhead, turn.index == paragraph.turnIndex {
             Menu(String(localized: "speakers.action.splitAtPlayhead")) {
@@ -279,22 +274,14 @@ struct SpeakerWorkspaceView: View {
                     model.splitAtPlayhead(to: nil, undoManager: undoManager)
                 }
             }
-            .disabled(!canCorrect)
         }
         Button(String(localized: "speakers.action.editText")) {
             textDraft = paragraph.text
             editedParagraph = paragraph
         }
-        .disabled(!canCorrect)
         Divider()
         Button(String(localized: "speakers.filter.show")) {
             model.filteredSpeaker = paragraph.speakerID
-        }
-        if !canCorrect {
-            Divider()
-            Button(String(localized: "speakers.premium.required")) {
-                SettingsNavigationCoordinator.shared.navigate(to: .premium)
-            }
         }
     }
 
@@ -344,7 +331,6 @@ struct SpeakerWorkspaceView: View {
             guard press.modifiers.isEmpty,
                   let number = Int(press.characters), (1...9).contains(number),
                   !model.selectedTurns.isEmpty,
-                  coordinator.hasPremiumAccess,
                   model.speakerIDs.indices.contains(number - 1) else { return .ignored }
             model.assign(
                 turns: model.selectedTurns.sorted(),
@@ -424,8 +410,7 @@ private struct SpeakerStrip: View {
                                 model: model,
                                 speakerID: speakerID,
                                 share: model.shares.first { $0.speakerID == speakerID },
-                                hasAudio: hasAudio,
-                                canCorrect: coordinator.hasPremiumAccess
+                                hasAudio: hasAudio
                             )
                             // The speakers come in from the left, one after the other.
                             .transition(
@@ -470,11 +455,6 @@ struct SpeakerRedetectMenu: View {
                 }
             }
             .disabled(startError != nil)
-            if startError == .premiumRequired {
-                Button(String(localized: "speakers.premium.required")) {
-                    SettingsNavigationCoordinator.shared.navigate(to: .premium)
-                }
-            }
         } label: {
             Image(systemName: "person.2.badge.gearshape")
         }
@@ -516,7 +496,6 @@ private struct SpeakerChip: View {
     let speakerID: String
     let share: SpeakerShare?
     let hasAudio: Bool
-    let canCorrect: Bool
     @State private var showsDetails = false
     @State private var isHovered = false
 
@@ -566,8 +545,7 @@ private struct SpeakerChip: View {
                 model: model,
                 speakerID: speakerID,
                 share: share,
-                hasAudio: hasAudio,
-                canCorrect: canCorrect
+                hasAudio: hasAudio
             )
             .frame(width: 270)
             .padding(8)
@@ -616,7 +594,6 @@ private struct SpeakerInspectorRow: View {
     let speakerID: String
     let share: SpeakerShare?
     let hasAudio: Bool
-    let canCorrect: Bool
     @Environment(\.undoManager) private var undoManager
     @State private var nameDraft = ""
     @State private var confirmsEnrollment = false
@@ -637,7 +614,6 @@ private struct SpeakerInspectorRow: View {
                     .onChange(of: isNameFocused) { _, focused in
                         if !focused { commitName() }
                     }
-                    .disabled(!canCorrect)
                     .accessibilityLabel(String(localized: "speakers.rename.help"))
                 if voiceState == .linked {
                     Image(systemName: "person.wave.2")
@@ -701,14 +677,13 @@ private struct SpeakerInspectorRow: View {
                             }
                         }
                     }
-                    .disabled(!canCorrect || model.speakerIDs.count < 2)
+                    .disabled(model.speakerIDs.count < 2)
                     if voiceState == .canEnroll {
                         Divider()
                         Button(String(localized: "speakers.voice.enroll")) { confirmsEnrollment = true }
                     } else if voiceState == .linked || voiceState == .outdated {
                         Divider()
                         Button(String(localized: "speakers.voice.relearn")) { model.relearnVoice(of: speakerID) }
-                            .disabled(!canCorrect)
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

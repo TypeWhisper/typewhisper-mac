@@ -17,9 +17,7 @@
         "llm"
     ],
     "iconSystemName": "sparkles",
-    "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg",
     "principalClass": "GeminiPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/gemini/"
+    "locality": "cloud"
 }

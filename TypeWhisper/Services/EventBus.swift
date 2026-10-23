@@ -2,7 +2,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "EventBus")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "EventBus")
 
 @MainActor
 final class EventBus: EventBusProtocol, @unchecked Sendable {

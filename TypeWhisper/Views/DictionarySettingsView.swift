@@ -86,14 +86,12 @@ struct DictionarySettingsView: View {
             Divider()
 
             if settingsNavigation.dictionaryPart == .learning {
-                SettingsPremiumPart(
+                SettingsDetailPart(
                     backTitle: String(localized: "Dictionary"),
                     onBack: { settingsNavigation.dictionaryPart = .dictionary }
                 ) {
-                    PremiumCorrectionLearningSettingsView(
-                        licenseService: .shared,
-                        correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService,
-                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    CorrectionLearningSettingsView(
+                        correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService
                     )
                 }
             } else {
@@ -111,7 +109,7 @@ struct DictionarySettingsView: View {
     private var dictionaryPart: some View {
         VStack(spacing: 0) {
             #if !APPSTORE
-            PremiumActiveFeatureOverview.link(to: .correctionLearning)
+            FeatureSettingsLink(feature: .correctionLearning)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.vertical, 12)
             #endif
@@ -753,8 +751,8 @@ private struct DictionaryTrainingSheet: View {
                 localizedAppText("Choose the target word", de: "Zielwort auswählen"),
                 systemImage: "character.cursor.ibeam",
                 description: Text(localizedAppText(
-                    "TypeWhisper will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
-                    de: "TypeWhisper nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
+                    "dictum will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
+                    de: "dictum nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
                 ))
             )
 
@@ -1756,7 +1754,7 @@ private struct DictionaryCorrectionAliasRow: View {
 
 private struct DictionaryRegexBadge: View {
     var body: some View {
-        Text(".*")
+        Text(verbatim: ".*")
             .font(.caption2.monospaced())
             .padding(.horizontal, 5)
             .padding(.vertical, 2)

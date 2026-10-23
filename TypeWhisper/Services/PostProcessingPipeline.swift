@@ -2,7 +2,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PostProcessingPipeline")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PostProcessingPipeline")
 
 func isPostProcessingCancellation(_ error: Error) -> Bool {
     if error is CancellationError { return true }

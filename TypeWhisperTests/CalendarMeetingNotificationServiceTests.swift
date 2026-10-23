@@ -194,7 +194,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(startDelay))
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: startMode, autoStopEnabled: false,
+            startMode: startMode, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: []
         )
@@ -441,7 +441,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(120))
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            startMode: .reminder, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: []
         )
@@ -526,7 +526,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(600))
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .automatic, autoStopEnabled: false,
+            startMode: .automatic, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: []
         )
@@ -754,7 +754,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(2 * 60))
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            startMode: .reminder, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: []
         )
@@ -866,12 +866,12 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
             hasOtherParticipants: false
         )
         let automatic = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .automatic, autoStopEnabled: false,
+            startMode: .automatic, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: []
         )
         let changed = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: startMode, autoStopEnabled: false,
+            startMode: startMode, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: [],
             confirmSoloEvents: confirmSoloEvents
@@ -932,7 +932,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         }
         if switchOffFirst {
             let off = CalendarMeetingAutomationConfiguration(
-                hasPremiumAccess: true, startMode: .off, autoStopEnabled: false,
+                startMode: .off, autoStopEnabled: false,
                 calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
                 enabledProviders: [.zoom], suppressedOccurrenceDigests: []
             )
@@ -1252,7 +1252,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
             meetingLinks: [identity], isAdHoc: isAdHoc
         )
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            startMode: .reminder, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: [], detectAdHocMeetings: isAdHoc
         )
@@ -1434,7 +1434,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
             meetingLinks: [identity], isAdHoc: isAdHoc
         )
         let configuration = CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: true, startMode: .reminder, autoStopEnabled: false,
+            startMode: .reminder, autoStopEnabled: false,
             calendarAuthorization: .fullAccess, selectedCalendarIDs: [occurrence.calendarID],
             enabledProviders: [.zoom], suppressedOccurrenceDigests: [],
             detectAdHocMeetings: isAdHoc

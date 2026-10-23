@@ -1,0 +1,429 @@
+{
+  "title": "dictum (com.schneidervvv.dictum)",
+  "description": "Managed settings for dictum. Only configure the keys you manage.",
+  "__preferencedomain": "com.schneidervvv.dictum",
+  "properties": {
+    "TranscriptionProviderId": {
+      "title": "Transcription provider",
+      "description": "Plugin ID of the transcription provider, or <plugin ID>:<provider ID> for one engine of a plugin with several. Set together with TranscriptionModelId.",
+      "property_order": 5,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+        }
+      ]
+    },
+    "TranscriptionModelId": {
+      "title": "Transcription model",
+      "description": "Model ID as the provider lists it, for example parakeet-tdt-0.6b-v3. Set together with TranscriptionProviderId.",
+      "property_order": 10,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+        }
+      ]
+    },
+    "LlmProviderId": {
+      "title": "Language model provider",
+      "description": "Plugin ID of the language model provider, <plugin ID>:<provider ID>, or com.typewhisper.apple-intelligence. Set together with LlmModelId.",
+      "property_order": 15,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+        }
+      ]
+    },
+    "LlmModelId": {
+      "title": "Language model",
+      "description": "Model ID as the provider lists it. Set together with LlmProviderId.",
+      "property_order": 20,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+        }
+      ]
+    },
+    "AllowedTranscriptionProviders": {
+      "title": "Allowed transcription providers",
+      "description": "Provider IDs that may receive audio. An empty list allows none.",
+      "property_order": 25,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "array",
+          "items": {
+            "title": "ID",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          },
+          "maxItems": 256
+        }
+      ]
+    },
+    "AllowedLlmProviders": {
+      "title": "Allowed language model providers",
+      "description": "Provider IDs that may receive text, including com.typewhisper.apple-intelligence. An empty list allows none.",
+      "property_order": 30,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "array",
+          "items": {
+            "title": "ID",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          },
+          "maxItems": 256
+        }
+      ]
+    },
+    "AllowedPlugins": {
+      "title": "Allowed plugins",
+      "description": "Plugin IDs that may be installed, loaded and enabled. An empty list allows none.",
+      "property_order": 35,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "array",
+          "items": {
+            "title": "ID",
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+          },
+          "maxItems": 256
+        }
+      ]
+    },
+    "AllowCloudTranscription": {
+      "title": "Allow cloud transcription",
+      "description": "Off keeps audio on the Mac: only plugins whose locality is local transcribe.",
+      "property_order": 40,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
+    "AllowCloudTextProcessing": {
+      "title": "Allow cloud text processing",
+      "description": "Off keeps transcripts, prompts, dictionary terms and context on the Mac.",
+      "property_order": 45,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
+    "AllowModelDownloads": {
+      "title": "Allow model downloads",
+      "description": "Off refuses model downloads. Installed models keep working.",
+      "property_order": 50,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
+    "LaunchAtLogin": {
+      "title": "Launch at login",
+      "description": "Registers or removes dictum's login item and locks the setting.",
+      "property_order": 55,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
+    "SkipOnboardingWhenReady": {
+      "title": "Skip setup when ready",
+      "description": "Keeps the setup wizard closed when an engine, the permissions and a dictation shortcut are ready.",
+      "property_order": 60,
+      "links": [
+        {
+          "rel": "More information",
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+        }
+      ],
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "boolean"
+        }
+      ]
+    },
+    "Recommended": {
+      "title": "Recommended settings (users can change)",
+      "description": "Defaults that apply until the user makes a choice.",
+      "property_order": 65,
+      "anyOf": [
+        {
+          "type": "null",
+          "title": "Not Configured"
+        },
+        {
+          "title": "Configured",
+          "type": "object",
+          "properties": {
+            "TranscriptionProviderId": {
+              "title": "Transcription provider",
+              "description": "Plugin ID of the transcription provider, or <plugin ID>:<provider ID> for one engine of a plugin with several. Set together with TranscriptionModelId.",
+              "property_order": 5,
+              "links": [
+                {
+                  "rel": "More information",
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+                }
+              ],
+              "anyOf": [
+                {
+                  "type": "null",
+                  "title": "Not Configured"
+                },
+                {
+                  "title": "Configured",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                }
+              ]
+            },
+            "TranscriptionModelId": {
+              "title": "Transcription model",
+              "description": "Model ID as the provider lists it, for example parakeet-tdt-0.6b-v3. Set together with TranscriptionProviderId.",
+              "property_order": 10,
+              "links": [
+                {
+                  "rel": "More information",
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+                }
+              ],
+              "anyOf": [
+                {
+                  "type": "null",
+                  "title": "Not Configured"
+                },
+                {
+                  "title": "Configured",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                }
+              ]
+            },
+            "LlmProviderId": {
+              "title": "Language model provider",
+              "description": "Plugin ID of the language model provider, <plugin ID>:<provider ID>, or com.typewhisper.apple-intelligence. Set together with LlmModelId.",
+              "property_order": 15,
+              "links": [
+                {
+                  "rel": "More information",
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+                }
+              ],
+              "anyOf": [
+                {
+                  "type": "null",
+                  "title": "Not Configured"
+                },
+                {
+                  "title": "Configured",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                }
+              ]
+            },
+            "LlmModelId": {
+              "title": "Language model",
+              "description": "Model ID as the provider lists it. Set together with LlmProviderId.",
+              "property_order": 20,
+              "links": [
+                {
+                  "rel": "More information",
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+                }
+              ],
+              "anyOf": [
+                {
+                  "type": "null",
+                  "title": "Not Configured"
+                },
+                {
+                  "title": "Configured",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]*[^\\s\\u0000-\\u001F\\u007F-\\u009F][^\\u0000-\\u001F\\u007F-\\u009F]*$"
+                }
+              ]
+            },
+            "LaunchAtLogin": {
+              "title": "Launch at login",
+              "description": "Registers or removes dictum's login item and locks the setting.",
+              "property_order": 25,
+              "links": [
+                {
+                  "rel": "More information",
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
+                }
+              ],
+              "anyOf": [
+                {
+                  "type": "null",
+                  "title": "Not Configured"
+                },
+                {
+                  "title": "Configured",
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

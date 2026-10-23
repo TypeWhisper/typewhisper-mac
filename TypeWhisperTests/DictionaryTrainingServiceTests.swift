@@ -1,4 +1,3 @@
-import Combine
 import XCTest
 @testable import TypeWhisper
 
@@ -6,56 +5,6 @@ final class DictionaryTrainingServiceTests: XCTestCase {
     private enum TestError: Error {
         case transcriptionFailed
         case saveFailed
-    }
-
-    @MainActor
-    func testTrainingSuppressesHighlightsDuringPreparationRecordingAndTranscription() async throws {
-        let suiteName = "TypeWhisperTests.WhatsNewTraining.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        let coordinator = WhatsNewCoordinator(defaults: defaults)
-        let otherActivity = CurrentValueSubject<Bool, Never>(false)
-        let snapshot = makeSnapshot()
-        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
-            engineSnapshot: { snapshot },
-            canTranscribe: { true },
-            requestMicrophonePermission: {
-                XCTAssertTrue(coordinator.operationInProgress)
-                XCTAssertFalse(coordinator.isPresenting)
-                return true
-            },
-            startRecording: {
-                XCTAssertTrue(coordinator.operationInProgress)
-                XCTAssertFalse(coordinator.beginManualPresentation())
-            },
-            stopRecording: { [0.1] },
-            discardActiveRecording: {},
-            transcribe: { _ in
-                XCTAssertTrue(coordinator.operationInProgress)
-                XCTAssertFalse(coordinator.beginManualPresentation())
-                return "Today I want to say TypeWhisper clearly."
-            },
-            dictionaryEntries: { [] },
-            commit: { [self] _, _ in self.emptyCommitResult() }
-        ))
-        coordinator.observeActivity([service.activityPublisher, otherActivity.eraseToAnyPublisher()])
-        service.canonicalWord = "TypeWhisper"
-        service.beginTraining(localeIdentifier: "en_US")
-        XCTAssertTrue(coordinator.beginManualPresentation())
-
-        await service.startRecording(sampleID: service.samples[0].id)
-        XCTAssertTrue(coordinator.operationInProgress)
-        XCTAssertTrue(coordinator.hasUnseenContent)
-        otherActivity.send(true)
-        await service.stopRecordingAndTranscribe(sampleID: service.samples[0].id)
-        XCTAssertNil(service.activeSampleID)
-        XCTAssertTrue(coordinator.operationInProgress, "Finishing training must not clear another operation")
-        otherActivity.send(false)
-
-        XCTAssertFalse(coordinator.operationInProgress)
-        XCTAssertFalse(coordinator.isPresenting)
-        XCTAssertTrue(coordinator.beginManualPresentation())
     }
 
     @MainActor

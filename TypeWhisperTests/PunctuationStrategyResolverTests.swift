@@ -33,7 +33,7 @@ final class PunctuationStrategyResolverTests: XCTestCase {
     }
 
     @MainActor
-    func testResolverProvidesVendorHintForParakeetGerman() {
+    func testResolverStartsUnverifiedForQwen3German() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)
         defer { defaults.removePersistentDomain(forName: #function) }
@@ -42,13 +42,13 @@ final class PunctuationStrategyResolverTests: XCTestCase {
         let resolver = PunctuationStrategyResolver(profileStore: store)
 
         let resolved = resolver.resolve(
-            engineId: "parakeet",
-            modelId: "v3",
+            engineId: "qwen3",
+            modelId: "qwen3-asr-1.7b-6bit",
             configuredLanguage: "de",
             detectedLanguage: nil
         )
 
         XCTAssertEqual(resolved?.strategy, .automatic)
-        XCTAssertEqual(resolved?.profile.verificationState, .vendorHint)
+        XCTAssertEqual(resolved?.profile.verificationState, .unknown)
     }
 }

@@ -5,49 +5,60 @@
 	<key>PayloadContent</key>
 	<array>
 		<dict>
-			<key>AllowPluginDownloads</key>
-			<false/>
 			<key>AllowedLlmProviders</key>
 			<array>
 				<string>com.typewhisper.openai</string>
-				<string>com.typewhisper.apple-intelligence</string>
 			</array>
 			<key>AllowedTranscriptionProviders</key>
 			<array>
-				<string>com.typewhisper.parakeet</string>
 				<string>com.typewhisper.openai</string>
+				<string>com.typewhisper.groq</string>
 			</array>
 			<key>PayloadDisplayName</key>
-			<string>TypeWhisper managed settings (com.typewhisper.mac)</string>
+			<string>dictum managed settings (com.schneidervvv.dictum)</string>
 			<key>PayloadIdentifier</key>
-			<string>com.typewhisper.mdm.approved-cloud.com.typewhisper.mac</string>
+			<string>com.schneidervvv.dictum.mdm.cloud.com.schneidervvv.dictum</string>
 			<key>PayloadType</key>
-			<string>com.typewhisper.mac</string>
+			<string>com.schneidervvv.dictum</string>
 			<key>PayloadUUID</key>
-			<string>778F8148-74B4-5069-9742-3D05DE5CB0A9</string>
+			<string>AB648E6E-3C12-57D0-B998-82F5A00662F8</string>
 			<key>PayloadVersion</key>
 			<integer>1</integer>
-			<key>Recommended</key>
-			<dict>
-				<key>TranscriptionModelId</key>
-				<string>gpt-4o-transcribe</string>
-				<key>TranscriptionProviderId</key>
+		</dict>
+		<dict>
+			<key>AllowedLlmProviders</key>
+			<array>
 				<string>com.typewhisper.openai</string>
-			</dict>
+			</array>
+			<key>AllowedTranscriptionProviders</key>
+			<array>
+				<string>com.typewhisper.openai</string>
+				<string>com.typewhisper.groq</string>
+			</array>
+			<key>PayloadDisplayName</key>
+			<string>dictum managed settings (com.typewhisper.typewhisper-app)</string>
+			<key>PayloadIdentifier</key>
+			<string>com.schneidervvv.dictum.mdm.cloud.com.typewhisper.typewhisper-app</string>
+			<key>PayloadType</key>
+			<string>com.typewhisper.typewhisper-app</string>
+			<key>PayloadUUID</key>
+			<string>C21C8DB2-3E2B-5E2F-B7D4-75085A3031E6</string>
+			<key>PayloadVersion</key>
+			<integer>1</integer>
 		</dict>
 	</array>
 	<key>PayloadDescription</key>
-	<string>Managed settings for TypeWhisper. See docs/mdm/managed-settings.md.</string>
+	<string>Managed settings for dictum. See docs/mdm/managed-settings.md.</string>
 	<key>PayloadDisplayName</key>
-	<string>TypeWhisper Approved Cloud Providers</string>
+	<string>dictum 供应商限制</string>
 	<key>PayloadIdentifier</key>
-	<string>com.typewhisper.mdm.approved-cloud</string>
+	<string>com.schneidervvv.dictum.mdm.cloud</string>
 	<key>PayloadScope</key>
 	<string>System</string>
 	<key>PayloadType</key>
 	<string>Configuration</string>
 	<key>PayloadUUID</key>
-	<string>8A6ABA8C-8BD4-50BE-8FE2-5C859DEE1F84</string>
+	<string>5DA75AD0-AC47-5202-B8B3-B12AFA75D088</string>
 	<key>PayloadVersion</key>
 	<integer>1</integer>
 </dict>

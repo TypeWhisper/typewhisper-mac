@@ -126,18 +126,12 @@ enum OutputFormatter {
             "Prompt Actions: \(integer("promptActionsImported")) imported, \(integer("promptActionsUpdated")) updated, \(integer("promptActionsSkipped")) skipped",
             "Profiles: \(integer("profilesImported")) imported, \(integer("profilesUpdated")) updated, \(integer("profilesSkipped")) skipped",
             "Hotkeys: \(integer("hotkeysApplied")) applied, \(integer("hotkeysSkipped")) skipped",
-            "Plugins: \(integer("pluginsInstalled")) installed, \(integer("pluginsSkipped")) skipped",
+            "Plugins: \(integer("pluginsConfigured")) configured, \(integer("pluginsSkipped")) unavailable",
             "History: \(integer("historyImported")) imported, \(integer("historySkippedAsDuplicate")) skipped as duplicates, \(integer("historySkippedByRetention")) skipped by retention",
             "Preferences: \(integer("preferencesApplied")) applied",
         ]
         if integer("historySkippedUnreadableDestination") > 0 {
             lines.append("Warning: \(integer("historySkippedUnreadableDestination")) history entries were skipped because the existing history could not be read.")
-        }
-        if result["updateChannelApplied"] as? Bool == true {
-            lines.append("Update channel applied")
-        }
-        if result["pluginsRegistryFetchFailed"] as? Bool == true {
-            lines.append("Warning: The plugin marketplace could not be reached; some plugins may have been skipped.")
         }
         return lines.joined(separator: "\n")
     }

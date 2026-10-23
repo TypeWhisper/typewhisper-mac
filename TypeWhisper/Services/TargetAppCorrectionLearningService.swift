@@ -280,9 +280,9 @@ final class TargetAppCorrectionLearningService: ObservableObject {
     }
 
     #if DEBUG
-    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+    func prepareScreenshotFixture(isConfigured: Bool) {
         activeAttemptID = nil
-        latestAttempt = hasPremiumAccess
+        latestAttempt = isConfigured
             ? TargetAppCorrectionLearningAttemptSnapshot(
                 outcome: .learned,
                 timestamp: AppConstants.screenshotFixtureReferenceDate,

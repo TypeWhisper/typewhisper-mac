@@ -37,9 +37,8 @@ output goes to that checkout's `build/` folder.
 # Build, sign with your Apple Development identity and launch the sandboxed app
 scripts/appstore/build-dev.sh --run
 
-# Same with fresh privacy permissions, in German, with Parakeet installed
-scripts/appstore/build-dev.sh --run --reset-permissions --language de \
-  --install-plugin com.typewhisper.parakeet
+# Launch in German and request system permissions again
+scripts/appstore/build-dev.sh --run --reset-permissions --language de
 
 # Relaunch the last build without building
 scripts/appstore/build-dev.sh --relaunch
@@ -62,12 +61,11 @@ container and keychain items. Release builds are **TypeWhisper**
 `build-dev.sh` signs without a provisioning profile and therefore uses
 `TypeWhisperAppStore-Local.entitlements`: iCloud, Sign in with Apple and real
 purchases need a TestFlight build. Every worktree builds the same bundle ID, so
-launching quits any running App Store Dev build first. `--language` and
-`--install-plugin` apply to that launch only.
+launching quits any running App Store Dev build first. `--language` applies to that launch only.
 
 Run the unit tests in Xcode or with `xcodebuild ... test` on the generated
 `TypeWhisperAppStore.xcodeproj`. After changing the plugin set in
-`appstore-project.yml`, refresh the marketplace metadata with
+`appstore-project.yml`, refresh the bundled plugin audit catalog with
 `scripts/appstore/update_plugin_catalog.py`.
 
 The audit checks bundle ID, Info.plist keys, bundled components against
@@ -150,30 +148,22 @@ into those languages.
 
 ## Plugins
 
-The marketplace lists the bundled plugins from
-`AppStore/Resources/AppStorePluginCatalog.json`. Installing a plugin marks it as
-installed and loads the bundled copy; plugins that are not installed are never
-loaded. Apple Speech is installed on first launch, as in the direct app.
-Speaker Detection belongs to the Premium speaker feature: it is always loaded,
-is managed on the Speakers page and is not listed in the marketplace.
+The app loads bundled plugins at launch. Each plugin has its own settings page.
+`AppStore/Resources/AppStorePluginCatalog.json` defines the bundle set for build audits.
+Speaker detection is managed on the Speakers page.
 
 | Status | Plugins |
 |---|---|
-| Bundled | AssemblyAI, Cartesia, Cerebras, Claude, Cohere, Deepgram, ElevenLabs, Fireworks, Gemini, Gladia, Google Cloud STT, Groq, Meta, Microsoft AI, OpenAI, OpenAI Compatible, OpenRouter, Smallest AI, Soniox, Speechmatics, Vercel AI Gateway, xAI, WhisperKit, Parakeet, Speaker Detection, Apple Speech, Qwen3, Local LLM, Supertonic, System TTS, Filler Words, Live Transcript, File Memory, OpenAI Vector Memory, Webhook, Linear, Obsidian, MCP Client, Mistral AI, Cloudflare ASR, Reson8 |
-| Not included by policy | Community plugins (MemPalace, R2T2), SaluteSpeech (sanctions), the niche local models Canary, Granite and Voxtral (each adds its own MLX copy, about 46 MB), and the Russian-only GigaAM (adds a second ONNX Runtime copy next to Supertonic) |
-| Not possible | Authenticated CLI, Script, File Job Script, Web Link, R2T2, Cohere Transcribe (Local): they run external programs or downloaded binaries |
+| Bundled | Qwen3, WhisperKit, Apple Speech, OpenAI, Groq, Deepgram, AssemblyAI, ElevenLabs, Soniox, Gemini, Claude, OpenRouter, OpenAI Compatible, Speaker Detection |
 
-Some bundled plugins are reduced in the App Store edition (`#if APPSTORE`):
+OpenAI has an App Store-specific login policy (`#if APPSTORE`):
 
 | Plugin | App Store edition |
 |---|---|
 | OpenAI | API key only. The ChatGPT login (localhost OAuth callback, Codex login import) is not compiled in. |
-| System TTS | Speaks in-process with `NSSpeechSynthesizer` instead of launching `/usr/bin/say`. |
-| Obsidian | The vault is picked in an open panel and kept as a security-scoped bookmark; no auto-detection from Obsidian's config. |
-| MCP Client | Streamable HTTP servers only; the stdio transport is not compiled in. |
 
-`update_plugin_catalog.py` overrides the marketplace text of OpenAI and MCP Client
-accordingly.
+`update_plugin_catalog.py` reads local manifests and applies the OpenAI metadata
+for the App Store build.
 
 ## Premium
 

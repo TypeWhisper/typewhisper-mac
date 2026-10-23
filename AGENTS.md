@@ -1,6 +1,6 @@
 ---
 DateCreated: 2026-10-21 20:10:50
-LastUpdated: 2026-10-21 20:16:00
+LastUpdated: 2026-10-23 00:27:30
 ---
 ## Global Rules
 
@@ -19,6 +19,7 @@ LastUpdated: 2026-10-21 20:16:00
 * [TYPELESS RESEARCH](docs/TYPELESS_RESEARCH.md)：Typeless 的功能、教程、定价和 UX 细节调研，附来源。规划功能范围或设计交互时阅读。
 * [DESIGN](docs/design/DESIGN.md)：V0.1.0 的界面设计规范（颜色、字体、动效、每个页面和语音条每个状态的布局、文案与数据来源），HTML 原型在 docs/design/prototypes。实现或审查任何界面前阅读。
 * [UPSTREAM AGENTS](docs/UPSTREAM_AGENTS.md)：TypeWhisper 上游仓库的 Agent 规则（PR 要求、App Store 版本构建）。修改 `APPSTORE` 相关代码或准备 PR 时阅读。
+* [KNOWN TEST FAILURES](scripts/known-test-failures.txt)：已确认的测试失败及原因。运行验证或处理新增失败前阅读；只有清单内的失败允许验证命令返回成功。
 
 ## Voice Principles
 

@@ -336,15 +336,12 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
 
 enum CloudFolderSyncError: LocalizedError {
     case missingStore
-    case notEntitled
     case incompleteMigrationHistory
 
     var errorDescription: String? {
         switch self {
         case .missingStore:
-            String(localized: "TypeWhisper user data is unavailable.")
-        case .notEntitled:
-            String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
+            String(localized: "dictum user data is unavailable.")
         case .incompleteMigrationHistory:
             String(localized: "Previously synced correction files are missing or unreadable. Wait for your cloud provider to download them, or choose a new sync folder if the old files were deleted.")
         }
@@ -352,7 +349,7 @@ enum CloudFolderSyncError: LocalizedError {
 }
 
 enum CloudFolderSyncEngine {
-    private static let packageDirectoryName = "typewhisper-sync"
+    private static let packageDirectoryName = "dictum-sync"
     private static let manifestFileName = "manifest.json"
     private static let devicesDirectoryName = "devices"
     private static let operationsDirectoryName = "ops"
@@ -367,15 +364,11 @@ enum CloudFolderSyncEngine {
         folderURL: URL,
         store: (any UserDataSyncStore)?,
         state: inout CloudFolderSyncState,
-        entitlements: PaidEntitlements,
         historyOriginDeviceID: String? = nil,
         now: Date = Date(),
         cache: CloudFolderSyncCache? = nil,
         afterFileIO: (@Sendable () async -> Void)? = nil
     ) async throws -> CloudFolderSyncResult {
-        guard entitlements.canUseCloudFolderSync else {
-            throw CloudFolderSyncError.notEntitled
-        }
         guard let store else {
             throw CloudFolderSyncError.missingStore
         }
@@ -1342,7 +1335,7 @@ enum CloudFolderSyncEngine {
     ) throws {
         let manifest = CloudFolderSyncManifest(
             schemaVersion: 1,
-            createdBy: "TypeWhisper",
+            createdBy: "dictum",
             updatedAt: now
         )
         try writeJSON(manifest, to: packageURL.appendingPathComponent(manifestFileName))

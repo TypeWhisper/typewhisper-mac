@@ -2,10 +2,8 @@ import SwiftUI
 import AVFoundation
 import Combine
 import Foundation
+import os
 import TypeWhisperPluginSDK
-#if !APPSTORE
-@preconcurrency import Sparkle
-#endif
 
 extension UserDefaults {
     @objc dynamic var showMenuBarIcon: Bool {
@@ -21,9 +19,6 @@ extension UserDefaults {
 extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
-    static let iOSCompanionPromoRequested = Notification.Name("iOSCompanionPromoRequested")
-    static let whatsNewRequested = Notification.Name("whatsNewRequested")
-    static let startupActivityDidBecomeIdle = Notification.Name("startupActivityDidBecomeIdle")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -125,7 +120,7 @@ struct SetupManagedAppWindowScene: Scene {
     let content: AnyView
 
     var body: some Scene {
-        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
+        Window(String(localized: "dictum Setup"), id: "setup") {
             content
                 .disablesManagedAppWindowRestoration()
         }
@@ -260,7 +255,6 @@ final class FinderTranscriptionService: NSObject {
 
     @discardableResult
     func handle(_ pasteboard: NSPasteboard) -> String? {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         let urls = Self.fileURLs(from: pasteboard)
         guard !urls.isEmpty else {
             return "No supported audio or video files were selected."
@@ -314,7 +308,7 @@ private struct MenuBarExtraLabel: View {
     @StateObject private var icon = MenuBarIconModel()
 
     private var title: String {
-        AppConstants.isDevelopment ? "TypeWhisper Dev" : "TypeWhisper"
+        AppConstants.isDevelopment ? "dictum Dev" : "dictum"
     }
 
     private var isRecordingActive: Bool {
@@ -457,23 +451,6 @@ enum MenuBarLogoMarkImage {
 struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
-    @State private var startupSheet: StartupSheetRoute?
-    @State private var lastPresentedStartupSheet: StartupSheetRoute?
-    @State private var ignoreNextStartupSheetDismiss = false
-    @State private var startupSheetDeferredForActivity = false
-
-    private var postUpdatePromptCoordinator: PostUpdatePromptCoordinator {
-        PostUpdatePromptCoordinator.shared
-    }
-
-    private var iOSCompanionPromoCoordinator: IOSCompanionPromoCoordinator {
-        IOSCompanionPromoCoordinator.shared
-    }
-
-    private var settingsNavigation: SettingsNavigationCoordinator {
-        SettingsNavigationCoordinator.shared
-    }
-
     var body: some Scene {
         MenuBarExtra(isInserted: $showMenuBarIcon) {
             menuBarContent
@@ -489,7 +466,6 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             CommandGroup(after: .appInfo) {
                 ManagedWindowOpenerRegistrar()
             }
-            PluginAppCommands(pluginManager: ServiceContainer.shared.pluginManager)
         }
 
         WindowConfiguration.settings(content: AnyView(settingsContent))
@@ -513,58 +489,6 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             EmptyView()
         } else {
             SettingsView()
-                .sheet(item: $startupSheet, onDismiss: handleStartupSheetDismissed) { route in
-                    switch route {
-                    case .welcome:
-                        #if APPSTORE
-                        EmptyView()
-                        #else
-                        WelcomeSheet()
-                        #endif
-                    case .iOSCompanion:
-                        IOSCompanionPromoView(
-                            appStoreURL: AppConstants.IOSCompanion.appStoreURL,
-                            onOpenAppStore: handleOpenIOSAppStore,
-                            onDismiss: handleIOSCompanionDismissal
-                        )
-                    case .postUpdateLicensing:
-                        #if APPSTORE
-                        EmptyView()
-                        #else
-                        PostUpdateLicensePromptView(
-                            onPersonalOSS: handlePersonalOSSSelection,
-                            onWorkUsage: handleWorkUsageSelection,
-                            onExistingKey: handleExistingKeySelection,
-                            onBecomeSupporter: handleSupporterSelection,
-                            onNotNow: handlePromptDismissalAction
-                        )
-                        #endif
-                    }
-                }
-                .task {
-                    refreshStartupSheet()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .iOSCompanionPromoRequested)) { _ in
-                    refreshStartupSheet()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .startupActivityDidBecomeIdle)) { _ in
-                    // @Published emits before the underlying view-model state
-                    // is stored; recheck activity on the next main-queue turn.
-                    DispatchQueue.main.async {
-                        refreshDeferredStartupSheetIfPossible()
-                    }
-                }
-                .onReceive(Publishers.Merge3(
-                    NotificationCenter.default.publisher(for: NSWindow.willCloseNotification),
-                    NotificationCenter.default.publisher(for: NSWindow.didEndSheetNotification),
-                    NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
-                )) { _ in
-                    // Let AppKit detach the sheet or finish its modal session first.
-                    // Regaining key status also covers panels that are ordered out.
-                    DispatchQueue.main.async {
-                        refreshDeferredStartupSheetIfPossible()
-                    }
-                }
         }
     }
 
@@ -599,19 +523,13 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         guard !AppConstants.isRunningTests else { return }
 
         LaunchSignposts.beginLaunch()
-        WhatsNewCoordinator.shared = WhatsNewCoordinator()
 
         // Trigger ServiceContainer initialization
         let serviceContainer = LaunchSignposts.signposter.withIntervalSignpost("Launch.serviceContainer") {
             ServiceContainer.shared
         }
-        serviceContainer.hotkeyService.onHotkeyAction = {
-            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
-        }
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
-        IOSCompanionPromoCoordinator.shared = IOSCompanionPromoCoordinator()
-        PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         #if DEBUG
         if AppConstants.isScreenshotAutomation {
@@ -628,138 +546,6 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         #endif
     }
 
-    private func refreshDeferredStartupSheetIfPossible() {
-        guard startupSheetDeferredForActivity,
-              startupSheet == nil,
-              !appDelegate.operationInProgress else { return }
-        refreshStartupSheet()
-    }
-
-    private func refreshStartupSheet() {
-        startupSheetDeferredForActivity = false
-        if AppConstants.isScreenshotAutomation {
-            startupSheet = nil
-            return
-        }
-
-        if ManagedLaunchGate.isSetupWizardRequired {
-            startupSheet = nil
-            return
-        }
-
-        let manualIOSCompanionRequest = iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
-        // An automatic refresh must not dismiss or replace an existing sheet,
-        // nor treat that sheet as a blocker that should itself be dismissed.
-        if !manualIOSCompanionRequest, startupSheet != nil { return }
-        if !manualIOSCompanionRequest, let whatsNew = WhatsNewCoordinator.shared,
-           whatsNew.shouldDeferAutomaticSheets {
-            startupSheetDeferredForActivity = whatsNew.operationInProgress
-            startupSheet = nil
-            return
-        }
-
-        if !manualIOSCompanionRequest, appDelegate.operationInProgress {
-            startupSheetDeferredForActivity = true
-            return
-        }
-
-        let nextRoute: StartupSheetRoute?
-        if manualIOSCompanionRequest {
-            nextRoute = .iOSCompanion
-        } else if LicenseService.shared.needsWelcomeSheet {
-            nextRoute = .welcome
-        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt, !ManagedLaunchGate.suppressesOptionalPrompts {
-            nextRoute = .iOSCompanion
-        } else {
-            nextRoute = postUpdatePromptCoordinator.activeSheetRoute
-        }
-
-        startupSheet = nextRoute
-        if let nextRoute {
-            lastPresentedStartupSheet = nextRoute
-        }
-    }
-
-    private func handleStartupSheetDismissed() {
-        let dismissedRoute = lastPresentedStartupSheet
-        defer {
-            lastPresentedStartupSheet = nil
-        }
-
-        if dismissedRoute == .iOSCompanion {
-            if ignoreNextStartupSheetDismiss {
-                ignoreNextStartupSheetDismiss = false
-            } else {
-                iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
-            }
-
-            // Avoid replacing the promo immediately with another startup sheet.
-            // Any remaining prompt can appear the next time Settings is opened.
-            return
-        }
-
-        if dismissedRoute == .postUpdateLicensing {
-            if ignoreNextStartupSheetDismiss {
-                ignoreNextStartupSheetDismiss = false
-            } else {
-                postUpdatePromptCoordinator.handleSheetDismissedWithoutExplicitAction()
-            }
-        }
-
-        refreshStartupSheet()
-    }
-
-    private func dismissStartupPrompt(after action: () -> Void) {
-        ignoreNextStartupSheetDismiss = true
-        action()
-        startupSheet = nil
-    }
-
-    private func handlePersonalOSSSelection() {
-        dismissStartupPrompt {
-            postUpdatePromptCoordinator.handlePersonalOSSSelection()
-        }
-    }
-
-    private func handleWorkUsageSelection() {
-        dismissStartupPrompt {
-            postUpdatePromptCoordinator.handleWorkUsageSelection()
-            settingsNavigation.navigateToLicense(target: .top)
-        }
-    }
-
-    private func handleExistingKeySelection() {
-        dismissStartupPrompt {
-            postUpdatePromptCoordinator.handleExistingKeySelection()
-            settingsNavigation.navigateToLicense(target: .activationKey)
-        }
-    }
-
-    private func handleSupporterSelection() {
-        dismissStartupPrompt {
-            postUpdatePromptCoordinator.handleSupporterSelection()
-            settingsNavigation.navigateToLicense(target: .supporter)
-        }
-    }
-
-    private func handlePromptDismissalAction() {
-        dismissStartupPrompt {
-            postUpdatePromptCoordinator.handleNotNowSelection()
-        }
-    }
-
-    private func handleOpenIOSAppStore() {
-        dismissStartupPrompt {
-            iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
-            NSWorkspace.shared.open(AppConstants.IOSCompanion.appStoreURL)
-        }
-    }
-
-    private func handleIOSCompanionDismissal() {
-        dismissStartupPrompt {
-            iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
-        }
-    }
 }
 
 @MainActor
@@ -784,7 +570,6 @@ final class ManagedAppWindowOpener {
     var openWindow: OpenWindowAction?
 
     func open(id: String) {
-        WhatsNewCoordinator.shared?.handleWindowRequest()
         open(id: id, remainingAttempts: 10)
     }
 
@@ -877,32 +662,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenLockObservers: [NSObjectProtocol] = []
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
-    private var whatsNewWindowController: WhatsNewWindowController?
-    private var startupActivitySubscriptions = Set<AnyCancellable>()
     private let finderTranscriptionService = FinderTranscriptionService()
-    #if !APPSTORE
-    private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
-
-    var updateChecker: UpdateChecker {
-        .sparkle(updaterController.updater, coordinator: ServiceContainer.shared.managedUpdateCoordinator)
-    }
-
-    /// Under CheckOnly the app announces new versions without installing them: check once now,
-    /// and again whenever the policy changes, because Sparkle's own schedule may be off.
-    private func observeManagedUpdatePolicy() {
-        let coordinator = ServiceContainer.shared.managedUpdateCoordinator
-        let updater = updaterController.updater
-        coordinator.onPolicyChange = { previous, current in
-            updater.resetUpdateCycleAfterShortDelay()
-            if current.mode == .checkOnly, previous.mode != .checkOnly || previous.isBlocked {
-                updater.checkForUpdatesInBackground()
-            }
-        }
-        if coordinator.policy.mode == .checkOnly {
-            updater.checkForUpdatesInBackground()
-        }
-    }
-    #endif
 
     private var showMenuBarIconPreference: Bool {
         UserDefaults.standard.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true
@@ -948,11 +708,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        observeStartupActivity()
-        NotificationCenter.default.publisher(for: .whatsNewRequested)
-            .sink { [weak self] _ in self?.presentWhatsNewManually() }
-            .store(in: &startupActivitySubscriptions)
-
         if AppConstants.isScreenshotAutomation {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
@@ -971,10 +726,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.servicesProvider = finderTranscriptionService
         NSUpdateDynamicServices()
 
-        #if !APPSTORE
-        UpdateChecker.shared = updateChecker
-        observeManagedUpdatePolicy()
-        #endif
         applyActivationPolicy()
 
         let coordinator = IndicatorCoordinator(
@@ -1018,14 +769,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        let isNormalLaunch = Self.isNormalLaunch(notification)
-        if !isNormalLaunch {
-            WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
-        }
-        // Allow launch URLs and Services to arrive first; recheck all priorities
-        // at presentation time, not when scheduling the window.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.presentInitialWindow(isNormalLaunch: isNormalLaunch)
+            self?.presentInitialWindow()
         }
 
         // Observe appearance preference changes
@@ -1126,17 +871,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         guard !AppConstants.isRunningTests else { return }
-        WhatsNewCoordinator.shared?.acknowledgePresentation()
         DictationViewModel._shared?.flushPendingPostInsertionPersistence()
         ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
         ServiceContainer.shared.snippetService.saveDeferredUsageCounts()
         ServiceContainer.shared.dictionaryService.saveDeferredUsageCounts()
         ServiceContainer.shared.calendarMeetingAutomationController.shutdown()
+        Logger(subsystem: AppConstants.loggerSubsystem, category: "AppLifecycle")
+            .notice("applicationWillTerminate completed")
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-        WhatsNewCoordinator.shared?.handleWindowRequest()
         if ManagedAppReopenSuppression.shared.consumeIfActive() {
             return true
         }
@@ -1151,7 +896,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         for url in urls {
             handleIncomingURL(url)
         }
@@ -1161,102 +905,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ManagedAppWindowOpener.shared.open(id: "settings")
     }
 
-    static func isNormalLaunch(_ notification: Notification) -> Bool {
-        notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool == true
-            && notification.userInfo?[NSApplication.launchUserNotificationUserInfoKey] == nil
-    }
-
-    private func observeStartupActivity() {
-        let container = ServiceContainer.shared
-        guard let whatsNew = WhatsNewCoordinator.shared else { return }
-        whatsNew.activityDidBecomeIdle = {
-            NotificationCenter.default.post(name: .startupActivityDidBecomeIdle, object: nil)
-        }
-        let activities = [
-            container.dictationViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
-            container.audioRecorderViewModel.$state.map { $0 != .idle }.eraseToAnyPublisher(),
-            container.audioRecorderViewModel.$retranscribingRecordingURL.map { $0 != nil }.eraseToAnyPublisher(),
-            container.fileTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
-            container.speakerTranscriptionViewModel.$batchState.map { $0 == .processing }.eraseToAnyPublisher(),
-            container.dictionaryTrainingService.activityPublisher,
-            HistoryRetranscriptionActivity.recordIDPublisher.map { $0 != nil }.eraseToAnyPublisher()
-        ]
-        whatsNew.observeActivity(activities)
-    }
-
-    var operationInProgress: Bool {
-        let container = ServiceContainer.shared
-        return container.dictationViewModel.state != .idle
-            || container.hotkeyService.isDictationStartPending
-            || container.audioRecorderViewModel.state != .idle
-            || container.audioRecorderViewModel.retranscribingRecordingURL != nil
-            || container.fileTranscriptionViewModel.batchState == .processing
-            || container.speakerTranscriptionViewModel.batchState == .processing
-            || container.dictionaryTrainingService.activeSampleID != nil
-            || HistoryRetranscriptionActivity.recordID != nil
-            || Self.hasBlockingModalPresentation
-    }
-
-    static var hasBlockingModalPresentation: Bool {
-        NSApp.modalWindow != nil
-            || NSApp.windows.contains { $0.isVisible && $0.attachedSheet != nil }
-    }
-
-    private func presentWhatsNewManually() {
-        guard let whatsNew = WhatsNewCoordinator.shared,
-              whatsNew.beginManualPresentation() else { return }
-        // Use the same activity state as the About button. A sheet attached to
-        // another window only blocks automatic presentation, not this explicit request.
-        showWhatsNew(coordinator: whatsNew)
-    }
-
-    private func showWhatsNew(coordinator: WhatsNewCoordinator) {
-        if whatsNewWindowController == nil {
-            whatsNewWindowController = WhatsNewWindowController(coordinator: coordinator)
-        }
-        whatsNewWindowController?.showWindow(nil)
-        // An unfocused overview still counts as an open window for Dock policy.
-        applyActivationPolicy()
-    }
-
-    private func presentInitialWindow(isNormalLaunch: Bool) {
-        guard let whatsNew = WhatsNewCoordinator.shared else { return }
-        let suppressesOptionalPrompts = ManagedLaunchGate.suppressesOptionalPrompts
-        if suppressesOptionalPrompts {
-            // The highlights stay available from Settings > About.
-            whatsNew.suppressForCurrentLaunch()
-        }
-        let presentation = whatsNew.presentationForLaunch(
-            isNormalLaunch: isNormalLaunch,
-            setupWizardRequired: ManagedLaunchGate.isSetupWizardRequired,
-            operationInProgress: operationInProgress,
-            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
-            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt && !suppressesOptionalPrompts
-        )
-
+    private func presentInitialWindow() {
         LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
-            switch presentation {
-            case .setup:
-                NSApp.setActivationPolicy(.regular)
-                openSetupWindow()
-            case .whatsNew:
-                showWhatsNew(coordinator: whatsNew)
-            case .settings:
-                openSettingsWindow()
-            case .none:
-                break
-            }
-        }
-    }
-
-    private var screenshotPremiumDestination: PremiumSettingsDestination? {
-        switch AppConstants.screenshotState {
-        case "premium-access": .access
-        case "premium-calendar": .calendarMeeting
-        case "premium-learning": .correctionLearning
-        case "premium-sync": .cloudSync
-        case "premium-speakers": .speakerWorkspace
-        default: nil
+            guard ManagedLaunchGate.isSetupWizardRequired else { return }
+            NSApp.setActivationPolicy(.regular)
+            openSetupWindow()
         }
     }
 
@@ -1273,14 +926,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        guard let destination = screenshotPremiumDestination else {
-            openSettingsWindow()
-            prepareScreenshotSettingsWindow()
-            return
-        }
-
-        PremiumSettingsWindowManager.shared.present(destination)
-        prepareScreenshotPremiumWindow(destination)
+        openSettingsWindow()
+        prepareScreenshotSettingsWindow()
     }
 
     private func openScreenshotPluginWindow(pluginId: String) {
@@ -1330,34 +977,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         prepareScreenshotWindow(window, contentSize: NSSize(width: 1_150, height: 890))
-    }
-
-    private func prepareScreenshotPremiumWindow(
-        _ destination: PremiumSettingsDestination,
-        remainingAttempts: Int = 8
-    ) {
-        guard AppConstants.isScreenshotAutomation else { return }
-
-        guard let window = PremiumSettingsWindowManager.shared.managedWindow(for: destination) else {
-            guard remainingAttempts > 0 else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                self.prepareScreenshotPremiumWindow(
-                    destination,
-                    remainingAttempts: remainingAttempts - 1
-                )
-            }
-            return
-        }
-
-        let contentSize: NSSize? = switch destination {
-        case .calendarMeeting:
-            NSSize(width: 640, height: 820)
-        case .cloudSync:
-            NSSize(width: 640, height: 640)
-        case .access, .correctionLearning, .speakerWorkspace, .pairedDevices:
-            nil
-        }
-        prepareScreenshotWindow(window, contentSize: contentSize)
     }
 
     private func prepareScreenshotPluginWindow(
@@ -1437,15 +1056,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleIncomingURL(_ url: URL) {
-        #if !APPSTORE
-        guard SupporterDiscordService.canHandleCallbackURL(url) else { return }
-
-        openSettingsWindow()
-
-        Task { @MainActor in
-            await SupporterDiscordService.shared?.handleCallbackURL(url)
+        guard url.scheme == "dictum" else { return }
+        if url.host == "settings", url.path == "/plugins" {
+            SettingsNavigationCoordinator.shared.navigate(to: SettingsView.firstPluginTab)
         }
-        #endif
+        openSettingsWindow()
     }
 
     func isManagedWindow(_ window: NSWindow) -> Bool {
@@ -1453,15 +1068,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if identifier.contains("settings")
                 || identifier.contains("setup")
                 || identifier.contains("history")
-                || identifier.contains("errors")
-                || identifier == "whats-new" {
+                || identifier.contains("errors") {
                 return true
             }
         }
 
         let title = window.title
         return title == String(localized: "Settings")
-            || title == String(localized: "TypeWhisper Setup")
+            || title == String(localized: "dictum Setup")
             || title == String(localized: "History")
             || title == String(localized: "Error Log")
     }
@@ -1485,9 +1099,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window = notification.object as? NSWindow else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isManagedWindow(window), window.isVisible else { return }
-            // The overview participates in Dock policy without activating the app
-            // over the user's current work when it is shown automatically.
-            self.applyActivationPolicy(activate: window.identifier?.rawValue != "whats-new")
+            self.applyActivationPolicy(activate: true)
         }
     }
 
@@ -1499,41 +1111,3 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 }
-
-#if !APPSTORE
-extension AppDelegate: SPUUpdaterDelegate {
-    nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
-        MainActor.assumeIsolated {
-            ServiceContainer.shared.managedUpdateCoordinator.effectiveChannel.value.sparkleChannels
-        }
-    }
-
-    nonisolated func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
-        try MainActor.assumeIsolated {
-            try ServiceContainer.shared.managedUpdateCoordinator.authorizeCheck()
-        }
-    }
-
-    nonisolated func updater(
-        _ updater: SPUUpdater,
-        shouldProceedWithUpdate updateItem: SUAppcastItem,
-        updateCheck: SPUUpdateCheck
-    ) throws {
-        let version = updateItem.displayVersionString
-        let userInitiated = updateCheck == .updates
-        try MainActor.assumeIsolated {
-            try ServiceContainer.shared.managedUpdateCoordinator.authorizeUpdate(
-                version: version,
-                userInitiated: userInitiated,
-                downloadsAutomatically: updater.automaticallyDownloadsUpdates
-            )
-        }
-    }
-
-    nonisolated func updaterShouldPromptForPermissionToCheck(forUpdates updater: SPUUpdater) -> Bool {
-        MainActor.assumeIsolated {
-            !ServiceContainer.shared.managedUpdateCoordinator.policy.suppressesAutomaticCheckPrompt
-        }
-    }
-}
-#endif

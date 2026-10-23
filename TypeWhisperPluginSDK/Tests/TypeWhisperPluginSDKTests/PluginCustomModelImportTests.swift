@@ -208,7 +208,7 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         let store = store()
         defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
         let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
-        XCTAssertEqual(candidate.suggestedPluginName, "Canary ASR")
+        XCTAssertNil(candidate.suggestedPluginName)
         do {
             _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
             XCTFail("Accepted Canary in the Qwen engine")

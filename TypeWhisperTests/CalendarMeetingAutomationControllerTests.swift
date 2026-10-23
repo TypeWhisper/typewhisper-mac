@@ -24,17 +24,14 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         ))
     }
 
-    func testFreeAndOffStatesNeverActivateOSServices() {
-        XCTAssertFalse(CalendarMeetingAutomationController.shouldActivateOSServices(
-            hasPremiumAccess: false,
+    func testActiveModesActivateOSServicesWithoutAnAccount() {
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldActivateOSServices(
             startMode: .automatic
         ))
         XCTAssertFalse(CalendarMeetingAutomationController.shouldActivateOSServices(
-            hasPremiumAccess: true,
             startMode: .off
         ))
         XCTAssertTrue(CalendarMeetingAutomationController.shouldActivateOSServices(
-            hasPremiumAccess: true,
             startMode: .reminder
         ))
     }
@@ -83,24 +80,20 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         )
     }
 
-    func testCalendarAccessRequestRequiresPremiumActiveModeAndNoRequestInFlight() {
+    func testCalendarAccessRequestRequiresActiveModeAndNoRequestInFlight() {
         XCTAssertTrue(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
-            hasPremiumAccess: true,
             startMode: .reminder,
             isRequestInFlight: false
         ))
         XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
-            hasPremiumAccess: true,
             startMode: .automatic,
             isRequestInFlight: true
         ))
         XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
-            hasPremiumAccess: true,
             startMode: .off,
             isRequestInFlight: false
         ))
-        XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
-            hasPremiumAccess: false,
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
             startMode: .automatic,
             isRequestInFlight: false
         ))
@@ -115,23 +108,19 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
             .unknown
         ] {
             XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
-                hasPremiumAccess: true,
                 startMode: .reminder,
                 calendarAuthorization: authorization
             ))
         }
         XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
-            hasPremiumAccess: true,
             startMode: .automatic,
             calendarAuthorization: .fullAccess
         ))
         XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
-            hasPremiumAccess: true,
             startMode: .off,
             calendarAuthorization: .fullAccess
         ))
-        XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
-            hasPremiumAccess: false,
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
             startMode: .automatic,
             calendarAuthorization: .fullAccess
         ))
@@ -198,21 +187,6 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         ))
     }
 
-    func testCommercialOrPremiumAccountUnlocksButSupporterDoesNotParticipate() {
-        XCTAssertFalse(CalendarMeetingPremiumAccess.isGranted(
-            hasCommercialLicense: false,
-            hasPremiumEntitlement: false
-        ))
-        XCTAssertTrue(CalendarMeetingPremiumAccess.isGranted(
-            hasCommercialLicense: true,
-            hasPremiumEntitlement: false
-        ))
-        XCTAssertTrue(CalendarMeetingPremiumAccess.isGranted(
-            hasCommercialLicense: false,
-            hasPremiumEntitlement: true
-        ))
-    }
-
     func testBrowserURLResolutionAcceptsInputOrOutputForCameraFallback() {
         let input = MeetingAudioProcess(
             audioObjectID: 1,
@@ -253,13 +227,11 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
 
     func testAdHocDetectionCanRequestRemindersWithoutCalendarPermission() {
         XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
-            hasPremiumAccess: true,
             startMode: .reminder,
             calendarAuthorization: .denied,
             detectAdHocMeetings: true
         ))
-        XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
-            hasPremiumAccess: false,
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
             startMode: .automatic,
             calendarAuthorization: .denied,
             detectAdHocMeetings: true

@@ -4,7 +4,7 @@ import SwiftData
 import os.log
 
 private let usageStatisticsLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "UsageStatisticsService"
 )
 

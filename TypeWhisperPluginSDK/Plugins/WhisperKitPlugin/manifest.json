@@ -20,6 +20,5 @@
     ],
     "iconSystemName": "waveform",
     "principalClass": "WhisperKitPlugin",
-    "locality": "local",
-    "detailsURL": "https://www.typewhisper.com/addons/whisperkit/"
+    "locality": "local"
 }

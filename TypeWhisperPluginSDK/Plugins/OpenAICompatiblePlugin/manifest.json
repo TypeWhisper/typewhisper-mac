@@ -18,6 +18,5 @@
     ],
     "iconSystemName": "server.rack",
     "principalClass": "OpenAICompatiblePlugin",
-    "locality": "configurable",
-    "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/"
+    "locality": "configurable"
 }

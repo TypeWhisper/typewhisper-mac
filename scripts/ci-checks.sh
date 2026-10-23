@@ -28,9 +28,6 @@ python3 scripts/check_app_version_sync.py
 log "checking plugin release policy"
 python3 scripts/validate_plugin_release_manifest.py TypeWhisperPluginSDK/Plugins/*/manifest.json
 
-log "validating community plugin registry"
-python3 scripts/assemble_community_plugin_registry.py
-
 log "checking localization completeness"
 python3 scripts/check_localization_completeness.py
 

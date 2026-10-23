@@ -7,12 +7,6 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "DictationViewModel")
 
-private struct CorrectionContributionContext: Sendable {
-    let language: String?
-    let engineId: String
-    let modelId: String?
-}
-
 struct DictationSessionTranscription: Sendable, Equatable {
     var text: String
     let rawText: String
@@ -372,11 +366,6 @@ final class DictationViewModel: ObservableObject {
             applyEffectiveMicrophoneBoostToAudioService()
         }
     }
-    @Published var spokenFeedbackEnabled: Bool {
-        didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
-    }
-    @Published private(set) var lastTranscribedText: String?
-    @Published private(set) var lastTranscriptionLanguage: String?
     /// Updated only by the completed text-insertion path, never by indicator feedback.
     @Published private(set) var lastSuccessfulDictationInsertion: DictationInsertionCompletion?
     @Published var hotkeyLabelsVersion = 0
@@ -456,7 +445,6 @@ final class DictationViewModel: ObservableObject {
     private let translationService: AnyObject? // TranslationService (macOS 15+)
     private let audioDuckingService: AudioDuckingService
     private let dictionaryService: DictionaryService
-    private let licenseService: LicenseService?
     private let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
     private let snippetService: SnippetService
     private let soundService: SoundService
@@ -464,7 +452,6 @@ final class DictationViewModel: ObservableObject {
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
     private let workflowTextProcessingService: WorkflowTextProcessingService
-    private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
@@ -646,7 +633,6 @@ final class DictationViewModel: ObservableObject {
         translationService: AnyObject?,
         audioDuckingService: AudioDuckingService,
         dictionaryService: DictionaryService,
-        licenseService: LicenseService? = nil,
         targetAppCorrectionLearningService: TargetAppCorrectionLearningService? = nil,
         snippetService: SnippetService,
         soundService: SoundService,
@@ -657,7 +643,6 @@ final class DictationViewModel: ObservableObject {
         appFormatterService: AppFormatterService,
         punctuationStrategyResolver: PunctuationStrategyResolver,
         speechPunctuationService: SpeechPunctuationService,
-        speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
         mediaPlaybackService: MediaPlaybackService,
@@ -681,7 +666,6 @@ final class DictationViewModel: ObservableObject {
         self.translationService = translationService
         self.audioDuckingService = audioDuckingService
         self.dictionaryService = dictionaryService
-        self.licenseService = licenseService
         self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
             ?? TargetAppCorrectionLearningService(
                 textInsertionService: textInsertionService,
@@ -700,7 +684,6 @@ final class DictationViewModel: ObservableObject {
                 workflowService: workflowService,
                 vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
             )
-        self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
@@ -790,7 +773,6 @@ final class DictationViewModel: ObservableObject {
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
-        self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -1447,7 +1429,7 @@ final class DictationViewModel: ObservableObject {
         if usedBluetoothInput {
             return String(localized: "The Bluetooth microphone sent only silence. Check that it is not muted, or reconnect it.")
         }
-        return String(localized: "The microphone sent only silence. Check that it is not muted and TypeWhisper has microphone access.")
+        return String(localized: "The microphone sent only silence. Check that it is not muted and dictum has microphone access.")
     }
 
     private func prepareRecordingStartCue(playsSound: Bool) {
@@ -1946,7 +1928,6 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
-        WhatsNewCoordinator.shared?.suppressForCurrentLaunch()
         guard HistoryRetranscriptionActivity.recordID == nil else {
             hotkeyService.cancelDictation()
             showNotchFeedback(message: HistoryRetranscriptionError.busy.localizedDescription, icon: "hourglass", duration: 2)
@@ -2616,8 +2597,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     private var shouldTrackTargetAppCorrectionLearning: Bool {
-        (licenseService?.hasCommercialLicense ?? false) &&
-            UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        UserDefaults.standard.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
     }
 
     private var effectiveNumberNormalizationOverride: Bool? {
@@ -2666,14 +2646,14 @@ final class DictationViewModel: ObservableObject {
         guard effectiveAutoEnterMode == .duringDictation, !hotkeyService.canSuppressExternalKeyEvents else { return true }
         let message = AccessibilityPermissionPane.text(
             legacy: localizedAppText(
-                "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte TypeWhisper neu oder wähle eine andere Enter-Option."
+                "Enter submission is unavailable. Check Accessibility access and restart dictum, or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Bedienungshilfen und starte dictum neu oder wähle eine andere Enter-Option."
             ),
             deviceControl: localizedAppText(
-                "Enter submission is unavailable. Check the Device Control and Data Access permission and restart TypeWhisper, or choose another Enter option.",
-                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte TypeWhisper neu oder wähle eine andere Enter-Option.",
-                ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。",
-                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+                "Enter submission is unavailable. Check the Device Control and Data Access permission and restart dictum, or choose another Enter option.",
+                de: "Absenden mit Enter ist nicht verfügbar. Prüfe die Berechtigung „Gerätesteuerung und Datenzugriff“ und starte dictum neu oder wähle eine andere Enter-Option.",
+                ja: "Enter キーで送信できません。「デバイスの制御とデータへのアクセス」の権限を確認して dictum を再起動するか、別の Enter オプションを選択してください。",
+                zh: "无法使用 Enter 发送。请检查“设备控制和数据访问”权限并重启 dictum，或选择其他 Enter 选项。"
             )
         )
         abortActiveRecordingImmediately(sessionMessage: message)
@@ -3197,10 +3177,8 @@ final class DictationViewModel: ObservableObject {
                         standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
                             .standaloneValueFinalPeriodCleanupEnabled()
                     )
-                    let shouldObservePostInsertionEdits = (
-                        shouldTrackTargetAppCorrectionLearning
-                            || improveTypeWhisperCaptureEnabled
-                    ) && resolvedOutputFormat == nil
+                    let shouldObservePostInsertionEdits = shouldTrackTargetAppCorrectionLearning
+                        && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
                     var insertionResult: TextInsertionService.InsertionResult?
@@ -3369,17 +3347,9 @@ final class DictationViewModel: ObservableObject {
                 finishLatencyTraceAfterInsertion(sessionID: sessionID)
 
                 if let insertedTextForCorrectionTracking {
-                    let contributionContext: CorrectionContributionContext? = improveTypeWhisperCaptureEnabled
-                        ? CorrectionContributionContext(
-                            language: result.detectedLanguage ?? language,
-                            engineId: result.engineUsed,
-                            modelId: transcription.modelId
-                        )
-                        : nil
                     didTransferAccessibilityObservationLease = startTargetAppCorrectionLearningIfNeeded(
                         insertedText: insertedTextForCorrectionTracking,
                         baseline: targetAppCorrectionBaseline,
-                        contributionContext: contributionContext,
                         accessibilityObservationLease: accessibilityObservationLease
                     )
                 }
@@ -3394,9 +3364,6 @@ final class DictationViewModel: ObservableObject {
                 if let actionResultAnnouncement {
                     accessibilityAnnouncementService.announce(actionResultAnnouncement)
                 }
-                speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
-                lastTranscribedText = text
-                lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
                     let fallbackMessage = localizedAppText(
@@ -4897,11 +4864,6 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.insertLatest(currentState: state)
     }
 
-    func readBackLastTranscription() {
-        guard let text = lastTranscribedText else { return }
-        speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
-    }
-
     // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
 
     /// Deletes the text inserted by the most recent successful dictation.
@@ -4978,7 +4940,6 @@ final class DictationViewModel: ObservableObject {
                 id: session.id, status: session.status, transcription: transcription, error: session.error
             ))
         }
-        lastTranscribedText = rawText
     }
 
     var canRecoverLastRecording: Bool {
@@ -5020,14 +4981,12 @@ final class DictationViewModel: ObservableObject {
     private func startTargetAppCorrectionLearningIfNeeded(
         insertedText: String,
         baseline: TextInsertionService.FocusedTextObservation?,
-        contributionContext: CorrectionContributionContext?,
         accessibilityObservationLease: TargetAppAccessibilityObservationLease?
     ) -> Bool {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
 
-        let shouldLearn = shouldTrackTargetAppCorrectionLearning
-        guard shouldLearn || contributionContext != nil else {
+        guard shouldTrackTargetAppCorrectionLearning else {
             return false
         }
 
@@ -5036,8 +4995,6 @@ final class DictationViewModel: ObservableObject {
                 weak self,
                 baseline,
                 insertedText,
-                contributionContext,
-                shouldLearn,
                 accessibilityObservationLease
             ] in
             defer {
@@ -5053,31 +5010,10 @@ final class DictationViewModel: ObservableObject {
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            if let contributionContext,
-               let correctionObservation = result.correctionObservation {
-                EventBus.shared.emit(.textCorrectionCommitted(TextCorrectionCommittedPayload(
-                    id: UUID(),
-                    capturedAt: Date(),
-                    originalText: insertedText,
-                    correctedText: correctionObservation.correctedInsertedText,
-                    language: contributionContext.language,
-                    engineId: contributionContext.engineId,
-                    modelId: contributionContext.modelId,
-                    appVersion: AppConstants.appVersion,
-                    appBuild: AppConstants.buildVersion,
-                    platformVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                    commitSignal: correctionObservation.commitSignal?.contributionPayloadValue,
-                    sourceChannel: AppConstants.isDevelopment ? .development : .production
-                )))
-            }
-            guard shouldLearn, !result.learnedCorrections.isEmpty else { return }
+            guard !result.learnedCorrections.isEmpty else { return }
             self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
         return true
-    }
-
-    private var improveTypeWhisperCaptureEnabled: Bool {
-        UserDefaults.standard.bool(forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
     }
 
     private func cancelTargetAppCorrectionLearning() {
@@ -5093,7 +5029,6 @@ final class DictationViewModel: ObservableObject {
             return
         }
         guard shouldTrackTargetAppCorrectionLearning
-                || improveTypeWhisperCaptureEnabled
                 || liveFieldTranscriptEnabled else {
             return
         }
@@ -5350,9 +5285,7 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    /// Settings page where the user can fix a transcription setup error, or nil for transient failures.
-    /// With the provider known, engine setup errors open that engine's own settings page, which is
-    /// what the message points to; Discover plugins stays the target when the engine is not installed.
+    /// 配置错误打开对应引擎的设置；引擎不可用时打开听写设置。
     static func settingsTab(forTranscriptionError error: Error, providerId: String? = nil) -> SettingsTab? {
         if let failure = error as? AutomaticRecoveryFallbackFailure {
             return settingsTab(forTranscriptionError: failure.primaryError, providerId: providerId)
@@ -5389,7 +5322,7 @@ final class DictationViewModel: ObservableObject {
     private static func engineSettingsTab(providerId: String?) -> SettingsTab {
         guard let providerId,
               let plugin = PluginManager.shared?.installedTranscriptionPlugin(for: providerId) else {
-            return .integrations
+            return .dictation
         }
         return .installedPlugin(pluginId: plugin.id)
     }

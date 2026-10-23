@@ -184,13 +184,6 @@ final class DictionaryTrainingService: ObservableObject {
         samples.first { $0.state.isActive }?.id
     }
 
-    var activityPublisher: AnyPublisher<Bool, Never> {
-        $samples
-            .map { $0.contains { $0.state.isActive } }
-            .removeDuplicates()
-            .eraseToAnyPublisher()
-    }
-
     var canProceedToReview: Bool {
         samples.count >= Self.requiredSampleCount && samples.allSatisfy {
             $0.state == .completed

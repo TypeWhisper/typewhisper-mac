@@ -370,25 +370,10 @@ private struct DiagnosticsReport: Encodable {
         let source: DiagnosticPluginSourceInfo
         let currentSettingsActivity: DiagnosticPluginActivityInfo?
         let runtimeMemory: PluginRuntimeMemoryInfo?
-        let registryVersion: String?
-        let registrySource: String?
-        let externalBundleNotice: String?
-    }
-
-    struct SkippedExternalBundleInfo: Encodable {
-        let id: String
-        let name: String
-        let version: String
-        let reason: String
-        let source: DiagnosticPluginSourceInfo
-        let registryVersion: String?
-        let registrySource: String?
-        let externalBundleNotice: String?
     }
 
     struct SettingsSnapshot: Encodable {
         let bundledReleaseChannel: String
-        let selectedUpdateChannel: String
         let selectedLanguage: String?
         let selectedTask: String?
         let translationEnabled: Bool
@@ -396,8 +381,6 @@ private struct DiagnosticsReport: Encodable {
         let historyRetentionDays: Int
         let saveAudioWithHistory: Bool
         let dictationRecoveryRetentionDays: Int
-        let memoryEnabled: Bool
-        let memoryCaptureScope: String
         let appFormattingEnabled: Bool
         let modelAutoUnloadSeconds: Int
         let modelAutoUnloadPolicy: String
@@ -412,7 +395,6 @@ private struct DiagnosticsReport: Encodable {
         let overlayPosition: String
         let externalStreamingDisplayCount: Int?
         let soundFeedbackEnabled: Bool
-        let spokenFeedbackEnabled: Bool
         let showMenuBarIcon: Bool
         let dockIconBehaviorWhenMenuBarHidden: String
         let watchFolderAutoStart: Bool
@@ -447,10 +429,8 @@ private struct DiagnosticsReport: Encodable {
     let api: APIInfo
     let processMemory: ProcessMemoryInfo
     let modelAutoUnload: ModelAutoUnloadDiagnosticsSnapshot
-    let memoryExtraction: MemoryExtractionDiagnosticsSnapshot
     let audio: AudioInfo
     let plugins: [PluginInfo]
-    let skippedExternalBundles: [SkippedExternalBundleInfo]
     let workflows: DiagnosticWorkflowSnapshot
     let correctionLearning: DiagnosticCorrectionLearningInfo
     let settings: SettingsSnapshot
@@ -525,11 +505,6 @@ final class ErrorLogService: ObservableObject {
             }
             let activity = (loadedPlugin.instance as? any PluginSettingsActivityReporting)?.currentSettingsActivity
             let runtimeMemory = (loadedPlugin.instance as? any PluginRuntimeMemoryDiagnosticsReporting)?.runtimeMemorySnapshot
-            let registryEntry = container.pluginRegistryService.registry.first { $0.id == loadedPlugin.manifest.id }
-            let externalNotice = pluginManager.externalBundleNotice(
-                for: loadedPlugin.manifest.id,
-                registryPlugin: registryEntry
-            )
             let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
                 bundle: loadedPlugin.bundle,
                 sourceURL: loadedPlugin.sourceURL,
@@ -555,40 +530,12 @@ final class ErrorLogService: ObservableObject {
                 storedSelectedVersion: defaults.string(forKey: Self.pluginDefaultKey(pluginId: loadedPlugin.manifest.id, key: "selectedVersion")),
                 source: pluginSource,
                 currentSettingsActivity: activity.map(DiagnosticPluginActivityInfo.init),
-                runtimeMemory: runtimeMemory.map(DiagnosticsReport.PluginRuntimeMemoryInfo.init),
-                registryVersion: registryEntry?.version,
-                registrySource: registryEntry?.source.rawValue,
-                externalBundleNotice: externalNotice?.diagnosticsValue
-            ))
-        }
-
-        var skippedExternalBundleDiagnostics: [DiagnosticsReport.SkippedExternalBundleInfo] = []
-        for bundle in pluginManager.incompatibleExternalBundles.values.sorted(by: { $0.pluginName < $1.pluginName }) {
-            let registryEntry = container.pluginRegistryService.registry.first(where: { $0.id == bundle.pluginId })
-            let pluginSource = await PluginDiagnosticsSupport.sourceInfo(
-                bundle: Bundle(url: bundle.bundleURL),
-                sourceURL: bundle.bundleURL,
-                builtInPluginsURL: Bundle.main.builtInPlugInsURL,
-                pluginsDirectory: pluginManager.pluginsDirectory
-            )
-            skippedExternalBundleDiagnostics.append(DiagnosticsReport.SkippedExternalBundleInfo(
-                id: bundle.pluginId,
-                name: bundle.pluginName,
-                version: bundle.version,
-                reason: bundle.reason.diagnosticsValue,
-                source: pluginSource,
-                registryVersion: registryEntry?.version,
-                registrySource: registryEntry?.source.rawValue,
-                externalBundleNotice: PluginManager.externalBundleNotice(
-                    loadedPlugin: pluginManager.loadedPlugins.first(where: { $0.manifest.id == bundle.pluginId }),
-                    registryPlugin: registryEntry,
-                    incompatibleExternalBundle: bundle
-                )?.diagnosticsValue
+                runtimeMemory: runtimeMemory.map(DiagnosticsReport.PluginRuntimeMemoryInfo.init)
             ))
         }
 
         return DiagnosticsReport(
-            schemaVersion: 11,
+            schemaVersion: 12,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -629,7 +576,6 @@ final class ErrorLogService: ObservableObject {
             ),
             processMemory: DiagnosticProcessMemorySupport.snapshot(),
             modelAutoUnload: container.modelManagerService.autoUnloadDiagnosticsSnapshot(),
-            memoryExtraction: container.memoryService.extractionDiagnosticsSnapshot(),
             audio: .init(
                 selectedInputDeviceUID: defaults.string(forKey: UserDefaultsKeys.selectedInputDeviceUID),
                 selectedInputDeviceName: container.audioDeviceService.selectedDevice?.name,
@@ -648,7 +594,6 @@ final class ErrorLogService: ObservableObject {
                 inputDiagnostics: container.audioDeviceService.diagnosticsReport()
             ),
             plugins: pluginDiagnostics,
-            skippedExternalBundles: skippedExternalBundleDiagnostics,
             workflows: Self.workflowDiagnosticsSnapshot(
                 from: container.workflowService,
                 promptProcessingService: container.promptProcessingService
@@ -659,7 +604,6 @@ final class ErrorLogService: ObservableObject {
             ),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
-                selectedUpdateChannel: container.managedUpdateCoordinator.effectiveChannel.value.rawValue,
                 selectedLanguage: defaults.string(forKey: UserDefaultsKeys.selectedLanguage),
                 selectedTask: defaults.string(forKey: UserDefaultsKeys.selectedTask),
                 translationEnabled: defaults.bool(forKey: UserDefaultsKeys.translationEnabled),
@@ -667,8 +611,6 @@ final class ErrorLogService: ObservableObject {
                 historyRetentionDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays),
                 saveAudioWithHistory: defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory),
                 dictationRecoveryRetentionDays: DictationRecoveryRetentionPolicy.load(from: defaults).rawValue,
-                memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
-                memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),
                 modelAutoUnloadSeconds: modelAutoUnloadSeconds,
                 modelAutoUnloadPolicy: ModelAutoUnloadPolicy.policyName(seconds: modelAutoUnloadSeconds),
@@ -683,7 +625,6 @@ final class ErrorLogService: ObservableObject {
                 overlayPosition: defaults.string(forKey: UserDefaultsKeys.overlayPosition) ?? OverlayPosition.top.rawValue,
                 externalStreamingDisplayCount: DictationViewModel._shared?.externalStreamingDisplayCount,
                 soundFeedbackEnabled: defaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true,
-                spokenFeedbackEnabled: defaults.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled),
                 showMenuBarIcon: defaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool ?? true,
                 dockIconBehaviorWhenMenuBarHidden: defaults.string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) ?? DockIconBehavior.keepVisible.rawValue,
                 watchFolderAutoStart: defaults.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

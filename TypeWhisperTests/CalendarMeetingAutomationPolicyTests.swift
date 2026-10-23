@@ -5,13 +5,12 @@ import XCTest
 final class CalendarMeetingAutomationPolicyTests: XCTestCase {
     private let identity = CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
 
-    func testFreeAndOffConfigurationsNeverRequestAudioOrCameraCollectors() {
+    func testOffConfigurationNeverRequestsAudioOrCameraCollectors() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)
 
         for configuration in [
-            configuration(mode: .automatic, premium: false),
-            configuration(mode: .off, premium: true)
+            configuration(mode: .off)
         ] {
             var policy = CalendarMeetingAutomationPolicy()
             let effects = policy.reduce(.configure(
@@ -979,7 +978,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         )
 
         let effects = policy.reduce(.configure(
-            configuration(mode: .off, autoStop: false, premium: false),
+            configuration(mode: .off, autoStop: false),
             occurrences: [],
             now: now.addingTimeInterval(1)
         ))
@@ -1283,12 +1282,10 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
     private func configuration(
         mode: CalendarMeetingStartMode,
         autoStop: Bool = false,
-        premium: Bool = true,
         suppressedDigests: Set<String> = [],
         confirmSoloEvents: Bool = false
     ) -> CalendarMeetingAutomationConfiguration {
         CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: premium,
             startMode: mode,
             autoStopEnabled: autoStop,
             calendarAuthorization: .fullAccess,
@@ -1317,12 +1314,10 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
 extension CalendarMeetingAutomationPolicyTests {
     private func adHocConfiguration(
         mode: CalendarMeetingStartMode = .automatic,
-        premium: Bool = true,
         enabled: Bool = true,
         providers: Set<MeetingProvider> = [.zoom, .teams, .googleMeet]
     ) -> CalendarMeetingAutomationConfiguration {
         CalendarMeetingAutomationConfiguration(
-            hasPremiumAccess: premium,
             startMode: mode,
             autoStopEnabled: true,
             calendarAuthorization: .denied,
@@ -1357,12 +1352,11 @@ extension CalendarMeetingAutomationPolicyTests {
         ))
     }
 
-    func testAdHocCollectorNeedsOptInAndEntitlementButNoCalendarPermission() {
+    func testAdHocCollectorNeedsOptInAndActiveModeButNoCalendarPermission() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         for config in [
             adHocConfiguration(enabled: false),
-            adHocConfiguration(mode: .off),
-            adHocConfiguration(premium: false)
+            adHocConfiguration(mode: .off)
         ] {
             var policy = CalendarMeetingAutomationPolicy()
             let effects = policy.reduce(.configure(config, occurrences: [], now: now))

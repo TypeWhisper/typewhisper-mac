@@ -3,7 +3,7 @@ import TypeWhisperPluginSDK
 import os.log
 
 private let workflowTextProcessingLogger = Logger(
-    subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
+    subsystem: AppConstants.loggerSubsystem,
     category: "WorkflowTextProcessingService"
 )
 

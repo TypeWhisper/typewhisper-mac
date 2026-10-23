@@ -47,7 +47,6 @@ private struct ManagedLockAccessibilityHint: ViewModifier {
 /// Settings > Advanced > Managed Settings: the read-only view of the managed preferences.
 struct ManagedSettingsSection: View {
     @ObservedObject var policyService: ManagedPolicyService
-    @ObservedObject var updateCoordinator: ManagedUpdateCoordinator
 
     /// Shown while anything is managed or reported, so unmanaged Macs keep a short Advanced page.
     static func isVisible(_ snapshot: ManagedPolicySnapshot) -> Bool {
@@ -57,7 +56,7 @@ struct ManagedSettingsSection: View {
     var body: some View {
         let snapshot = policyService.current
         let rows = Self.rows(snapshot)
-        let problems = Self.problems(snapshot, updatePolicy: updateCoordinator.policy) + Self.pairProblems()
+        let problems = snapshot.issues.map(\.message) + Self.pairProblems()
 
         Section(String(localized: "Managed Settings")) {
             Text(Self.summary(snapshot))
@@ -126,7 +125,7 @@ struct ManagedSettingsSection: View {
                         Text(String(localized: "Last checked \(snapshot.readAt.formatted(date: .omitted, time: .standard))"))
                             .font(.caption)
                     }
-                    Text(String(localized: "TypeWhisper checks again every 30 seconds and when it becomes active."))
+                    Text(String(localized: "dictum checks again every 30 seconds and when it becomes active."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -184,24 +183,6 @@ struct ManagedSettingsSection: View {
         return rows
     }
 
-    /// Validation findings, conflicts between enforced values and keys this edition ignores.
-    static func problems(_ snapshot: ManagedPolicySnapshot, updatePolicy: ManagedUpdatePolicy) -> [String] {
-        var problems = snapshot.issues.map(\.message)
-        if let conflict = updatePolicy.conflict {
-            problems.append(conflict)
-        }
-        #if APPSTORE
-        let notApplicable = [
-            ManagedPolicyKeys.updateMode, ManagedPolicyKeys.updateChannel, ManagedPolicyKeys.allowedUpdateChannels,
-            ManagedPolicyKeys.allowPluginDownloads, ManagedPolicyKeys.managedLicenseKey,
-        ]
-        for key in notApplicable where snapshot.enforced(key) != nil || snapshot.recommended(key) != nil {
-            problems.append("\(key) does not apply to the App Store edition and is ignored.")
-        }
-        #endif
-        return problems
-    }
-
     /// Enforced pairs that name a provider or model that cannot be used, with the reason.
     @MainActor
     static func pairProblems(pluginManager: PluginManager? = PluginManager.shared) -> [String] {
@@ -220,19 +201,7 @@ struct ManagedSettingsSection: View {
         case .boolean(let flag):
             return flag ? String(localized: "On") : String(localized: "Off")
         case .enumeration(let number):
-            switch definition.name {
-            case ManagedPolicyKeys.updateMode:
-                switch ManagedUpdateMode(rawValue: number) {
-                case .external: return String(localized: "External")
-                case .checkOnly: return String(localized: "Check only")
-                case .userInitiated: return String(localized: "User-initiated")
-                case nil: return String(number)
-                }
-            case ManagedPolicyKeys.updateChannel:
-                return ManagedUpdatePolicy.channel(policyValue: number)?.selectionDisplayName ?? String(number)
-            default:
-                return String(number)
-            }
+            return String(number)
         case .text(let text):
             return text
         case .list(let items):

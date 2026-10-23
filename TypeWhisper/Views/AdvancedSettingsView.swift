@@ -3,12 +3,10 @@ import UniformTypeIdentifiers
 
 struct AdvancedSettingsView: View {
     @ObservedObject private var viewModel = APIServerViewModel.shared
-    @ObservedObject private var memoryService = ServiceContainer.shared.memoryService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var speechFeedbackService = ServiceContainer.shared.speechFeedbackService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
     @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
@@ -16,7 +14,6 @@ struct AdvancedSettingsView: View {
     @State private var cliSymlinkTarget = ""
     @State private var raycastInstalled = false
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
-    @State private var showClearMemoryConfirmation = false
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
@@ -37,14 +34,14 @@ struct AdvancedSettingsView: View {
     private var browserExtensionInfoText: String {
         if browserExtensionConnected {
             return localizedAppText(
-                "A browser extension has connected to TypeWhisper. It reports the active website, so website workflows match the page you are on.",
-                de: "Eine Browser-Erweiterung hat sich mit TypeWhisper verbunden. Sie meldet die aktive Website, damit Website-Workflows zur geöffneten Seite passen."
+                "A browser extension has connected to dictum. It reports the active website, so website workflows match the page you are on.",
+                de: "Eine Browser-Erweiterung hat sich mit dictum verbunden. Sie meldet die aktive Website, damit Website-Workflows zur geöffneten Seite passen."
             )
         }
 #if APPSTORE
         return localizedAppText(
-            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because TypeWhisper cannot read browser addresses itself. Requires the API server to be running.",
-            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil TypeWhisper Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
+            "Dictate into text fields in Chrome and Firefox. In this edition, website workflows need the extension, because dictum cannot read browser addresses itself. Requires the API server to be running.",
+            de: "Diktiere in Textfelder in Chrome und Firefox. In dieser Edition brauchen Website-Workflows die Erweiterung, weil dictum Browser-Adressen nicht selbst lesen kann. Der API-Server muss laufen."
         )
 #else
         return localizedAppText(
@@ -62,8 +59,7 @@ struct AdvancedSettingsView: View {
             Form {
                 if ManagedSettingsSection.isVisible(managedPolicyService.current) {
                     ManagedSettingsSection(
-                        policyService: managedPolicyService,
-                        updateCoordinator: ServiceContainer.shared.managedUpdateCoordinator
+                        policyService: managedPolicyService
                     )
                 }
 
@@ -125,8 +121,10 @@ struct AdvancedSettingsView: View {
                     }
 
                     SettingsInfoButton(text: localizedAppText(
-                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.",
-                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
+                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkeys, plugin settings, transcription history without audio, and app preferences to a file you can import on another Mac. Provider API keys, downloaded models, Launch at Login, and other machine-specific settings are not included.",
+                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkeys, Plugin-Einstellungen, Transkriptionsverlauf ohne Audio und App-Einstellungen in eine Datei für einen anderen Mac. Anbieter-API-Schlüssel, heruntergeladene Modelle, „Bei Anmeldung öffnen“ und andere gerätespezifische Einstellungen sind nicht enthalten.",
+                        ja: "ワークフロー、辞書、スニペット、プロファイル、プロンプト操作、ホットキー、プラグイン設定、音声を含まない履歴、アプリ設定を別のMacに読み込めるファイルに書き出します。APIキー、ダウンロードしたモデル、ログイン時に開く設定などの端末固有設定は含まれません。",
+                        zh: "将工作流、词典、快捷短语、配置、提示操作、快捷键、插件设置、不含音频的转录历史和应用偏好导出为文件，可在其他 Mac 上导入。不包含提供商 API 密钥、已下载模型、登录时启动等本机设置。"
                     ), topic: localizedAppText("Backup & Restore", de: "Sicherung & Wiederherstellung"))
                 }
             }
@@ -163,8 +161,8 @@ struct AdvancedSettingsView: View {
                     }
 
                     SettingsInfoButton(text: localizedAppText(
-                        "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
-                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
+                        "Export creates a ZIP archive with everything dictum stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits dictum.",
+                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was dictum auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet dictum."
                     ), topic: localizedAppText("Your Data", de: "Deine Daten", ja: "あなたのデータ", zh: "你的数据"))
                 }
                 .confirmationDialog(
@@ -176,115 +174,12 @@ struct AdvancedSettingsView: View {
                     }
                 } message: {
                     Text(localizedAppText(
-                        "TypeWhisper deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded and imported models, API keys and license activation on this Mac, then quits. Imported models are not part of the data export. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
-                        de: "TypeWhisper löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene und importierte Modelle, API-Schlüssel und die Lizenzaktivierung auf diesem Mac und beendet sich danach. Importierte Modelle sind nicht im Datenexport enthalten. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
+                        "dictum deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded and imported models and API keys on this Mac, then quits. Imported models are not part of the data export. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
+                        de: "dictum löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene und importierte Modelle und API-Schlüssel auf diesem Mac und beendet sich danach. Importierte Modelle sind nicht im Datenexport enthalten. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
                     ))
                 }
             }
 
-                // MARK: - Memory
-                Section(String(localized: "Memory")) {
-                Toggle(isOn: $memoryService.isEnabled) {
-                    SettingsInfoLabel(
-                        title: String(localized: "Enable Memory"),
-                        info: String(localized: "Automatically extracts facts, preferences and patterns from your transcriptions using an LLM. Memories are injected into prompt context.")
-                    )
-                }
-
-                if memoryService.isEnabled {
-                    Picker(selection: $memoryService.captureScope) {
-                        ForEach(MemoryCaptureScope.allCases) { scope in
-                            Text(scope.localizedTitle).tag(scope)
-                        }
-                    } label: {
-                        SettingsInfoLabel(
-                            title: String(localized: "Capture From"),
-                            info: memoryService.captureScope.localizedDescription
-                        )
-                    }
-
-                    Picker(String(localized: "Extraction Provider"), selection: $memoryService.extractionProviderId) {
-                        Text(String(localized: "None")).tag("")
-                        ForEach(promptProcessingService.availableProviders, id: \.id) { provider in
-                            Text(provider.displayName).tag(provider.id)
-                        }
-                    }
-
-                    if !memoryService.extractionProviderId.isEmpty {
-                        let models = promptProcessingService.modelsForProvider(memoryService.extractionProviderId)
-                        if !models.isEmpty {
-                            Picker(String(localized: "Extraction Model"), selection: $memoryService.extractionModel) {
-                                Text(String(localized: "Default")).tag("")
-                                ForEach(models, id: \.id) { model in
-                                    Text(model.displayName).tag(model.id)
-                                }
-                            }
-                        }
-                    }
-
-                    Stepper(value: $memoryService.minimumTextLength, in: 10...200, step: 10) {
-                        HStack {
-                            SettingsInfoLabel(
-                                title: String(localized: "Min. text length"),
-                                info: String(localized: "Transcriptions shorter than this are skipped for memory extraction.")
-                            )
-                            Spacer()
-                            Text("\(memoryService.minimumTextLength)")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    DisclosureGroup(String(localized: "Extraction Prompt")) {
-                        TextEditor(text: $memoryService.extractionPrompt)
-                            .font(.system(.caption, design: .monospaced))
-                            .frame(minHeight: 120)
-                            .border(.separator)
-                            .accessibilityLabel(String(localized: "Extraction Prompt"))
-
-                        Button(String(localized: "Reset to Default")) {
-                            memoryService.extractionPrompt = MemoryService.defaultExtractionPrompt
-                        }
-                        .font(.caption)
-                    }
-
-                    let pluginCount = PluginManager.shared.memoryStoragePlugins.count
-                    HStack {
-                        Image(systemName: "circle.fill")
-                            .foregroundStyle(pluginCount > 0 && !memoryService.extractionProviderId.isEmpty ? .green : .orange)
-                            .font(.caption2)
-                            .accessibilityHidden(true)
-                        if pluginCount == 0 {
-                            Text(String(localized: "No memory storage plugins active. Enable one in Integrations."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else if memoryService.extractionProviderId.isEmpty {
-                            Text(String(localized: "Select an extraction provider to start collecting memories."))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(String(localized: "\(pluginCount) storage plugin(s) active"))
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button(role: .destructive) {
-                        showClearMemoryConfirmation = true
-                    } label: {
-                        Label(String(localized: "Clear All Memories"), systemImage: "trash")
-                    }
-                    .confirmationDialog(
-                        String(localized: "Clear All Memories?"),
-                        isPresented: $showClearMemoryConfirmation
-                    ) {
-                        Button(String(localized: "Clear All"), role: .destructive) {
-                            Task { await memoryService.clearAllMemories() }
-                        }
-                    } message: {
-                        Text(String(localized: "This will permanently delete all stored memories from all plugins. This cannot be undone."))
-                    }
-                }
-            }
 
                 // MARK: - Recording
                 Section(String(localized: "Recording")) {
@@ -396,43 +291,6 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
-                if speechFeedbackService.hasAvailableProviders {
-                    Toggle(isOn: $dictation.spokenFeedbackEnabled) {
-                        SettingsInfoLabel(
-                            title: String(localized: "Spoken feedback"),
-                            info: String(localized: "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements.")
-                        )
-                    }
-
-                    if dictation.spokenFeedbackEnabled {
-                        let providerSelection = Binding(
-                            get: { speechFeedbackService.effectiveProviderId ?? speechFeedbackService.selectedProviderId },
-                            set: { speechFeedbackService.selectedProviderId = $0 }
-                        )
-
-                        Picker(String(localized: "Speech Provider"), selection: providerSelection) {
-                            ForEach(speechFeedbackService.availableProviders, id: \.id) { provider in
-                                Text(provider.displayName).tag(provider.id)
-                            }
-                        }
-
-                        if let summary = speechFeedbackService.currentSettingsSummary {
-                            Text(summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        if let activeProviderId = speechFeedbackService.effectiveProviderId,
-                           let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
-                           plugin.instance.settingsView != nil {
-                            Button(String(localized: "Configure Voice & Speed…")) {
-                                SettingsNavigationCoordinator.shared.navigate(
-                                    to: .installedPlugin(pluginId: plugin.id)
-                                )
-                            }
-                        }
-                    }
-                }
             }
 
                 SpokenPunctuationSettingsSection()
@@ -475,10 +333,10 @@ struct AdvancedSettingsView: View {
                     SettingsInfoLabel(
                         title: String(localized: "Require API Token"),
                         info: localizedAppText(
-                            "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in TypeWhisper's Application Support folder.",
-                            de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von TypeWhisper.",
-                            ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、TypeWhisper の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
-                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 TypeWhisper 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
+                            "Clients must send the API token as a bearer token. The command line tool, the Raycast extension and other local tools read it from api-discovery.json in dictum's Application Support folder.",
+                            de: "Clients müssen den API-Token als Bearer-Token mitschicken. Das Kommandozeilen-Tool, die Raycast-Erweiterung und andere lokale Tools lesen ihn aus api-discovery.json im Application-Support-Ordner von dictum.",
+                            ja: "クライアントは API トークンを Bearer トークンとして送信する必要があります。コマンドラインツール、Raycast 拡張機能、その他のローカルツールは、dictum の Application Support フォルダにある api-discovery.json からトークンを読み取ります。",
+                            zh: "客户端必须以 Bearer 令牌的形式发送 API 令牌。命令行工具、Raycast 扩展和其他本地工具会从 dictum 的 Application Support 文件夹中的 api-discovery.json 读取令牌。"
                         )
                     )
                 }
@@ -588,7 +446,7 @@ struct AdvancedSettingsView: View {
                         }
 
                         SettingsInfoButton(
-                            text: String(localized: "Requires the API server to be running. The CLI tool connects to TypeWhisper's API for fast transcription without model cold starts."),
+                            text: String(localized: "Requires the API server to be running. The CLI tool connects to dictum's API for fast transcription without model cold starts."),
                             topic: String(localized: "Command Line Tool")
                         )
                     }
@@ -630,7 +488,7 @@ struct AdvancedSettingsView: View {
                             .accessibilityLabel(learnMoreAccessibilityLabel(about: raycastTitle))
 
                             SettingsInfoButton(
-                                text: String(localized: "TypeWhisper works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."),
+                                text: String(localized: "dictum works with Raycast. Start dictation and more directly from your launcher. Requires the API server to be running."),
                                 topic: raycastTitle
                             )
                         }
@@ -640,34 +498,11 @@ struct AdvancedSettingsView: View {
                 let browserExtensionTitle = localizedAppText("Browser Extension", de: "Browser-Erweiterung", ja: "ブラウザ拡張機能", zh: "浏览器扩展")
                 integrationRow(systemImage: "globe", title: browserExtensionTitle) {
                     HStack {
-                        Button(localizedAppText("Learn More", de: "Mehr erfahren")) {
-                            NSWorkspace.shared.open(URL(string: "https://www.typewhisper.com/extensions#browser")!)
-                        }
-                        .accessibilityLabel(learnMoreAccessibilityLabel(about: browserExtensionTitle))
-
                         SettingsInfoButton(text: browserExtensionInfoText, topic: browserExtensionTitle)
                     }
                 }
 
-                let companionAppTitle = localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App", ja: "iPhone・iPad アプリ", zh: "iPhone 和 iPad App")
-                integrationRow(systemImage: "iphone", title: companionAppTitle) {
-                    HStack {
-                        Button(localizedAppText("Show", de: "Anzeigen", ja: "表示", zh: "显示")) {
-                            IOSCompanionPromoCoordinator.shared.requestManualPresentation()
-                        }
-                        .accessibilityLabel(localizedAppText(
-                            "Show \(companionAppTitle)",
-                            de: "Anzeigen: \(companionAppTitle)",
-                            ja: "\(companionAppTitle)を表示",
-                            zh: "显示\(companionAppTitle)"
-                        ))
-
-                        SettingsInfoButton(text: localizedAppText(
-                            "Show the TypeWhisper companion app for iPhone and iPad again.",
-                            de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
-                        ), topic: companionAppTitle)
-                    }
-                }
+                RemoteLinkSettingsView()
                 }
             }
             .formStyle(.grouped)
@@ -680,10 +515,6 @@ struct AdvancedSettingsView: View {
                 withBundleIdentifier: "com.raycast.macos"
             ) != nil
             checkCLIInstallation()
-            syncSpeechFeedbackAvailability()
-        }
-        .onReceive(pluginManager.$registryRevision) { _ in
-            syncSpeechFeedbackAvailability()
         }
         .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
             Button(String(localized: "OK"), role: .cancel) {}
@@ -925,7 +756,6 @@ struct AdvancedSettingsView: View {
             profileService: container.profileService,
             promptActionService: container.promptActionService,
             pluginManager: container.pluginManager,
-            pluginRegistryService: container.pluginRegistryService,
             historyService: container.historyService,
             usageStatisticsService: container.usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { enabled in
@@ -978,13 +808,12 @@ struct AdvancedSettingsView: View {
             category: String(localized: "Profiles")
         )
         lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
-        lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
-        if result.pluginsRegistryFetchFailed {
-            lines.append(localizedAppText(
-                "Could not reach the plugin marketplace — some plugins may have been skipped due to a network error, not because they're unavailable.",
-                de: "Der Plugin-Marktplatz konnte nicht erreicht werden – einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
-            ))
-        }
+        lines.append(String(format: localizedAppText(
+            "Plugins: %d configured, %d unavailable",
+            de: "Plugins: %d konfiguriert, %d nicht verfügbar",
+            ja: "プラグイン: %d件を設定、%d件は利用不可",
+            zh: "插件：已配置 %d 个，%d 个不可用"
+        ), result.pluginsConfigured, result.pluginsSkipped))
         lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))
         if result.historySkippedByRetention > 0 {
             lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
@@ -1004,9 +833,6 @@ struct AdvancedSettingsView: View {
                 ja: "履歴: %d件をスキップ（登録済み）",
                 zh: "历史记录：已跳过 %d 条（已存在）"
             ), result.historySkippedAsDuplicate))
-        }
-        if result.updateChannelApplied {
-            lines.append(String(localized: "Update channel applied"))
         }
         if result.preferencesApplied > 0 {
             lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))
@@ -1119,14 +945,6 @@ struct AdvancedSettingsView: View {
         try? process.run()
     }
 
-    private func syncSpeechFeedbackAvailability() {
-        guard !speechFeedbackService.hasAvailableProviders else { return }
-        if dictation.spokenFeedbackEnabled {
-            dictation.spokenFeedbackEnabled = false
-        } else {
-            _ = speechFeedbackService.disableIfNoProvidersAvailable()
-        }
-    }
 }
 
 /// Wraps a built `SettingsBackup` snapshot with a stable identity so the

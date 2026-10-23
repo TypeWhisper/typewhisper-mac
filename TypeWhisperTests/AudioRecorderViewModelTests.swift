@@ -138,26 +138,6 @@ private final class BlockingRecorderCompletionsLoader: @unchecked Sendable {
 
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
-    func testRecordingRequestSuppressesWhatsNewBeforeAsyncStartup() async throws {
-        let defaults = try makeDefaults()
-        defaults.set(true, forKey: UserDefaultsKeys.setupWizardCompleted)
-        let coordinator = WhatsNewCoordinator(defaults: defaults)
-        let previous = WhatsNewCoordinator.shared
-        WhatsNewCoordinator.shared = coordinator
-        defer { WhatsNewCoordinator.shared = previous }
-
-        let viewModel = makeViewModel(defaults: defaults)
-        // Reject before accessing hardware; the recording intent must still win.
-        viewModel.micEnabled = false
-        viewModel.systemAudioEnabled = false
-        viewModel.startRecording()
-
-        XCTAssertEqual(viewModel.state, .idle)
-        XCTAssertTrue(coordinator.isSuppressedForLaunch)
-        XCTAssertTrue(coordinator.hasUnseenContent)
-        await Task.yield()
-    }
-
     /// A recording resets the error; the same error in a later recording is announced again.
     func testSameRecorderErrorAndWarningAreAnnouncedAgainAfterBeingCleared() throws {
         final class Announcements {
@@ -2167,7 +2147,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.plugin.restoreCount, 1)
         XCTAssertFalse(fixture.plugin.isConfigured)
         XCTAssertEqual(failure.phase, .finalTranscription)
-        XCTAssertTrue(failure.providerError.contains("Failed to load the selected model"))
+        XCTAssertTrue(failure.providerError.contains(String(localized: "Failed to load the selected model.")))
         XCTAssertTrue(failure.providerError.contains(restoreMessage))
         XCTAssertTrue(fixture.viewModel.errorMessage?.contains(restoreMessage) == true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.transcriptURL.path))

@@ -53,7 +53,6 @@ final class ServiceContainer: ObservableObject {
 
     // Services
     let managedPolicyService: ManagedPolicyService
-    let managedUpdateCoordinator: ManagedUpdateCoordinator
     let launchAtLoginController: LaunchAtLoginPolicyController
     let modelManagerService: ModelManagerService
     let audioFileService: AudioFileService
@@ -81,10 +80,8 @@ final class ServiceContainer: ObservableObject {
     let promptActionService: PromptActionService
     let promptProcessingService: PromptProcessingService
     let pluginManager: PluginManager
-    let pluginRegistryService: PluginRegistryService
     let termPackRegistryService: TermPackRegistryService
     let widgetDataService: WidgetDataService
-    let memoryService: MemoryService
     let appFormatterService: AppFormatterService
     let dictationPunctuationProfileStore: DictationPunctuationProfileStore
     let punctuationRulesLoader: PunctuationRulesLoader
@@ -93,14 +90,7 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderService: AudioRecorderService
     let watchFolderService: WatchFolderService
     let accessibilityAnnouncementService: AccessibilityAnnouncementService
-    let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
-    let licenseService: LicenseService
-    let premiumAccountService: PremiumAccountService
-    #if APPSTORE
-    let appStorePremiumService: AppStorePremiumService
-    #endif
-    let supporterDiscordService: SupporterDiscordService
     let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
     let speakerVoiceProfileService: SpeakerVoiceProfileService
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
@@ -138,7 +128,6 @@ final class ServiceContainer: ObservableObject {
             snapshotStore: .shared
         )
         managedPolicyService.refresh()
-        managedUpdateCoordinator = ManagedUpdateCoordinator(policyService: managedPolicyService)
         launchAtLoginController = LaunchAtLoginPolicyController(snapshot: managedPolicyService.current)
 
         // Services
@@ -194,13 +183,11 @@ final class ServiceContainer: ObservableObject {
         )
         promptProcessingService = PromptProcessingService()
         pluginManager = PluginManager()
-        pluginRegistryService = PluginRegistryService()
         termPackRegistryService = TermPackRegistryService()
         widgetDataService = WidgetDataService(
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
-        memoryService = MemoryService(promptProcessingService: promptProcessingService)
         appFormatterService = AppFormatterService()
         dictationPunctuationProfileStore = DictationPunctuationProfileStore()
         punctuationRulesLoader = PunctuationRulesLoader()
@@ -209,31 +196,11 @@ final class ServiceContainer: ObservableObject {
         audioRecorderService = AudioRecorderService(
             inputActivationGuard: inputActivationGuard
         )
-        promptProcessingService.memoryService = memoryService
         promptProcessingService.modelManagerService = modelManagerService
         watchFolderService = WatchFolderService(audioFileService: audioFileService, modelManagerService: modelManagerService)
         accessibilityAnnouncementService = AccessibilityAnnouncementService()
-        pluginRegistryService.accessibilityAnnouncementService = accessibilityAnnouncementService
-        speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
-        licenseService = LicenseService()
-        premiumAccountService = AppConstants.isRunningTests
-            ? PremiumAccountService(
-                isSignedInOverride: false,
-                automaticallyRefresh: false
-            )
-            : PremiumAccountService()
-        #if APPSTORE
-        appStorePremiumService = AppStorePremiumService(
-            licenseService: licenseService,
-            premiumAccountService: premiumAccountService
-        )
-        // The sync controller below reads Premium access while it starts.
-        AppStorePremiumService.shared = appStorePremiumService
-        #endif
-        supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
-            premiumAccountService: premiumAccountService,
             syncStore: userDataSyncStore,
             historyService: historyService,
             historySyncPreferences: historyPreferences
@@ -251,8 +218,7 @@ final class ServiceContainer: ObservableObject {
             modelManager: modelManagerService,
             historyService: historyService,
             audioFileService: audioFileService,
-            usageStatisticsRecorder: usageStatisticsService,
-            licenseService: licenseService
+            usageStatisticsRecorder: usageStatisticsService
         )
         dictationRecoveryViewModel = recoveryViewModel
         settingsViewModel = SettingsViewModel(modelManager: modelManagerService)
@@ -275,7 +241,6 @@ final class ServiceContainer: ObservableObject {
             translationService: translationService,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
-            licenseService: licenseService,
             targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             snippetService: snippetService,
             soundService: soundService,
@@ -285,7 +250,6 @@ final class ServiceContainer: ObservableObject {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService,
@@ -310,18 +274,8 @@ final class ServiceContainer: ObservableObject {
         )
         let speakerCoordinator = SpeakerTranscriptCoordinator(
             historyService: historyService,
-            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first },
-            premiumAccess: { [licenseService, premiumAccountService] in
-                SpeakerWorkspacePremiumAccess.isGranted(
-                    hasCommercialLicense: licenseService.hasCommercialLicense,
-                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
-                )
-            }
+            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first }
         )
-        speakerCoordinator.observePremiumChanges([
-            licenseService.objectWillChange.eraseToAnyPublisher(),
-            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
-        ])
         speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
             let samples = try await audioFileService.loadAudioSamples(from: url)
             return try await modelManagerService.transcribe(
@@ -332,46 +286,9 @@ final class ServiceContainer: ObservableObject {
                 onSourceProgress: { _ in true }
             )
         }
-        speakerCoordinator.wordTimingSource = { [audioFileService, modelManagerService] url, language in
-            // Parakeet reports when each word is spoken and runs on this Mac.
-            let engineID = "parakeet"
-            let log = Logger(subsystem: AppConstants.loggerSubsystem, category: "SpeakerTranscript")
-            guard let engine = PluginManager.shared?.transcriptionEngine(for: engineID) else {
-                log.info("Word timing pass skipped: Parakeet is not installed")
-                return []
-            }
-            guard modelManagerService.canPrepareForTranscription(engine) else {
-                log.info("Word timing pass skipped: Parakeet has no model to load")
-                return []
-            }
-            // Engines store a code or a name ("de", "German").
-            let language = SpeakerTranscriptBuilder.languageCode(from: language)
-            let languages = engine.supportedLanguages
-            if let language, !languages.isEmpty,
-               !languages.contains(where: { language.hasPrefix($0) || $0.hasPrefix(language) }) {
-                log.info("Word timing pass skipped: Parakeet does not support \(language, privacy: .public)")
-                return []
-            }
-            let samples = try await audioFileService.loadAudioSamples(from: url)
-            let result = try await modelManagerService.transcribe(
-                audioSamples: samples,
-                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
-                task: .transcribe,
-                engineOverrideId: engineID,
-                onProgress: { _ in true },
-                onSourceProgress: { _ in true }
-            )
-            // The words are matched to another engine's text, which may
-            // punctuate differently.
-            return result.words.compactMap { word in
-                let text = word.text.trimmingCharacters(in: .punctuationCharacters.union(.whitespaces))
-                return text.isEmpty ? nil : TranscriptionWord(text: text, start: word.start, end: word.end)
-            }
-        }
         speakerVoiceProfileService = SpeakerVoiceProfileService(
             store: VoiceProfileStore(),
-            historyService: historyService,
-            premiumAccess: { [speakerCoordinator] in speakerCoordinator.hasPremiumAccess }
+            historyService: historyService
         )
         speakerCoordinator.voices = speakerVoiceProfileService
         speakerTranscriptCoordinator = speakerCoordinator
@@ -402,8 +319,6 @@ final class ServiceContainer: ObservableObject {
             }
         )
         calendarMeetingAutomationController = CalendarMeetingAutomationController(
-            licenseService: licenseService,
-            premiumAccountService: premiumAccountService,
             recorderViewModel: audioRecorderViewModel,
             dictationViewModel: dictationViewModel,
             countdownModel: calendarMeetingCountdownModel
@@ -423,7 +338,6 @@ final class ServiceContainer: ObservableObject {
             profileService: profileService,
             promptActionService: promptActionService,
             pluginManager: pluginManager,
-            pluginRegistryService: pluginRegistryService,
             historyService: historyService,
             usageStatisticsService: usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { [dictationViewModel] enabled in
@@ -474,19 +388,7 @@ final class ServiceContainer: ObservableObject {
         httpServer = HTTPServer(router: router)
         apiServerViewModel = APIServerViewModel(httpServer: httpServer, apiAuthenticator: apiAuthenticator)
         remoteLinkServer = RemoteLinkServer(router: router)
-        remoteLinkViewModel = RemoteLinkViewModel(
-            server: remoteLinkServer,
-            premiumAccess: { [licenseService, premiumAccountService] in
-                CalendarMeetingPremiumAccess.isGranted(
-                    hasCommercialLicense: licenseService.hasCommercialLicense,
-                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
-                )
-            }
-        )
-        remoteLinkViewModel.observePremiumChanges([
-            licenseService.objectWillChange.eraseToAnyPublisher(),
-            premiumAccountService.objectWillChange.eraseToAnyPublisher(),
-        ])
+        remoteLinkViewModel = RemoteLinkViewModel(server: remoteLinkServer)
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
@@ -496,7 +398,6 @@ final class ServiceContainer: ObservableObject {
         installedAppsViewModel = InstalledAppsViewModel()
         dictionaryViewModel = DictionaryViewModel(
             dictionaryService: dictionaryService,
-            licenseService: licenseService,
             termPackRegistryService: termPackRegistryService,
             selectedTranscriptionEngine: { [modelManagerService] in
                 modelManagerService.selectedProviderId.flatMap {
@@ -532,14 +433,9 @@ final class ServiceContainer: ObservableObject {
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
 
-        // License
-        LicenseService.shared = licenseService
-        SupporterDiscordService.shared = supporterDiscordService
-
         // Plugin system
         EventBus.shared = EventBus()
         PluginManager.shared = pluginManager
-        PluginRegistryService.shared = pluginRegistryService
         TermPackRegistryService.shared = termPackRegistryService
 
         modelManagerService.observePluginManager()
@@ -567,12 +463,6 @@ final class ServiceContainer: ObservableObject {
             snapshot,
             setupCompleted: UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted)
         )
-        #if !APPSTORE
-        let key = ManagedPolicyKeys.managedLicenseKey
-        if let previous, previous.enforced(key) != snapshot.enforced(key) {
-            Task { await licenseService.validateIfNeeded() }
-        }
-        #endif
     }
 
     func initialize() async {
@@ -590,11 +480,6 @@ final class ServiceContainer: ObservableObject {
             .sink { [weak self] previous, current in
                 self?.applyManagedPolicy(current, previous: previous)
             }
-
-        #if APPSTORE
-        // Listen for App Store transactions as early as possible.
-        appStorePremiumService.start()
-        #endif
 
         calendarMeetingAutomationController.initialize()
         historyService.failInterruptedSpeakerTranscripts()
@@ -632,18 +517,6 @@ final class ServiceContainer: ObservableObject {
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
-
-        pluginRegistryService.checkForUpdatesInBackground()
-
-        // Start memory service
-        memoryService.startListening()
-
-        #if !APPSTORE
-        // Validate license if needed
-        await licenseService.validateIfNeeded()
-        await licenseService.validateSupporterIfNeeded()
-        await supporterDiscordService.refreshStatusIfNeeded()
-        #endif
 
         // Auto-start watch folder if configured
         if UserDefaults.standard.bool(forKey: UserDefaultsKeys.watchFolderAutoStart),

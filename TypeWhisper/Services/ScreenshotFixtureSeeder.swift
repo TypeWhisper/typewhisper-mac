@@ -10,19 +10,12 @@ extension ServiceContainer {
         let content = language.content
         let variant = ScreenshotFixtureVariant.current
 
-        licenseService.usageIntent = variant.hasPremiumAccess ? .workSolo : .personalOSS
-        licenseService.licenseStatus = variant.hasPremiumAccess ? .active : .unlicensed
-        licenseService.licenseTier = variant.hasPremiumAccess ? .individual : nil
-        licenseService.licenseIsLifetime = variant.hasPremiumAccess
-        licenseService.supporterStatus = .unlicensed
-        licenseService.supporterTier = nil
-        premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
-        cloudFolderSyncController.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
+        cloudFolderSyncController.prepareScreenshotFixture(isConfigured: variant.hasPremiumAccess)
         calendarMeetingAutomationController.prepareScreenshotFixture(
-            hasPremiumAccess: variant.hasPremiumAccess,
+            isConfigured: variant.hasPremiumAccess,
             calendars: language.calendars
         )
-        targetAppCorrectionLearningService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
+        targetAppCorrectionLearningService.prepareScreenshotFixture(isConfigured: variant.hasPremiumAccess)
         UserDefaults.standard.set(
             variant.hasPremiumAccess,
             forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled
@@ -61,7 +54,6 @@ extension ServiceContainer {
             )
         }
 
-        seedScreenshotPluginRegistry()
         seedScreenshotTermPacks()
         DictionaryViewModel.shared.filterTab = AppConstants.screenshotState == "dictionary-term-packs"
             ? .termPacks
@@ -335,173 +327,6 @@ extension ServiceContainer {
         historyViewModel.requestRecordSelection([recordID])
     }
 
-    private func seedScreenshotPluginRegistry() {
-        pluginRegistryService.registry = [
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.deepgram",
-                name: "Deepgram",
-                description: "Fast cloud transcription with multilingual model support.",
-                descriptions: [
-                    "de": "Schnelle Cloud-Transkription mit mehrsprachigen Modellen.",
-                    "ja": "多言語モデルに対応した高速なクラウド文字起こし。",
-                    "zh": "支持多语言模型的快速云端转写。",
-                ],
-                categories: ["transcription"],
-                hosting: .cloud
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.assemblyai",
-                name: "AssemblyAI",
-                description: "Cloud speech recognition with speaker and language features.",
-                descriptions: [
-                    "de": "Cloud-Spracherkennung mit Sprecher- und Sprachfunktionen.",
-                    "ja": "話者識別と言語機能を備えたクラウド音声認識。",
-                    "zh": "具备说话人和语言功能的云端语音识别。",
-                ],
-                categories: ["transcription"],
-                hosting: .cloud
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.openrouter",
-                name: "OpenRouter",
-                description: "Use a broad catalog of language models in your workflows.",
-                descriptions: [
-                    "de": "Nutze eine große Auswahl an Sprachmodellen in deinen Workflows.",
-                    "ja": "豊富な言語モデルをワークフローで利用できます。",
-                    "zh": "在工作流中使用丰富的语言模型。",
-                ],
-                categories: ["llm"],
-                hosting: .cloud
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.elevenlabs",
-                name: "ElevenLabs",
-                description: "Natural text-to-speech voices for spoken feedback.",
-                descriptions: [
-                    "de": "Natürliche Stimmen für gesprochenes Feedback.",
-                    "ja": "読み上げフィードバック向けの自然な音声。",
-                    "zh": "用于语音反馈的自然文本转语音。",
-                ],
-                categories: ["tts"],
-                hosting: .cloud
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.file-memory",
-                name: "File Memory",
-                description: "Give workflows local context from selected documents.",
-                descriptions: [
-                    "de": "Gib Workflows lokalen Kontext aus ausgewählten Dokumenten.",
-                    "ja": "選択した書類のローカル情報をワークフローで利用できます。",
-                    "zh": "让工作流使用所选文档中的本地上下文。",
-                ],
-                categories: ["memory"],
-                hosting: .local
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.obsidian",
-                name: "Obsidian",
-                description: "Send processed notes directly to an Obsidian vault.",
-                descriptions: [
-                    "de": "Sende bearbeitete Notizen direkt an einen Obsidian-Vault.",
-                    "ja": "処理したメモをObsidianの保管庫へ直接送信します。",
-                    "zh": "将处理后的笔记直接发送到 Obsidian 仓库。",
-                ],
-                categories: ["action"],
-                hosting: .local,
-                locality: .configurable
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.parakeet",
-                name: "Parakeet",
-                description: "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
-                descriptions: [
-                    "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen.",
-                    "ja": "NVIDIA Parakeet TDTによるローカル音声認識です。高速かつ高精度で、25言語に対応します。",
-                ],
-                categories: ["transcription"],
-                hosting: .local
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.whisperkit",
-                name: "WhisperKit",
-                description: "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
-                descriptions: [
-                    "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung.",
-                    "ja": "WhisperKitによるローカル音声認識です。8種類のモデルサイズ、99言語、ストリーミングに対応します。",
-                ],
-                categories: ["transcription"],
-                hosting: .local
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.qwen3",
-                name: "Qwen3 ASR",
-                description: "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
-                descriptions: [
-                    "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key nötig.",
-                    "ja": "Apple Silicon上のMLXで動作するローカルQwen3-ASR音声認識です。30言語と中国語方言に対応し、APIキーは不要です。",
-                ],
-                categories: ["transcription"],
-                hosting: .local
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.local-llm-mlx",
-                name: "Local LLM (MLX)",
-                description: "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
-                descriptions: [
-                    "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
-                    "ja": "Apple Silicon上でMLX経由で動作するローカルLLM。Gemma 4、Qwen3.5、LFM2.5モデルに対応。APIキーは不要です。",
-                ],
-                categories: ["llm"],
-                hosting: .local
-            ),
-            screenshotRegistryPlugin(
-                id: "com.typewhisper.filler-words",
-                name: "Filler Words",
-                description: "Removes filler words like \"um\" and \"uh\" from transcribed text.",
-                descriptions: [
-                    "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text.",
-                ],
-                categories: ["post-processor"],
-                hosting: .local
-            ),
-        ]
-        pluginRegistryService.fetchState = .loaded
-        pluginRegistryService.updateAvailableUpdatesCount()
-    }
-
-    private func screenshotRegistryPlugin(
-        id: String,
-        name: String,
-        description: String,
-        descriptions: [String: String],
-        categories: [String],
-        hosting: PluginHosting,
-        locality: PluginLocality? = nil
-    ) -> RegistryPlugin {
-        RegistryPlugin(
-            id: id,
-            source: .official,
-            name: name,
-            version: "1.0.0",
-            minHostVersion: "0.0.0",
-            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-            minOSVersion: "14.0",
-            supportedArchitectures: nil,
-            author: "TypeWhisper",
-            description: description,
-            category: categories[0],
-            categories: categories,
-            capabilities: [],
-            size: 1_800_000,
-            downloadURL: "https://github.com/TypeWhisper/typewhisper-mac/releases/download/screenshot-fixture/plugin.zip",
-            iconSystemName: "puzzlepiece.extension",
-            requiresAPIKey: hosting == .cloud,
-            hosting: hosting,
-            descriptions: descriptions,
-            downloadCount: 1_250,
-            locality: (locality ?? (hosting == .cloud ? .cloud : .local)).rawValue
-        )
-    }
 
     private func seedScreenshotTermPacks() {
         termPackRegistryService.communityPacks = [

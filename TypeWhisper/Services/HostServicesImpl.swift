@@ -226,14 +226,6 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, H
         }
     }
 
-    func openSettingsSidebarItem(_ itemId: String) {
-        DispatchQueue.main.async { [pluginId] in
-            SettingsNavigationCoordinator.shared.navigate(
-                to: .plugin(pluginId: pluginId, itemId: itemId)
-            )
-            ManagedAppWindowOpener.shared.open(id: "settings")
-        }
-    }
 
     func enqueueImportedMediaForTranscription(
         _ media: PluginImportedMedia,

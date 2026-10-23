@@ -4,7 +4,7 @@ import Combine
 import os.log
 import TypeWhisperPluginSDK
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PromptActionService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PromptActionService")
 
 @MainActor
 class PromptActionService: ObservableObject {

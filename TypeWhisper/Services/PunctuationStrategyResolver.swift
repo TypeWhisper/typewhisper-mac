@@ -51,22 +51,13 @@ final class PunctuationStrategyResolver {
     }
 
     private func defaultProfile(engineId: String, modelId: String?, languageCode: String) -> DictationPunctuationProfile {
-        let verificationState: PunctuationVerificationState
-
-        switch (engineId, languageCode) {
-        case ("parakeet", "de"):
-            verificationState = .vendorHint
-        default:
-            verificationState = .unknown
-        }
-
         return DictationPunctuationProfile(
             engineId: engineId,
             modelId: modelId,
             languageCode: languageCode,
             defaultStrategy: .automatic,
             userOverride: nil,
-            verificationState: verificationState,
+            verificationState: .unknown,
             lastVerifiedAt: nil
         )
     }

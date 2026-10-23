@@ -11,7 +11,7 @@
 #
 # Usage:
 #   scripts/appstore/build-dev.sh [--run] [--clean] [--reset-permissions]
-#                                 [--language en|de|ja|zh-Hans] [--install-plugin <id>]...
+#                                 [--language en|de|ja|zh-Hans]
 #   scripts/appstore/build-dev.sh --relaunch [--reset-permissions] [--language ...]
 #   scripts/appstore/build-dev.sh --check
 #
@@ -22,7 +22,6 @@
 #   --reset-permissions   reset Accessibility, Input Monitoring, microphone and other
 #                         privacy decisions for the App Store bundle ID before launch
 #   --language <code>     app language for this launch only
-#   --install-plugin <id> treat a bundled plugin as installed for this launch only
 #
 # Environment:
 #   TYPEWHISPER_CODE_SIGN_IDENTITY   signing identity if several are installed
@@ -38,7 +37,6 @@ check=false
 clean=false
 reset_permissions=false
 language=""
-plugins=()
 
 usage() {
     sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'
@@ -53,7 +51,6 @@ while [[ $# -gt 0 ]]; do
         --clean) clean=true; shift ;;
         --reset-permissions) reset_permissions=true; shift ;;
         --language) [[ $# -ge 2 ]] || usage; language="$2"; shift 2 ;;
-        --install-plugin) [[ $# -ge 2 ]] || usage; plugins+=("$2"); shift 2 ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1" >&2; usage ;;
     esac
@@ -165,12 +162,6 @@ launch() {
     if [[ -n "$language" ]]; then
         args+=(-AppleLanguages "($language)" -preferredAppLanguage "$language")
     fi
-    if [[ ${#plugins[@]} -gt 0 ]]; then
-        local joined
-        joined="$(IFS=,; echo "${plugins[*]}")"
-        args+=(-appStore.installedPluginIDs "(com.typewhisper.speechanalyzer,$joined)")
-    fi
-
     if [[ ${#args[@]} -gt 0 ]]; then
         open "$app_path" --args "${args[@]}"
     else

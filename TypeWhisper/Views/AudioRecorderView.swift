@@ -39,19 +39,16 @@ struct AudioRecorderView: View {
             Divider()
 
             if settingsNavigation.recorderPart == .meetings {
-                SettingsPremiumPart(
+                SettingsDetailPart(
                     backTitle: String(localized: "settings.tab.recorder"),
                     onBack: { settingsNavigation.recorderPart = .recorder }
                 ) {
-                    PremiumCalendarMeetingSettingsWindow(
-                        licenseService: .shared,
-                        premiumAccount: ServiceContainer.shared.premiumAccountService,
-                        controllerFactory: { ServiceContainer.shared.calendarMeetingAutomationController },
-                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    CalendarMeetingSettingsSection(
+                        controller: ServiceContainer.shared.calendarMeetingAutomationController
                     )
                 }
             } else {
-            PremiumActiveFeatureOverview.link(to: .calendarMeeting)
+            FeatureSettingsLink(feature: .calendarMeeting)
                 .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
                 .padding(.top, SettingsLayoutMetrics.pagePadding)
 
@@ -204,7 +201,7 @@ struct AudioRecorderView: View {
                     || viewModel.trackMode == .separate
                 )
 
-                Text(String(localized: "Affects only TypeWhisper recordings and transcriptions, not your live meeting microphone."))
+                Text(String(localized: "Affects only dictum recordings and transcriptions, not your live meeting microphone."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -314,22 +311,6 @@ struct AudioRecorderView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
-
-                    if isLiveTranscriptPluginActive {
-                        Label(
-                            String(localized: "recorder.liveTranscriptActive"),
-                            systemImage: "text.quote"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                    } else {
-                        Label(
-                            String(localized: "recorder.liveTranscriptHint"),
-                            systemImage: "info.circle"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
                 }
             }
             .onAppear {
@@ -395,10 +376,6 @@ struct AudioRecorderView: View {
         case .finalizing:
             String(localized: "recorder.transcribing")
         }
-    }
-
-    private var isLiveTranscriptPluginActive: Bool {
-        pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
     }
 
     private func recorderSummaryRow(title: String, value: String) -> some View {

@@ -411,7 +411,6 @@ final class StatisticsViewModel: ObservableObject {
         }
         switch engineUsed.lowercased() {
         case "whisper": return "Whisper"
-        case "parakeet": return "Parakeet"
         case "unknown": return String(localized: "Unknown")
         default: return engineUsed.capitalized
         }

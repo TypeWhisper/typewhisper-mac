@@ -15,6 +15,5 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "DeepgramPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/deepgram/"
+    "locality": "cloud"
 }

@@ -68,7 +68,6 @@ enum UserDefaultsKeys {
     static let apiServerPort = "apiServerPort"
     static let apiServerRequiresAuthentication = "apiServerRequiresAuthentication"
     static let browserExtensionConnected = "browserExtensionConnected"
-    static let updateChannel = "updateChannel"
 
     // MARK: - Remote Link
     static let remoteLinkEnabled = "remoteLinkEnabled"
@@ -136,28 +135,12 @@ enum UserDefaultsKeys {
     static let dockIconBehaviorWhenMenuBarHidden = "dockIconBehaviorWhenMenuBarHidden"
     static let menuBarIconHiddenAlertShown = "menuBarIconHiddenAlertShown"
 
-    // MARK: - Memory
-    static let memoryEnabled = "memoryEnabled"
-    static let memoryExtractionProvider = "memoryExtractionProvider"
-    static let memoryExtractionModel = "memoryExtractionModel"
-    static let memoryMinTextLength = "memoryMinTextLength"
-    static let memoryExtractionPrompt = "memoryExtractionPrompt"
-    static let memoryCaptureScope = "memoryCaptureScope"
-
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
     static let stripFinalPeriodFromStandaloneValuesEnabled = "stripFinalPeriodFromStandaloneValuesEnabled"
     static let transcriptionNumberNormalizationEnabled = "transcriptionNumberNormalizationEnabled"
     static let transcriptionNumberNormalizationMinimumValue = "transcriptionNumberNormalizationMinimumValue"
     static let dictationPunctuationProfiles = "dictationPunctuationProfiles"
-
-    // MARK: - Accessibility
-    static let spokenFeedbackEnabled = "spokenFeedbackEnabled"
-    static let spokenFeedbackProviderId = "spokenFeedbackProviderId"
-
-    // MARK: - Plugin Registry
-    static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
-    static let improveTypeWhisperCaptureEnabled = "plugin.com.typewhisper.improve.collectCorrections"
 
     // MARK: - Recorder
     static let recorderMicEnabled = "recorderMicEnabled"
@@ -206,21 +189,6 @@ enum UserDefaultsKeys {
     static let workflowDefaultLLMCloudModel = "workflowDefaultLLMCloudModel"
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
-    // MARK: - Licensing
-    static let managedLicenseKey = "ManagedLicenseKey"
-    static let usageIntent = "usageIntent"
-    static let userType = "userType"
-    static let licenseStatus = "licenseStatus"
-    static let licenseTier = "licenseTier"
-    static let lastLicenseValidation = "lastLicenseValidation"
-    static let licenseIsLifetime = "licenseIsLifetime"
-    static let welcomeSheetShown = "welcomeSheetShown"
-    static let workUsagePromptDismissed = "workUsagePromptDismissed"
-    static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
-    static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
-    static let lastSeenWhatsNewContentVersion = "lastSeenWhatsNewContentVersion"
-    static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
-
     // MARK: - Managed settings
     /// The login item state before an enforced `LaunchAtLogin` policy changed it; restored once
     /// the policy is removed.
@@ -237,10 +205,4 @@ enum UserDefaultsKeys {
     /// Set once a recommended LLM pair has become the initial default language model.
     static let managedLlmRecommendationApplied = "managedLlmRecommendationApplied"
 
-    // MARK: - Supporter
-    static let supporterTier = "supporterTier"
-    static let supporterStatus = "supporterStatus"
-    static let lastSupporterValidation = "lastSupporterValidation"
-    static let supporterDiscordClaimStatus = "supporterDiscordClaimStatus"
-    static let supporterDiscordSessionId = "supporterDiscordSessionId"
 }

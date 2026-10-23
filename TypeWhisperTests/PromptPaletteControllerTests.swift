@@ -235,7 +235,7 @@ final class PromptPaletteControllerTests: XCTestCase {
         spy.pressEscape(inShow: 1)
 
         XCTAssertEqual(spy.shows.count, 3)
-        XCTAssertEqual(spy.shows[2].items.map(\.title), ["Summarize", "Recent Transcriptions"])
+        XCTAssertEqual(spy.shows[2].items.map(\.title), ["Summarize", String(localized: "Recent Transcriptions")])
     }
 
     func testEscapeOnTopLevelKeepsDefaultDismissBehavior() {

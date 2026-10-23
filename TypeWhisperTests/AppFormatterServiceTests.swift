@@ -2,41 +2,6 @@ import XCTest
 @testable import TypeWhisper
 
 final class AppFormatterServiceTests: XCTestCase {
-    func testPremiumAccountKeychainServiceSeparatesRuntimeEnvironments() {
-        XCTAssertEqual(
-            AppConstants.resolvePremiumAccountKeychainService(
-                isScreenshotAutomation: false,
-                isRunningTests: false,
-                isDevelopment: false
-            ),
-            "com.typewhisper.mac.premium-account"
-        )
-        XCTAssertEqual(
-            AppConstants.resolvePremiumAccountKeychainService(
-                isScreenshotAutomation: false,
-                isRunningTests: false,
-                isDevelopment: true
-            ),
-            "com.typewhisper.mac.dev.premium-account"
-        )
-        XCTAssertEqual(
-            AppConstants.resolvePremiumAccountKeychainService(
-                isScreenshotAutomation: false,
-                isRunningTests: true,
-                isDevelopment: true
-            ),
-            "com.typewhisper.mac.tests.premium-account"
-        )
-        XCTAssertEqual(
-            AppConstants.resolvePremiumAccountKeychainService(
-                isScreenshotAutomation: true,
-                isRunningTests: true,
-                isDevelopment: true
-            ),
-            "com.typewhisper.mac.screenshots.premium-account"
-        )
-    }
-
     func testBundledReleaseChannelUsesInfoDictionaryValue() {
         let channel = AppConstants.bundledReleaseChannel(
             infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.releaseCandidate.rawValue]
@@ -56,7 +21,7 @@ final class AppFormatterServiceTests: XCTestCase {
         XCTAssertEqual(release.tag, "v1.6.0-daily.20260716")
         XCTAssertEqual(
             release.url.absoluteString,
-            "https://github.com/TypeWhisper/typewhisper-mac/releases/tag/v1.6.0-daily.20260716"
+            "https://github.com/schneidervvv/dictum/releases/tag/v1.6.0-daily.20260716"
         )
     }
 
@@ -71,7 +36,7 @@ final class AppFormatterServiceTests: XCTestCase {
         XCTAssertEqual(release.tag, "v1.6.0-rc1")
         XCTAssertEqual(
             release.url.absoluteString,
-            "https://github.com/TypeWhisper/typewhisper-mac/releases/tag/v1.6.0-rc1"
+            "https://github.com/schneidervvv/dictum/releases/tag/v1.6.0-rc1"
         )
     }
 
@@ -100,37 +65,6 @@ final class AppFormatterServiceTests: XCTestCase {
         ))
     }
 
-    func testSelectedUpdateChannelUsesStoredOverride() {
-        let defaults = UserDefaults(suiteName: #function)!
-        defaults.removePersistentDomain(forName: #function)
-        defaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
-        defer {
-            defaults.removePersistentDomain(forName: #function)
-        }
-
-        let channel = AppConstants.selectedUpdateChannel(
-            defaults: defaults,
-            infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue]
-        )
-
-        XCTAssertEqual(channel, .daily)
-    }
-
-    func testSelectedUpdateChannelIgnoresInvalidStoredOverride() {
-        let defaults = UserDefaults(suiteName: #function)!
-        defaults.removePersistentDomain(forName: #function)
-        defaults.set("beta", forKey: UserDefaultsKeys.updateChannel)
-        defer {
-            defaults.removePersistentDomain(forName: #function)
-        }
-
-        let channel = AppConstants.selectedUpdateChannel(
-            defaults: defaults,
-            infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue]
-        )
-
-        XCTAssertEqual(channel, .stable)
-    }
 
     @MainActor
     func testMarkdownFormattingNormalizesBullets() {

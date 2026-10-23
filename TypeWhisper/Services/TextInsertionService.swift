@@ -5,7 +5,7 @@ import Carbon.HIToolbox
 import os
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "TextInsertionService")
 
 @MainActor
 final class TargetAppAccessibilityObservationLease {

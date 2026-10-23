@@ -18,8 +18,7 @@ POLICY_SOURCE = REPO_ROOT / "TypeWhisper" / "Models" / "ManagedPolicy.swift"
 DEFAULTS_SOURCE = REPO_ROOT / "TypeWhisper" / "App" / "UserDefaultsKeys.swift"
 SETTINGS_VIEW_SOURCE = REPO_ROOT / "TypeWhisper" / "Views" / "ManagedSettingsView.swift"
 DOCUMENTATION = REPO_ROOT / "docs" / "mdm" / "managed-settings.md"
-EDITION_DOMAINS = ("com.typewhisper.mac", "com.typewhisper.typewhisper-app")
-TEAM_IDENTIFIER = "2D8ALY3LCL"
+EDITION_DOMAINS = ("com.schneidervvv.dictum", "com.typewhisper.typewhisper-app")
 
 
 def load_module(name, path):
@@ -65,6 +64,8 @@ def swift_catalog():
 def swift_app_store_ignored():
     """Returns the keys ManagedSettingsSection.problems reports as ignored by the App Store edition."""
     source = SETTINGS_VIEW_SOURCE.read_text()
+    if "let notApplicable = [" not in source:
+        return set()
     body = source.split("let notApplicable = [", 1)[1].split("]", 1)[0]
     constants = swift_constants()
     return {constants[constant] for constant in re.findall(r"ManagedPolicyKeys\.(\w+)", body)}
@@ -101,9 +102,9 @@ def check_value(test, name, value):
 
 class CatalogTests(unittest.TestCase):
     def test_reads_the_swift_catalog(self):
-        self.assertEqual(len(CATALOG), 18)
-        self.assertEqual(CATALOG["UpdateMode"], ("enumeration", False, 2, None))
-        self.assertEqual(CATALOG["ManagedLicenseKey"], ("text", False, 0, None))
+        self.assertEqual(len(CATALOG), 12)
+        self.assertEqual(CATALOG["LaunchAtLogin"], ("boolean", True, 0, None))
+        self.assertNotIn("ManagedLicenseKey", CATALOG)
         self.assertEqual(CATALOG["TranscriptionProviderId"][3], "TranscriptionModelId")
 
     def test_generator_keys_match_the_app(self):
@@ -117,9 +118,8 @@ class CatalogTests(unittest.TestCase):
 
     def test_schema_script_matches_the_app(self):
         self.assertEqual(GENERATOR.APP_STORE_IGNORED, APP_STORE_IGNORED)
-        self.assertEqual(set(GENERATOR.UPDATE_CHANNEL_ENTRIES), {"stable", "daily", "release-candidate", "none"})
         self.assertEqual(SCHEMAS.APP_STORE_IGNORED, GENERATOR.APP_STORE_IGNORED)
-        self.assertEqual(len(APP_STORE_IGNORED), 5)
+        self.assertEqual(len(APP_STORE_IGNORED), 0)
         self.assertEqual(set(SCHEMAS.DESCRIPTIONS), set(CATALOG))
         for name, (kind, _, maximum, _) in CATALOG.items():
             if kind == "enumeration":
@@ -152,31 +152,26 @@ class GeneratorTests(unittest.TestCase):
             profile = plistlib.loads(output.read_bytes()) if status == 0 else None
             return status, profile, stderr.getvalue()
 
-    def settings(self, profile, domain="com.typewhisper.mac"):
+    def settings(self, profile, domain="com.schneidervvv.dictum"):
         payload = next(item for item in profile["PayloadContent"] if item["PayloadType"] == domain)
         return payload_settings(payload)
 
     def test_writes_enforced_and_recommended_values(self):
         status, profile, _ = self.generate(
             "--set", "AllowCloudTranscription=false",
-            "--set", "UpdateMode=check-only",
-            "--set", "AllowedUpdateChannels=stable,daily",
             "--set", "AllowedPlugins=",
-            "--recommend", "UpdateChannel=release-candidate",
             "--recommend", "LaunchAtLogin=true",
         )
         self.assertEqual(status, 0)
         self.assertEqual(self.settings(profile), {
             "AllowCloudTranscription": False,
-            "UpdateMode": 1,
-            "AllowedUpdateChannels": ["stable", "daily"],
             "AllowedPlugins": [],
-            "Recommended": {"UpdateChannel": 2, "LaunchAtLogin": True},
+            "Recommended": {"LaunchAtLogin": True},
         })
-        self.assertEqual(profile["PayloadContent"][0]["PayloadType"], "com.typewhisper.mac")
+        self.assertEqual(profile["PayloadContent"][0]["PayloadType"], "com.schneidervvv.dictum")
 
     def test_writes_one_payload_per_domain_with_stable_identifiers(self):
-        arguments = ["--set", "SuppressOptionalPrompts=true", "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1]]
+        arguments = ["--set", "SkipOnboardingWhenReady=true", "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1]]
         _, first, _ = self.generate(*arguments)
         _, second, _ = self.generate(*arguments)
         self.assertEqual(first, second)
@@ -186,39 +181,11 @@ class GeneratorTests(unittest.TestCase):
 
     def test_writes_a_repeated_domain_once(self):
         _, profile, _ = self.generate(
-            "--set", "SuppressOptionalPrompts=true",
+            "--set", "SkipOnboardingWhenReady=true",
             "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
         )
         self.assertEqual([item["PayloadType"] for item in profile["PayloadContent"]], list(EDITION_DOMAINS))
 
-    def test_leaves_keys_the_app_store_edition_ignores_out_of_its_payload(self):
-        status, profile, stderr = self.generate(
-            "--set", "UpdateMode=external", "--set", "SuppressOptionalPrompts=true",
-            "--recommend", "UpdateChannel=stable", "--recommend", "LaunchAtLogin=true",
-            "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
-        )
-        self.assertEqual(status, 0)
-        self.assertEqual(self.settings(profile, EDITION_DOMAINS[0]), {
-            "UpdateMode": 0,
-            "SuppressOptionalPrompts": True,
-            "Recommended": {"UpdateChannel": 0, "LaunchAtLogin": True},
-        })
-        self.assertEqual(self.settings(profile, EDITION_DOMAINS[1]), {
-            "SuppressOptionalPrompts": True,
-            "Recommended": {"LaunchAtLogin": True},
-        })
-        self.assertIn("com.typewhisper.typewhisper-app: left out UpdateChannel, UpdateMode", stderr)
-
-    def test_writes_no_payload_for_an_edition_none_of_the_values_apply_to(self):
-        status, profile, _ = self.generate(
-            "--set", "UpdateMode=external", "--domain", EDITION_DOMAINS[0], "--domain", EDITION_DOMAINS[1],
-        )
-        self.assertEqual(status, 0)
-        self.assertEqual([item["PayloadType"] for item in profile["PayloadContent"]], [EDITION_DOMAINS[0]])
-
-        status, _, stderr = self.generate("--set", "ManagedLicenseKey=KEY", "--domain", "com.typewhisper.typewhisper-app.dev")
-        self.assertEqual(status, 2)
-        self.assertIn("none of the values apply to the App Store edition", stderr)
 
     def test_invalid_metadata_leaves_an_existing_profile_untouched(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -226,25 +193,27 @@ class GeneratorTests(unittest.TestCase):
             output.write_bytes(b"previous")
             stderr = io.StringIO()
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
-                status = GENERATOR.main(["--set", "UpdateMode=0", "--name", "Bad\u0007Name", "--output", str(output)])
+                status = GENERATOR.main(["--set", "LaunchAtLogin=false", "--name", "Bad\u0007Name", "--output", str(output)])
             self.assertEqual(status, 2)
             self.assertIn("--name must not contain control characters", stderr.getvalue())
             self.assertEqual(output.read_bytes(), b"previous")
 
     def test_refuses_invalid_input(self):
         cases = [
-            (["--set", "updateMode=external"], "did you mean UpdateMode?"),
+            (["--set", "launchAtLogin=true"], "did you mean LaunchAtLogin?"),
             (["--set", "AllowCloudTranscription=1"], "true or false"),
-            (["--set", "UpdateMode=3"], "UpdateMode must be one of"),
-            (["--set", "AllowedUpdateChannels=beta"], "stable, daily, release-candidate or none"),
-            (["--recommend", "AllowPluginDownloads=false"], "can only be enforced"),
+            (["--set", "UpdateMode=3"], "unknown key"),
+            (["--set", "AllowedUpdateChannels=stable"], "unknown key"),
+            (["--set", "UpdateChannel=stable"], "unknown key"),
+            (["--set", "SuppressOptionalPrompts=true"], "unknown key"),
+            (["--set", "AllowPluginDownloads=false"], "unknown key"),
+            (["--recommend", "AllowModelDownloads=false"], "can only be enforced"),
             (["--set", "TranscriptionProviderId=com.typewhisper.parakeet"], "must be set together"),
             (["--set", "LlmModelId= "], "must not be empty"),
-            (["--set", "UpdateMode=0", "--set", "UpdateMode=1"], "set twice"),
+            (["--set", "LaunchAtLogin=false", "--set", "LaunchAtLogin=true"], "set twice"),
             (["--set", "TranscriptionProviderId=a\u0085b", "--set", "TranscriptionModelId=m"], "control characters"),
-            (["--set", "UpdateMode=0", "--identifier", "TypeWhisper settings"], "reverse-DNS"),
-            (["--set", "AllowedUpdateChannels=none,stable"], "cannot combine none"),
-            (["--set", "UpdateMode=0", "--identifier", ""], "reverse-DNS"),
+            (["--set", "LaunchAtLogin=false", "--identifier", "dictum settings"], "reverse-DNS"),
+            (["--set", "LaunchAtLogin=false", "--identifier", ""], "reverse-DNS"),
             ([], "at least one value"),
         ]
         for arguments, message in cases:
@@ -255,31 +224,10 @@ class GeneratorTests(unittest.TestCase):
 
 
 class ProfileTests(unittest.TestCase):
-    def test_app_settings_example_proposes_permissions_for_both_editions(self):
-        """macOS 27 replaces Accessibility in PPPC with declarative app settings."""
-        declaration = json.loads((DEPLOYMENT / "examples" / "TypeWhisper-AppSettings-Privacy.json").read_text())
-        self.assertEqual(declaration["Type"], "com.apple.configuration.app.settings")
-        self.assertTrue(declaration["Identifier"])
-        self.assertTrue(declaration["ServerToken"])
-        pppc = plistlib.loads((DEPLOYMENT / "examples" / "TypeWhisper-Privacy.mobileconfig").read_bytes())
-        requirements = {
-            entry["Identifier"]: entry["CodeRequirement"]
-            for payload in pppc["PayloadContent"]
-            if payload["PayloadType"] == "com.apple.TCC.configuration-profile-policy"
-            for entries in payload["Services"].values()
-            for entry in entries
-        }
-        defaults = declaration["Payload"]["Privacy"]["PermissionDefaults"]
-        # Apps are matched by "Bundle-ID {Designated-Requirement}", the same requirement as in PPPC.
-        self.assertEqual(set(defaults), {f"{bundle} {{{requirements[bundle]}}}" for bundle in EDITION_DOMAINS})
-        for permissions in defaults.values():
-            permissions = dict(permissions)
-            self.assertTrue(permissions.pop("OrganizationJustification").strip())
-            self.assertEqual(permissions, {"Accessibility": "Allow", "Microphone": "Allow"})
 
     def test_example_profiles_hold_only_supported_values(self):
         profiles = sorted((DEPLOYMENT / "examples").glob("*.mobileconfig"))
-        self.assertGreaterEqual(len(profiles), 6)
+        self.assertGreaterEqual(len(profiles), 3)
         seen_preferences = False
         for path in profiles:
             with self.subTest(profile=path.name):
@@ -291,16 +239,6 @@ class ProfileTests(unittest.TestCase):
                     if payload["PayloadType"] in GENERATOR.DOMAINS:
                         seen_preferences = True
                         self.check_settings(payload["PayloadType"], payload_settings(payload))
-                    elif payload["PayloadType"] == "com.apple.servicemanagement":
-                        for rule in payload["Rules"]:
-                            self.assertIn(rule["RuleValue"], EDITION_DOMAINS)
-                            self.assertEqual(rule["TeamIdentifier"], TEAM_IDENTIFIER)
-                    elif payload["PayloadType"] == "com.apple.TCC.configuration-profile-policy":
-                        for entries in payload["Services"].values():
-                            for entry in entries:
-                                self.assertIn(entry["Identifier"], EDITION_DOMAINS)
-                                self.assertIn(f'identifier "{entry["Identifier"]}"', entry["CodeRequirement"])
-                                self.assertIn(f'certificate leaf[subject.OU] = "{TEAM_IDENTIFIER}"', entry["CodeRequirement"])
                     else:
                         self.fail(f"unexpected payload type {payload['PayloadType']}")
                 self.assertEqual(len(set(uuids)), len(uuids))
@@ -338,9 +276,7 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(len(configured["options"]["enum_titles"]), maximum + 1, name)
         if kind == "list":
             self.assertEqual(configured["items"]["type"], "string", name)
-        if name == "AllowedUpdateChannels":
-            self.assertEqual(configured["items"]["enum"], list(GENERATOR.UPDATE_CHANNEL_ENTRIES))
-        elif kind == "list":
+        if kind == "list":
             self.assertEqual(configured["items"]["minLength"], 1, name)
             self.assertEqual(configured["maxItems"], GENERATOR.MAXIMUM_LIST_ENTRIES, name)
         if kind == "text":
@@ -348,8 +284,6 @@ class SchemaTests(unittest.TestCase):
             self.assertEqual(configured["minLength"], 1, name)
             self.assertEqual(configured["maxLength"], GENERATOR.MAXIMUM_TEXT_LENGTH, name)
             self.assertEqual(configured["pattern"], SCHEMAS.TEXT_PATTERN, name)
-        if name == "ManagedLicenseKey":
-            self.assertEqual(configured["format"], "password")
 
     def test_text_pattern_refuses_what_the_app_refuses(self):
         pattern = re.compile(SCHEMAS.TEXT_PATTERN)
@@ -391,11 +325,6 @@ class SchemaTests(unittest.TestCase):
                         if kind == "enumeration":
                             self.assertEqual(key["pfm_range_list"], list(range(maximum + 1)), name)
                             self.assertEqual(len(key["pfm_range_list_titles"]), maximum + 1, name)
-                if "ManagedLicenseKey" in settings:
-                    self.assertTrue(settings["ManagedLicenseKey"].get("pfm_sensitive"))
-                if "AllowedUpdateChannels" in settings:
-                    entries = settings["AllowedUpdateChannels"]["pfm_subkeys"][0]["pfm_range_list"]
-                    self.assertEqual(entries, list(GENERATOR.UPDATE_CHANNEL_ENTRIES))
 
 
 if __name__ == "__main__":

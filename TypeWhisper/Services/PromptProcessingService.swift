@@ -4,7 +4,7 @@ import Foundation
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PromptProcessingService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "PromptProcessingService")
 
 @MainActor
 protocol ProcessActivityManaging {
@@ -13,11 +13,6 @@ protocol ProcessActivityManaging {
         reason: String,
         operation: () async throws -> T
     ) async rethrows -> T
-}
-
-@MainActor
-protocol MemoryRetrieving: AnyObject {
-    func retrieveRelevantMemories(for text: String) async -> String
 }
 
 @MainActor
@@ -141,7 +136,6 @@ class PromptProcessingService: ObservableObject {
         }
     }
 
-    weak var memoryService: (any MemoryRetrieving)?
     weak var modelManagerService: ModelManagerService?
     private var appleIntelligenceProvider: LLMProvider?
     private var cancellables = Set<AnyCancellable>()
@@ -385,8 +379,7 @@ class PromptProcessingService: ObservableObject {
         prompt: String,
         text: String,
         providerOverride: String? = nil,
-        cloudModelOverride: String? = nil,
-        skipMemoryInjection: Bool = false
+        cloudModelOverride: String? = nil
     ) async throws -> String {
         try await process(
             prompt: prompt,
@@ -394,8 +387,7 @@ class PromptProcessingService: ObservableObject {
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: .inheritProviderSetting,
-            effortOverride: nil,
-            skipMemoryInjection: skipMemoryInjection
+            effortOverride: nil
         )
     }
 
@@ -425,7 +417,6 @@ class PromptProcessingService: ObservableObject {
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: temperatureDirective,
             effortOverride: effortOverride,
-            skipMemoryInjection: true,
             processingKind: .workflow(originalText: text)
         )
     }
@@ -538,8 +529,7 @@ class PromptProcessingService: ObservableObject {
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
         temperatureDirective: PluginLLMTemperatureDirective = .inheritProviderSetting,
-        effortOverride: String? = nil,
-        skipMemoryInjection: Bool = false
+        effortOverride: String? = nil
     ) async throws -> String {
         try await execute(
             prompt: prompt,
@@ -548,7 +538,6 @@ class PromptProcessingService: ObservableObject {
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: temperatureDirective,
             effortOverride: effortOverride,
-            skipMemoryInjection: skipMemoryInjection,
             processingKind: .prompt
         )
     }
@@ -560,23 +549,10 @@ class PromptProcessingService: ObservableObject {
         cloudModelOverride: String?,
         temperatureDirective: PluginLLMTemperatureDirective,
         effortOverride: String?,
-        skipMemoryInjection: Bool,
         processingKind: ProcessingKind
     ) async throws -> String {
         let totalStart = ContinuousClock.now
-        var effectivePrompt = prompt
-
-        if !skipMemoryInjection, let memoryService {
-            let memoryStart = ContinuousClock.now
-            let memoryContext = await memoryService.retrieveRelevantMemories(for: text)
-            try Task.checkCancellation()
-            logger.info("Prompt memory retrieval finished in \(ContinuousClock.now - memoryStart)")
-            if !memoryContext.isEmpty {
-                effectivePrompt = memoryContext + "\n\n" + prompt
-            }
-        } else if skipMemoryInjection {
-            logger.info("Prompt memory retrieval skipped")
-        }
+        let effectivePrompt = prompt
 
         if let reason = PluginManager.shared?.enforcedLlmResolution?.unavailableReason {
             throw ManagedPolicyRefusal(reason: reason)

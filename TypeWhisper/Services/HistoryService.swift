@@ -4,7 +4,7 @@ import Combine
 import TypeWhisperPluginSDK
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "HistoryService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HistoryService")
 
 struct HistoryPage {
     let records: [TranscriptionRecord]

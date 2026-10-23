@@ -155,7 +155,7 @@ struct TextProcessingAPI: Sendable {
         guard Self.remoteDeviceID(of: request) != nil, !isRemoteWritingAllowed() else { return nil }
         return .error(
             status: 403,
-            message: "Writing with this Mac is turned off in TypeWhisper settings",
+            message: "Writing with this Mac is turned off in dictum settings",
             code: "writing_not_allowed"
         )
     }

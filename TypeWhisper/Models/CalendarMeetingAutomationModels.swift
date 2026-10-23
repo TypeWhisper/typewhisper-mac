@@ -7,15 +7,6 @@ enum CalendarMeetingStartMode: String, Codable, Sendable, CaseIterable {
     case automatic
 }
 
-enum CalendarMeetingPremiumAccess {
-    static func isGranted(
-        hasCommercialLicense: Bool,
-        hasPremiumEntitlement: Bool
-    ) -> Bool {
-        hasCommercialLicense || hasPremiumEntitlement
-    }
-}
-
 enum CalendarMeetingSuppressionList {
     static let capacity = 256
 

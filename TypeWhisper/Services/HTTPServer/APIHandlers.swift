@@ -519,8 +519,6 @@ final class APIHandlers: @unchecked Sendable {
                         samples: samples,
                         speakerCount: options.speakerCount
                     )
-                } catch SpeakerTranscriptCoordinator.StartError.premiumRequired {
-                    return .error(status: 403, message: "Speaker detection requires TypeWhisper Premium")
                 } catch SpeakerTranscriptCoordinator.StartError.providerUnavailable {
                     return .error(status: 503, message: "Speaker detection is not available")
                 } catch SpeakerTranscriptCoordinator.StartError.timingMissing {

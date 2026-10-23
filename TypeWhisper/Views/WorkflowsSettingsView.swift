@@ -210,8 +210,8 @@ private struct MyWorkflowsPage: View {
         SettingsPageHeader(
             localizedAppText("Workflows", de: "Workflows"),
             summary: localizedAppText(
-                "Create and manage the workflows TypeWhisper should actively run.",
-                de: "Erstelle und verwalte die Workflows, die TypeWhisper aktiv ausführen soll."
+                "Create and manage the workflows dictum should actively run.",
+                de: "Erstelle und verwalte die Workflows, die dictum aktiv ausführen soll."
             )
         ) {
             Button {
@@ -238,7 +238,6 @@ private struct MyWorkflowsPage: View {
             ),
             compact: true
         ) {
-            let providers = promptProcessingService.availableProviders
 
             VStack(alignment: .leading, spacing: 8) {
                 if let enforced = pluginManager.enforcedLlmResolution {
@@ -262,13 +261,7 @@ private struct MyWorkflowsPage: View {
                 }
 
                 HStack(alignment: .center, spacing: 12) {
-                    if providers.isEmpty {
-                        Button(localizedAppText("Open Integrations", de: "Integrationen öffnen")) {
-                            SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    } else if !fallbackAddOptions.isEmpty {
+                    if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
                             .disabled(promptProcessingService.isFallbackListLocked)
                             .managedLockAccessibilityHint(
@@ -279,13 +272,6 @@ private struct MyWorkflowsPage: View {
 
                     Spacer(minLength: 0)
 
-                    if !providers.isEmpty {
-                        Button(localizedAppText("Manage in Integrations", de: "In Integrationen verwalten")) {
-                            SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                        }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                    }
                 }
             }
         }
@@ -1675,8 +1661,8 @@ private struct WorkflowEditorPage: View {
             if engines.isEmpty {
                 Text(
                     localizedAppText(
-                        "Install a transcription engine in Integrations before using workflow engine overrides.",
-                        de: "Installiere zuerst eine Transkriptions-Engine in Integrationen, bevor du Workflow-Engine-Overrides nutzt."
+                        "Enable a transcription engine in its settings before using workflow engine overrides.",
+                        de: "Aktiviere zuerst eine Transkriptions-Engine in ihren Einstellungen, bevor du Workflow-Engine-Overrides nutzt."
                     )
                 )
                 .font(.caption)
@@ -1927,18 +1913,15 @@ private struct WorkflowEditorPage: View {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(
                         localizedAppText(
-                            "Install an LLM provider in Integrations before using workflow overrides.",
-                            de: "Installiere zuerst einen LLM-Provider in Integrationen, bevor du Workflow-Overrides nutzt."
+                            "Enable a language model provider in its settings page before using workflow overrides.",
+                            de: "Aktiviere einen Sprachmodellanbieter auf seiner Einstellungsseite, bevor du Workflow-Overrides nutzt.",
+                            ja: "ワークフローで上書きする前に、設定ページで言語モデルプロバイダーを有効にしてください。",
+                            zh: "请在供应商设置页面启用语言模型供应商，然后设置工作流覆盖选项。"
                         )
                     )
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    Button(localizedAppText("Open Integrations", de: "Integrationen öffnen")) {
-                        SettingsNavigationCoordinator.shared.navigate(to: .integrations)
-                    }
-                    .buttonStyle(.link)
-                    .font(.caption)
                 }
             } else {
                 Picker(
@@ -2048,8 +2031,8 @@ private struct WorkflowEditorPage: View {
                     if !promptProcessingService.isProviderReady(providerId) {
                         Text(
                             localizedAppText(
-                                "This provider is not ready yet. Finish its setup in Integrations before this workflow can use it.",
-                                de: "Dieser Provider ist noch nicht einsatzbereit. Schließe sein Setup in Integrationen ab, bevor der Workflow ihn nutzen kann."
+                                "This provider is not ready yet. Finish its setup on its settings page before this workflow can use it.",
+                                de: "Dieser Provider ist noch nicht einsatzbereit. Schließe sein Setup in seinen Einstellungen ab, bevor der Workflow ihn nutzen kann."
                             )
                         )
                         .font(.caption)
@@ -2263,8 +2246,8 @@ private struct WorkflowEditorPage: View {
         VStack(alignment: .leading, spacing: 10) {
             #if APPSTORE
             Text(localizedAppText(
-                "Matches in browsers with the TypeWhisper extension.",
-                de: "Greift in Browsern mit der TypeWhisper-Erweiterung."
+                "Matches in browsers with the dictum extension.",
+                de: "Greift in Browsern mit der dictum-Erweiterung."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)

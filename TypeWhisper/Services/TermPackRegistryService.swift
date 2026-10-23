@@ -1,7 +1,7 @@
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TermPackRegistry")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "TermPackRegistry")
 
 // MARK: - Registry Models
 
@@ -50,7 +50,7 @@ final class TermPackRegistryService: ObservableObject {
     @Published var fetchState: FetchState = .idle
 
     private var lastFetchDate: Date?
-    private let registryURL: URL
+    private let registryURL: URL?
     private let cacheDuration: TimeInterval
     private let userDefaults: UserDefaults
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
@@ -63,7 +63,7 @@ final class TermPackRegistryService: ObservableObject {
     }
 
     init(
-        registryURL: URL = URL(string: "https://typewhisper.github.io/typewhisper-termpacks/termpacks.json")!,
+        registryURL: URL? = nil,
         cacheDuration: TimeInterval = 300,
         userDefaults: UserDefaults = .standard,
         fetchData: @escaping (URLRequest) async throws -> (Data, URLResponse) = { request in
@@ -86,6 +86,12 @@ final class TermPackRegistryService: ObservableObject {
             return true
         }
         #endif
+
+        guard let registryURL else {
+            communityPacks = []
+            fetchState = .loaded
+            return true
+        }
 
         if !force,
            let lastFetch = lastFetchDate,

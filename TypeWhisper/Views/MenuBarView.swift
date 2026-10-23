@@ -13,7 +13,6 @@ private final class MenuBarState: ObservableObject {
     @Published var canCopyLastTranscription: Bool
     @Published var canUndoLastDictation: Bool
     @Published var canRestoreRawTranscript: Bool
-    @Published var hasLastTranscribedText: Bool
     @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
@@ -47,7 +46,6 @@ private final class MenuBarState: ObservableObject {
         self.canCopyLastTranscription = hasRecentTranscriptions
         self.canUndoLastDictation = dictation.dictationUndoService.canUndo
         self.canRestoreRawTranscript = dictation.dictationUndoService.canRestoreRaw
-        self.hasLastTranscribedText = dictation.lastTranscribedText != nil
         self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
@@ -118,15 +116,6 @@ private final class MenuBarState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] url in
                 self?.hasRecoverableRecording = url != nil
-            }
-            .store(in: &cancellables)
-
-        dictation.$lastTranscribedText
-            .map { $0 != nil }
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] hasText in
-                self?.hasLastTranscribedText = hasText
             }
             .store(in: &cancellables)
 
@@ -309,10 +298,8 @@ enum MenuBarMenuItem: Hashable {
     case recentTranscriptions
     case copyLastTranscription
     case pasteLastTranscription
-    case readBackLastTranscription
     case undoLastDictation
     case restoreRawTranscript
-    case checkForUpdates
 }
 
 enum MenuBarMenuSection: String, CaseIterable, Hashable {
@@ -361,68 +348,10 @@ enum MenuBarActionDispatcher {
     }
 }
 
-private struct PluginCommandButton: View {
-    let pluginId: String
-    let command: PluginCommandDescriptor
-    @ObservedObject var pluginManager: PluginManager
-
-    var body: some View {
-        Button {
-            pluginManager.performPluginCommand(pluginId: pluginId, commandId: command.id)
-        } label: {
-            if let systemImageName = command.systemImageName {
-                Label {
-                    Text(verbatim: command.title)
-                } icon: {
-                    Image(systemName: systemImageName)
-                }
-            } else {
-                Text(verbatim: command.title)
-            }
-        }
-        .disabled(!command.isEnabled)
-    }
-}
-
-struct PluginAppCommands: Commands {
-    @ObservedObject var pluginManager: PluginManager
-
-    var body: some Commands {
-        CommandMenu(String(localized: "Integrations")) {
-            let contributions = pluginManager.userInterfaceContributions.filter {
-                !$0.appMenuCommands.isEmpty
-            }
-            if contributions.isEmpty {
-                Button(String(localized: "No Integration Commands")) {}
-                    .disabled(true)
-            } else {
-                ForEach(contributions, id: \.pluginId) { contribution in
-                    Menu {
-                        ForEach(contribution.appMenuCommands) { command in
-                            PluginCommandButton(
-                                pluginId: contribution.pluginId,
-                                command: command,
-                                pluginManager: pluginManager
-                            )
-                        }
-                    } label: {
-                        Text(verbatim: contribution.pluginName)
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
     @StateObject private var quickSelection = DictationQuickSelectionModel()
-    @ObservedObject private var pluginManager: PluginManager
-
-    init(pluginManager: PluginManager = PluginManager.shared) {
-        self._pluginManager = ObservedObject(wrappedValue: pluginManager)
-    }
 
     var body: some View {
         Group {
@@ -460,33 +389,7 @@ struct MenuBarView: View {
                 }
             }
 
-            let pluginContributions = pluginManager.userInterfaceContributions.filter {
-                !$0.primaryMenuBarCommands.isEmpty
-            }
-            if !pluginContributions.isEmpty {
-                Divider()
-                Section(String(localized: "Integrations")) {
-                    ForEach(pluginContributions, id: \.pluginId) { contribution in
-                        Menu {
-                            ForEach(contribution.primaryMenuBarCommands) { command in
-                                PluginCommandButton(
-                                    pluginId: contribution.pluginId,
-                                    command: command,
-                                    pluginManager: pluginManager
-                                )
-                            }
-                        } label: {
-                            Text(verbatim: contribution.pluginName)
-                        }
-                    }
-                }
-            }
-
             Divider()
-
-            #if !APPSTORE
-            menuItem(for: .checkForUpdates)
-            #endif
 
             Button(String(localized: "Quit")) {
                 NSApplication.shared.terminate(nil)
@@ -611,7 +514,6 @@ struct MenuBarView: View {
                 recentTranscriptionsButton
                 copyLastTranscriptionButton
                 pasteLastTranscriptionButton
-                readBackLastTranscriptionButton
                 // Undo needs to read the target field through Accessibility,
                 // which the App Sandbox does not allow.
                 #if !APPSTORE
@@ -628,7 +530,6 @@ struct MenuBarView: View {
             .disabled(
                 !status.hasRecentTranscriptions
                     && !status.canCopyLastTranscription
-                    && !status.hasLastTranscribedText
                     && !status.canUndoLastDictation
             )
 
@@ -641,20 +542,12 @@ struct MenuBarView: View {
         case .pasteLastTranscription:
             pasteLastTranscriptionButton
 
-        case .readBackLastTranscription:
-            readBackLastTranscriptionButton
-
         case .undoLastDictation:
             undoLastDictationButton
 
         case .restoreRawTranscript:
             restoreRawTranscriptButton
 
-        case .checkForUpdates:
-            Button(String(localized: "Check for Updates...")) {
-                UpdateChecker.shared?.checkForUpdates()
-            }
-            .disabled(UpdateChecker.shared?.canCheckForUpdates() != true)
         }
     }
 
@@ -812,17 +705,6 @@ struct MenuBarView: View {
         }
         .keyboardShortcut(keyboardShortcut(from: status.pasteLastTranscriptionMenuShortcut))
         .disabled(!status.canCopyLastTranscription)
-    }
-
-    @ViewBuilder
-    private var readBackLastTranscriptionButton: some View {
-        Button {
-            DictationViewModel.shared.readBackLastTranscription()
-        } label: {
-            Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
-        }
-        .keyboardShortcut("r", modifiers: [.command, .shift])
-        .disabled(!status.hasLastTranscribedText)
     }
 
     @ViewBuilder

@@ -26,14 +26,6 @@ struct HistorySpeakerDetectionRow: View {
     @ViewBuilder
     private var idle: some View {
         switch coordinator.startError(for: record) {
-        case .premiumRequired:
-            row(symbol: "lock.fill", tint: .purple) {
-                title(String(localized: "speakers.premium.required"))
-            } actions: {
-                Button(String(localized: "speakers.premium.open")) {
-                    SettingsNavigationCoordinator.shared.navigate(to: .premium)
-                }
-            }
         case .providerUnavailable:
             notice(String(localized: "speakers.status.providerUnavailable"))
         case .audioMissing:

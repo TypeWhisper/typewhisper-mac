@@ -1032,14 +1032,14 @@ private struct ElevenLabsSettingsView: View {
 
                     VStack(alignment: .leading, spacing: 4) {
                         Toggle(isOn: $useDictionaryTerms) {
-                            Text("Use TypeWhisper dictionary terms", bundle: bundle)
+                            Text("Use dictum dictionary terms", bundle: bundle)
                         }
                         .accessibilityIdentifier(ElevenLabsSettingsAccessibility.useDictionaryTerms)
                         .onChange(of: useDictionaryTerms) {
                             plugin.setUseDictionaryTerms(useDictionaryTerms)
                         }
 
-                        Text("Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.", bundle: bundle)
+                        Text("Sends active dictum dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)

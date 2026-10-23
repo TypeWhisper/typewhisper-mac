@@ -34,18 +34,14 @@ final class RemoteLinkViewModel: ObservableObject {
 
     private let server: RemoteLinkServer
     private let defaults: UserDefaults
-    private let premiumAccess: @MainActor () -> Bool
-    private var premiumObservation: AnyCancellable?
     private var approval: (request: RemoteLinkPairingRequest, continuation: CheckedContinuation<Bool, Never>)?
 
     init(
         server: RemoteLinkServer,
-        defaults: UserDefaults = .standard,
-        premiumAccess: @escaping @MainActor () -> Bool = { true }
+        defaults: UserDefaults = .standard
     ) {
         self.server = server
         self.defaults = defaults
-        self.premiumAccess = premiumAccess
         isEnabled = defaults.bool(forKey: UserDefaultsKeys.remoteLinkEnabled)
         isWritingAllowed = defaults.bool(forKey: UserDefaultsKeys.remoteLinkWritingAllowed)
         devices = server.store.devices()
@@ -65,27 +61,8 @@ final class RemoteLinkViewModel: ObservableObject {
     }
 
     func startIfEnabled() {
-        guard isEnabled, premiumAccess() else { return }
+        guard isEnabled else { return }
         start()
-    }
-
-    /// Paired devices are a Premium feature: losing access stops the listener,
-    /// regaining it starts the listener again if the user had it on.
-    func observePremiumChanges(_ changes: [AnyPublisher<Void, Never>]) {
-        premiumObservation = Publishers.MergeMany(changes)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.premiumAccessChanged() }
-    }
-
-    func premiumAccessChanged() {
-        if premiumAccess() {
-            if isEnabled && !isRunning { start() }
-        } else {
-            // A listener that is still starting or waiting for Local Network
-            // permission has not reported `isRunning` yet; stop it anyway.
-            endPairing()
-            stop()
-        }
     }
 
     func setEnabled(_ enabled: Bool) {
@@ -139,7 +116,6 @@ final class RemoteLinkViewModel: ObservableObject {
     }
 
     private func start() {
-        guard premiumAccess() else { return }
         errorMessage = nil
         do {
             try server.start()

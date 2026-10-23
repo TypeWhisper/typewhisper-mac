@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Builds a configuration profile with TypeWhisper managed settings.
+"""Builds a configuration profile with dictum managed settings.
 
-The macOS counterpart to deployment/windows/Set-TypeWhisperPolicy.ps1 in TypeWhisper for
-Windows. Values are checked against the keys TypeWhisper understands (docs/mdm/managed-settings.md)
+Values are checked against the keys dictum understands (docs/mdm/managed-settings.md)
 before the profile is written, so a typo fails here instead of on the Macs. Each payload sets the
 managed preferences of one domain, so System Settings lists every setting with its value.
 
@@ -13,15 +12,9 @@ Examples:
       --set AllowCloudTranscription=false --set AllowCloudTextProcessing=false \\
       --set TranscriptionProviderId=com.typewhisper.parakeet \\
       --set TranscriptionModelId=parakeet-tdt-0.6b-v3 \\
-      --output TypeWhisper-LocalOnly.mobileconfig
-
-  # Deployment-managed updates with a recommended (editable) channel.
-  make-typewhisper-profile.py --set UpdateMode=external --recommend UpdateChannel=stable \\
-      --output TypeWhisper-Updates.mobileconfig
+      --output dictum-LocalOnly.mobileconfig
 
 Lists are comma-separated; an empty value denies everything. Booleans accept true or false.
-UpdateMode accepts external, check-only or user-initiated, UpdateChannel stable, daily or
-release-candidate, or their numbers.
 """
 
 from __future__ import annotations
@@ -36,7 +29,7 @@ import unicodedata
 import uuid
 from pathlib import Path
 
-# Mirrors ManagedPolicyKeys.all in TypeWhisper/Models/ManagedPolicy.swift; a test keeps them equal.
+# Mirrors ManagedPolicyKeys.all in dictum/Models/ManagedPolicy.swift; a test keeps them equal.
 # name: (kind, may be recommended, largest enumeration value)
 KEYS = {
     "TranscriptionProviderId": ("text", True, 0),
@@ -48,34 +41,25 @@ KEYS = {
     "AllowedPlugins": ("list", False, 0),
     "AllowCloudTranscription": ("boolean", False, 0),
     "AllowCloudTextProcessing": ("boolean", False, 0),
-    "AllowPluginDownloads": ("boolean", False, 0),
     "AllowModelDownloads": ("boolean", False, 0),
-    "UpdateMode": ("enumeration", False, 2),
-    "UpdateChannel": ("enumeration", True, 2),
-    "AllowedUpdateChannels": ("list", False, 0),
     "LaunchAtLogin": ("boolean", True, 0),
     "SkipOnboardingWhenReady": ("boolean", False, 0),
-    "SuppressOptionalPrompts": ("boolean", True, 0),
-    "ManagedLicenseKey": ("text", False, 0),
 }
 PAIRS = [("TranscriptionProviderId", "TranscriptionModelId"), ("LlmProviderId", "LlmModelId")]
 ENUMERATION_NAMES = {
-    "UpdateMode": {"external": 0, "check-only": 1, "user-initiated": 2},
-    "UpdateChannel": {"stable": 0, "daily": 1, "release-candidate": 2},
 }
 DOMAINS = (
-    "com.typewhisper.mac",
+    "com.schneidervvv.dictum",
     "com.typewhisper.typewhisper-app",
-    "com.typewhisper.mac.dev",
+    "com.schneidervvv.dictum.dev",
     "com.typewhisper.typewhisper-app.dev",
 )
 APP_STORE_DOMAINS = ("com.typewhisper.typewhisper-app", "com.typewhisper.typewhisper-app.dev")
 # Keys the App Store edition ignores (notApplicable in ManagedSettingsView.swift); a test keeps
 # them equal. They are left out of App Store payloads, where they would only be reported.
-APP_STORE_IGNORED = frozenset({"UpdateMode", "UpdateChannel", "AllowedUpdateChannels", "AllowPluginDownloads", "ManagedLicenseKey"})
+APP_STORE_IGNORED = frozenset()
 MAXIMUM_TEXT_LENGTH = 1024
 MAXIMUM_LIST_ENTRIES = 256
-UPDATE_CHANNEL_ENTRIES = ("stable", "daily", "release-candidate", "none")
 # Reverse-DNS style, as configuration profiles require for PayloadIdentifier.
 IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)+")
 
@@ -124,13 +108,6 @@ def parse_value(name: str, raw: str):
                 items.append(item)
         if len(items) > MAXIMUM_LIST_ENTRIES:
             raise ProfileError(f"{name} must not exceed {MAXIMUM_LIST_ENTRIES} entries")
-        if name == "AllowedUpdateChannels":
-            unknown = [item for item in items if item not in UPDATE_CHANNEL_ENTRIES]
-            if unknown:
-                raise ProfileError(f"{name} entries must be stable, daily, release-candidate or none")
-            # The app ignores none next to a channel, so the channel would stay allowed.
-            if "none" in items and len(items) > 1:
-                raise ProfileError(f"{name} cannot combine none with channels; use none alone to turn updates off")
         return items
     return parse_text(name, raw)
 
@@ -198,18 +175,18 @@ def build_profile(
             "PayloadVersion": 1,
             "PayloadIdentifier": f"{identifier}.{domain}",
             "PayloadUUID": stable_uuid(identifier, domain),
-            "PayloadDisplayName": f"TypeWhisper managed settings ({domain})",
+            "PayloadDisplayName": f"dictum managed settings ({domain})",
             **settings,
         })
     if not payloads:
-        raise ProfileError("none of the values apply to the App Store edition; add --domain com.typewhisper.mac")
+        raise ProfileError("none of the values apply to the App Store edition; add --domain com.schneidervvv.dictum")
     profile = {
         "PayloadType": "Configuration",
         "PayloadVersion": 1,
         "PayloadIdentifier": identifier,
         "PayloadUUID": stable_uuid(identifier),
         "PayloadDisplayName": name,
-        "PayloadDescription": "Managed settings for TypeWhisper. See docs/mdm/managed-settings.md.",
+        "PayloadDescription": "Managed settings for dictum. See docs/mdm/managed-settings.md.",
         "PayloadScope": scope,
         "PayloadContent": payloads,
     }
@@ -222,9 +199,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="enforced value")
     parser.add_argument("--recommend", action="append", default=[], metavar="KEY=VALUE", help="recommended value users may change")
-    parser.add_argument("--domain", action="append", choices=DOMAINS, help="preference domain; repeat for both editions (default: com.typewhisper.mac)")
+    parser.add_argument("--domain", action="append", choices=DOMAINS, help="preference domain; repeat for both editions (default: com.schneidervvv.dictum)")
     parser.add_argument("--identifier", default="com.typewhisper.mdm.settings", help="profile identifier; keep it to replace a deployed profile")
-    parser.add_argument("--name", default="TypeWhisper Managed Settings", help="profile display name")
+    parser.add_argument("--name", default="dictum Managed Settings", help="profile display name")
     parser.add_argument("--organization", help="PayloadOrganization")
     parser.add_argument("--scope", choices=("System", "User"), default="System")
     parser.add_argument("--output", type=Path, required=True)
@@ -234,7 +211,7 @@ def main(argv: list[str] | None = None) -> int:
         profile = build_profile(
             parse_assignments(args.set, recommended=False),
             parse_assignments(args.recommend, recommended=True),
-            domains=args.domain or ["com.typewhisper.mac"],
+            domains=args.domain or ["com.schneidervvv.dictum"],
             identifier=args.identifier,
             name=parse_text("--name", args.name),
             organization=parse_text("--organization", args.organization) if args.organization is not None else None,

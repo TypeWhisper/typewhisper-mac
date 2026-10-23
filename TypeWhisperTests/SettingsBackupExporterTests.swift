@@ -21,7 +21,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         let profileService: ProfileService
         let promptActionService: PromptActionService
         let pluginManager: PluginManager
-        let pluginRegistryService: PluginRegistryService
         let historyService: HistoryService
         let usageStatisticsService: UsageStatisticsService
         let userDefaults: UserDefaults
@@ -40,11 +39,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: ProfileService(appSupportDirectory: dir),
             promptActionService: PromptActionService(appSupportDirectory: dir),
             pluginManager: PluginManager(appSupportDirectory: dir),
-            pluginRegistryService: PluginRegistryService(
-                cacheDirectory: dir.appendingPathComponent("MarketplaceCache", isDirectory: true),
-                userDefaults: userDefaults,
-                fetchData: { _ in throw URLError(.notConnectedToInternet) }
-            ),
             historyService: HistoryService(appSupportDirectory: dir),
             usageStatisticsService: UsageStatisticsService(appSupportDirectory: dir),
             userDefaults: userDefaults,
@@ -94,7 +88,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.promptActions.first?.name, "Custom")
     }
 
-    func testBuildBackupExcludesBundledPlugins() throws {
+    func testBuildBackupIncludesBundledPluginEnabledState() throws {
         let fixture = try makeFixture()
         defer { teardown(fixture) }
 
@@ -114,11 +108,11 @@ final class SettingsBackupExporterTests: XCTestCase {
             userDefaults: fixture.userDefaults
         )
 
-        XCTAssertEqual(backup.plugins.count, 1)
+        XCTAssertEqual(backup.plugins.count, 2)
         let plugin = try XCTUnwrap(backup.plugins.first)
-        XCTAssertEqual(plugin.id, "com.typewhisper.community")
-        XCTAssertEqual(plugin.version, "2.1.0")
-        XCTAssertFalse(plugin.wasEnabled)
+        XCTAssertEqual(plugin.id, "com.typewhisper.bundled")
+        XCTAssertEqual(plugin.version, "1.0.0")
+        XCTAssertTrue(plugin.wasEnabled)
     }
 
     func testRoundTripWorkflowsDictionarySnippets() async throws {
@@ -161,7 +155,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -253,7 +246,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -309,7 +301,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -354,7 +345,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -398,7 +388,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destinationEmpty.profileService,
             promptActionService: destinationEmpty.promptActionService,
             pluginManager: destinationEmpty.pluginManager,
-            pluginRegistryService: destinationEmpty.pluginRegistryService,
             historyService: destinationEmpty.historyService,
             usageStatisticsService: destinationEmpty.usageStatisticsService,
             userDefaults: destinationEmpty.userDefaults
@@ -424,7 +413,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destinationOccupied.profileService,
             promptActionService: destinationOccupied.promptActionService,
             pluginManager: destinationOccupied.pluginManager,
-            pluginRegistryService: destinationOccupied.pluginRegistryService,
             historyService: destinationOccupied.historyService,
             usageStatisticsService: destinationOccupied.usageStatisticsService,
             userDefaults: destinationOccupied.userDefaults
@@ -436,7 +424,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(unchangedHotkeys.first, existingHotkey)
     }
 
-    func testImportSkipsPluginNotFoundInRegistry() async throws {
+    func testImportSkipsUnavailablePlugin() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
 
@@ -458,8 +446,6 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         let destination = try makeFixture()
         defer { teardown(destination) }
-        // The mocked pluginRegistryService's fetchData always throws, so fetchRegistry()
-        // resolves to an empty registry and the plugin can never be found.
         let result = await SettingsBackupExporter.importBackup(
             backup,
             workflowService: destination.workflowService,
@@ -468,20 +454,16 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
-        XCTAssertEqual(result.pluginsInstalled, 0)
+        XCTAssertEqual(result.pluginsConfigured, 0)
         XCTAssertEqual(result.pluginsSkipped, 1)
-        // The mocked registry fetch always fails, so this must be flagged
-        // distinctly from "plugin genuinely removed from the marketplace".
-        XCTAssertTrue(result.pluginsRegistryFetchFailed)
     }
 
-    func testImportSkipsPluginAlreadyInstalled() async throws {
+    func testImportRestoresAvailablePluginEnabledState() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
 
@@ -514,14 +496,14 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
-        XCTAssertEqual(result.pluginsInstalled, 0)
-        XCTAssertEqual(result.pluginsSkipped, 1)
+        XCTAssertEqual(result.pluginsConfigured, 1)
+        XCTAssertEqual(result.pluginsSkipped, 0)
+        XCTAssertTrue(try XCTUnwrap(destination.pluginManager.loadedPlugins.first).isEnabled)
     }
 
     func testHistoryRoundTripPreservesTimestampAndExcludesAudio() async throws {
@@ -569,7 +551,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -629,7 +610,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 profileService: destination.profileService,
                 promptActionService: destination.promptActionService,
                 pluginManager: destination.pluginManager,
-                pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
                 userDefaults: destination.userDefaults,
@@ -672,7 +652,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 profileService: destination.profileService,
                 promptActionService: destination.promptActionService,
                 pluginManager: destination.pluginManager,
-                pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
                 userDefaults: destination.userDefaults
@@ -698,7 +677,7 @@ final class SettingsBackupExporterTests: XCTestCase {
                 schemaVersion: SettingsBackupExporter.schemaVersion,
                 exportedAt: Date(), appVersion: "1.0",
                 workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
-                hotkeys: [:], plugins: [], history: [], updateChannel: nil, preferences: preferences
+                hotkeys: [:], plugins: [], history: [], preferences: preferences
             )
             // Optional fields are omitted from JSON, matching older settings backups.
             let decoded = try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(backup))
@@ -710,7 +689,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 profileService: destination.profileService,
                 promptActionService: destination.promptActionService,
                 pluginManager: destination.pluginManager,
-                pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
                 userDefaults: destination.userDefaults
@@ -721,11 +699,10 @@ final class SettingsBackupExporterTests: XCTestCase {
         }
     }
 
-    func testUpdateChannelAndPreferencesRoundTrip() async throws {
+    func testPreferencesRoundTrip() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
 
-        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
         source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.showMenuBarIcon)
@@ -752,7 +729,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             userDefaults: source.userDefaults
         )
 
-        XCTAssertEqual(backup.updateChannel, AppConstants.ReleaseChannel.daily.rawValue)
         XCTAssertEqual(backup.preferences.selectedLanguage, "de")
         XCTAssertEqual(backup.preferences.translationEnabled, true)
         XCTAssertEqual(backup.preferences.showMenuBarIcon, false)
@@ -781,7 +757,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
@@ -791,9 +766,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
-        XCTAssertTrue(result.updateChannelApplied)
         XCTAssertGreaterThanOrEqual(result.preferencesApplied, 8)
-        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.updateChannel), AppConstants.ReleaseChannel.daily.rawValue)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage), "de")
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
@@ -823,7 +796,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             schemaVersion: SettingsBackupExporter.schemaVersion,
             exportedAt: Date(), appVersion: "1.0",
             workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
-            hotkeys: [:], plugins: [], history: [], updateChannel: nil, preferences: preferences
+            hotkeys: [:], plugins: [], history: [], preferences: preferences
         )
         var appliedIndicatorTheme: IndicatorTheme?
 
@@ -835,7 +808,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
@@ -880,7 +852,6 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         source.workflowService.addWorkflow(name: "Cleanup", template: .cleanedText, trigger: .app("com.apple.mail"))
         source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
-        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
         source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
 
         let backup = try SettingsBackupExporter.buildBackup(
@@ -897,12 +868,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(SettingsBackupExporter.Category.count(.workflows, in: backup), 1)
         XCTAssertEqual(SettingsBackupExporter.Category.count(.dictionary, in: backup), 1)
         XCTAssertEqual(SettingsBackupExporter.Category.count(.snippets, in: backup), 0)
-        // The update channel is folded into the Preferences category rather than
-        // being its own selectable entry, so it contributes to the preferences count.
-        XCTAssertEqual(backup.updateChannel, AppConstants.ReleaseChannel.daily.rawValue)
-        // At least selectedLanguage + the update channel; some UserDefaults suites in this environment
-        // also surface a non-nil dockIconBehaviorWhenMenuBarHidden by default (see
-        // testUpdateChannelAndPreferencesRoundTrip), so this isn't pinned to 1.
         XCTAssertGreaterThanOrEqual(SettingsBackupExporter.Category.count(.preferences, in: backup), 1)
         XCTAssertEqual(SettingsBackupExporter.Category.count(.history, in: backup), 0)
     }
@@ -914,7 +879,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.workflowService.addWorkflow(name: "Cleanup", template: .cleanedText, trigger: .app("com.apple.mail"))
         source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
-        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
 
         let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
@@ -931,7 +895,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(filtered.workflows.count, 1)
         XCTAssertEqual(filtered.dictionaryEntries.count, 0)
         XCTAssertEqual(filtered.snippets.count, 0)
-        XCTAssertNil(filtered.updateChannel)
 
         let destination = try makeFixture()
         defer { teardown(destination) }
@@ -944,7 +907,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -953,7 +915,6 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(result.workflowsImported, 1)
         XCTAssertEqual(result.dictionaryImported, 0)
         XCTAssertEqual(result.snippetsImported, 0)
-        XCTAssertFalse(result.updateChannelApplied)
     }
 
     func testImportNotifiesWhenRecoveryPreferencesWereApplied() async throws {
@@ -967,7 +928,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
                 hotkeys: [:], plugins: [],
                 history: [],
-                updateChannel: nil,
                 preferences: preferences
             )
         }
@@ -984,7 +944,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 profileService: destination.profileService,
                 promptActionService: destination.promptActionService,
                 pluginManager: destination.pluginManager,
-                pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
                 userDefaults: destination.userDefaults,
@@ -1018,7 +977,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
             hotkeys: [:], plugins: [],
             history: [],
-            updateChannel: nil,
             preferences: preferences
         )
         let destination = try makeFixture()
@@ -1032,7 +990,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
@@ -1058,7 +1015,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
                 hotkeys: [:], plugins: [],
                 history: [],
-                updateChannel: nil,
                 preferences: preferences
             )
         }
@@ -1076,7 +1032,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 profileService: destination.profileService,
                 promptActionService: destination.promptActionService,
                 pluginManager: destination.pluginManager,
-                pluginRegistryService: destination.pluginRegistryService,
                 historyService: destination.historyService,
                 usageStatisticsService: destination.usageStatisticsService,
                 userDefaults: destination.userDefaults
@@ -1096,7 +1051,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -1129,7 +1083,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                     pipelineSteps: []
                 ),
             ],
-            updateChannel: nil,
             preferences: .empty
         )
 
@@ -1144,7 +1097,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -1176,7 +1128,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                     durationSeconds: 1, language: nil, engineUsed: "whisperkit", modelUsed: nil, pipelineSteps: []
                 ),
             ],
-            updateChannel: nil,
             preferences: .empty
         )
 
@@ -1192,7 +1143,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -1232,7 +1182,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: destination.profileService,
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
-            pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
@@ -1321,7 +1270,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: fixture.profileService,
             promptActionService: fixture.promptActionService,
             pluginManager: fixture.pluginManager,
-            pluginRegistryService: fixture.pluginRegistryService,
             historyService: fixture.historyService,
             usageStatisticsService: fixture.usageStatisticsService,
             userDefaults: fixture.userDefaults,
@@ -1348,7 +1296,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             hotkeys: hotkeys ?? backup.hotkeys,
             plugins: backup.plugins,
             history: backup.history,
-            updateChannel: backup.updateChannel,
             preferences: backup.preferences
         )
     }
@@ -1439,7 +1386,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             hotkeys: [:],
             plugins: [],
             history: [entry, laterEntry, laterEntry],
-            updateChannel: nil,
             preferences: .empty
         )
 
@@ -1600,7 +1546,6 @@ final class SettingsBackupExporterTests: XCTestCase {
                 engineOverride: profile.engineOverride,
                 cloudModelOverride: profile.cloudModelOverride,
                 promptActionId: profile.promptActionId,
-                memoryEnabled: profile.memoryEnabled,
                 outputFormat: profile.outputFormat,
                 hotkey: profile.hotkey,
                 inlineCommandsEnabled: profile.inlineCommandsEnabled,
@@ -1700,7 +1645,6 @@ final class SettingsBackupExporterTests: XCTestCase {
             engineOverride: profile.engineOverride,
             cloudModelOverride: profile.cloudModelOverride,
             promptActionId: profile.promptActionId,
-            memoryEnabled: profile.memoryEnabled,
             outputFormat: profile.outputFormat,
             hotkey: profile.hotkey,
             inlineCommandsEnabled: profile.inlineCommandsEnabled,

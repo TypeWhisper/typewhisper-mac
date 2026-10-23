@@ -780,7 +780,6 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
             appFormatterService: AppFormatterService(),
             punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: punctuationProfileStore),
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: SpeechFeedbackService(),
             accessibilityAnnouncementService: AccessibilityAnnouncementService(),
             errorLogService: ErrorLogService(appSupportDirectory: appSupportDirectory),
             mediaPlaybackService: MediaPlaybackService(startListening: false)

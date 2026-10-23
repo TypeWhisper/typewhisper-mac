@@ -133,10 +133,10 @@ struct VisualShortcutKeyboardView: View {
         case .modifier(let entry):
             switch entry {
             case .fn:
-                Text("fn").font(.system(size: 12, weight: .medium))
+                Text(verbatim: "fn").font(.system(size: 12, weight: .medium))
             case .keyCode(let code):
                 if code == 0x38 || code == 0x3C {
-                    Text("⇧").font(.system(size: 21, weight: .regular))
+                    Text(verbatim: "⇧").font(.system(size: 21, weight: .regular))
                 } else {
                     VStack(spacing: 2) {
                         Text(modifierSymbol(code)).font(.system(size: 17))
@@ -145,7 +145,7 @@ struct VisualShortcutKeyboardView: View {
                 }
             }
         case .capsLock:
-            Text("⇪").font(.system(size: 20))
+            Text(verbatim: "⇪").font(.system(size: 20))
         case .touchID:
             Image(systemName: "touchid")
                 .font(.system(size: 18, weight: .light))

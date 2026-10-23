@@ -13,13 +13,15 @@ enum TranscriptionEngineError: LocalizedError {
     case modelLoadFailed(String)
     case modelDownloadFailed(String)
 
-    // These reach the indicator and the menu bar, so they are localized and name the
-    // pages as the sidebar does: "Dictation" and "Discover plugins", plus each engine's
-    // own settings page.
     var errorDescription: String? {
         switch self {
         case .noEngineSelected:
-            String(localized: "No transcription engine selected. Choose one under Settings > Dictation, or install one under Discover plugins.")
+            localizedAppText(
+                "No transcription engine selected. Choose one under Settings > Dictation.",
+                de: "Keine Transkriptions-Engine ausgewählt. Wähle eine unter Einstellungen > Diktat.",
+                ja: "文字起こしエンジンが選択されていません。設定 > 音声入力で選択してください。",
+                zh: "尚未选择语音识别引擎，请在设置的听写页面选择。"
+            )
         case .engineUnavailable(let engineName, let reason):
             [
                 String(localized: "\(engineName ?? Self.defaultEngineName) is not available."),

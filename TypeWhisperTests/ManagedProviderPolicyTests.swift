@@ -12,7 +12,6 @@ final class ManagedProviderPolicyTests: XCTestCase {
         let policy = ManagedProviderPolicy(snapshot: snapshot([
             "AllowCloudTranscription": .boolean(false),
             "AllowCloudTextProcessing": .boolean(true),
-            "AllowPluginDownloads": .boolean(false),
             "AllowModelDownloads": .boolean(false),
             "AllowedPlugins": .array([.string("com.typewhisper.parakeet")]),
             "AllowedTranscriptionProviders": .array([]),
@@ -21,7 +20,6 @@ final class ManagedProviderPolicyTests: XCTestCase {
 
         XCTAssertFalse(policy.allowsCloudTranscription)
         XCTAssertTrue(policy.allowsCloudTextProcessing)
-        XCTAssertFalse(policy.allowsPluginDownloads)
         XCTAssertFalse(policy.allowsModelDownloads)
         XCTAssertEqual(policy.allowedPlugins, ["com.typewhisper.parakeet"])
         XCTAssertEqual(policy.allowedTranscriptionProviders, [])
@@ -40,7 +38,6 @@ final class ManagedProviderPolicyTests: XCTestCase {
             XCTAssertNil(policy.packageRefusal(pluginId: "a", locality: locality, categories: ["transcription"]))
             XCTAssertTrue(policy.allowsPromptText(toTranscriptionLocality: locality))
         }
-        XCTAssertNil(policy.pluginDownloadRefusal)
         XCTAssertNil(policy.modelDownloadRefusal)
     }
 
@@ -113,12 +110,9 @@ final class ManagedProviderPolicyTests: XCTestCase {
     }
 
     func testDownloadsAreRefusedWithTheirOwnReasons() {
-        let policy = ManagedProviderPolicy(allowsPluginDownloads: false, allowsModelDownloads: false)
+        let policy = ManagedProviderPolicy(allowsModelDownloads: false)
 
-        XCTAssertNotNil(policy.pluginDownloadRefusal)
         XCTAssertNotNil(policy.modelDownloadRefusal)
-        XCTAssertNotEqual(policy.pluginDownloadRefusal, policy.modelDownloadRefusal)
-        XCTAssertNil(ManagedProviderPolicy(allowsPluginDownloads: false).modelDownloadRefusal)
     }
 
     func testInvalidOrUnreadablePolicyRefusesWhatItGoverns() {
@@ -134,52 +128,8 @@ final class ManagedProviderPolicyTests: XCTestCase {
         let unreadable = ManagedProviderPolicy(snapshot: ManagedPolicyValidator.validate(.unreadable("test"), revision: 1, readAt: Date()))
         XCTAssertNotNil(unreadable.packageRefusal(pluginId: "p", locality: .local, categories: []))
         XCTAssertNotNil(unreadable.modelDownloadRefusal)
-        XCTAssertNotNil(unreadable.pluginDownloadRefusal)
     }
 
-    @MainActor
-    func testRegistryInstallRefusalUsesTheCatalogLocality() {
-        let plugin = registryPlugin(locality: "cloud", categories: ["transcription"])
-
-        XCTAssertNil(PluginRegistryService.installRefusal(for: plugin, policy: .unmanaged))
-        XCTAssertNotNil(PluginRegistryService.installRefusal(for: plugin, policy: ManagedProviderPolicy(allowsCloudTranscription: false)))
-        XCTAssertNil(PluginRegistryService.installRefusal(
-            for: registryPlugin(locality: "local", categories: ["transcription"]),
-            policy: ManagedProviderPolicy(allowsCloudTranscription: false)
-        ))
-        XCTAssertNotNil(PluginRegistryService.installRefusal(
-            for: registryPlugin(locality: "hybrid", categories: ["transcription"]),
-            policy: ManagedProviderPolicy(allowsCloudTranscription: false)
-        ), "An unknown locality counts as remote")
-        #if !APPSTORE
-        XCTAssertNotNil(PluginRegistryService.installRefusal(for: plugin, policy: ManagedProviderPolicy(allowsPluginDownloads: false)))
-        #endif
-    }
-
-    private func registryPlugin(locality: String?, categories: [String]) -> RegistryPlugin {
-        RegistryPlugin(
-            id: "com.typewhisper.tests.remote",
-            source: .official,
-            name: "Remote",
-            version: "1.0.0",
-            minHostVersion: "1.7.0",
-            sdkCompatibilityVersion: "v1",
-            minOSVersion: nil,
-            supportedArchitectures: nil,
-            author: "TypeWhisper",
-            description: "Test",
-            category: categories.first ?? "utility",
-            categories: categories,
-            size: 1,
-            downloadURL: "https://example.com/plugin.zip",
-            iconSystemName: nil,
-            requiresAPIKey: nil,
-            hosting: nil,
-            descriptions: nil,
-            downloadCount: nil,
-            locality: locality
-        )
-    }
 }
 
 @MainActor
@@ -283,7 +233,7 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         let service = PromptProcessingService(userDefaults: defaults)
 
         do {
-            _ = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Cloud LLM", skipMemoryInjection: true)
+            _ = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Cloud LLM")
             XCTFail("A refused provider must not run")
         } catch {
             XCTAssertEqual(error as? ManagedPolicyRefusal, ManagedPolicyRefusal(
@@ -308,7 +258,7 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         manager.applyProviderPolicy(ManagedProviderPolicy(allowsCloudTextProcessing: false))
 
         do {
-            _ = try await service.process(prompt: "Fix", text: "hello", skipMemoryInjection: true)
+            _ = try await service.process(prompt: "Fix", text: "hello")
             XCTFail("A refused provider must not run")
         } catch {
             XCTAssertEqual(error as? ManagedPolicyRefusal, ManagedPolicyRefusal(
@@ -374,33 +324,6 @@ final class ManagedProviderPolicyPluginManagerTests: XCTestCase {
         XCTAssertNil(UserDefaults.standard.stringArray(forKey: PluginManager.knownProviderIdsKey(PolicyTestEngine.cloudId)))
     }
 
-    func testRefusedPluginFileIsNotInstalled() async throws {
-        let manager = PluginManager(appSupportDirectory: directory)
-        PluginManager.shared = manager
-        manager.applyProviderPolicy(ManagedProviderPolicy(allowedPlugins: [PolicyTestEngine.localId]))
-        let incoming = directory.appendingPathComponent("Incoming", isDirectory: true)
-        let bundleURL = incoming.appendingPathComponent("Refused.bundle", isDirectory: true)
-        try writeBundle(at: bundleURL, manifest: PluginManifest(
-            id: PolicyTestEngine.cloudId, name: "Refused", version: "1.0.0",
-            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-            principalClass: "Test", categories: ["transcription"], locality: "local"
-        ))
-        let service = PluginRegistryService(
-            registryBaseURL: URL(string: "https://example.com")!,
-            cacheDirectory: directory.appendingPathComponent("Cache", isDirectory: true),
-            fetchData: { _ in throw URLError(.badServerResponse) }
-        )
-
-        do {
-            _ = try await service.installFromFile(bundleURL)
-            XCTFail("A plugin outside AllowedPlugins must not be installed")
-        } catch {
-            XCTAssertNotNil(error as? ManagedPolicyRefusal)
-        }
-        let installed = (try? FileManager.default.contentsOfDirectory(atPath: manager.pluginsDirectory.path)) ?? []
-        XCTAssertTrue(installed.isEmpty, "Nothing was copied: \(installed)")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: bundleURL.path))
-    }
 
     private func writeBundle(at bundleURL: URL, manifest: PluginManifest) throws {
         let resources = bundleURL.appendingPathComponent("Contents/Resources", isDirectory: true)

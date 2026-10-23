@@ -260,7 +260,7 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         let service = PromptProcessingService(userDefaults: defaults)
         PairTestLLM.models = []
 
-        let result = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Other LLM", skipMemoryInjection: true)
+        let result = try await service.process(prompt: "Fix", text: "hello", providerOverride: "Other LLM")
 
         XCTAssertEqual(result, "hello")
         XCTAssertEqual(PairTestLLM.models, ["model-a"])
@@ -269,7 +269,7 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
             enforcedLlm: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "x")
         ))
         do {
-            _ = try await service.process(prompt: "Fix", text: "hello", skipMemoryInjection: true)
+            _ = try await service.process(prompt: "Fix", text: "hello")
             XCTFail("An unavailable enforced pair must refuse")
         } catch {
             XCTAssertTrue(error is ManagedPolicyRefusal)
@@ -392,7 +392,7 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
         let hotkeyService = HotkeyService()
         var draft = WorkflowDraft(template: .dictation)
         draft.transcriptionEngineId = "removed-engine"
-        let missingEngine = "The selected transcription engine is not installed."
+        let missingEngine = String(localized: "The selected transcription engine is not installed.")
 
         let unmanaged = draft.validationError(
             hotkeyService: hotkeyService, workflowService: workflowService, pluginManager: manager, existingWorkflowId: nil
@@ -609,11 +609,6 @@ final class ManagedSelectionPolicyResolutionTests: XCTestCase {
     /// store that stands in for its `plugin.<id>.*` defaults.
     func testBundledEnginesReturnToTheirSavedSelectionWhenThePairIsRemoved() throws {
         let cases: [(id: String, providerId: String, users: String, enforced: String, make: () -> TranscriptionEnginePlugin)] = [
-            ("com.typewhisper.parakeet", "parakeet", "parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", {
-                let plugin = ParakeetPlugin()
-                plugin.restoresModelOnActivate = false
-                return plugin
-            }),
             ("com.typewhisper.whisperkit", "whisper", "openai_whisper-tiny", "openai_whisper-large-v3_turbo", { WhisperKitPlugin() }),
         ]
         for testCase in cases {

@@ -1,24 +1,7 @@
 import AppKit
-import AuthenticationServices
 import Combine
-import CryptoKit
 import Foundation
-import Security
 import SwiftUI
-
-private func readPremiumAccountToken(service: String) -> String? {
-    let query: [String: Any] = [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: service,
-        kSecAttrAccount as String: "access-token",
-        kSecReturnData as String: true,
-        kSecMatchLimit as String: kSecMatchLimitOne,
-    ]
-    var value: CFTypeRef?
-    guard SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
-          let data = value as? Data else { return nil }
-    return String(data: data, encoding: .utf8)
-}
 
 enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     case off
@@ -44,658 +27,6 @@ private enum TypeWhisperBuildCapabilities {
     }
 }
 
-struct CrossDevicePremiumEntitlement: Codable, Equatable, Sendable {
-    struct SignedClaims: Codable, Equatable, Sendable {
-        let status: String
-        let tier: String
-        let source: String
-        let isLifetime: Bool
-        let expiresAt: Date?
-        let deviceLimit: Int?
-        let verifiedAt: Date
-    }
-
-    let status: String
-    let tier: String
-    let source: String
-    let isLifetime: Bool
-    let expiresAt: Date?
-    let deviceLimit: Int?
-    let verifiedAt: Date
-    let signature: String?
-
-    var isActive: Bool {
-        guard status == "active" || status == "granted" else { return false }
-        return expiresAt.map { $0 > Date() } ?? true
-    }
-
-    var signedClaims: SignedClaims {
-        SignedClaims(
-            status: status,
-            tier: tier,
-            source: source,
-            isLifetime: isLifetime,
-            expiresAt: expiresAt,
-            deviceLimit: deviceLimit,
-            verifiedAt: verifiedAt
-        )
-    }
-}
-
-struct CrossDevicePremiumEntitlementVerifier: Sendable {
-    private let publicKey: P256.Signing.PublicKey
-
-    init?(publicKeyBase64: String) {
-        guard let keyData = Data(base64Encoded: publicKeyBase64),
-              let key = try? P256.Signing.PublicKey(rawRepresentation: keyData) else {
-            return nil
-        }
-        publicKey = key
-    }
-
-    func verified(_ entitlement: CrossDevicePremiumEntitlement) -> CrossDevicePremiumEntitlement? {
-        guard let signatureValue = entitlement.signature else { return nil }
-        let components = signatureValue.split(separator: ".", omittingEmptySubsequences: false)
-        guard components.count == 2,
-              let payload = Self.decodeBase64URL(String(components[0])),
-              let signatureData = Self.decodeBase64URL(String(components[1])),
-              let signature = try? P256.Signing.ECDSASignature(rawRepresentation: signatureData),
-              publicKey.isValidSignature(signature, for: payload) else {
-            return nil
-        }
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom(
-            decodeISO8601DateWithOptionalFractionalSeconds
-        )
-        guard let claims = try? decoder.decode(
-            CrossDevicePremiumEntitlement.SignedClaims.self,
-            from: payload
-        ), claims == entitlement.signedClaims else {
-            return nil
-        }
-        return entitlement
-    }
-
-    private static func decodeBase64URL(_ value: String) -> Data? {
-        let base64 = value
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let padded = base64.padding(
-            toLength: ((base64.count + 3) / 4) * 4,
-            withPad: "=",
-            startingAt: 0
-        )
-        return Data(base64Encoded: padded)
-    }
-}
-
-private enum PremiumAccountServiceError: LocalizedError {
-    case invalidEntitlementSignature
-    case commercialLicenseLinkFailed
-    case appleSignInCancelled
-    case invalidAppleAuthorizationCallback
-    case appleAuthorizationFailed
-    case secureRandomGenerationFailed
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidEntitlementSignature:
-            String(localized: "The Premium entitlement signature could not be verified.")
-        case .commercialLicenseLinkFailed:
-            String(localized: "premium.window.access.linkFailed")
-        case .appleSignInCancelled:
-            nil
-        case .invalidAppleAuthorizationCallback:
-            String(localized: "The Sign in with Apple response could not be verified.")
-        case .appleAuthorizationFailed:
-            String(localized: "Sign in with Apple could not be completed.")
-        case .secureRandomGenerationFailed:
-            String(localized: "Secure sign-in data could not be generated.")
-        }
-    }
-}
-
-private func decodeISO8601DateWithOptionalFractionalSeconds(
-    from decoder: Decoder
-) throws -> Date {
-    let container = try decoder.singleValueContainer()
-    let value = try container.decode(String.self)
-    let formatter = ISO8601DateFormatter()
-
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let date = formatter.date(from: value) {
-        return date
-    }
-
-    formatter.formatOptions = [.withInternetDateTime]
-    if let date = formatter.date(from: value) {
-        return date
-    }
-
-    throw DecodingError.dataCorruptedError(
-        in: container,
-        debugDescription: "Expected an ISO 8601 date"
-    )
-}
-
-@MainActor
-protocol AppleWebAuthenticating: AnyObject {
-    func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL
-}
-
-private final class AppleWebAuthenticationCompletion: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<URL, Error>?
-
-    init(continuation: CheckedContinuation<URL, Error>) {
-        self.continuation = continuation
-    }
-
-    func resume(callbackURL: URL?, error: Error?) {
-        lock.lock()
-        let continuation = continuation
-        self.continuation = nil
-        lock.unlock()
-
-        guard let continuation else { return }
-        if let callbackURL {
-            continuation.resume(returning: callbackURL)
-        } else {
-            continuation.resume(throwing: error ?? URLError(.cancelled))
-        }
-    }
-}
-
-private func makeAppleWebAuthenticationSession(
-    authorizationURL: URL,
-    callbackScheme: String,
-    completion: AppleWebAuthenticationCompletion
-) -> ASWebAuthenticationSession {
-    ASWebAuthenticationSession(
-        url: authorizationURL,
-        callbackURLScheme: callbackScheme
-    ) { callbackURL, error in
-        completion.resume(callbackURL: callbackURL, error: error)
-    }
-}
-
-@MainActor
-final class AppleWebAuthenticationSession: NSObject, AppleWebAuthenticating, ASWebAuthenticationPresentationContextProviding {
-    private var authenticationSession: ASWebAuthenticationSession?
-    private let fallbackWindow = NSWindow()
-
-    func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL {
-        defer { authenticationSession = nil }
-        return try await withCheckedThrowingContinuation { continuation in
-            let completion = AppleWebAuthenticationCompletion(continuation: continuation)
-            let session = makeAppleWebAuthenticationSession(
-                authorizationURL: authorizationURL,
-                callbackScheme: callbackScheme,
-                completion: completion
-            )
-            session.presentationContextProvider = self
-            session.prefersEphemeralWebBrowserSession = false
-            authenticationSession = session
-            guard session.start() else {
-                completion.resume(
-                    callbackURL: nil,
-                    error: URLError(.cannotLoadFromNetwork)
-                )
-                return
-            }
-        }
-    }
-
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApp.keyWindow ?? NSApp.mainWindow ?? NSApp.windows.first ?? fallbackWindow
-    }
-}
-
-@MainActor
-final class PremiumAccountService: ObservableObject {
-    private struct AccountSession: Decodable {
-        let accessToken: String
-        let entitlement: CrossDevicePremiumEntitlement?
-    }
-    private struct EntitlementResponse: Decodable { let entitlement: CrossDevicePremiumEntitlement? }
-    private struct DeviceDetachResponse: Decodable {
-        let ok: Bool
-        let released: Bool
-    }
-    private struct ErrorResponse: Decodable { let error: String }
-    private struct AppleWebStartResponse: Decodable {
-        let authorizationURL: URL
-        let state: String
-        let expiresAt: Date
-    }
-
-    private enum Keys {
-        static let cachedEntitlement = "premium.account.cachedEntitlement"
-        static let lastRefresh = "premium.account.lastRefresh"
-        static let deviceID = "premium.account.deviceID"
-    }
-
-    @Published private(set) var entitlement: CrossDevicePremiumEntitlement?
-    @Published private(set) var isSignedIn: Bool
-    @Published private(set) var isWorking = false
-    @Published var errorMessage: String?
-
-    private let defaults: UserDefaults
-    private let baseURL: URL
-    private let decoder: JSONDecoder
-    private let encoder: JSONEncoder
-    private let requestExecutor: @Sendable (URLRequest) async throws -> (Data, URLResponse)
-    private let keychainService: String
-    private let deviceID: String
-    private let entitlementVerifier: CrossDevicePremiumEntitlementVerifier?
-    private let appleWebAuthenticator: any AppleWebAuthenticating
-    private var startupTokenTask: Task<Void, Never>?
-
-    private static let productionEntitlementPublicKeyBase64 =
-        "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
-
-    var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
-
-    #if DEBUG
-    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
-        startupTokenTask?.cancel()
-        startupTokenTask = nil
-        isSignedIn = hasPremiumAccess
-        errorMessage = nil
-        entitlement = hasPremiumAccess
-            ? CrossDevicePremiumEntitlement(
-                status: "active",
-                tier: "individual",
-                source: "screenshot-fixture",
-                isLifetime: true,
-                expiresAt: nil,
-                deviceLimit: 3,
-                verifiedAt: Date(),
-                signature: nil
-            )
-            : nil
-    }
-    #endif
-
-    init(
-        defaults: UserDefaults = .standard,
-        baseURL: URL? = nil,
-        session: URLSession = .shared,
-        requestExecutor: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil,
-        appleWebAuthenticator: (any AppleWebAuthenticating)? = nil,
-        keychainService: String = AppConstants.premiumAccountKeychainService,
-        entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
-        isSignedInOverride: Bool? = nil,
-        automaticallyRefresh: Bool = true,
-        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken
-    ) {
-        self.defaults = defaults
-        self.baseURL = baseURL
-            ?? (Bundle.main.object(forInfoDictionaryKey: "TypeWhisperAccountBaseURL") as? String)
-                .flatMap(URL.init(string:))
-            ?? URL(string: "https://app.typewhisper.com")!
-        self.requestExecutor = requestExecutor ?? { try await session.data(for: $0) }
-        self.appleWebAuthenticator = appleWebAuthenticator ?? AppleWebAuthenticationSession()
-        self.keychainService = keychainService
-        entitlementVerifier = CrossDevicePremiumEntitlementVerifier(
-            publicKeyBase64: entitlementPublicKeyBase64
-        )
-        decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom(
-            decodeISO8601DateWithOptionalFractionalSeconds
-        )
-        encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        if let existing = defaults.string(forKey: Keys.deviceID) {
-            deviceID = existing
-        } else {
-            let generated = UUID().uuidString
-            defaults.set(generated, forKey: Keys.deviceID)
-            deviceID = generated
-        }
-        if let data = defaults.data(forKey: Keys.cachedEntitlement),
-           let cached = try? decoder.decode(CrossDevicePremiumEntitlement.self, from: data),
-           let verified = entitlementVerifier?.verified(cached) {
-            entitlement = verified
-        } else {
-            entitlement = nil
-            defaults.removeObject(forKey: Keys.cachedEntitlement)
-        }
-        isSignedIn = isSignedInOverride ?? false
-        if let isSignedInOverride {
-            if isSignedInOverride, automaticallyRefresh {
-                Task { await refreshIfNeeded() }
-            }
-        } else {
-            startupTokenTask = Task { @MainActor [weak self] in
-                let hasStoredToken = await Task.detached {
-                    startupTokenReader(keychainService) != nil
-                }.value
-                guard !Task.isCancelled, let self else { return }
-                self.isSignedIn = hasStoredToken
-                self.startupTokenTask = nil
-                if hasStoredToken, automaticallyRefresh {
-                    await self.refreshIfNeeded()
-                }
-            }
-        }
-    }
-
-    func signInWithApple(
-        commercialLicenseProof: CommercialLicenseLinkProof?
-    ) async {
-        await perform {
-            let nonce = try Self.randomBase64URLToken()
-            let codeVerifier = try Self.randomBase64URLToken()
-            let nonceHash = Self.sha256Hex(nonce)
-            let codeChallenge = Self.sha256Base64URL(codeVerifier)
-            let start: AppleWebStartResponse = try await request(
-                path: "/v1/auth/apple/web/start",
-                method: "POST",
-                body: try encoder.encode([
-                    "nonceHash": nonceHash,
-                    "codeChallenge": codeChallenge,
-                ]),
-                authenticated: false
-            )
-            guard start.expiresAt > Date(),
-                  start.authorizationURL.scheme == "https",
-                  start.authorizationURL.host == "appleid.apple.com" else {
-                throw PremiumAccountServiceError.invalidAppleAuthorizationCallback
-            }
-
-            let callbackURL: URL
-            do {
-                callbackURL = try await appleWebAuthenticator.authenticate(
-                    at: start.authorizationURL,
-                    callbackScheme: "typewhisper"
-                )
-            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
-                throw PremiumAccountServiceError.appleSignInCancelled
-            } catch let error as URLError where error.code == .cancelled {
-                throw PremiumAccountServiceError.appleSignInCancelled
-            }
-
-            let callback = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false)
-            let values = (callback?.queryItems ?? []).reduce(into: [String: String]()) { result, item in
-                if result[item.name] == nil, let value = item.value {
-                    result[item.name] = value
-                }
-            }
-            guard callbackURL.scheme == "typewhisper",
-                  callbackURL.host == "premium-auth",
-                  callbackURL.path == "/callback",
-                  values["state"] == start.state else {
-                throw PremiumAccountServiceError.invalidAppleAuthorizationCallback
-            }
-            if values["error"] == "user_cancelled_authorize" {
-                throw PremiumAccountServiceError.appleSignInCancelled
-            }
-            guard values["error"] == nil, let code = values["code"], !code.isEmpty else {
-                throw PremiumAccountServiceError.appleAuthorizationFailed
-            }
-
-            let accountSession: AccountSession = try await request(
-                path: "/v1/auth/apple/web/exchange",
-                method: "POST",
-                body: try encoder.encode([
-                    "state": start.state,
-                    "code": code,
-                    "codeVerifier": codeVerifier,
-                ]),
-                authenticated: false
-            )
-            try await acceptAccountSession(
-                accountSession,
-                commercialLicenseProof: commercialLicenseProof
-            )
-        }
-    }
-
-    func refreshIfNeeded() async {
-        guard isSignedIn else { return }
-        if hasPremiumEntitlement,
-           let last = defaults.object(forKey: Keys.lastRefresh) as? Date,
-           Date().timeIntervalSince(last) < 7 * 24 * 60 * 60 { return }
-        do { try await refresh() }
-        catch { if entitlement == nil { errorMessage = error.localizedDescription } }
-    }
-
-    func signOut() {
-        clearAuthorizationState()
-    }
-
-    func signOutFromAccount() async {
-        await perform {
-            let response: DeviceDetachResponse = try await request(
-                path: "/v1/entitlements/polar/device/current",
-                method: "DELETE"
-            )
-            guard response.ok else { throw URLError(.badServerResponse) }
-            _ = response.released
-            clearAuthorizationState()
-        }
-    }
-
-    func linkCommercialLicense(_ proof: CommercialLicenseLinkProof) async {
-        await perform {
-            let entitlement = try await attachCommercialLicense(proof)
-            try acceptEntitlement(entitlement)
-            guard hasPremiumEntitlement else {
-                throw PremiumAccountServiceError.commercialLicenseLinkFailed
-            }
-            defaults.set(Date(), forKey: Keys.lastRefresh)
-        }
-    }
-
-    func deleteAccount() async {
-        await perform {
-            let _: [String: Bool] = try await request(path: "/v1/account", method: "DELETE")
-            signOut()
-        }
-    }
-
-    private func refresh() async throws {
-        let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
-        try acceptEntitlement(response.entitlement)
-        defaults.set(Date(), forKey: Keys.lastRefresh)
-    }
-
-    private func acceptAccountSession(
-        _ accountSession: AccountSession,
-        commercialLicenseProof: CommercialLicenseLinkProof?
-    ) async throws {
-        startupTokenTask?.cancel()
-        startupTokenTask = nil
-        try Self.saveToken(accountSession.accessToken, service: keychainService)
-        isSignedIn = true
-        try acceptEntitlement(accountSession.entitlement)
-        if let commercialLicenseProof,
-           !commercialLicenseProof.key.isEmpty,
-           !commercialLicenseProof.activationId.isEmpty {
-            do {
-                try acceptEntitlement(
-                    try await attachCommercialLicense(commercialLicenseProof)
-                )
-            } catch {
-                clearAuthorizationState()
-                throw error
-            }
-        } else {
-            try await refresh()
-        }
-    }
-
-    private func attachCommercialLicense(
-        _ proof: CommercialLicenseLinkProof
-    ) async throws -> CrossDevicePremiumEntitlement? {
-        let response: EntitlementResponse = try await request(
-            path: "/v1/entitlements/polar/device/attach",
-            method: "POST",
-            body: try encoder.encode([
-                "licenseKey": proof.key,
-                "activationId": proof.activationId,
-            ])
-        )
-        return response.entitlement
-    }
-
-    private func acceptEntitlement(_ value: CrossDevicePremiumEntitlement?) throws {
-        guard let value else {
-            entitlement = nil
-            defaults.removeObject(forKey: Keys.cachedEntitlement)
-            return
-        }
-        guard let verified = entitlementVerifier?.verified(value) else {
-            entitlement = nil
-            defaults.removeObject(forKey: Keys.cachedEntitlement)
-            throw PremiumAccountServiceError.invalidEntitlementSignature
-        }
-        entitlement = verified
-        if let data = try? encoder.encode(verified) {
-            defaults.set(data, forKey: Keys.cachedEntitlement)
-        }
-    }
-
-    private func perform(_ operation: () async throws -> Void) async {
-        guard !isWorking else { return }
-        isWorking = true
-        errorMessage = nil
-        defer { isWorking = false }
-        do { try await operation() }
-        catch PremiumAccountServiceError.appleSignInCancelled {}
-        catch { errorMessage = error.localizedDescription }
-    }
-
-    private func request<Response: Decodable>(
-        path: String,
-        method: String = "GET",
-        body: Data? = nil,
-        authenticated: Bool = true
-    ) async throws -> Response {
-        var request = URLRequest(url: baseURL.appending(path: path))
-        request.httpMethod = method
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue(deviceID, forHTTPHeaderField: "X-TypeWhisper-Device-ID")
-        request.setValue("macos", forHTTPHeaderField: "X-TypeWhisper-Platform")
-        request.setValue("2", forHTTPHeaderField: "X-TypeWhisper-Entitlement-Version")
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
-        }
-        if authenticated {
-            guard let token = Self.readToken(service: keychainService) else {
-                throw NSError(domain: "PremiumAccount", code: 401, userInfo: [NSLocalizedDescriptionKey: "Sign in with Apple first."])
-            }
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-        let (data, response) = try await requestExecutor(request)
-        guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-        guard (200..<300).contains(http.statusCode) else {
-            if authenticated, http.statusCode == 401 || http.statusCode == 403 {
-                clearAuthorizationState()
-            }
-            let message = (try? decoder.decode(ErrorResponse.self, from: data).error) ?? "Account request failed (HTTP \(http.statusCode))."
-            throw NSError(domain: "PremiumAccount", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
-        }
-        return try decoder.decode(Response.self, from: data)
-    }
-
-    func clearAuthorizationForHTTPStatus(_ statusCode: Int) {
-        guard statusCode == 401 || statusCode == 403 else { return }
-        clearAuthorizationState()
-    }
-
-    private func clearAuthorizationState() {
-        startupTokenTask?.cancel()
-        startupTokenTask = nil
-        Self.deleteToken(service: keychainService)
-        isSignedIn = false
-        entitlement = nil
-        defaults.removeObject(forKey: Keys.cachedEntitlement)
-        defaults.removeObject(forKey: Keys.lastRefresh)
-    }
-
-    private static func readToken(service: String) -> String? {
-        readPremiumAccountToken(service: service)
-    }
-
-    private static func saveToken(_ token: String, service: String) throws {
-        deleteToken(service: service)
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: "access-token",
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-            kSecValueData as String: Data(token.utf8),
-        ]
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else { throw NSError(domain: NSOSStatusErrorDomain, code: Int(status)) }
-    }
-
-    private static func deleteToken(service: String) {
-        SecItemDelete([
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: "access-token",
-        ] as CFDictionary)
-    }
-
-    private static func randomBase64URLToken(byteCount: Int = 32) throws -> String {
-        var bytes = [UInt8](repeating: 0, count: byteCount)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
-            throw PremiumAccountServiceError.secureRandomGenerationFailed
-        }
-        return Data(bytes).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    private static func sha256Hex(_ value: String) -> String {
-        SHA256.hash(data: Data(value.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-    }
-
-    private static func sha256Base64URL(_ value: String) -> String {
-        Data(SHA256.hash(data: Data(value.utf8)))
-            .base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-}
-
-#if APPSTORE
-extension PremiumAccountService {
-    /// Links an App Store transaction to the signed-in account, so Premium
-    /// bought on this Mac is also available on the account's other devices.
-    func syncStoreKitTransaction(_ transactionID: UInt64) async throws {
-        let response: EntitlementResponse = try await request(
-            path: "/v1/entitlements/storekit/sync",
-            method: "POST",
-            body: try encoder.encode([
-                "transactionId": String(transactionID),
-                // "app" names the App Store record, not the platform. The Mac
-                // edition is a universal purchase of the iOS app record
-                // (com.typewhisper.typewhisper-app); the platform is sent in
-                // the X-TypeWhisper-Platform header.
-                "app": "ios",
-            ])
-        )
-        guard let synced = response.entitlement else { throw URLError(.badServerResponse) }
-        defaults.set(Date(), forKey: Keys.lastRefresh)
-        // A subscription answer must not replace an active lifetime entitlement.
-        if let entitlement, entitlement.isActive, entitlement.isLifetime, !synced.isLifetime {
-            return
-        }
-        try acceptEntitlement(synced)
-    }
-}
-#endif
-
 @MainActor
 final class CloudFolderSyncController: ObservableObject {
     private enum Keys {
@@ -707,7 +38,6 @@ final class CloudFolderSyncController: ObservableObject {
         static let legacySyncState = "plugin.com.typewhisper.cloud-folder-sync.syncState"
     }
 
-    private let premiumAccountService: PremiumAccountService
     private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
     private let automaticICloudBridge: any PremiumICloudBridging
@@ -726,7 +56,6 @@ final class CloudFolderSyncController: ObservableObject {
     private var localChangeObserverId: UUID?
     private var scheduledSyncTask: Task<Void, Never>?
     private var automaticPollTask: Task<Void, Never>?
-    private var entitlementCancellable: AnyCancellable?
     private var needsResync = false
     private var needsChangeCheck = false
     private var isCheckingForChanges = false
@@ -753,17 +82,6 @@ final class CloudFolderSyncController: ObservableObject {
     @Published var errorMessage: String?
     @Published var statusMessage: String?
 
-    var canUseSync: Bool {
-        #if APPSTORE
-        // An App Store purchase also unlocks sync; the account connects the devices.
-        AppConstants.isPremiumSyncSmokeTest
-            || (premiumAccountService.isSignedIn && AppStorePremiumService.shared?.hasPremiumAccess == true)
-        #else
-        AppConstants.isPremiumSyncSmokeTest
-            || (premiumAccountService.isSignedIn && premiumAccountService.hasPremiumEntitlement)
-        #endif
-    }
-
     var availableModes: [PremiumSyncMode] {
         #if APPSTORE
         // Keep a chosen automatic iCloud sync selectable while iCloud is signed out.
@@ -786,7 +104,6 @@ final class CloudFolderSyncController: ObservableObject {
     var isConfigured: Bool { mode == .automaticICloud || (mode == .cloudFolder && selectedFolderURL != nil) }
 
     init(
-        premiumAccountService: PremiumAccountService,
         syncStore: any UserDataSyncStore,
         historyService: HistoryService? = nil,
         historySyncPreferences: HistorySyncPreferences? = nil,
@@ -794,7 +111,6 @@ final class CloudFolderSyncController: ObservableObject {
         automaticICloudBridge: any PremiumICloudBridging = PremiumICloudBridgeFactory.makeDefault(),
         automaticICloudAvailable: Bool? = nil
     ) {
-        self.premiumAccountService = premiumAccountService
         self.syncStore = syncStore
         self.historyService = historyService
         self.historySyncPreferences = historySyncPreferences
@@ -834,34 +150,10 @@ final class CloudFolderSyncController: ObservableObject {
             MainActor.assumeIsolated { self?.handleUbiquityIdentityChange() }
         }
         #endif
-        // Entitlement refreshes republish unchanged values; only gaining access starts a sync.
-        #if APPSTORE
-        let premiumAccess = AppStorePremiumService.shared?.$hasPremiumAccess.eraseToAnyPublisher()
-            ?? Just(false).eraseToAnyPublisher()
-        #else
-        let premiumAccess = premiumAccountService.$entitlement
-            .map { $0?.isActive == true }
-            .eraseToAnyPublisher()
-        #endif
-        entitlementCancellable = premiumAccess
-            .combineLatest(premiumAccountService.$isSignedIn)
-            .map { hasPremium, isSignedIn in
-                AppConstants.isPremiumSyncSmokeTest
-                    || (isSignedIn && hasPremium)
-            }
-            .removeDuplicates()
-            .dropFirst()
-            .sink { [weak self] canUseSync in
-                guard canUseSync else { return }
-                Task { @MainActor in
-                    guard let self, self.isConfigured, self.canUseSync else { return }
-                    await self.syncIfNeeded()
-                }
-            }
-        if isConfigured, canUseSync {
+        if isConfigured {
             initialSyncTask = Task { @MainActor [weak self] in
                 await Task.yield()
-                guard let self, self.isConfigured, self.canUseSync else { return }
+                guard let self, self.isConfigured else { return }
                 await self.syncIfNeeded()
             }
         }
@@ -887,7 +179,7 @@ final class CloudFolderSyncController: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
-        panel.message = String(localized: "Choose a cloud-synced folder for TypeWhisper.")
+        panel.message = String(localized: "Choose a cloud-synced folder for dictum.")
 
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task { await selectCustomFolder(url) }
@@ -896,7 +188,7 @@ final class CloudFolderSyncController: ObservableObject {
     func setMode(_ newMode: PremiumSyncMode) async {
         guard automaticICloudAvailable || newMode != .automaticICloud else { return }
         guard newMode != mode, !isSyncing else { return }
-        if isConfigured, canUseSync { await syncNow() }
+        if isConfigured { await syncNow() }
         guard !isSyncing else { return }
         mode = newMode
         if newMode == .automaticICloud { provider = .iCloudDrive }
@@ -917,7 +209,7 @@ final class CloudFolderSyncController: ObservableObject {
               historySyncPreferences.isEnabled != enabled else { return }
         historySyncPreferences.isEnabled = enabled
         objectWillChange.send()
-        if enabled, isConfigured, canUseSync {
+        if enabled, isConfigured {
             await syncNow()
         }
     }
@@ -1022,10 +314,6 @@ final class CloudFolderSyncController: ObservableObject {
 
         let syncMode = mode
         guard syncMode != .off else { return }
-        guard canUseSync else {
-            errorMessage = CloudFolderSyncError.notEntitled.localizedDescription
-            return
-        }
         guard let folderURL = activeFolderURL(for: syncMode) else { return }
         guard !isSyncing else {
             needsResync = true
@@ -1053,7 +341,6 @@ final class CloudFolderSyncController: ObservableObject {
                 folderURL: folderURL,
                 store: syncStore,
                 state: &syncState,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync),
                 historyOriginDeviceID: historySyncPreferences?.deviceID,
                 cache: syncCache
             )
@@ -1104,7 +391,7 @@ final class CloudFolderSyncController: ObservableObject {
             return
         }
 
-        if isConfigured, canUseSync { await syncNow() }
+        if isConfigured { await syncNow() }
         guard !isSyncing else { return }
         if selectedFolderURL != url {
             scheduledSyncTask?.cancel()
@@ -1154,7 +441,7 @@ final class CloudFolderSyncController: ObservableObject {
         // Installing received audio only records the local file name, which is not synced.
         guard !isInstallingSynchronizedAudio else { return }
         hasPendingLocalChanges = true
-        guard isConfigured, canUseSync else { return }
+        guard isConfigured else { return }
         pendingChanges += 1
         if isSyncing {
             needsResync = true
@@ -1205,7 +492,7 @@ final class CloudFolderSyncController: ObservableObject {
 
     /// Checks for remote changes; a full sync only runs when the package or local data changed.
     func automaticPollTick() async {
-        guard mode == .automaticICloud, canUseSync, !isSyncing else { return }
+        guard mode == .automaticICloud, !isSyncing else { return }
         await syncIfNeeded()
     }
 
@@ -1225,8 +512,7 @@ final class CloudFolderSyncController: ObservableObject {
             return true
         }
         guard !isCheckingForChanges else { return true }
-        guard canUseSync,
-              !hasPendingLocalChanges,
+        guard !hasPendingLocalChanges,
               let synchronizedPackage,
               synchronizedPackage.mode == syncMode,
               let folderURL = activeFolderURL(for: syncMode),
@@ -1374,7 +660,7 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func canRetrieveHistoryAudio(_ record: TranscriptionRecord) -> Bool {
-        guard canUseSync, mode != .off,
+        guard mode != .off,
               historySyncPreferences?.isEnabled == true,
               historySyncPreferences?.isAudioEnabled == true,
               let descriptor = historyService?.synchronizedAudioDescriptor(for: record),
@@ -1461,14 +747,14 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     #if DEBUG
-    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+    func prepareScreenshotFixture(isConfigured: Bool) {
         scheduledSyncTask?.cancel()
         scheduledSyncTask = nil
         stopICloudObservation()
         selectedFolderURL = nil
-        mode = hasPremiumAccess ? .automaticICloud : .off
-        provider = hasPremiumAccess ? .iCloudDrive : .custom
-        lastSyncDate = hasPremiumAccess ? AppConstants.screenshotFixtureReferenceDate : nil
+        mode = isConfigured ? .automaticICloud : .off
+        provider = isConfigured ? .iCloudDrive : .custom
+        lastSyncDate = isConfigured ? AppConstants.screenshotFixtureReferenceDate : nil
         pendingChanges = 0
         if AppConstants.screenshotState == "history" {
             deviceCount = 2
@@ -1492,7 +778,7 @@ final class CloudFolderSyncController: ObservableObject {
                 ),
             ]
         } else {
-            deviceCount = hasPremiumAccess ? 2 : 0
+            deviceCount = isConfigured ? 2 : 0
             devices = []
         }
         isSyncing = false
@@ -1687,7 +973,7 @@ struct CloudFolderSyncSettingsView: View {
                             } label: {
                                 Label(String(localized: "premium.window.sync.chooseFolder"), systemImage: "folder.badge.plus")
                             }
-                            .disabled(!controller.canUseSync || controller.isSyncing)
+                            .disabled(controller.isSyncing)
                             .accessibilityIdentifier("premium.sync.chooseFolder")
                         }
 
@@ -1704,7 +990,7 @@ struct CloudFolderSyncSettingsView: View {
                                 Label(String(localized: "premium.window.sync.syncNow"), systemImage: "arrow.triangle.2.circlepath")
                             }
                         }
-                        .disabled(!controller.canUseSync || !controller.isConfigured || controller.isSyncing)
+                        .disabled(!controller.isConfigured || controller.isSyncing)
                         .accessibilityIdentifier("premium.sync.syncNow")
 
                         if controller.mode == .cloudFolder {

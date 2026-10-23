@@ -4,7 +4,7 @@ import MediaRemoteAdapter
 import Foundation
 import os.log
 
-private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "MediaPlaybackService")
+private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "MediaPlaybackService")
 
 #if !APPSTORE
 struct MediaPlaybackSnapshot: Equatable {

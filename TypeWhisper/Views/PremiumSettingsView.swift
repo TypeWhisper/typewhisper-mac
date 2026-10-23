@@ -1,329 +1,12 @@
-import AuthenticationServices
 import SwiftUI
 
 @MainActor
-struct PremiumSettingsView: View {
-    @ObservedObject private var license: LicenseService
-    @ObservedObject private var syncController: CloudFolderSyncController
-    @ObservedObject private var premiumAccount: PremiumAccountService
-    @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
-    @ObservedObject private var managedPolicyService = ServiceContainer.shared.managedPolicyService
-
-    private let settingsNavigation: SettingsNavigationCoordinator
-    private let windowPresenter: any PremiumSettingsWindowPresenting
-
-    init(
-        licenseService: LicenseService = LicenseService.shared,
-        syncController: CloudFolderSyncController = ServiceContainer.shared.cloudFolderSyncController,
-        premiumAccount: PremiumAccountService = ServiceContainer.shared.premiumAccountService,
-        correctionLearningService: TargetAppCorrectionLearningService = ServiceContainer.shared.targetAppCorrectionLearningService,
-        settingsNavigation: SettingsNavigationCoordinator = .shared,
-        windowPresenter: any PremiumSettingsWindowPresenting = PremiumSettingsWindowManager.shared
-    ) {
-        self.license = licenseService
-        self.syncController = syncController
-        self.premiumAccount = premiumAccount
-        self.correctionLearningService = correctionLearningService
-        self.settingsNavigation = settingsNavigation
-        self.windowPresenter = windowPresenter
-    }
-
-    private var access: PremiumFeatureAccessSnapshot {
-        PremiumFeatureAccessSnapshot(
-            hasCommercialLicense: license.hasCommercialLicense,
-            hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement,
-            isSignedIn: premiumAccount.isSignedIn,
-            isSupporter: license.isSupporter
-        )
-    }
-
-    var body: some View {
-        VStack(spacing: 0) {
-            SettingsPageHeader(String(localized: "Premium"))
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    PremiumAccessStatusBar(
-                        summary: access.summary,
-                        onManageAccess: {
-                            windowPresenter.present(.access)
-                        }
-                    )
-
-                    #if APPSTORE
-                    AppStorePremiumStoreView()
-                    #endif
-
-                    if access.hasAnyPremiumAccess {
-                        PremiumActiveFeatureOverview(
-                            licenseService: license,
-                            premiumAccount: premiumAccount,
-                            syncController: syncController,
-                            correctionLearningService: correctionLearningService,
-                            calendarController: ServiceContainer.shared.calendarMeetingAutomationController,
-                            windowPresenter: windowPresenter
-                        )
-                    } else {
-                        #if !APPSTORE
-                        PremiumLockedFeatureOverview(
-                            isSupporter: license.isSupporter,
-                            showsUnlock: !ManagedPromptPolicy.suppressesOptionalPrompts(managedPolicyService.current),
-                            onUnlock: {
-                                settingsNavigation.navigateToLicense(target: .top)
-                            }
-                        )
-                        #endif
-                    }
-                }
-                .padding(SettingsLayoutMetrics.pagePadding)
-                .frame(maxWidth: 980, alignment: .topLeading)
-            }
-        }
-        .frame(minWidth: 560, minHeight: 360, alignment: .topLeading)
-    }
-}
-
-@MainActor
-struct PremiumAccessSettingsView: View {
-    @ObservedObject private var license: LicenseService
-    @ObservedObject private var premiumAccount: PremiumAccountService
-    @State private var confirmingAccountDeletion = false
-
-    private let settingsNavigation: SettingsNavigationCoordinator
-
-    init(
-        licenseService: LicenseService,
-        premiumAccount: PremiumAccountService,
-        settingsNavigation: SettingsNavigationCoordinator
-    ) {
-        self.license = licenseService
-        self.premiumAccount = premiumAccount
-        self.settingsNavigation = settingsNavigation
-    }
-
-    private var access: PremiumFeatureAccessSnapshot {
-        PremiumFeatureAccessSnapshot(
-            hasCommercialLicense: license.hasCommercialLicense,
-            hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement,
-            isSignedIn: premiumAccount.isSignedIn,
-            isSupporter: license.isSupporter
-        )
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PremiumSettingsDetailHeader(
-                icon: "person.crop.circle.badge.checkmark",
-                accent: .purple,
-                title: String(localized: "premium.window.access.title"),
-                description: accessDescription,
-                status: accessTitle,
-                statusColor: access.hasAnyPremiumAccess ? .green : .secondary
-            )
-
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    Label(
-                        String(localized: "premium.window.access.currentAccess"),
-                        systemImage: access.hasAnyPremiumAccess ? "checkmark.seal.fill" : "lock.fill"
-                    )
-                    .font(.headline)
-                    .foregroundStyle(access.hasAnyPremiumAccess ? .green : .secondary)
-                    .accessibilityAddTraits(.isHeader)
-
-                    Text(accessTitle)
-                        .font(.callout)
-                        .accessibilityIdentifier("premium.window.access.status")
-
-                    Button {
-                        settingsNavigation.navigateToLicense(target: .top)
-                    } label: {
-                        Label(manageAccessTitle, systemImage: "key")
-                    }
-                    .accessibilityIdentifier("premium.window.access.manageLicense")
-                }
-            }
-
-            SettingsCard {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Label(
-                            String(localized: "premium.window.access.accountTitle"),
-                            systemImage: "person.crop.circle"
-                        )
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
-
-                        Spacer()
-
-                        if premiumAccount.hasPremiumEntitlement {
-                            Label(
-                                String(localized: "premium.window.access.accountActive"),
-                                systemImage: "checkmark.seal.fill"
-                            )
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.green)
-                        }
-                    }
-
-                    if premiumAccount.isSignedIn {
-                        Text(String(localized: "premium.window.access.signedInDescription"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-
-                        if license.hasCommercialLicense,
-                           !premiumAccount.hasPremiumEntitlement,
-                           let proof = license.commercialLicenseProofForAccountLink {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(String(localized: "premium.window.access.linkDescription"))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                Button {
-                                    Task {
-                                        await premiumAccount.linkCommercialLicense(proof)
-                                    }
-                                } label: {
-                                    Label(
-                                        String(localized: "premium.window.access.linkLicense"),
-                                        systemImage: "link"
-                                    )
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(premiumAccount.isWorking)
-                                .accessibilityIdentifier("premium.window.access.linkLicense")
-                            }
-                            .padding(.vertical, 2)
-                        }
-
-                        HStack(spacing: 8) {
-                            Button(String(localized: "premium.window.access.signOut")) {
-                                Task { await premiumAccount.signOutFromAccount() }
-                            }
-                            .disabled(premiumAccount.isWorking)
-                            .accessibilityIdentifier("premium.window.access.signOut")
-
-                            Button(String(localized: "premium.window.access.deleteAccount"), role: .destructive) {
-                                confirmingAccountDeletion = true
-                            }
-                            .disabled(premiumAccount.isWorking)
-                            .accessibilityIdentifier("premium.window.access.deleteAccount")
-                        }
-                    } else {
-                        AppKitSignInWithAppleButton {
-                            Task {
-                                await premiumAccount.signInWithApple(
-                                    commercialLicenseProof: license.commercialLicenseProofForAccountLink
-                                )
-                            }
-                        }
-                        .frame(width: 240, height: 38)
-                        .disabled(premiumAccount.isWorking)
-                        .accessibilityIdentifier("premium.window.access.signIn")
-
-                        Text(String(localized: "premium.window.access.signInDescription"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if premiumAccount.isWorking {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel(localizedAppText(
-                                "Please wait",
-                                de: "Bitte warten",
-                                ja: "お待ちください",
-                                zh: "请稍候"
-                            ))
-                    }
-
-                    if let errorMessage = premiumAccount.errorMessage {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .accessibilityLabel(String(localized: "Error: \(errorMessage)"))
-                    }
-                }
-            }
-
-            Label(
-                String(localized: "premium.window.access.privacy"),
-                systemImage: "hand.raised.fill"
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-        }
-        .alert(
-            String(localized: "premium.window.access.deleteConfirmationTitle"),
-            isPresented: $confirmingAccountDeletion
-        ) {
-            Button(String(localized: "premium.window.access.deleteAccount"), role: .destructive) {
-                Task { await premiumAccount.deleteAccount() }
-            }
-            Button(String(localized: "premium.common.cancel"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "premium.window.access.deleteConfirmationMessage"))
-        }
-    }
-
-    private var accessTitle: String {
-        access.summary.localizedTitle
-    }
-
-    private var accessDescription: String {
-        #if APPSTORE
-        localizedAppText(
-            "Manage your Premium purchase and the optional account for cross-device sync.",
-            de: "Verwalte deinen Premium-Kauf und das optionale Konto für die Synchronisierung zwischen Geräten."
-        )
-        #else
-        String(localized: "premium.window.access.description")
-        #endif
-    }
-
-    private var manageAccessTitle: String {
-        #if APPSTORE
-        access.hasAnyPremiumAccess
-            ? localizedAppText("Manage Premium…", de: "Premium verwalten …")
-            : String(localized: "premium.hub.unlock")
-        #else
-        String(localized: "premium.window.access.manageLicense")
-        #endif
-    }
-}
-
-@MainActor
-struct PremiumCorrectionLearningSettingsView: View {
-    @ObservedObject private var license: LicenseService
-    @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
+struct CorrectionLearningSettingsView: View {
+    @ObservedObject var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var learningEnabled = false
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningRequiredObservations) private var requiredObservations = 1
 
-    private let onManageAccess: () -> Void
-
-    init(
-        licenseService: LicenseService,
-        correctionLearningService: TargetAppCorrectionLearningService,
-        onManageAccess: @escaping () -> Void
-    ) {
-        self.license = licenseService
-        self.correctionLearningService = correctionLearningService
-        self.onManageAccess = onManageAccess
-    }
-
     var body: some View {
-        if license.hasCommercialLicense {
-            enabledContent
-        } else {
-            PremiumLockedDetailView(
-                message: lockedMessage,
-                onManageAccess: onManageAccess
-            )
-        }
-    }
-
-    private var enabledContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             PremiumSettingsDetailHeader(
                 icon: "wand.and.sparkles",
@@ -338,19 +21,13 @@ struct PremiumCorrectionLearningSettingsView: View {
 
             SettingsCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle(
-                        String(localized: "premium.window.learning.toggle"),
-                        isOn: learningBinding
-                    )
-                    .toggleStyle(.switch)
-                    .accessibilityIdentifier("premium.learning.enabled")
-
+                    Toggle(String(localized: "premium.window.learning.toggle"), isOn: $learningEnabled)
+                        .toggleStyle(.switch)
+                        .accessibilityIdentifier("premium.learning.enabled")
                     Text(String(localized: "premium.window.learning.help"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
                     Divider()
-
                     Picker(
                         String(localized: "premium.window.learning.repeatCount.label"),
                         selection: $requiredObservations
@@ -359,8 +36,7 @@ struct PremiumCorrectionLearningSettingsView: View {
                             Text(count == 1
                                 ? String(localized: "premium.window.learning.repeatCount.immediately")
                                 : String.localizedStringWithFormat(
-                                    String(localized: "premium.window.learning.repeatCount.afterFormat"),
-                                    count
+                                    String(localized: "premium.window.learning.repeatCount.afterFormat"), count
                                 ))
                                 .tag(count)
                         }
@@ -368,7 +44,6 @@ struct PremiumCorrectionLearningSettingsView: View {
                     .fixedSize()
                     .disabled(!learningEnabled)
                     .accessibilityIdentifier("premium.learning.repeatCount")
-
                     Text(String(localized: "premium.window.learning.repeatCount.help"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -380,22 +55,18 @@ struct PremiumCorrectionLearningSettingsView: View {
                     Text(String(localized: "premium.window.learning.lastActivity"))
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
-
                     if let attempt = correctionLearningService.latestAttempt {
                         HStack(alignment: .top, spacing: 10) {
                             Image(systemName: PremiumCorrectionLearningCopy.outcomeIcon(attempt.outcome))
                                 .foregroundStyle(PremiumCorrectionLearningCopy.outcomeColor(attempt.outcome))
                                 .frame(width: 18)
                                 .accessibilityHidden(true)
-
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(PremiumCorrectionLearningCopy.outcomeText(attempt.outcome))
                                     .font(.callout.weight(.medium))
-
                                 Text(attempt.timestamp, style: .relative)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
-
                                 if attempt.learnedCorrectionCount > 0 {
                                     Text(String.localizedStringWithFormat(
                                         String(localized: "premium.window.learning.correctionsLearnedFormat"),
@@ -405,9 +76,7 @@ struct PremiumCorrectionLearningSettingsView: View {
                                     .foregroundStyle(.secondary)
                                 }
                             }
-
                             Spacer(minLength: 8)
-
                             if let commitSignal = attempt.commitSignal {
                                 Text(PremiumCorrectionLearningCopy.commitSignalText(commitSignal))
                                     .font(.caption2.weight(.medium))
@@ -419,12 +88,9 @@ struct PremiumCorrectionLearningSettingsView: View {
                         }
                         .accessibilityElement(children: .combine)
                     } else {
-                        Label(
-                            String(localized: "premium.window.learning.noActivity"),
-                            systemImage: "clock"
-                        )
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                        Label(String(localized: "premium.window.learning.noActivity"), systemImage: "clock")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -434,74 +100,14 @@ struct PremiumCorrectionLearningSettingsView: View {
                     Text(String(localized: "premium.window.learning.examplesTitle"))
                         .font(.headline)
                         .accessibilityAddTraits(.isHeader)
-
                     Text(String(localized: "premium.window.learning.examplesHelp"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
                     ForEach(Array(PremiumCorrectionExamples.current.enumerated()), id: \.offset) { _, example in
                         PremiumCorrectionExampleRow(before: example.before, after: example.after)
                     }
                 }
             }
-        }
-    }
-
-    private var lockedMessage: String {
-        #if APPSTORE
-        localizedAppText(
-            "Learning from corrections requires TypeWhisper Premium.",
-            de: "Das Lernen aus Korrekturen benötigt TypeWhisper Premium."
-        )
-        #else
-        String(localized: "premium.window.learning.locked")
-        #endif
-    }
-
-    private var learningBinding: Binding<Bool> {
-        Binding(
-            get: { license.hasCommercialLicense && learningEnabled },
-            set: { newValue in
-                guard license.hasCommercialLicense else { return }
-                learningEnabled = newValue
-            }
-        )
-    }
-}
-
-struct AppKitSignInWithAppleButton: NSViewRepresentable {
-    let action: @MainActor () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(action: action)
-    }
-
-    func makeNSView(context: Context) -> ASAuthorizationAppleIDButton {
-        let button = ASAuthorizationAppleIDButton(
-            authorizationButtonType: .signIn,
-            authorizationButtonStyle: .whiteOutline
-        )
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.activate)
-        button.isEnabled = context.environment.isEnabled
-        return button
-    }
-
-    func updateNSView(_ button: ASAuthorizationAppleIDButton, context: Context) {
-        context.coordinator.action = action
-        button.isEnabled = context.environment.isEnabled
-    }
-
-    @MainActor
-    final class Coordinator: NSObject {
-        var action: @MainActor () -> Void
-
-        init(action: @escaping @MainActor () -> Void) {
-            self.action = action
-        }
-
-        @objc func activate() {
-            action()
         }
     }
 }

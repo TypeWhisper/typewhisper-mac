@@ -72,10 +72,7 @@ public struct PluginModelImportCandidate: Sendable {
 
     public var suggestedPluginName: String? {
         switch modelType {
-        case "canary": "Canary ASR"
         case "qwen3_asr": "Qwen3 ASR"
-        case "granite_speech": "Granite Speech"
-        case "voxtral_realtime": "Voxtral"
         default: nil
         }
     }

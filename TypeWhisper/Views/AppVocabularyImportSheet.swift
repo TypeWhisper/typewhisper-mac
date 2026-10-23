@@ -144,7 +144,7 @@ struct AppVocabularyImportSheet: View {
                 Text(String(localized: "No compatible entries found. Nothing was changed."))
             }
             if model.destination == .snippets {
-                Text(String(localized: "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text."))
+                Text(String(localized: "Snippets containing dictum dynamic placeholders are excluded to preserve literal text."))
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -209,8 +209,8 @@ private struct SetupWizardImportDialog: View {
                             .foregroundStyle(.secondary)
                     }
                     Picker(String(localized: "Source"), selection: $selectedSource) {
-                        Text("Wispr Flow").tag(AppVocabularyImport.Source.wisprFlow)
-                        Text("Handy").tag(AppVocabularyImport.Source.handy)
+                        Text(verbatim: "Wispr Flow").tag(AppVocabularyImport.Source.wisprFlow)
+                        Text(verbatim: "Handy").tag(AppVocabularyImport.Source.handy)
                     }
                     HStack {
                         Button(String(localized: "Cancel")) { dismiss() }

@@ -77,7 +77,7 @@ struct GeneralSettingsView: View {
                 .disabled(launchAtLogin.isLocked)
                 .managedLockAccessibilityHint(isLocked: launchAtLogin.isLocked, reason: nil)
 
-                Text(String(localized: "TypeWhisper will start automatically when you log in."))
+                Text(String(localized: "dictum will start automatically when you log in."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -87,7 +87,7 @@ struct GeneralSettingsView: View {
 
                 if launchAtLogin.requiresApproval {
                     HStack {
-                        Text(String(localized: "macOS needs your approval in Login Items before TypeWhisper can start at login."))
+                        Text(String(localized: "macOS needs your approval in Login Items before dictum can start at login."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -116,7 +116,7 @@ struct GeneralSettingsView: View {
             }
             Button(String(localized: "Later"), role: .cancel) {}
         } message: {
-            Text(String(localized: "The language change will take effect after restarting TypeWhisper."))
+            Text(String(localized: "The language change will take effect after restarting dictum."))
         }
     }
 

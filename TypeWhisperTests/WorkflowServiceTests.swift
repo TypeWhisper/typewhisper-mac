@@ -1432,7 +1432,7 @@ final class WorkflowServiceTests: XCTestCase {
 
     func testWorkflowOutputFormatPresetsExposeAutoDetect() {
         XCTAssertTrue(WorkflowOutputFormatPreset.all.contains { preset in
-            preset.title == "Auto-Detect" && preset.value == "auto"
+            preset.title == String(localized: "Auto-Detect") && preset.value == "auto"
         })
     }
 

@@ -15,6 +15,5 @@
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "AssemblyAIPlugin",
     "requiresAPIKey": true,
-    "locality": "cloud",
-    "detailsURL": "https://www.typewhisper.com/addons/assemblyai/"
+    "locality": "cloud"
 }

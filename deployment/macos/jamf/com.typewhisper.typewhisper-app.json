@@ -1,6 +1,6 @@
 {
-  "title": "TypeWhisper (App Store) (com.typewhisper.typewhisper-app)",
-  "description": "Managed settings for TypeWhisper (App Store). Only configure the keys you manage.",
+  "title": "dictum (App Store) (com.typewhisper.typewhisper-app)",
+  "description": "Managed settings for dictum (App Store). Only configure the keys you manage.",
   "__preferencedomain": "com.typewhisper.typewhisper-app",
   "properties": {
     "TranscriptionProviderId": {
@@ -10,7 +10,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -34,7 +34,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -58,7 +58,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -82,7 +82,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -106,7 +106,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -135,7 +135,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -164,7 +164,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -193,7 +193,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -214,7 +214,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -235,7 +235,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -251,12 +251,12 @@
     },
     "LaunchAtLogin": {
       "title": "Launch at login",
-      "description": "Registers or removes TypeWhisper's login item and locks the setting.",
+      "description": "Registers or removes dictum's login item and locks the setting.",
       "property_order": 55,
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -277,28 +277,7 @@
       "links": [
         {
           "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-        }
-      ],
-      "anyOf": [
-        {
-          "type": "null",
-          "title": "Not Configured"
-        },
-        {
-          "title": "Configured",
-          "type": "boolean"
-        }
-      ]
-    },
-    "SuppressOptionalPrompts": {
-      "title": "Hide optional prompts",
-      "description": "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button.",
-      "property_order": 65,
-      "links": [
-        {
-          "rel": "More information",
-          "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+          "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
         }
       ],
       "anyOf": [
@@ -315,7 +294,7 @@
     "Recommended": {
       "title": "Recommended settings (users can change)",
       "description": "Defaults that apply until the user makes a choice.",
-      "property_order": 70,
+      "property_order": 65,
       "anyOf": [
         {
           "type": "null",
@@ -332,7 +311,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -356,7 +335,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -380,7 +359,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -404,7 +383,7 @@
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
@@ -423,33 +402,12 @@
             },
             "LaunchAtLogin": {
               "title": "Launch at login",
-              "description": "Registers or removes TypeWhisper's login item and locks the setting.",
+              "description": "Registers or removes dictum's login item and locks the setting.",
               "property_order": 25,
               "links": [
                 {
                   "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
-                }
-              ],
-              "anyOf": [
-                {
-                  "type": "null",
-                  "title": "Not Configured"
-                },
-                {
-                  "title": "Configured",
-                  "type": "boolean"
-                }
-              ]
-            },
-            "SuppressOptionalPrompts": {
-              "title": "Hide optional prompts",
-              "description": "Hides What's New, the iPhone app promotion, the work-use card and the Premium unlock button.",
-              "property_order": 30,
-              "links": [
-                {
-                  "rel": "More information",
-                  "href": "https://github.com/TypeWhisper/typewhisper-mac/blob/main/docs/mdm/managed-settings.md"
+                  "href": "https://github.com/schneidervvv/dictum/blob/main/docs/mdm/managed-settings.md"
                 }
               ],
               "anyOf": [
