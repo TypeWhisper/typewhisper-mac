@@ -124,7 +124,7 @@ enum UserDataExportService {
     /// downloads, the local API port/token files, and voice profiles, which
     /// are biometric data that stays on this Mac.
     static let excludedTopLevelNames: Set<String> = [
-        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "VoiceProfiles",
+        "Plugins", "MarketplaceCache", "models", "api-port", "api-discovery.json", "local-api-token", "VoiceProfiles",
     ]
 
     /// Model download folders inside `PluginData/<pluginId>/`, compared
