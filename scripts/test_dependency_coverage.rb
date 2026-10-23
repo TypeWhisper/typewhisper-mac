@@ -62,42 +62,4 @@ class DependencyCoverageTest < Minitest::Test
     assert_raises(RuntimeError) { DependencyCoverage.check_sbom(sbom, sha) }
   end
 
-  def test_ruby_graph_requires_every_locked_gem_version_as_added
-    sha = DependencyCoverage.git("rev-parse", "HEAD").strip
-    changes = DependencyCoverage.gems(sha).map { |name, version| { "change_type" => "added", "manifest" => "Gemfile.lock", "name" => name, "version" => version } }
-    capture_io { DependencyCoverage.check_ruby_graph(changes, sha) }
-    stale = changes.dup.tap { |list| list[0] = list[0].merge("version" => "0.0.0") }
-    assert_raises(RuntimeError) { DependencyCoverage.check_ruby_graph(stale, sha) }
-    removed = changes.dup.tap { |list| list[0] = list[0].merge("change_type" => "removed") }
-    assert_raises(RuntimeError) { DependencyCoverage.check_ruby_graph(removed, sha) }
-  end
-
-  def test_ruby_graph_expects_platform_variants_once_under_their_plain_version
-    lock = <<~LOCK
-      GEM
-        remote: https://rubygems.org/
-        specs:
-          json (2.21.2)
-          prism (2.0.0)
-          prism (2.0.0-arm64-darwin)
-          rbs (4.2.0)
-            prism (>= 1.6.0)
-
-      PLATFORMS
-        arm64-darwin-25
-        ruby
-
-      CHECKSUMS
-        prism (2.0.0-arm64-darwin) sha256=00
-    LOCK
-    read = ->(path, _sha = nil) { path == "Gemfile.lock" ? lock : raise("Unexpected read: #{path}") }
-    DependencyCoverage.stub(:read, read) do
-      expected = [%w[json 2.21.2], %w[prism 2.0.0], %w[rbs 4.2.0]]
-      assert_equal expected, DependencyCoverage.gems("sha")
-      changes = expected.map { |name, version| { "change_type" => "added", "manifest" => "Gemfile.lock", "name" => name, "version" => version } }
-      capture_io { DependencyCoverage.check_ruby_graph(changes, "sha") }
-      without_prism = changes.reject { |change| change["name"] == "prism" }
-      assert_raises(RuntimeError) { DependencyCoverage.check_ruby_graph(without_prism, "sha") }
-    end
-  end
 end

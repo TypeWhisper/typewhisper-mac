@@ -28,13 +28,6 @@ xcuserdata/
 # CocoaPods (if used)
 Pods/
 
-# Fastlane
-vendor/bundle/
-fastlane/report.xml
-fastlane/Preview.html
-fastlane/screenshots/
-fastlane/test_output/
-
 # Claude Code
 .claude/
 .agents/

@@ -42,18 +42,7 @@ enum TestHostIsolation {
     }
 }
 
-/// Keeps screenshot runs out of the app's own preferences.
-///
-/// Screenshot automation (`--store-screenshots`, Debug builds only) shows fixture data. The
-/// fastlane lane builds the app with the bundle identifier of the screenshot domain, but a Debug
-/// build started from a checkout, as for pull-request screenshots, has the Dev app's identifier
-/// `com.typewhisper.mac.dev`. It would read and write the Dev app's settings and apply profiles
-/// meant for the Dev app.
-///
-/// In a screenshot run, `UserDefaults.standard` returns the defaults of
-/// `AppConstants.screenshotPreferencesDomain`, whatever the bundle identifier, and managed
-/// preferences are read from that domain (`AppConstants.managedPreferencesDomain`). The fastlane
-/// lane resets the domain before every capture.
+/// 截图检查使用独立的偏好设置，避免读取或修改已安装应用的设置。
 enum ScreenshotPreferencesIsolation {
     /// The defaults `UserDefaults.standard` returns in a screenshot run, or nil when the app's
     /// own domain already is the screenshot domain or this is no screenshot run.
