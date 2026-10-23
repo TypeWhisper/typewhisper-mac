@@ -27,8 +27,12 @@ private struct SpeechSettingsForm: View {
         engines.filter { plugins.loadedTranscriptionPlugin(for: $0.providerId)?.manifest.resolvedLocality == .local }
     }
     private var cloudEngines: [any TranscriptionEnginePlugin] {
+        // 兼容接口插件把每个供应商档案都登记为引擎，档案里的模型清单同时服务于大语言模型，
+        // 无法证明其带有转写接口，只列出插件自己的主引擎。
         engines.filter {
-            plugins.loadedTranscriptionPlugin(for: $0.providerId)?.manifest.resolvedLocality != .local
+            let plugin = plugins.loadedTranscriptionPlugin(for: $0.providerId)
+            return plugin?.manifest.resolvedLocality != .local
+                && (plugin?.instance as? any TranscriptionEnginePlugin)?.providerId == $0.providerId
                 && !$0.transcriptionModels.isEmpty
         }
     }
