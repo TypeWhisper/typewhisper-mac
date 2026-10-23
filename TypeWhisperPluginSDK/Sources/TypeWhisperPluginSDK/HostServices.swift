@@ -5,7 +5,7 @@ import os
 // MARK: - Host Services
 
 public protocol HostServices: Sendable {
-    // Keychain
+    // Secrets (plugin-scoped, stored in a private file)
     func storeSecret(key: String, value: String) throws
     func loadSecret(key: String) -> String?
 

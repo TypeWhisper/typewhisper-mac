@@ -128,10 +128,10 @@ enum AppConstants {
         #endif
     }()
 
-    static let devKeychainServicePrefix = "com.schneidervvv.dictum.dev.apikey."
-    static let releaseKeychainServicePrefix = "com.schneidervvv.dictum.apikey."
+    static let devSecretKeyPrefix = "com.schneidervvv.dictum.dev.apikey."
+    static let releaseSecretKeyPrefix = "com.schneidervvv.dictum.apikey."
 
-    static let keychainServicePrefix: String = {
+    static let secretKeyPrefix: String = {
         if isScreenshotAutomation {
             return "com.schneidervvv.dictum.screenshots.apikey."
         }
@@ -140,9 +140,9 @@ enum AppConstants {
             return "com.schneidervvv.dictum.tests.apikey."
         }
         #if DEBUG
-        return devKeychainServicePrefix
+        return devSecretKeyPrefix
         #else
-        return releaseKeychainServicePrefix
+        return releaseSecretKeyPrefix
         #endif
     }()
 

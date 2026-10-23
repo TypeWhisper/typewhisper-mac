@@ -287,24 +287,24 @@
         }
       }
     },
-    "API keys are stored securely in the Keychain": {
+    "API keys are stored in a private file on this Mac": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Schlüssel werden sicher im Schlüsselbund gespeichert"
+            "value": "API-Schlüssel werden in einer privaten Datei auf diesem Mac gespeichert"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "APIキーはセキュアにキーチェーンに保存されます"
+            "value": "APIキーはこのMac上の非公開ファイルに保存されます"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "API 密钥安全存储在钥匙串中"
+            "value": "API 密钥保存在这台 Mac 上的私有文件中"
           }
         }
       }
