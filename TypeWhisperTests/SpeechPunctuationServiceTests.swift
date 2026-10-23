@@ -57,6 +57,25 @@ final class SpeechPunctuationServiceTests: XCTestCase {
         XCTAssertEqual(service.normalize(text: "see open bracket note close bracket", language: "en"), "see (note)")
     }
 
+    @MainActor
+    func testBundledEnglishRulesAttachSpokenQuotesAndHashOnlyWhereDictated() {
+        let service = SpeechPunctuationService(
+            rulesLoader: PunctuationRulesLoader(bundle: Bundle(for: SpeechPunctuationService.self))
+        )
+        XCTAssertEqual(
+            service.normalize(text: "she said open quote hello there close quote period", language: "en"),
+            "she said \"hello there\"."
+        )
+        XCTAssertEqual(
+            service.normalize(text: "follow hashtag swift and hash sign ios", language: "en"),
+            "follow #swift and #ios"
+        )
+        XCTAssertEqual(
+            service.normalize(text: "C# is \"fine\" open quotes ok end quote", language: "en"),
+            "C# is \"fine\" \"ok\""
+        )
+    }
+
     private func makeRulesLoader() -> PunctuationRulesLoader {
         PunctuationRulesLoader { languageCode in
             switch languageCode {

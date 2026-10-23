@@ -10,6 +10,14 @@ struct PunctuationReplacementRule: Codable, Hashable {
     let phrase: String
     let replacement: String
     let category: PunctuationRuleCategory
+    /// Set when the replacement must attach to the next (opening) or previous (closing) word.
+    /// Needed for characters such as `"` that are the same on both sides of a quote.
+    var spacing: PunctuationRuleSpacing? = nil
+}
+
+enum PunctuationRuleSpacing: String, Codable, Hashable {
+    case opening
+    case closing
 }
 
 enum PunctuationRuleCategory: String, Codable, Hashable {

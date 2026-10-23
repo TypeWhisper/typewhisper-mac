@@ -11,6 +11,9 @@ final class SpeechPunctuationService {
     private struct CompiledRule {
         let rule: PunctuationReplacementRule
         let regex: NSRegularExpression
+        /// Private-use stand-in for rules with explicit spacing, swapped back after spacing is normalized.
+        /// Keeps a dictated `"` or `#` attached without changing how transcribed `"` or `C#` are spaced.
+        let placeholder: Character?
     }
     private var compiledRules: [String: [CompiledRule]] = [:]
     // Engines such as Apple Speech emit "ですか ？": full-width punctuation never takes a leading space.
@@ -40,12 +43,15 @@ final class SpeechPunctuationService {
         if let cached = compiledRules[languageCode] {
             rules = cached
         } else {
-            rules = ruleSet.rules.sorted(by: { $0.phrase.count > $1.phrase.count }).compactMap { rule in
+            rules = ruleSet.rules.sorted(by: { $0.phrase.count > $1.phrase.count }).enumerated().compactMap { index, rule in
                 guard let regex = try? NSRegularExpression(
                     pattern: wholePhrasePattern(for: rule.phrase),
                     options: [.caseInsensitive]
                 ) else { return nil }
-                return CompiledRule(rule: rule, regex: regex)
+                let placeholder = rule.spacing.flatMap { _ in
+                    Unicode.Scalar(Self.placeholderBase + UInt32(index)).map(Character.init)
+                }
+                return CompiledRule(rule: rule, regex: regex, placeholder: placeholder)
             }
             compiledRules[languageCode] = rules
         }
@@ -53,7 +59,7 @@ final class SpeechPunctuationService {
         for compiled in rules {
             let updated = replaceWholePhrase(
                 compiled.regex,
-                with: compiled.rule.replacement,
+                with: compiled.placeholder.map(String.init) ?? compiled.rule.replacement,
                 category: compiled.rule.category,
                 in: result
             )
@@ -67,9 +73,22 @@ final class SpeechPunctuationService {
         case .selectiveFallback where !replacementApplied:
             return text
         default:
-            return normalizeSpacing(in: result)
+            var placeholderBehaviors: [Character: TokenBehavior] = [:]
+            for compiled in rules {
+                guard let placeholder = compiled.placeholder, let spacing = compiled.rule.spacing else { continue }
+                placeholderBehaviors[placeholder] = spacing == .opening ? .opening : .closing
+            }
+            var spaced = normalizeSpacing(in: result, placeholderBehaviors: placeholderBehaviors)
+            for compiled in rules {
+                guard let placeholder = compiled.placeholder else { continue }
+                spaced = spaced.replacingOccurrences(of: String(placeholder), with: compiled.rule.replacement)
+            }
+            return spaced
         }
     }
+
+    // Start of Supplementary Private Use Area-A; speech engines never emit these scalars.
+    private static let placeholderBase: UInt32 = 0xF0000
 
     func removeSpacesBeforeFullWidthPunctuation(in text: String) -> String {
         spaceBeforeFullWidthPunctuationRegex.stringByReplacingMatches(
@@ -122,7 +141,10 @@ final class SpeechPunctuationService {
         return #"(?<![\p{L}\p{N}])\#(escapedWords)(?![\p{L}\p{N}])"#
     }
 
-    private func normalizeSpacing(in text: String) -> String {
+    private func normalizeSpacing(
+        in text: String,
+        placeholderBehaviors: [Character: TokenBehavior]
+    ) -> String {
         let openingTokens = CharacterSet(charactersIn: "([{")
         let closingTokens = CharacterSet(charactersIn: ")]}")
         let inlineTokens = CharacterSet(charactersIn: ",.:;?!")
@@ -150,7 +172,7 @@ final class SpeechPunctuationService {
                 let followingNonWhitespace = nextNonWhitespaceIndex < text.endIndex ? text[nextNonWhitespaceIndex] : nil
 
                 if let previous = result.last,
-                   behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening {
+                   behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens, placeholders: placeholderBehaviors) == .opening {
                     index = nextIndex
                     continue
                 }
@@ -173,7 +195,7 @@ final class SpeechPunctuationService {
                 }
 
                 if let nextCharacter,
-                   let nextBehavior = behavior(for: nextCharacter, opening: openingTokens, closing: closingTokens, inline: inlineTokens) {
+                   let nextBehavior = behavior(for: nextCharacter, opening: openingTokens, closing: closingTokens, inline: inlineTokens, placeholders: placeholderBehaviors) {
                     if nextBehavior == .opening, !result.isEmpty, !result.last!.isWhitespace {
                         result.append(" ")
                     }
@@ -188,7 +210,7 @@ final class SpeechPunctuationService {
                 continue
             }
 
-            if let behavior = behavior(for: character, opening: openingTokens, closing: closingTokens, inline: inlineTokens) {
+            if let behavior = behavior(for: character, opening: openingTokens, closing: closingTokens, inline: inlineTokens, placeholders: placeholderBehaviors) {
                 if behavior == .closing || behavior == .inline {
                     while result.last == " " {
                         result.removeLast()
@@ -326,8 +348,12 @@ final class SpeechPunctuationService {
         for character: Character,
         opening: CharacterSet,
         closing: CharacterSet,
-        inline: CharacterSet
+        inline: CharacterSet,
+        placeholders: [Character: TokenBehavior]
     ) -> TokenBehavior? {
+        if let placeholderBehavior = placeholders[character] {
+            return placeholderBehavior
+        }
         guard let scalar = character.unicodeScalars.first, character.unicodeScalars.count == 1 else {
             return nil
         }
