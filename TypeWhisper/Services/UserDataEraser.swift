@@ -4,12 +4,10 @@ import ServiceManagement
 import UserNotifications
 import WidgetKit
 
-/// Removes everything dictum stores on this Mac: Keychain items (API
-/// keys and the local API token), the Application
-/// Support folder including plugins and downloaded models, App Group files,
-/// caches, and all preferences. Afterwards the app must quit without running
-/// `applicationWillTerminate`, which would flush pending history and usage
-/// writes into the freshly emptied folders.
+/// 删除 dictum 在这台 Mac 上保存的全部数据：密钥文件（API 密钥和本机接口令牌）、
+/// 旧版本留在钥匙串里的密钥条目、包含插件和已下载模型的应用支持文件夹、
+/// App Group 文件、缓存和所有偏好设置。之后应用必须直接退出，不能运行
+/// `applicationWillTerminate`，否则它会把待写入的历史和用量数据写回刚清空的文件夹。
 ///
 /// Remote copies are left alone: the iCloud Drive package, a user-chosen cloud
 /// folder, and other devices keep their data.
@@ -107,15 +105,15 @@ enum UserDataEraser {
         locations: UserDataLocations,
         userDefaults: UserDefaults = .standard,
         fileManager: FileManager = .default,
-        deleteKeychainItems: () throws -> Void = UserDataEraser.deleteAppKeychainItems,
+        deleteSecrets: () throws -> Void = UserDataEraser.deleteAppSecrets,
         resetSystemRegistrations: () -> [Failure] = UserDataEraser.resetSystemRegistrations
     ) -> [Failure] {
         var failures: [Failure] = []
 
         do {
-            try deleteKeychainItems()
+            try deleteSecrets()
         } catch {
-            failures.append(Failure(item: "Keychain", message: error.localizedDescription))
+            failures.append(Failure(item: "Secrets", message: error.localizedDescription))
         }
 
         failures += resetSystemRegistrations()
@@ -147,8 +145,19 @@ enum UserDataEraser {
         return failures
     }
 
-    nonisolated static func deleteAppKeychainItems() throws {
-        try KeychainService.deleteAll(withServicePrefix: "")
+    nonisolated static func deleteAppSecrets() throws {
+        var firstError: Error?
+        do {
+            try KeychainService.deleteAll(withServicePrefix: "")
+        } catch {
+            firstError = error
+        }
+        do {
+            try KeychainService.deleteLegacyKeychainItems(withFullServicePrefix: AppConstants.secretKeyPrefix)
+        } catch {
+            firstError = firstError ?? error
+        }
+        if let firstError { throw firstError }
     }
 
     nonisolated static func resetSystemRegistrations() -> [Failure] {

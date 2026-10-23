@@ -3601,7 +3601,7 @@ private struct OpenAISettingsView: View {
                 }
             }
 
-            Text("API keys are stored securely in the Keychain", bundle: bundle)
+            Text("API keys are stored in a private file on this Mac", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
