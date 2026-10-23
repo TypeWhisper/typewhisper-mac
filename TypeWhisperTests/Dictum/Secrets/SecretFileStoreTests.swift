@@ -1,4 +1,5 @@
 import OSLog
+import Security
 import XCTest
 @testable import TypeWhisper
 
@@ -167,6 +168,51 @@ final class SecretFileStoreTests: XCTestCase {
         XCTAssertEqual(store.load(name: "service"), "value")
     }
 
+    func testRepeatedCorruptionKeepsEveryAsideFileUnderADistinctName() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for round in 0..<3 {
+            try Data("{ broken \(round)".utf8).write(to: store.fileURL)
+            XCTAssertNil(store.load(name: "service"))
+        }
+
+        let asideNames = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasPrefix("\(SecretFileStore.fileName).corrupt-") }
+        XCTAssertEqual(Set(asideNames).count, 3)
+        let pattern = #"^secrets\.json\.corrupt-\d{4}-\d{2}-\d{2}T\d{6}\.\d{3}Z-[0-9A-F]{8}$"#
+        for name in asideNames {
+            XCTAssertNotNil(name.range(of: pattern, options: .regularExpression), name)
+        }
+    }
+
+    func testCorruptFileThatCannotBeMovedAsideIsNeverOverwritten() throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let corrupt = Data("{ this is not json".utf8)
+        try corrupt.write(to: store.fileURL)
+        // 文件夹只读时仍能读取文件，但无法改名。
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path) }
+
+        XCTAssertThrowsError(try store.save("value", name: "service")) { error in
+            guard case SecretStoreError.readFailed = error else {
+                return XCTFail("Expected readFailed, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try store.delete(name: "service"))
+        XCTAssertThrowsError(try store.deleteAll(withNamePrefix: ""))
+        XCTAssertNil(store.load(name: "service"))
+
+        XCTAssertEqual(try Data(contentsOf: store.fileURL), corrupt)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: directory.path), [SecretFileStore.fileName])
+    }
+
+    func testEverySavedFileIsExcludedFromBackup() throws {
+        try store.save("one", name: "a")
+        try store.save("two", name: "a")
+
+        let values = try store.fileURL.resourceValues(forKeys: [.isExcludedFromBackupKey])
+        XCTAssertEqual(values.isExcludedFromBackup, true)
+    }
+
     func testCorruptFileContentsAreNeverWrittenToTheLog() throws {
         let secret = "sk-corrupt-file-secret-\(UUID().uuidString)"
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -227,6 +273,59 @@ final class KeychainServiceTests: XCTestCase {
 
         try UserDataEraser.deleteAppSecrets()
         XCTAssertNil(KeychainService.load(service: "other.two"))
+    }
+
+    // 以下两个测试直接读写系统钥匙串，只使用测试专用的服务名前缀，并在结束时删除。
+    private func addLegacyKeychainItem(service: String) throws {
+        let status = SecItemAdd([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecValueData as String: Data("legacy-secret".utf8),
+        ] as CFDictionary, nil)
+        XCTAssertEqual(status, errSecSuccess)
+    }
+
+    private func legacyKeychainItemExists(service: String) -> Bool {
+        SecItemCopyMatching([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ] as CFDictionary, nil) == errSecSuccess
+    }
+
+    private func removeLegacyKeychainItem(service: String) {
+        SecItemDelete([
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+        ] as CFDictionary)
+    }
+
+    func testDeleteLegacyKeychainItemsRemovesOnlyItemsWithThePrefix() throws {
+        let prefix = "com.schneidervvv.dictum.tests.legacy-\(UUID().uuidString)."
+        let matching = [prefix + "one.apiKey", prefix + "two.apiKey"]
+        let other = "com.schneidervvv.dictum.tests.other-\(UUID().uuidString).apiKey"
+        for service in matching + [other] {
+            try addLegacyKeychainItem(service: service)
+        }
+        defer { (matching + [other]).forEach(removeLegacyKeychainItem) }
+
+        try KeychainService.deleteLegacyKeychainItems(withFullServicePrefix: prefix)
+
+        for service in matching {
+            XCTAssertFalse(legacyKeychainItemExists(service: service), service)
+        }
+        XCTAssertTrue(legacyKeychainItemExists(service: other))
+    }
+
+    func testDeleteAppSecretsRemovesFileEntriesAndLegacyKeychainItems() throws {
+        let legacyService = AppConstants.secretKeyPrefix + "legacy-\(UUID().uuidString).apiKey"
+        try addLegacyKeychainItem(service: legacyService)
+        defer { removeLegacyKeychainItem(service: legacyService) }
+        try KeychainService.save(key: "value", service: "plugin.apiKey")
+
+        try UserDataEraser.deleteAppSecrets()
+
+        XCTAssertFalse(legacyKeychainItemExists(service: legacyService))
+        XCTAssertNil(KeychainService.load(service: "plugin.apiKey"))
     }
 
     func testPluginSecretsGoThroughTheSecretsFile() throws {

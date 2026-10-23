@@ -89,19 +89,24 @@ struct SecretFileStore: Sendable {
         do {
             return try JSONDecoder().decode([String: String].self, from: data)
         } catch {
-            setCorruptFileAside()
+            try setCorruptFileAside()
             return [:]
         }
     }
 
-    private func setCorruptFileAside() {
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "")
-        let asideURL = directory.appendingPathComponent("\(Self.fileName).corrupt-\(stamp)")
+    // 移不开时抛出读取错误，保存操作因此不会覆盖损坏的文件。
+    private func setCorruptFileAside() throws {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let stamp = formatter.string(from: Date()).replacingOccurrences(of: ":", with: "")
+        let suffix = UUID().uuidString.prefix(8)
+        let asideURL = directory.appendingPathComponent("\(Self.fileName).corrupt-\(stamp)-\(suffix)")
         do {
             try FileManager.default.moveItem(at: fileURL, to: asideURL)
             Self.logger.error("The secrets file could not be parsed and was moved to \(asideURL.lastPathComponent, privacy: .public)")
         } catch {
             Self.logger.error("The secrets file could not be parsed and could not be moved aside: \(error.localizedDescription, privacy: .public)")
+            throw SecretStoreError.readFailed(underlying: error)
         }
     }
 
@@ -128,6 +133,11 @@ struct SecretFileStore: Sendable {
                 try handle.write(contentsOf: data)
                 try handle.synchronize()
                 try handle.close()
+                // 改名会把这个标记带到最终文件上，密钥文件不进入时间机器备份。
+                var excludedFromBackup = URLResourceValues()
+                excludedFromBackup.isExcludedFromBackup = true
+                var mutableTemporaryURL = temporaryURL
+                try mutableTemporaryURL.setResourceValues(excludedFromBackup)
                 guard rename(temporaryURL.path, fileURL.path) == 0 else {
                     throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
                 }

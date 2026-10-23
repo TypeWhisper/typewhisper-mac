@@ -76,11 +76,10 @@ struct UserDataLocations: Sendable {
 /// snippets, workflows, profiles, plugin data, logs), all preferences as JSON,
 /// and an importable settings backup.
 ///
-/// Secrets stay out of the archive: provider API keys live in the private
-/// secrets file, and the local API token file is skipped. Downloaded and imported models and plugin bundles are skipped as
-/// well: model weights are not personal data and would make the archive
-/// gigabytes large. The UI names imported models explicitly, since the managed
-/// copy may be the only one left.
+/// 密钥不进入归档：供应商 API 密钥和本机接口令牌保存在 `secrets.json` 中，
+/// `api-discovery.json` 也被排除。已下载和已导入的模型以及插件包同样不导出：
+/// 模型权重不是个人数据，会让归档大到数 GB。界面会明确列出已导入的模型，
+/// 因为受管理的那份副本可能是唯一的一份。
 enum UserDataExportService {
     enum ExportError: LocalizedError {
         case archiveFailed(Int32)
