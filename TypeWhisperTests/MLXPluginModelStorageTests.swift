@@ -33,14 +33,18 @@ final class MLXPluginModelStorageTests: XCTestCase {
         for _ in 0..<500 where session.requestedRequests.isEmpty {
             try await Task.sleep(for: .milliseconds(10))
         }
+        let preferredId = try XCTUnwrap(SetupWizardQwen3Recommendation.preferredModelId(from: qwen.modelCatalog))
+        let preferred = try XCTUnwrap(Qwen3Plugin.availableModels.first {
+            $0.id == preferredId
+        })
         XCTAssertNotNil(qwen.explicitModelLoadTask)
         XCTAssertEqual(qwen.currentSettingsActivity?.isError, false)
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, preferred.id)
         XCTAssertFalse(qwen.isConfigured)
         XCTAssertEqual(session.requestedRequests.count, 1)
         XCTAssertEqual(session.requestedRequests.first?.url?.host, "huggingface.co")
         XCTAssertEqual(session.requestedRequests.map { $0.url?.path }, [
-            "/api/models/mlx-community/Qwen3-ASR-1.7B-6bit/tree/main",
+            "/api/models/\(preferred.repoId)/tree/main",
         ])
         activation.cancel()
         try await activation.value
@@ -85,13 +89,16 @@ final class MLXPluginModelStorageTests: XCTestCase {
         defer { PluginHTTPClient.resetTestingHooks() }
         let fixture = try Fixture()
         defer { fixture.remove() }
-        let modelDef = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-6bit" })
-        let partialFile = fixture.repositoryDirectory(repositoryID: modelDef.repoId)
-            .appendingPathComponent("blobs/partial")
         let host = MockHostServices(pluginDataDirectory: fixture.root)
         let qwen = Qwen3Plugin()
         qwen.activate(host: host)
         defer { qwen.deactivate() }
+        let preferredId = try XCTUnwrap(SetupWizardQwen3Recommendation.preferredModelId(from: qwen.modelCatalog))
+        let modelDef = try XCTUnwrap(Qwen3Plugin.availableModels.first {
+            $0.id == preferredId
+        })
+        let partialFile = fixture.repositoryDirectory(repositoryID: modelDef.repoId)
+            .appendingPathComponent("blobs/partial")
 
         let first = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
         defer { first.cancel() }
