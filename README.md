@@ -25,7 +25,6 @@ If keychain authorization needs the owner, stop the signing command and handle t
 
 Launch in Simplified Chinese with `scripts/dictum-verify.sh run -AppleLanguages '(zh-Hans)'`.
 
-
 Build products and verification logs are stored in `.build/`. Swift modules, targets, folders, schemes, and plugin identifiers retain their upstream names for compatibility.
 
 ## 中文
@@ -45,6 +44,5 @@ dictum 是免费的 macOS 听写应用，支持本地与云端转录、文本工
 `test` 和 `all` 输出当前、已知、已消失和新增失败集合。所有失败均在 [已知失败清单](scripts/known-test-failures.txt) 中时返回 0；新增失败、构建失败或测试结果不完整时返回 1。清单内的测试照常运行。使用 `python3 scripts/check-localized-keys.py` 检查 `String(localized:)` 和 `Text("…")` 中的字面量键是否存在于字符串目录。
 
 使用 `scripts/dictum-verify.sh run -AppleLanguages '(zh-Hans)'` 以简体中文启动应用。
-
 
 构建产物与验证日志位于 `.build/`。Swift 模块、目标、文件夹、方案和插件标识保留上游名称，以维持兼容性。
