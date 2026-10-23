@@ -145,8 +145,28 @@ private struct APIDiscoveryDocument: Encodable {
     let token: String
 }
 
+/// API 服务运行时令牌本来就以明文写在 api-discovery.json 里，钥匙串不增加保护；
+/// 本机签名没有 Team ID，令牌放在钥匙串里时每次重新构建都会要求输入登录密码。
+struct LocalAPITokenFile: Sendable {
+    let url: URL
+
+    static var standard: LocalAPITokenFile {
+        LocalAPITokenFile(url: AppConstants.appSupportDirectory.appendingPathComponent("local-api-token"))
+    }
+
+    func load() -> String? {
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func save(_ token: String) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(token.utf8).write(to: url, options: [.atomic])
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+}
+
 final class LocalAPIAuthenticator: @unchecked Sendable {
-    private static let keychainService = "local-api-token"
     private static let tokenByteCount = 32
 
     private let token: OSAllocatedUnfairLock<String?>
@@ -158,10 +178,10 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
         initialToken: String? = nil,
         requiresAuthentication: Bool = LocalAPIAuthenticator.storedRequiresAuthentication(),
         tokenLoader: @escaping @Sendable () -> String? = {
-            KeychainService.load(service: LocalAPIAuthenticator.keychainService)
+            LocalAPITokenFile.standard.load()
         },
         tokenSaver: @escaping @Sendable (String) throws -> Void = {
-            try KeychainService.save(key: $0, service: LocalAPIAuthenticator.keychainService)
+            try LocalAPITokenFile.standard.save($0)
         }
     ) {
         token = OSAllocatedUnfairLock<String?>(initialState: initialToken)
