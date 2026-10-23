@@ -27,6 +27,8 @@ flowchart LR
   P5A --> P2[阶段2 润色与风格]
   P5A --> P4[阶段4 历史与词库]
   P5A --> P5B[阶段5B 首页与语音条]
+  P5A --> PR[Raycast 扩展]
+  PR --> P6
   P2 --> P3[阶段3 翻译]
   P5B --> P3
   P1 --> P6[阶段6 审查与实机测试]
@@ -44,6 +46,7 @@ flowchart LR
 | 2 润色与风格 | 默认开启润色；新润色提示词（去口头禅、改口、分段、列表）；润色强度三档；全局风格和按应用风格；国内供应商预设；供应商管理；风格页面、AI 模型页面、通用页的润色强度 | gpt-6.1-sol | Claude |
 | 4 历史与词库 | 云同步默认指向 iCloud Drive 文件夹；历史、词库同步；词库自动学习和 CSV 导入；历史页面、词典页面、通用页的历史与同步 | gpt-6.1-sol | Claude |
 | 5B 首页与语音条 | 首页仪表盘、语音条全部状态（含流式文字）、上手引导、菜单栏 | gpt-6.1-sol | Claude（含视觉比对） |
+| Raycast 扩展 | 基于 TypeWhisper 的 Raycast 扩展做 dictum 扩展：开始和结束听写、搜索和复制历史、添加词典词条；在负责人的 Raycast 里本地安装 | gpt-6.1-sol | Claude |
 | 3 翻译 | Fn + 左 Shift 翻译模式；语音条上切换目标语言；按应用调整译文语气；历史区分听写和翻译；通用页的翻译目标语言 | gpt-6.1-sol | Claude |
 | 6 审查与实机测试 | 全部合入后整体代码审查；gpt-6-astra 在本机逐项验证完成标准 | Claude、gpt-6-astra | Claude |
 | 7 人工测试与发布 | 负责人人工测试；修复反馈；打包 dictum 0.1.0 并发布到 GitHub Releases | gpt-6.1-sol | 负责人 |
@@ -64,4 +67,5 @@ gpt-6.1-sol 使用快速模式。额度用完后使用重置卡：协调代理�
 * dictum 是个人项目。只为公开发布或其他用户服务、又拖慢开发的功能可以删除，例如插件市场、App Store 版本、企业管理（MDM）配置、配套设备。
 * 能导出或导入的数据（个人词典、文本片段、历史、设置）使用和主流竞品（Typeless、Wispr Flow、Superwhisper 等）一致的文件格式和规范，方便在不同工具之间切换。
 * dictum 不包含 Apple Intelligence。
+* 保留并发展与 Raycast 的连接：dictum 的本机 API 保持可用，并基于 TypeWhisper 的 Raycast 扩展（MIT 授权）做一个 dictum 扩展，只在负责人自己的 Raycast 里安装使用。
 * 子代理连续运行超过 2 小时仍未完成时，协调代理派一个 Opus 子代理查看它卡在哪里并协助。
