@@ -25,6 +25,9 @@ stops with TypeWhisper (a small shell watchdog stops it even if TypeWhisper cras
 restarted after an unexpected exit, at most three times a minute. Pins are changed only by a new
 plugin release.
 
+The pinned audio.cpp build is arm64-only, so the built-in server needs Apple silicon. On Intel
+Macs the plugin hides it and uses only an own server.
+
 ## Own server
 
 Use audio.cpp v0.9.0 or newer, from the release archive (`chmod +x audiocpp_server` after

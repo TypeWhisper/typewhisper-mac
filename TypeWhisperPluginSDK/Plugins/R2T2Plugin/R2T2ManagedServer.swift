@@ -69,6 +69,15 @@ enum R2T2Runtime {
     static let archiveSHA256 = "7cea9219d5f06475011c5d225d71d988cecef633ff7d098ee8a4c7b08583b1b4"
     static let archiveURL = URL(string: "https://github.com/0xShug0/audio.cpp/releases/download/\(version)/\(archiveName)")!
     static let releaseURL = URL(string: "https://github.com/0xShug0/audio.cpp/releases/tag/\(version)")!
+
+    /// The pinned release ships only an arm64 build, so Intel Macs can use an own server only.
+    static var runsOnThisMac: Bool {
+        #if arch(arm64)
+        true
+        #else
+        false
+        #endif
+    }
 }
 
 enum R2T2ManagedError: LocalizedError {
@@ -142,11 +151,8 @@ struct R2T2ManagedAssets: Sendable {
 
     /// Downloads whatever is missing for `model`: the audio.cpp runtime, the license files and the GGUF.
     func install(_ model: R2T2ModelDefinition, progress: @Sendable @escaping (Double) -> Void) async throws {
-        #if arch(arm64)
+        guard R2T2Runtime.runsOnThisMac else { throw R2T2ManagedError.unsupportedArchitecture }
         try await installAssets(model, progress: progress)
-        #else
-        throw R2T2ManagedError.unsupportedArchitecture
-        #endif
     }
 
     private func installAssets(_ model: R2T2ModelDefinition, progress: @Sendable @escaping (Double) -> Void) async throws {

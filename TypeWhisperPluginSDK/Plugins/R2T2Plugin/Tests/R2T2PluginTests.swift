@@ -190,6 +190,17 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertEqual(plugin.serverURLString, "http://127.0.0.1:8488")
     }
 
+    func testIntelMacsUseOwnServerEvenWhenBuiltInWasStored() throws {
+        let host = try PluginTestHostServices(defaults: [R2T2Plugin.serverModeKey: R2T2ServerMode.builtIn.rawValue])
+        let plugin = R2T2Plugin()
+        plugin.supportsBuiltInServer = false
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.selectedModelId, R2T2Protocol.defaultModelId)
+        XCTAssertEqual(plugin.availableModels.map(\.id), [R2T2Protocol.defaultModelId])
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertEqual(host.userDefault(forKey: R2T2Plugin.serverModeKey) as? String, R2T2ServerMode.builtIn.rawValue)
+    }
+
     func testBuiltInModelCountsAsInstalledWithRuntimeGGUFAndLicenses() throws {
         let host = try PluginTestHostServices(defaults: [R2T2Plugin.builtInModelKey: "r2t2-q4_k_m"])
         let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)

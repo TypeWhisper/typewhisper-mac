@@ -728,6 +728,34 @@
           }
         }
       }
+    },
+    "The built-in server needs a Mac with Apple silicon. On this Mac, connect to an audio.cpp server you run yourself.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der integrierte Server braucht einen Mac mit Apple Silicon. Verbinde dich auf diesem Mac mit einem audio.cpp-Server, den du selbst betreibst."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El servidor integrado necesita un Mac con Apple silicon. En este Mac, conéctate a un servidor audio.cpp que ejecutes tú mismo."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内蔵サーバーにはAppleシリコン搭載のMacが必要です。このMacでは、自分で実行するaudio.cppサーバーに接続してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内置服务器需要配备 Apple 芯片的 Mac。在这台 Mac 上，请连接你自己运行的 audio.cpp 服务器。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
