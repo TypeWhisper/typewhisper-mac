@@ -17,7 +17,7 @@ enum DictationModelNotice: Equatable {
             }
             return hasDownloadedModel ? .loading : .downloading(progress: nil)
         }
-        return hasDownloadedModel ? .loading : .notDownloaded
+        return hasDownloadedModel ? nil : .notDownloaded
     }
 
     @MainActor

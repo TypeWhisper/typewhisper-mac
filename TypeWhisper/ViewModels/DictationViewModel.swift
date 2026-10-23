@@ -1943,7 +1943,7 @@ final class DictationViewModel: ObservableObject {
         beginDictationSession(id: sessionID)
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
-        guard canDictate else {
+        guard canDictate, DictationModelNotice.current(providerId: modelManager.selectedProviderId) == nil else {
             if let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId) {
                 modelNotice = notice
                 storeDictationSession(DictationSessionSnapshot(id: sessionID, status: .failed, transcription: nil, error: nil))

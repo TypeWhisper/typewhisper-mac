@@ -15,6 +15,7 @@ final class SpeechStateTests: XCTestCase {
     func testReadyAndCloudEnginesDoNotProduceLocalModelNotice() {
         XCTAssertNil(DictationModelNotice.resolve(isLocal: true, isReady: true, hasDownloadedModel: true, activity: nil))
         XCTAssertNil(DictationModelNotice.resolve(isLocal: false, isReady: false, hasDownloadedModel: false, activity: nil))
+        XCTAssertNil(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: true, activity: nil))
     }
 
     func testMissingLoadingAndFailedModelsRemainDistinct() {
