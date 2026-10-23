@@ -1,1 +1,35 @@
-{ "sourceLanguage": "en", "strings": {}, "version": "1.0" }
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "About %lld min": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "About %lld min" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "约 %lld 分钟" } } } },
+    "On this Mac": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "On this Mac" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "本机" } } } },
+    "Cloud": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cloud" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "云端" } } } },
+    "Recognition": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Recognition" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "识别" } } } },
+    "Precision": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Precision" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "精度" } } } },
+    "8-bit · Faster": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "8-bit · Faster" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "8-bit · 更快" } } } },
+    "bf16 · More accurate": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "bf16 · More accurate" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "bf16 · 更准" } } } },
+    "More local models": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "More local models" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "更多本机模型" } } } },
+    "Recommended": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Recommended" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "推荐" } } } },
+    "Accurate for mixed Chinese and English, works offline": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Accurate for mixed Chinese and English, works offline" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "中英混说准确，不联网也能用" } } } },
+    "Downloaded": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Downloaded" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "已下载" } } } },
+    "Download": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Download" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "下载" } } } },
+    "Resume": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Resume" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "继续下载" } } } },
+    "Preparing model": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Preparing model" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在加载模型" } } } },
+    "Cancel": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } } } },
+    "Show in Finder": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Show in Finder" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "在 Finder 中显示" } } } },
+    "Delete Model (%@)": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Delete Model (%@)" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "删除模型（%@）" } } } },
+    "Configured": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Configured" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "已配置" } } } },
+    "Not set up": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Not set up" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "未配置" } } } },
+    "Paste %@ API key": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Paste %@ API key" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "粘贴 %@ API 密钥" } } } },
+    "Test and Use": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Test and Use" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "测试并使用" } } } },
+    "Connected": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Connected" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "已连接" } } } },
+    "Invalid key": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Invalid key" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "密钥无效" } } } },
+    "Could not connect. Try again.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Could not connect. Try again." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "无法连接，请重试。" } } } },
+    "With cloud recognition, audio is sent to the provider you choose.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "With cloud recognition, audio is sent to the provider you choose." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "使用云端识别时，录音会发送给所选服务商。" } } } },
+    "You're offline. Cloud recognition is unavailable.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "You're offline. Cloud recognition is unavailable." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "现在没有网络，云端识别暂时不可用。" } } } },
+    "Spoken language": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Spoken language" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "说话语言" } } } },
+    "Detect automatically": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Detect automatically" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "自动检测" } } } },
+    "Show text while speaking": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Show text while speaking" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "说话时显示文字" } } } }
+  },
+  "version": "1.0"
+}
