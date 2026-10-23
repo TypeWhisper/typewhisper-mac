@@ -923,55 +923,6 @@ final class HistoryRetranscriptionTests: XCTestCase {
         }
     }
 
-    func testEnforcedPairReplacesTheRequestedEngineInThePlan() async throws {
-        let requested = HistoryComparisonRestoreEngine()
-        requested.providerID = "requested-engine"
-        let enforced = HistoryEnforcedTestEngine()
-        let environment = try makeEnvironment(plugins: [requested, enforced])
-        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
-            enforcedTranscription: ManagedSelectionPair(providerId: HistoryEnforcedTestEngine.pluginId, modelId: "any")
-        ))
-
-        let plan = try HistoryRetranscriptionEnvironment.plan(
-            .init(engineID: requested.providerId),
-            manager: environment.manager, dictionary: environment.dictionary,
-            workflows: [], promptProcessing: environment.promptProcessing
-        )
-
-        // The enforced engine sends audio off the Mac, so the plan asks before it runs.
-        XCTAssertTrue(plan.requiresCloudConfirmation)
-        XCTAssertEqual(plan.cloudProviders.count, 1)
-        XCTAssertTrue(plan.cloudProviders[0].contains(enforced.providerDisplayName))
-        let version = try await plan.run([0.1])
-        XCTAssertEqual(version.finalText, "enforced")
-        XCTAssertEqual(version.engineName, enforced.providerDisplayName)
-
-        // A profile change between planning and running stops the plan instead of running an
-        // engine it did not check or disclose.
-        let stale = try HistoryRetranscriptionEnvironment.plan(
-            .init(engineID: requested.providerId),
-            manager: environment.manager, dictionary: environment.dictionary,
-            workflows: [], promptProcessing: environment.promptProcessing
-        )
-        PluginManager.shared.applySelectionPolicy(.unmanaged)
-        do {
-            _ = try await stale.run([0.1])
-            XCTFail("A changed enforced pair must stop the plan")
-        } catch {
-            XCTAssertEqual(error.localizedDescription, HistoryRetranscriptionError.changed.localizedDescription)
-        }
-
-        PluginManager.shared.applySelectionPolicy(ManagedSelectionPolicy(
-            enforcedTranscription: ManagedSelectionPair(providerId: "com.typewhisper.tests.missing", modelId: "any")
-        ))
-        XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
-            .init(engineID: requested.providerId),
-            manager: environment.manager, dictionary: environment.dictionary,
-            workflows: [], promptProcessing: environment.promptProcessing
-        ))
-        PluginManager.shared.applySelectionPolicy(.unmanaged)
-    }
-
     func testComparisonRetainsRequestedLanguageWhenEngineDoesNotDetectOne() async throws {
         let engine = HistoryComparisonTestEngine()
         let environment = try makeEnvironment(plugins: [engine])
@@ -1292,36 +1243,6 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTAssertTrue(try XCTUnwrap(llm.lastSystemPrompt).contains("Return the result as markdown."))
     }
 
-    func testAppleIntelligenceWorkflowUsesBuiltInProviderWithoutCloudConsentAndRejectsUnavailability() async throws {
-        guard #available(macOS 26, *) else { throw XCTSkip("Apple Intelligence requires macOS 26") }
-        let engine = HistoryComparisonRestoreEngine()
-        let environment = try makeEnvironment(plugins: [engine])
-        environment.promptProcessing.testingSetAppleIntelligenceProvider(HistoryComparisonAppleIntelligence())
-        let workflow = Workflow(
-            name: "Apple Cleanup", template: .cleanedText, trigger: WorkflowTrigger(kind: .manual),
-            behavior: WorkflowBehavior(providerId: PromptProcessingService.appleIntelligenceId)
-        )
-        let request = HistoryRetranscriptionService.Request(engineID: engine.providerId, workflowID: workflow.id)
-        XCTAssertNil(PluginManager.shared.llmProvider(for: PromptProcessingService.appleIntelligenceId))
-        let plan = try HistoryRetranscriptionEnvironment.plan(
-            request, manager: environment.manager, dictionary: environment.dictionary,
-            workflows: [workflow], promptProcessing: environment.promptProcessing
-        )
-        XCTAssertFalse(plan.requiresCloudConfirmation)
-        XCTAssertTrue(plan.cloudProviders.isEmpty)
-        let version = try await plan.run([0.1, -0.1])
-        XCTAssertEqual(version.finalText, "Apple-cleaned result")
-        XCTAssertEqual(version.workflowID, workflow.id)
-
-        environment.promptProcessing.testingSetAppleIntelligenceProvider(nil)
-        XCTAssertThrowsError(try HistoryRetranscriptionEnvironment.plan(
-            request, manager: environment.manager, dictionary: environment.dictionary,
-            workflows: [workflow], promptProcessing: environment.promptProcessing
-        )) {
-            XCTAssertEqual($0.localizedDescription, HistoryRetranscriptionError.unavailable.localizedDescription)
-        }
-    }
-
     func testAppleTranslatePlanRejectsMissingOrIncompatibleServiceAndAcceptsAvailableService() throws {
         let engine = HistoryComparisonRestoreEngine()
         let environment = try makeEnvironment(plugins: [engine])
@@ -1424,7 +1345,6 @@ final class HistoryRetranscriptionTests: XCTestCase {
         XCTFail("Comparison did not finish")
     }
 }
-
 private class HistoryComparisonTestEngine: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.tests.history-comparison"
     static let pluginName = "History Comparison Test Engine"
@@ -1442,24 +1362,6 @@ private class HistoryComparisonTestEngine: NSObject, TranscriptionEnginePlugin, 
     func selectModel(_ modelId: String) {}
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         resultOverride ?? PluginTranscriptionResult(text: "test", detectedLanguage: language)
-    }
-}
-
-private final class HistoryEnforcedTestEngine: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
-    static let pluginId = "com.typewhisper.tests.history-enforced"
-    static let pluginName = "History Enforced Engine"
-    required override init() {}
-    var providerId: String { "enforced-engine" }
-    var providerDisplayName: String { "Enforced Engine" }
-    var isConfigured: Bool { true }
-    var transcriptionModels: [PluginModelInfo] { [] }
-    var selectedModelId: String? { nil }
-    var supportsTranslation: Bool { false }
-    func activate(host: HostServices) {}
-    func deactivate() {}
-    func selectModel(_ modelId: String) {}
-    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        PluginTranscriptionResult(text: "enforced", detectedLanguage: language)
     }
 }
 
@@ -1534,9 +1436,4 @@ private final class HistoryComparisonLLM: LLMProviderPlugin, LLMProviderSetupSta
         if let handler { return try await handler(userText) }
         return "cleaned test"
     }
-}
-
-private struct HistoryComparisonAppleIntelligence: LLMProvider {
-    var isAvailable: Bool { true }
-    func process(systemPrompt: String, userText: String) async throws -> String { "Apple-cleaned result" }
 }

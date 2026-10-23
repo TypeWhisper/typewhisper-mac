@@ -873,12 +873,7 @@ struct RecordingSettingsView: View {
     private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
     private var needsPermissions: Bool {
-#if APPSTORE
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
-            || dictation.needsInputMonitoringPermission
-#else
-        dictation.needsMicPermission || dictation.needsAccessibilityPermission
-#endif
     }
 
     private var usesBluetoothInput: Bool {
@@ -1151,15 +1146,6 @@ struct RecordingSettingsView: View {
                                 .disabled(!modelManager.canUseForTranscription(engine))
                         }
                     }
-                    .disabled(pluginManager.selectionPolicy.enforcesTranscription)
-                    .managedLockAccessibilityHint(
-                        isLocked: pluginManager.selectionPolicy.enforcesTranscription,
-                        reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
-                    )
-
-                    if let enforced = pluginManager.enforcedTranscriptionResolution {
-                        ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
-                    }
 
                     if let notice = transcriptionAuthNotice(for: engines) {
                         Label(notice, systemImage: "key")
@@ -1181,11 +1167,6 @@ struct RecordingSettingsView: View {
                                     Text(model.displayName).tag(model.id as String?)
                                 }
                             }
-                            .disabled(pluginManager.selectionPolicy.enforcesTranscription)
-                            .managedLockAccessibilityHint(
-                                isLocked: pluginManager.selectionPolicy.enforcesTranscription,
-                                reason: pluginManager.enforcedTranscriptionResolution?.unavailableReason
-                            )
                         }
                     }
 
@@ -1407,25 +1388,6 @@ struct RecordingSettingsView: View {
                         }
                     }
 
-#if APPSTORE
-                    if dictation.needsAccessibilityPermission {
-                        AppStorePermissionRow(
-                            dictation: dictation,
-                            kind: .accessibility,
-                            titleStyle: .short,
-                            labelColor: .orange
-                        )
-                    }
-
-                    if dictation.needsInputMonitoringPermission {
-                        AppStorePermissionRow(
-                            dictation: dictation,
-                            kind: .inputMonitoring,
-                            titleStyle: .short,
-                            labelColor: .orange
-                        )
-                    }
-#else
                     if dictation.needsAccessibilityPermission {
                         HStack {
                             Label(
@@ -1443,7 +1405,6 @@ struct RecordingSettingsView: View {
                             .controlSize(.small)
                         }
                     }
-#endif
                     }
                 }
             }
@@ -1625,15 +1586,6 @@ struct PermissionsBanner: View {
                 }
             }
 
-#if APPSTORE
-            if dictation.needsAccessibilityPermission {
-                AppStorePermissionRow(dictation: dictation, kind: .accessibility, labelColor: .red)
-            }
-
-            if dictation.needsInputMonitoringPermission {
-                AppStorePermissionRow(dictation: dictation, kind: .inputMonitoring, labelColor: .red)
-            }
-#else
             if dictation.needsAccessibilityPermission {
                 HStack {
                     Label(
@@ -1651,7 +1603,6 @@ struct PermissionsBanner: View {
                     .controlSize(.small)
                 }
             }
-#endif
         }
     }
 }

@@ -1,1 +1,0 @@
-Diktat,Spracherkennung,Transkription,Sprache zu Text,Whisper,offline,Meeting,Protokoll,KI

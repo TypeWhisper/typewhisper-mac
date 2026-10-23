@@ -1,32 +1,5 @@
 import Foundation
 
-// MARK: - Provider Type
-
-enum LLMProviderType: String, CaseIterable, Identifiable {
-    case appleIntelligence
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .appleIntelligence: "Apple Intelligence"
-        }
-    }
-}
-
-// MARK: - Provider Protocol
-
-protocol LLMProvider: Sendable {
-    func process(systemPrompt: String, userText: String) async throws -> String
-    var isAvailable: Bool { get }
-    /// Starts loading the model so a request shortly afterwards does not wait for it.
-    func prewarm()
-}
-
-extension LLMProvider {
-    func prewarm() {}
-}
-
 // MARK: - Errors
 
 enum LLMError: LocalizedError {

@@ -240,10 +240,6 @@ private struct MyWorkflowsPage: View {
         ) {
 
             VStack(alignment: .leading, spacing: 8) {
-                if let enforced = pluginManager.enforcedLlmResolution {
-                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
-                }
-
                 if promptProcessingService.fallbackPriorityList.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
                         Text(
@@ -257,17 +253,11 @@ private struct MyWorkflowsPage: View {
                     }
                 } else {
                     fallbackPriorityList
-                        .disabled(promptProcessingService.isFallbackListLocked)
                 }
 
                 HStack(alignment: .center, spacing: 12) {
                     if !fallbackAddOptions.isEmpty {
                         fallbackPriorityAddMenu
-                            .disabled(promptProcessingService.isFallbackListLocked)
-                            .managedLockAccessibilityHint(
-                                isLocked: promptProcessingService.isFallbackListLocked,
-                                reason: pluginManager.enforcedLlmResolution?.unavailableReason
-                            )
                     }
 
                     Spacer(minLength: 0)
@@ -590,16 +580,7 @@ private struct LLMFallbackPriorityRow: View {
             ja: "フォールバック \(count)件中\(position)件目: \(providerName)",
             zh: "第 \(position) 个备用项（共 \(count) 个）：\(providerName)"
         )
-        var parts = [name, statusText]
-        // The list is disabled under an enforced LLM pair; a hint on this container
-        // would replace its role description, so the reason is part of the name.
-        if promptProcessingService.isFallbackListLocked {
-            parts.append(
-                PluginManager.shared.enforcedLlmResolution?.unavailableReason
-                    ?? ManagedByOrganizationLabel.defaultText
-            )
-        }
-        return parts.joined(separator: ", ")
+        return [name, statusText].joined(separator: ", ")
     }
 
     var body: some View {
@@ -683,25 +664,21 @@ private struct LLMFallbackPriorityRow: View {
         // on the row's content it would be repeated on every control.
         .accessibilityElement(children: .contain)
         .accessibilityLabel(accessibilityRowLabel)
-        // A locked list cannot be reordered, so it offers no move actions either.
         .modifier(ReorderAccessibilityActions(
-            canMoveUp: canMoveUp && !promptProcessingService.isFallbackListLocked,
-            canMoveDown: canMoveDown && !promptProcessingService.isFallbackListLocked,
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
             moveUp: { onMove(item, -1) },
             moveDown: { onMove(item, 1) }
         ))
     }
 
-    /// Moves the row with the keyboard as well as by dragging. They use the same move as the
-    /// context menu and the VoiceOver actions; the locked list disables them with the whole row.
     private var moveButtons: some View {
         let providerName = promptProcessingService.displayName(for: item.providerId)
-        let isLocked = promptProcessingService.isFallbackListLocked
         return ReorderArrowButtons(
             position: index,
             count: count,
-            canMoveUp: canMoveUp && !isLocked,
-            canMoveDown: canMoveDown && !isLocked,
+            canMoveUp: canMoveUp,
+            canMoveDown: canMoveDown,
             upLabel: String(localized: "Move \(providerName) up"),
             downLabel: String(localized: "Move \(providerName) down"),
             spacing: 2,
@@ -714,7 +691,6 @@ private struct LLMFallbackPriorityRow: View {
 
     @ViewBuilder
     private var selectionFields: some View {
-        // An enforced LLM pair replaces the fallback list; the saved rows stay as they are.
         Group {
             providerPicker
             if showsModelPicker {
@@ -724,11 +700,6 @@ private struct LLMFallbackPriorityRow: View {
                 effortPicker
             }
         }
-        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
-        .managedLockAccessibilityHint(
-            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
-            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
-        )
     }
 
     private var providerPicker: some View {
@@ -1310,9 +1281,6 @@ private struct WorkflowEditorPage: View {
     @State private var isAdvancedExpanded = false
     @State private var showingAppPicker = false
     @State private var websiteInput = ""
-    #if APPSTORE
-    @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
-    #endif
     @StateObject private var websiteSuggestionStore = WorkflowWebsiteSuggestionStore()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -1678,15 +1646,6 @@ private struct WorkflowEditorPage: View {
                         Text(engine.providerDisplayName).tag(engine.providerId as String?)
                     }
                 }
-                .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
-                .managedLockAccessibilityHint(
-                    isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
-                    reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
-                )
-
-                if let enforced = pluginManager.enforcedTranscriptionResolution {
-                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
-                }
 
                 Text(
                     draft.transcriptionEngineId == nil
@@ -1715,11 +1674,6 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
-                        .disabled(PluginManager.shared.selectionPolicy.enforcesTranscription)
-                        .managedLockAccessibilityHint(
-                            isLocked: PluginManager.shared.selectionPolicy.enforcesTranscription,
-                            reason: PluginManager.shared.enforcedTranscriptionResolution?.unavailableReason
-                        )
 
                         Text(
                             localizedAppText(
@@ -1935,15 +1889,6 @@ private struct WorkflowEditorPage: View {
                         Text(provider.displayName).tag(provider.id as String?)
                     }
                 }
-                .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
-                .managedLockAccessibilityHint(
-                    isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
-                    reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
-                )
-
-                if let enforced = pluginManager.enforcedLlmResolution {
-                    ManagedByOrganizationLabel(text: enforced.unavailableReason ?? String(localized: "Managed by your organization."))
-                }
 
                 Text(
                     draft.providerId == nil
@@ -1972,11 +1917,6 @@ private struct WorkflowEditorPage: View {
                                 Text(model.displayName).tag(model.id as String?)
                             }
                         }
-                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
-                        .managedLockAccessibilityHint(
-                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
-                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
-                        )
 
                         Text(
                             localizedAppText(
@@ -2012,11 +1952,6 @@ private struct WorkflowEditorPage: View {
                                 Text(effort.displayName).tag(effort.id as String?)
                             }
                         }
-                        .disabled(PluginManager.shared.selectionPolicy.enforcesLlm)
-                        .managedLockAccessibilityHint(
-                            isLocked: PluginManager.shared.selectionPolicy.enforcesLlm,
-                            reason: PluginManager.shared.enforcedLlmResolution?.unavailableReason
-                        )
 
                         Text(
                             localizedAppText(
@@ -2160,17 +2095,8 @@ private struct WorkflowEditorPage: View {
                 appTriggerEditor
             }
 
-            // The sandboxed App Store edition cannot read browser URLs itself. A
-            // website trigger only matches once a browser extension reports tabs.
-            #if APPSTORE
-            if browserExtensionConnected {
-                Divider()
-                websiteTriggerComponent
-            }
-            #else
             Divider()
             websiteTriggerComponent
-            #endif
 
             Divider()
 
@@ -2244,15 +2170,6 @@ private struct WorkflowEditorPage: View {
 
     private var websiteTriggerEditor: some View {
         VStack(alignment: .leading, spacing: 10) {
-            #if APPSTORE
-            Text(localizedAppText(
-                "Matches in browsers with the dictum extension.",
-                de: "Greift in Browsern mit der dictum-Erweiterung."
-            ))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            #endif
-
             if draft.websitePatterns.isEmpty {
                 Text(localizedAppText("No websites added yet.", de: "Noch keine Websites hinzugefügt."))
                     .font(.subheadline)
@@ -3379,10 +3296,7 @@ struct WorkflowDraft {
             )
         }
 
-        // An enforced pair replaces the override and locks its pickers; the saved override is kept
-        // for when the pair is removed and must not block other edits.
         if template == .dictation,
-           !pluginManager.selectionPolicy.enforcesTranscription,
            let transcriptionEngineId,
            !transcriptionEngineId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             guard let engine = pluginManager.transcriptionEngine(for: transcriptionEngineId) else {

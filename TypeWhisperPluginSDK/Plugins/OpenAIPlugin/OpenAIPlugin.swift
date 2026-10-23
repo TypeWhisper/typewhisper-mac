@@ -1,12 +1,8 @@
 import AppKit
 import AVFoundation
-#if !APPSTORE
 import CryptoKit
-#endif
 import Foundation
-#if !APPSTORE
 import Network
-#endif
 import SwiftUI
 import TypeWhisperPluginSDK
 import os
@@ -78,9 +74,6 @@ enum OpenAIPluginError: LocalizedError {
     }
 }
 
-// ChatGPT login is not part of the App Store edition: it needs a localhost
-// callback listener and the Codex OAuth client. Only API keys are supported there.
-#if !APPSTORE
 private enum OpenAIOAuthConfig {
     static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
     static let issuer = "https://auth.openai.com"
@@ -500,7 +493,6 @@ private func extractOAuthMetadata(from tokens: OpenAIOAuthTokenResponse) -> Open
 
     return OpenAIOAuthMetadata(accountID: accountID, planType: planType, expiresAt: expiresAt)
 }
-#endif
 
 // MARK: - Responses API
 
@@ -1806,18 +1798,10 @@ final class OpenAIPlugin: NSObject,
 
     private static let openAIAPIKeyCredentialLabel = "OpenAI API key"
     private static let chatGPTLoginCredentialLabel = "ChatGPT Login"
-    #if APPSTORE
-    private static let apiKeyOrChatGPTCredentialLabel = openAIAPIKeyCredentialLabel
-    #else
     private static let apiKeyOrChatGPTCredentialLabel = "OpenAI API key or ChatGPT Login"
-    #endif
     private static let transcriptionRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI transcription requires an OpenAI API key."
     private static let ttsRequiresAPIKeyReason = "ChatGPT Login only enables prompt processing. OpenAI text-to-speech requires an OpenAI API key."
-    #if APPSTORE
-    private static let llmRequiresCredentialsReason = "OpenAI prompt processing requires an OpenAI API key."
-    #else
     private static let llmRequiresCredentialsReason = "OpenAI prompt processing requires an OpenAI API key or ChatGPT Login."
-    #endif
 
     private static let storageKeys = (
         apiKey: "api-key",
@@ -1877,7 +1861,6 @@ final class OpenAIPlugin: NSObject,
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: Self.storageKeys.apiKey)
-        #if !APPSTORE
         _oauthAccessToken = host.loadSecret(key: Self.storageKeys.oauthAccessToken)
         _oauthRefreshToken = host.loadSecret(key: Self.storageKeys.oauthRefreshToken)
         _oauthIDToken = host.loadSecret(key: Self.storageKeys.oauthIDToken)
@@ -1886,7 +1869,6 @@ final class OpenAIPlugin: NSObject,
            let authMode = OpenAIAuthMode(rawValue: rawMode) {
             _authMode = authMode
         }
-        #endif
         if let rawReasoningEffort = host.userDefault(forKey: Self.storageKeys.reasoningEffort) as? String,
            let reasoningEffort = OpenAIReasoningEffort(rawValue: rawReasoningEffort) {
             _reasoningEffort = reasoningEffort
@@ -1976,11 +1958,7 @@ final class OpenAIPlugin: NSObject,
     // MARK: - TranscriptionEnginePlugin
 
     var providerId: String { "openai" }
-    #if APPSTORE
-    var providerDisplayName: String { "OpenAI" }
-    #else
     var providerDisplayName: String { "OpenAI / ChatGPT" }
-    #endif
 
     var isConfigured: Bool {
         guard let key = _apiKey else { return false }
@@ -2450,11 +2428,7 @@ final class OpenAIPlugin: NSObject,
                 )
             )
         case .chatGPT:
-            #if APPSTORE
-            throw PluginChatError.notConfigured
-            #else
             return try await processWithChatGPT(systemPrompt: systemPrompt, userText: userText, model: modelId)
-            #endif
         }
     }
 
@@ -2673,14 +2647,10 @@ final class OpenAIPlugin: NSObject,
             let models = await refreshFetchedLLMModels()
             return models.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
         case .chatGPT:
-            #if APPSTORE
-            return []
-            #else
             let models = await fetchChatGPTModels()
             guard !models.isEmpty else { return [] }
             setFetchedChatGPTModels(models)
             return models.map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
-            #endif
         }
     }
 
@@ -2710,7 +2680,6 @@ final class OpenAIPlugin: NSObject,
         }
     }
 
-    #if !APPSTORE
     fileprivate func fetchChatGPTModels() async -> [OpenAIChatGPTModel] {
         do {
             let accessToken = try await validOAuthAccessToken()
@@ -2773,7 +2742,6 @@ final class OpenAIPlugin: NSObject,
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
             ?? "1.3.5"
     }
-    #endif
 
     fileprivate var ttsInstructions: String { _ttsInstructions }
 
@@ -2872,7 +2840,6 @@ final class OpenAIPlugin: NSObject,
         return "HTTP \(statusCode)"
     }
 
-    #if !APPSTORE
     fileprivate func loginWithChatGPTInBrowser() async throws {
         let state = randomState()
         let pkce = generatePKCECodes()
@@ -2925,7 +2892,6 @@ final class OpenAIPlugin: NSObject,
         )
         storeOAuthTokens(imported, preferredAccountID: store.tokens.account_id)
     }
-    #endif
 
     fileprivate func clearChatGPTLogin() {
         _oauthAccessToken = nil
@@ -2964,7 +2930,6 @@ final class OpenAIPlugin: NSObject,
         }
     }
 
-    #if !APPSTORE
     private func storeOAuthTokens(_ tokens: OpenAIOAuthTokenResponse, preferredAccountID: String? = nil) {
         let metadata = extractOAuthMetadata(from: tokens)
         let nextAccountID = preferredAccountID ?? metadata.accountID
@@ -3183,7 +3148,6 @@ final class OpenAIPlugin: NSObject,
         let completedText = completedParts.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
         return completedText.isEmpty ? nil : completedText
     }
-    #endif
 
     private static let chatPrefixes = ["gpt-", "o1-", "o3-", "o4-", "chatgpt-"]
     private static let excludeSuffixes = ["-transcribe", "-tts", "-embedding", "-realtime", "-search"]
@@ -3431,18 +3395,13 @@ private struct OpenAISettingsView: View {
     @State private var fetchedLLMModels: [OpenAIFetchedModel] = []
     @State private var isRefreshingLLMModels = false
     @State private var llmRefreshMessage: String?
-    #if !APPSTORE
     @State private var oauthBusy = false
     @State private var oauthStatusMessage: String?
     @State private var oauthErrorMessage: String?
-    #endif
     private let bundle = Bundle(for: OpenAIPlugin.self)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            #if APPSTORE
-            apiKeySection
-            #else
             VStack(alignment: .leading, spacing: 8) {
                 Text("Connection Method", bundle: bundle)
                     .font(.headline)
@@ -3470,7 +3429,6 @@ private struct OpenAISettingsView: View {
             } else {
                 chatGPTSection
             }
-            #endif
 
             if plugin.isConfigured {
                 Divider()
@@ -3652,7 +3610,6 @@ private struct OpenAISettingsView: View {
         }
     }
 
-    #if !APPSTORE
     private var chatGPTSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("ChatGPT Login", bundle: bundle)
@@ -3727,7 +3684,6 @@ private struct OpenAISettingsView: View {
             }
         }
     }
-    #endif
 
     private var ttsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -3960,7 +3916,6 @@ private struct OpenAISettingsView: View {
         }
     }
 
-    #if !APPSTORE
     private func startBrowserLogin() {
         oauthBusy = true
         oauthStatusMessage = String(localized: "Complete the OpenAI login in your browser. dictum will finish the connection automatically.", bundle: bundle)
@@ -3999,7 +3954,6 @@ private struct OpenAISettingsView: View {
             oauthErrorMessage = error.localizedDescription
         }
     }
-    #endif
 }
 
 // MARK: - Utilities

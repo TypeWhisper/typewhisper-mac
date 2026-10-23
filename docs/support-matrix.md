@@ -24,7 +24,6 @@ This matrix describes the officially supported direct-download path for the curr
 | HTTP API | Yes | Yes | Yes | Loopback-only, disabled by default |
 | CLI | Yes | Yes | Yes | Requires the local API server to be running |
 | Apple Translate integration | No | Yes | Yes | Advanced surface |
-| Apple Intelligence provider | No | No | Yes | Optional provider surface |
 | SpeechAnalyzer engine | No | No | Yes | Optional engine surface |
 
 ## Engine Notes

@@ -105,22 +105,6 @@
         }
       }
     },
-    "Enterprise: yearly subscription instead of Lifetime" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エンタープライズ: ライフタイムの代わりに年額サブスクリプション"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "企业版：以年度订阅代替终身版"
-          }
-        }
-      }
-    },
     "Everything in Individual included" : {
       "localizations" : {
         "ja" : {
@@ -165,22 +149,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "适用于个人"
-          }
-        }
-      }
-    },
-    "For organizations" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織向け"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "适用于组织"
           }
         }
       }
@@ -325,38 +293,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地优先"
-          }
-        }
-      }
-    },
-    "Managed by your organization" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織によって管理されています"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由你的组织管理"
-          }
-        }
-      }
-    },
-    "Managed license" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理対象ライセンス"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "托管许可证"
           }
         }
       }
@@ -861,44 +797,6 @@
         }
       }
     },
-    "The language model provider your organization requires needs macOS 26 or later." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, benötigt macOS 26 oder neuer."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した言語モデルプロバイダーには macOS 26 以降が必要です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织要求的语言模型提供方需要 macOS 26 或更高版本。"
-          }
-        }
-      }
-    },
-    "The same Enterprise tier with up to 50 devices, billed once a year." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最大50台のデバイスに対応する同じEnterprise階層を、年1回のお支払いで利用できます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同样的企业版，最多支持 50 台设备，每年计费一次。"
-          }
-        }
-      }
-    },
     "The menu bar icon is hidden too, so nothing on screen shows that a recording is running." : {
       "localizations" : {
         "de" : {
@@ -921,66 +819,6 @@
         }
       }
     },
-    "The transcription provider your organization requires is not installed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Transkriptionsanbieter, den deine Organisation vorgibt, ist nicht installiert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した文字起こしプロバイダーがインストールされていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织要求的转写提供方未安装。"
-          }
-        }
-      }
-    },
-    "The transcription provider your organization requires is turned off." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Transkriptionsanbieter, den deine Organisation vorgibt, ist deaktiviert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した文字起こしプロバイダーがオフになっています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织要求的转写提供方已关闭。"
-          }
-        }
-      }
-    },
-    "This Mac is covered by an enterprise license for your organization's rollout." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このMacは、組織での展開を対象としたエンタープライズライセンスでカバーされています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Mac 已受企业许可证覆盖，适用于贵组织的部署。"
-          }
-        }
-      }
-    },
     "Two months free" : {
       "localizations" : {
         "ja" : {
@@ -993,468 +831,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "免费两个月"
-          }
-        }
-      }
-    },
-    "Your organization's transcription provider does not name one of this plugin's engines." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der von deiner Organisation vorgegebene Transkriptionsanbieter benennt keine Engine dieses Plugins."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した文字起こしプロバイダーは、このプラグインのエンジンを指定していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织指定的转写提供方未指明此插件的某个引擎。"
-          }
-        }
-      }
-    },
-    "The transcription model your organization requires is not offered by this provider." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Transkriptionsmodell, das deine Organisation vorgibt, wird von diesem Anbieter nicht angeboten."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した文字起こしモデルは、このプロバイダーでは提供されていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此提供方不提供你的组织要求的转写模型。"
-          }
-        }
-      }
-    },
-    "The language model provider your organization requires is not installed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, ist nicht installiert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した言語モデルプロバイダーがインストールされていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织要求的语言模型提供方未安装。"
-          }
-        }
-      }
-    },
-    "The language model provider your organization requires is turned off." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Sprachmodell-Anbieter, den deine Organisation vorgibt, ist deaktiviert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した言語モデルプロバイダーがオフになっています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织要求的语言模型提供方已关闭。"
-          }
-        }
-      }
-    },
-    "Your organization's language model provider does not name one of this plugin's providers." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der von deiner Organisation vorgegebene Sprachmodell-Anbieter benennt keinen Anbieter dieses Plugins."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した言語モデルプロバイダーは、このプラグインのプロバイダーを指定していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织指定的语言模型提供方未指明此插件的某个提供方。"
-          }
-        }
-      }
-    },
-    "The language model your organization requires is not offered by this provider." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Sprachmodell, das deine Organisation vorgibt, wird von diesem Anbieter nicht angeboten."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定した言語モデルは、このプロバイダーでは提供されていません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此提供方不提供你的组织要求的语言模型。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow this transcription provider." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt diesen Transkriptionsanbieter nicht."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はこの文字起こしプロバイダーを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许此转写提供方。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow this language model provider." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt diesen Sprachmodell-Anbieter nicht."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はこの言語モデルプロバイダーを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许此语言模型提供方。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow plugin downloads." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt keine Plugin-Downloads."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はプラグインのダウンロードを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许下载插件。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow model downloads." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt keine Modell-Downloads."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はモデルのダウンロードを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许下载模型。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow audio to be transcribed outside this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt nicht, dass Audio außerhalb dieses Macs transkribiert wird."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織は、このMacの外で音声を文字起こしすることを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许在此 Mac 之外转写音频。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow text to be processed outside this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt nicht, dass Text außerhalb dieses Macs verarbeitet wird."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織は、このMacの外でテキストを処理することを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许在此 Mac 之外处理文本。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow this plugin." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt dieses Plugin nicht."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はこのプラグインを許可していません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许此插件。"
-          }
-        }
-      }
-    },
-    "This waits until your organization's settings can be applied." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das wartet, bis die Einstellungen deiner Organisation angewendet werden können."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織の設定を適用できるまで待機します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "这将等待，直到可以应用你所在组织的设置。"
-          }
-        }
-      }
-    },
-    "Not allowed by your organization" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Von deiner Organisation nicht erlaubt"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織により許可されていません"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许"
-          }
-        }
-      }
-    },
-    "App updates are paused until your organization's update settings can be applied." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App-Updates sind pausiert, bis die Update-Einstellungen deiner Organisation angewendet werden können."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織のアップデート設定を適用できるまで、アプリのアップデートは一時停止されています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在可以应用你所在组织的更新设置之前，应用更新已暂停。"
-          }
-        }
-      }
-    },
-    "App updates are managed by your organization." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App-Updates werden von deiner Organisation verwaltet."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリのアップデートは組織によって管理されています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用更新由你的组织管理。"
-          }
-        }
-      }
-    },
-    "Your organization has turned off app updates." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation hat App-Updates deaktiviert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織によってアプリのアップデートがオフにされています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织已关闭应用更新。"
-          }
-        }
-      }
-    },
-    "Your organization's update channel is not one of its allowed channels, so app updates are off." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Update-Kanal deiner Organisation gehört nicht zu ihren erlaubten Kanälen, deshalb sind App-Updates deaktiviert."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織が指定したアップデートチャンネルが許可されたチャンネルに含まれていないため、アプリのアップデートはオフになっています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织指定的更新渠道不在其允许的渠道中，因此应用更新已关闭。"
-          }
-        }
-      }
-    },
-    "Your organization does not allow updates on this channel. Choose an allowed channel." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation erlaubt keine Updates auf diesem Kanal. Wähle einen erlaubten Kanal."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織はこのチャンネルでのアップデートを許可していません。許可されたチャンネルを選択してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织不允许在此渠道上更新。请选择允许的渠道。"
-          }
-        }
-      }
-    },
-    "A newer version is available. Your organization installs updates on this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eine neuere Version ist verfügbar. Deine Organisation installiert Updates auf diesem Mac."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "新しいバージョンが利用可能です。このMacのアップデートは組織がインストールします。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "有新版本可用。此 Mac 上的更新由你的组织安装。"
           }
         }
       }
@@ -1521,50 +897,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打开登录项"
-          }
-        }
-      }
-    },
-    "Managed by your organization." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Von deiner Organisation verwaltet."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織によって管理されています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "由你的组织管理。"
-          }
-        }
-      }
-    },
-    "Managed Settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Verwaltete Einstellungen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理対象の設定"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "受管理的设置"
           }
         }
       }
@@ -1723,72 +1055,6 @@
         }
       }
     },
-    "The managed settings could not be read. Managed features wait until they can be read again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die verwalteten Einstellungen konnten nicht gelesen werden. Verwaltete Funktionen warten, bis sie wieder gelesen werden können."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "管理対象の設定を読み取れませんでした。再び読み取れるようになるまで、管理対象の機能は待機します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无法读取受管理的设置。受管理的功能将等待，直到可以再次读取。"
-          }
-        }
-      }
-    },
-    "Your organization manages these settings on this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation verwaltet diese Einstellungen auf diesem Mac."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このMacでは、組織がこれらの設定を管理しています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织在此 Mac 上管理这些设置。"
-          }
-        }
-      }
-    },
-    "No settings are managed on this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auf diesem Mac werden keine Einstellungen verwaltet."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "このMacで管理されている設定はありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "此 Mac 上没有受管理的设置。"
-          }
-        }
-      }
-    },
     "Enforced" : {
       "localizations" : {
         "de" : {
@@ -1895,28 +1161,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用户发起"
-          }
-        }
-      }
-    },
-    "Your organization limits the available update channels." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Organisation schränkt die verfügbaren Update-Kanäle ein."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "組織によって利用可能なアップデートチャンネルが制限されています。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的组织限制了可用的更新渠道。"
           }
         }
       }
@@ -13149,28 +12393,6 @@
         }
       }
     },
-    "Apple Intelligence" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence"
-          }
-        }
-      }
-    },
     "Apple Silicon only" : {
       "localizations" : {
         "ja" : {
@@ -18819,22 +18041,6 @@
         }
       }
     },
-    "Enter any dictum key here. The app automatically detects whether it is Supporter, Individual, Team, or Enterprise." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ここにdictumのキーを入力してください。アプリがSupporter、Individual、Team、Enterpriseのいずれであるかを自動的に検出します。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在此输入任意 dictum 密钥。应用会自动识别其属于支持者版、个人版、团队版还是企业版。"
-          }
-        }
-      }
-    },
     "Enter License Key" : {
       "localizations" : {
         "de" : {
@@ -18853,22 +18059,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "输入许可证密钥"
-          }
-        }
-      }
-    },
-    "Enterprise" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "エンタープライズ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "企业版"
           }
         }
       }
@@ -25514,35 +24704,6 @@
         }
       }
     },
-    "noLLMProvider" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kein LLM-Anbieter konfiguriert. Richte Apple Intelligence oder einen API-Schlüssel in den Einstellungen ein."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No LLM provider configured. Set up Apple Intelligence or an API key in Settings."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LLMプロバイダーが設定されていません。設定でApple IntelligenceまたはAPIキーを設定してください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未配置 LLM 服务提供商。请在“设置”中启用 Apple Intelligence 或配置 API 密钥。"
-          }
-        }
-      }
-    },
     "Non-GPL terms, procurement, support, or proprietary distribution for one person." : {
       "localizations" : {
         "ja" : {
@@ -25599,28 +24760,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "将口述数字转换为阿拉伯数字"
-          }
-        }
-      }
-    },
-    "Not available - Apple Intelligence must be enabled in System Settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht verfügbar - Apple Intelligence muss in den Systemeinstellungen aktiviert werden"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "利用不可 - Apple Intelligenceはシステム設定で有効にする必要があります"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不可用 - 必须在“系统设置”中启用 Apple Intelligence"
           }
         }
       }
@@ -28601,22 +27740,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "处理中…"
-          }
-        }
-      }
-    },
-    "Procurement, support, managed seats, and multi-device rollout." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "調達、サポート、シート管理、および複数デバイスへの展開。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "采购、支持、席位管理和多设备部署。"
           }
         }
       }
@@ -33454,24 +32577,6 @@
         }
       }
     },
-    "Sign in with Apple above and link a license or App Store subscription to start sync." : {
-      "comment" : "A description of the benefits of syncing with a premium account.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请先在上方通过 Apple 登录，并关联许可证或 App Store 订阅以开始同步。"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "同期を始めるには、上の「Appleでサインイン」からサインインし、ライセンスまたはApp Storeのサブスクリプションを紐づけてください。"
-          }
-        }
-      }
-    },
     "Sign in with Apple could not be completed." : {
       "comment" : "Error message when Sign in with Apple fails.",
       "isCommentAutoGenerated" : true,
@@ -34461,22 +33566,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "支持者身份已生效。高级功能需要商业许可证。"
-          }
-        }
-      }
-    },
-    "Supporter status is personal and optional. It can exist alongside GPLv3 / OSS, Individual, Team, or Enterprise, but it never grants commercial license terms." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "サポーターステータスは個人的かつ任意です。GPLv3/OSS、Individual、Team、Enterpriseと併用できますが、商用ライセンス条件を付与するものではありません。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "支持者身份属于个人自愿支持，可与 GPLv3／开源版、个人版、团队版或企业版同时存在，但不包含商业许可条款。"
           }
         }
       }
@@ -40731,24 +39820,6 @@
         }
       }
     },
-    "Your Apple account keeps Polar and App Store entitlements available on Mac and iPhone." : {
-      "comment" : "A description of the benefits of using a premium account.",
-      "isCommentAutoGenerated" : true,
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "您的 Apple 账户可让 Polar 和 App Store 权益在 Mac 和 iPhone 上保持可用。"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Appleアカウントを使って、PolarとApp Storeの利用権をMacとiPhoneで共有できます。"
-          }
-        }
-      }
-    },
     "Your changes will be lost if you don’t save them." : {
       "localizations" : {
         "de" : {
@@ -46301,7 +45372,6 @@
     "With Audio" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mit Audio"}},"ja":{"stringUnit":{"state":"translated","value":"音声あり"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"含音频"}}}},
     "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled dictum devices." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gespeicherter Text und der Posteingangsstatus werden deinem privaten Sync-Ordner hinzugefügt und auf deinen anderen aktivierten dictum-Geräten verfügbar."}},"ja":{"stringUnit":{"state":"translated","value":"保存済みのテキストと受信箱の状態がプライベート同期フォルダに追加され、有効化した他のdictumデバイスでも利用できるようになります。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已保存的文本和收件箱状态将添加到你的私人同步文件夹，并可在其他已启用的 dictum 设备上使用。"}}}},
     "Your saved transcriptions will appear here." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine gespeicherten Transkriptionen erscheinen hier."}},"ja":{"stringUnit":{"state":"translated","value":"保存した文字起こしがここに表示されます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你保存的转录会显示在这里。"}}}},
-    "iPhone & iPad" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iPhone & iPad"}},"ja":{"stringUnit":{"state":"translated","value":"iPhoneとiPad"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iPhone 和 iPad"}}}},
     "Choose an entry to read and edit its text or inspect its details." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle einen Eintrag aus, um seinen Text zu lesen und zu bearbeiten oder seine Details anzusehen."}},"ja":{"stringUnit":{"state":"translated","value":"項目を選択してテキストを読んだり編集したり、詳細を確認したりできます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择一个条目以阅读和编辑文本，或查看其详细信息。"}}}},
     "Device" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gerät"}},"ja":{"stringUnit":{"state":"translated","value":"デバイス"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"设备"}}}},
     "Failed" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Fehlgeschlagen"}},"ja":{"stringUnit":{"state":"translated","value":"失敗"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"失败"}}}},

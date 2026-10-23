@@ -204,44 +204,6 @@ extension MyTranscriptionEngine: DictionaryTermsSettingEnabling {
 `"minHostVersion": "1.8.0"` when you adopt it. Plugins without it keep working and
 TypeWhisper continues to show its static plugin-setting hint for them.
 
-If your engine offers several models, adopt `TransientModelSelectionProviding` so
-TypeWhisper can use a model for a while without changing the user's saved selection,
-for example a model that managed settings enforce. While a transient selection lasts,
-`selectedModelId` reports the transient model and restores load it, but the plugin
-saves neither it nor the model it loads; selections the user makes meanwhile are saved
-and apply once it ends. Ending it returns to the saved selection, including no
-selection. Neither call downloads a model, and deactivation drops the transient
-selection. `PluginTransientModelSelection` keeps the state thread-safe and tells model
-loads that finish late whether they may still be used:
-
-```swift
-extension MyTranscriptionEngine: TransientModelSelectionProviding {
-    var transientModelId: String? { transientSelection.modelId }
-
-    func beginTransientModelSelection(_ modelId: String) {
-        guard offersModel(modelId), transientSelection.begin(modelId) else { return }
-        unloadModelIfOtherThan(modelId)   // without clearing what you saved for the user
-    }
-
-    func endTransientModelSelection() {
-        guard transientSelection.end() != nil else { return }
-        selectedModel = savedSelection()  // nil when the user had none
-        unloadModelIfOtherThan(savedLoadedModel())
-    }
-}
-
-// When a load starts: let revision = transientSelection.revision
-// When it finishes:
-transientSelection.installIfPermitted(modelId, requestedAt: revision) { isTransient in
-    loadedModel = model                   // in-memory only; save it afterwards unless isTransient
-}
-```
-
-`TransientModelSelectionProviding` requires TypeWhisper 1.8.0 or later; declare
-`"minHostVersion": "1.8.0"` when you adopt it. Without it, TypeWhisper switches an
-enforced model with `selectModel(_:)` and selects the user's model again afterwards,
-which cannot restore "no selection".
-
 ### LLMProviderPlugin
 
 Add an LLM for prompt processing (text transformation, summarization, etc.).

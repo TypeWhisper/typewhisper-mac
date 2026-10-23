@@ -1,6 +1,3 @@
-#if APPSTORE
-import AppKit
-#endif
 import Foundation
 import os
 import ServiceManagement
@@ -33,8 +30,6 @@ enum UserDataEraser {
         container: ServiceContainer
     ) async -> [Failure] {
         apiServer.stopServerAndCancelActiveRequests()
-        container.remoteLinkViewModel.endPairing()
-        container.remoteLinkViewModel.stop()
         let failures = await discardActiveRecording(container.audioRecorderService)
 
         // The iCloud bridge copies the remote package into the local mirror
@@ -96,16 +91,6 @@ enum UserDataEraser {
         let message = failures
             .map { "\($0.item): \($0.message)" }
             .joined(separator: "\n")
-        #if APPSTORE
-        // Sandboxed apps should not launch helper tools, so the alert runs
-        // modally in this process. Timers in the default run loop mode stay
-        // paused while it is open; the app exits as soon as it is dismissed.
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = title
-        alert.informativeText = message
-        alert.runModal()
-        #else
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         process.arguments = [
@@ -115,7 +100,6 @@ enum UserDataEraser {
             title, message,
         ]
         try? process.run()
-        #endif
     }
 
     @discardableResult

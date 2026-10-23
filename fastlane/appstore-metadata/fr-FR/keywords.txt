@@ -1,1 +1,0 @@
-dictée,voix en texte,transcription,saisie vocale,Whisper,hors ligne,notes de réunion,rédaction IA

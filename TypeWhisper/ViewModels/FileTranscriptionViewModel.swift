@@ -281,7 +281,6 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     var resolvedEngine: TranscriptionEnginePlugin? {
-        // An enforced pair replaces the chosen engine, as it does when the files are transcribed.
         guard let engineId = modelManager.effectiveEngineId(availableSelectedEngine) else { return nil }
         guard let pluginManager = PluginManager.shared else { return nil }
         return pluginManager.transcriptionEngine(for: engineId)

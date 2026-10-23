@@ -43,7 +43,7 @@ sees through the bridging header:
 | Sources in `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDK/` | all, because the app and every plugin call into the SDK |
 | Sources in `TypeWhisper/`, `typewhisper-cli/`, `TypeWhisperICloudBridge/`, `TypeWhisperTranscribeAction/`, `TypeWhisperWidgetExtension/`, `TypeWhisperWidgetShared/` | the five app targets |
 | Sources in `TypeWhisperPluginSDK/Plugins/<Name>/` | `<Name>` |
-| anything else: tests, docs, resources, `AppStore/` | none |
+| anything else: tests, docs, resources | none |
 
 To print the full target list: `bash scripts/codeql-build-swift.sh --print-targets`.
 
@@ -68,7 +68,6 @@ the CodeQL Action omits the per-file extraction diagnostics on pull requests.
 | --- | --- |
 | `TypeWhisperTests/`, `TypeWhisperPluginSDK/Tests/`, `Plugins/*/Tests/`, other `*Tests.swift` | Test code; not part of the shipped app or plugins. |
 | `TypeWhisperPluginSDK/Sources/TypeWhisperPluginSDKTesting/` | Test support library. |
-| `AppStore/Sources/` and `#if APPSTORE` branches | The Mac App Store edition is a separate XcodeGen project with the `APPSTORE` flag. Building it in the same database would mix two variants of the same types; a separate analysis would add another full macOS build. |
 | Swift package dependencies | Built outside the source root; CodeQL extracts their signatures only. |
 
 ## Toolchain and runtime

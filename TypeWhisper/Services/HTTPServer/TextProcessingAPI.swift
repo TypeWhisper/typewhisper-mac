@@ -1,10 +1,7 @@
 import Foundation
 import os
 
-/// Routes that process given text on this Mac without inserting it anywhere:
-/// a prompt on the user's language model, or one of their workflows. Paired
-/// iPhones use them through Remote Link once the user allows it; local tools
-/// can call them with the API token.
+/// 本机工具通过 API 令牌调用文本处理和工作流。
 struct TextProcessingAPI: Sendable {
     struct LLMModel: Equatable, Sendable {
         let providerID: String
@@ -42,8 +39,6 @@ struct TextProcessingAPI: Sendable {
     let processPrompt: @MainActor @Sendable (_ systemPrompt: String, _ text: String, _ providerID: String?, _ modelID: String?) async throws -> String
     let listWorkflows: @MainActor @Sendable () -> [WorkflowSummary]
     let runWorkflow: @MainActor @Sendable (_ id: UUID, _ text: String, _ language: String?) async throws -> WorkflowResult
-    /// Whether paired devices may use these routes. Local tools are not affected.
-    let isRemoteWritingAllowed: @Sendable () -> Bool
     var limiter = TextProcessingLimiter()
     var deadline: TimeInterval = Self.processingDeadline
 
@@ -59,7 +54,6 @@ struct TextProcessingAPI: Sendable {
     // MARK: - Handlers
 
     func handleModels(_ request: HTTPRequest) async -> HTTPResponse {
-        if let rejection = permissionRejection(for: request) { return rejection }
         struct Entry: Encodable {
             let provider_id: String
             let provider_name: String
@@ -84,7 +78,7 @@ struct TextProcessingAPI: Sendable {
         }
         struct Response: Encodable { let text: String }
 
-        if let rejection = permissionRejection(for: request) ?? Self.sizeRejection(for: request) { return rejection }
+        if let rejection = Self.sizeRejection(for: request) { return rejection }
         guard let body = try? JSONDecoder().decode(Body.self, from: request.body) else {
             return .error(status: 400, message: "Expected JSON with system_prompt and text")
         }
@@ -103,7 +97,6 @@ struct TextProcessingAPI: Sendable {
     }
 
     func handleWorkflows(_ request: HTTPRequest) async -> HTTPResponse {
-        if let rejection = permissionRejection(for: request) { return rejection }
         struct Entry: Encodable {
             let id: String
             let name: String
@@ -129,7 +122,7 @@ struct TextProcessingAPI: Sendable {
             let workflow_name: String
         }
 
-        if let rejection = permissionRejection(for: request) ?? Self.sizeRejection(for: request) { return rejection }
+        if let rejection = Self.sizeRejection(for: request) { return rejection }
         guard let body = try? JSONDecoder().decode(Body.self, from: request.body) else {
             return .error(status: 400, message: "Expected JSON with workflow_id and text")
         }
@@ -151,15 +144,6 @@ struct TextProcessingAPI: Sendable {
 
     // MARK: - Guards
 
-    private func permissionRejection(for request: HTTPRequest) -> HTTPResponse? {
-        guard Self.remoteDeviceID(of: request) != nil, !isRemoteWritingAllowed() else { return nil }
-        return .error(
-            status: 403,
-            message: "Writing with this Mac is turned off in dictum settings",
-            code: "writing_not_allowed"
-        )
-    }
-
     /// Runs `operation` under the in-flight and rate limits and the processing
     /// deadline. The client gets its answer at the deadline or on cancellation
     /// even if the work ignores cancellation, while the work keeps its slot
@@ -168,7 +152,7 @@ struct TextProcessingAPI: Sendable {
         _ request: HTTPRequest,
         _ operation: @escaping @Sendable () async throws -> HTTPResponse
     ) async -> HTTPResponse {
-        let client = Self.remoteDeviceID(of: request) ?? "local"
+        let client = "local"
         switch await limiter.acquire(client: client) {
         case .busy:
             return .error(status: 429, message: "The Mac is already processing a request", code: "busy")
@@ -206,10 +190,6 @@ struct TextProcessingAPI: Sendable {
         } onCancel: {
             waiter.finish(.failure(CancellationError()))
         }
-    }
-
-    static func remoteDeviceID(of request: HTTPRequest) -> String? {
-        request.headers[RemoteLinkServer.remoteDeviceHeader]
     }
 
     static func sizeRejection(for request: HTTPRequest) -> HTTPResponse? {
@@ -257,10 +237,6 @@ struct TextProcessingAPI: Sendable {
         default:
             break
         }
-        if let refusal = APIHandlers.managedPolicyRefusal(in: error) {
-            return .error(status: 403, message: refusal, code: "forbidden")
-        }
-
         logger.error("Text processing failed: \(error.localizedDescription, privacy: .private(mask: .hash))")
         let exceededContext = LLMContextLimit.isExceeded(error)
             || (error as? LLMFallbackExhaustedError)?.failures.contains(where: \.exceededContext) == true
@@ -338,7 +314,6 @@ final class DeadlineWaiter<T: Sendable>: @unchecked Sendable {
     }
 }
 
-/// In-flight and per-minute limits for text processing, keyed by paired device.
 actor TextProcessingLimiter {
     enum Rejection: Equatable {
         case busy
@@ -385,8 +360,7 @@ extension TextProcessingAPI {
     static func live(
         promptProcessingService: PromptProcessingService,
         workflowService: WorkflowService,
-        workflowTextProcessor: WorkflowTextProcessingService,
-        isRemoteWritingAllowed: @escaping @Sendable () -> Bool
+        workflowTextProcessor: WorkflowTextProcessingService
     ) -> TextProcessingAPI {
         TextProcessingAPI(
             listModels: {
@@ -430,17 +404,12 @@ extension TextProcessingAPI {
                     resolvedOutputFormat: nil
                 )
                 return WorkflowResult(text: output, workflowID: workflow.id, workflowName: workflow.name)
-            },
-            isRemoteWritingAllowed: isRemoteWritingAllowed
+            }
         )
     }
 }
 
 extension Workflow {
-    /// Runnable without this Mac's text field: inline commands or a prompt.
-    /// Action plugins and auto-enter only act on this Mac. Apple Translate
-    /// stays local: its shared session falls back to the source text and
-    /// skips output formats, and paired devices translate on their own.
     var processesTextHeadlessly: Bool {
         guard !usesAppleTranslate else { return false }
         return usesInlineCommands || systemPrompt() != nil

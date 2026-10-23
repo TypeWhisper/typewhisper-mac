@@ -262,19 +262,8 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
 
     var areModelsInstalled: Bool { provider?.areDiarizationModelsInstalled == true }
 
-    /// The diarization models are downloaded on first use; the managed settings may refuse that.
-    private static func requireModelDownloadAllowed() throws {
-        if let refusal = ManagedPolicySnapshotStore.shared.providerPolicy.modelDownloadRefusal {
-            throw ManagedPolicyRefusal(reason: refusal)
-        }
-    }
-
     func downloadModels() {
         guard let provider, modelDownloadProgress == nil else { return }
-        if let refusal = ManagedPolicySnapshotStore.shared.providerPolicy.modelDownloadRefusal {
-            modelError = refusal
-            return
-        }
         modelDownloadProgress = 0
         modelError = nil
         Task { [weak self] in
@@ -445,7 +434,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         // History records are detected one at a time; wait for them.
         await lastTask?.value
         if !provider.areDiarizationModelsInstalled {
-            try Self.requireModelDownloadAllowed()
             try await provider.prepareDiarizationModels { _ in }
         }
         let diarization = try await provider.diarize(
@@ -568,7 +556,6 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 }
             }
             if !provider.areDiarizationModelsInstalled {
-                try Self.requireModelDownloadAllowed()
                 stages[recordID] = .downloadingModels(0)
                 try await provider.prepareDiarizationModels { [weak self] progress in
                     Task { @MainActor in

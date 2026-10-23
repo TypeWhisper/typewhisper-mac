@@ -4,7 +4,7 @@ import os
 import SwiftUI
 import XCTest
 @testable import TypeWhisper
-import TypeWhisperPluginSDK
+@_spi(Testing) import TypeWhisperPluginSDK
 
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
@@ -17,26 +17,10 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
     @MainActor
     func testSetupWizardActivationDownloadsMissingQwen3Model() async throws {
-        let fixture = try Fixture()
-        defer { fixture.remove() }
-        let refusal = "Downloads are turned off by your organization."
-        let host = MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: refusal)
-        let qwen = Qwen3Plugin()
-        qwen.activate(host: host)
-        defer { qwen.deactivate() }
-
-        do {
-            try await SetupWizardQwen3Recommendation.activate(qwen) { _ in }
-            XCTFail("Activation must try to download the missing model")
-        } catch TranscriptionEngineError.modelLoadFailed(let message) {
-            XCTAssertEqual(message, refusal)
-        }
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
-        XCTAssertFalse(qwen.isConfigured)
-    }
-
-    @MainActor
-    func testSetupWizardRetryReportsTheNewAttemptsFailure() async throws {
+        let session = SuspendedDownloadSession()
+        PluginHTTPClient.configureForTesting { _ in session }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        defer { PluginHTTPClient.resetTestingHooks() }
         let fixture = try Fixture()
         defer { fixture.remove() }
         let host = MockHostServices(pluginDataDirectory: fixture.root)
@@ -44,58 +28,99 @@ final class MLXPluginModelStorageTests: XCTestCase {
         qwen.activate(host: host)
         defer { qwen.deactivate() }
 
-        for refusal in ["A", "B"] {
-            host.modelDownloadRefusal = refusal
-            do {
-                try await SetupWizardQwen3Recommendation.activate(qwen) { _ in }
-                XCTFail("Activation must try to download the missing model")
-            } catch TranscriptionEngineError.modelLoadFailed(let message) {
-                XCTAssertEqual(message, refusal)
-            }
+        let activation = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
+        defer { activation.cancel() }
+        for _ in 0..<500 where session.requestedRequests.isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(host.downloadStarts, 2)
+        XCTAssertNotNil(qwen.explicitModelLoadTask)
+        XCTAssertEqual(qwen.currentSettingsActivity?.isError, false)
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
+        XCTAssertFalse(qwen.isConfigured)
+        XCTAssertEqual(session.requestedRequests.count, 1)
+        XCTAssertEqual(session.requestedRequests.first?.url?.host, "huggingface.co")
+        XCTAssertEqual(session.requestedRequests.map { $0.url?.path }, [
+            "/api/models/mlx-community/Qwen3-ASR-1.7B-6bit/tree/main",
+        ])
+        activation.cancel()
+        try await activation.value
+        let download = qwen.explicitModelLoadTask
+        download?.cancel()
+        await download?.value
+        XCTAssertEqual(session.requestedRequests.count, 1)
+    }
+
+    @MainActor
+    func testSetupWizardRetryReportsTheNewAttemptsFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": "Incomplete", "modelType": "qwen3_asr", "origin": "folder", "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        let qwen = Qwen3Plugin()
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+        qwen.selectModel(id)
+        for _ in 0..<2 {
+            var progressUpdates = 0
+            do {
+                try await SetupWizardQwen3Recommendation.activate(qwen) { _ in progressUpdates += 1 }
+                XCTFail("Missing imported files must fail preparation")
+            } catch TranscriptionEngineError.modelLoadFailed(let message) {
+                XCTAssertTrue(message.contains("Imported files are missing"))
+            }
+            XCTAssertGreaterThan(progressUpdates, 0)
+        }
     }
 
     @MainActor
     func testSetupWizardFollowsRunningDownloadInsteadOfRestartingIt() async throws {
+        let session = SuspendedDownloadSession()
+        PluginHTTPClient.configureForTesting { _ in session }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        defer { PluginHTTPClient.resetTestingHooks() }
         let fixture = try Fixture()
         defer { fixture.remove() }
         let modelDef = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-6bit" })
         let partialFile = fixture.repositoryDirectory(repositoryID: modelDef.repoId)
             .appendingPathComponent("blobs/partial")
-        try FileManager.default.createDirectory(at: partialFile.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data("partial".utf8).write(to: partialFile)
-        let hold = DispatchSemaphore(value: 0)
-        let host = MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: "A")
-        host.heldDownloadStart = hold
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
         let qwen = Qwen3Plugin()
         qwen.activate(host: host)
         defer { qwen.deactivate() }
 
         let first = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
-        for _ in 0..<500 where host.downloadStarts == 0 {
+        defer { first.cancel() }
+        for _ in 0..<500 where session.requestedRequests.isEmpty {
             try await Task.sleep(for: .milliseconds(10))
         }
-        XCTAssertEqual(host.downloadStarts, 1)
         let runningTask = try XCTUnwrap(qwen.explicitModelLoadTask)
+        XCTAssertEqual(session.requestedRequests.count, 1)
+        XCTAssertEqual(session.requestedRequests.map { $0.url?.path }, [
+            "/api/models/\(modelDef.repoId)/tree/main",
+        ])
+        try FileManager.default.createDirectory(at: partialFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: partialFile)
 
         let second = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
+        defer { second.cancel() }
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertFalse(runningTask.isCancelled)
         XCTAssertTrue(FileManager.default.fileExists(atPath: partialFile.path))
+        XCTAssertEqual(try Data(contentsOf: partialFile), Data("partial".utf8))
+        XCTAssertEqual(session.requestedRequests.count, 1)
 
-        host.heldDownloadStart = nil
-        hold.signal()
-        for activation in [first, second] {
-            do {
-                try await activation.value
-                XCTFail("Both activations must report the running download's failure")
-            } catch TranscriptionEngineError.modelLoadFailed(let message) {
-                XCTAssertEqual(message, "A")
-            }
-        }
-        XCTAssertEqual(host.downloadStarts, 1)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: partialFile.path))
+        first.cancel()
+        second.cancel()
+        try await first.value
+        try await second.value
+        runningTask.cancel()
+        await runningTask.value
+        XCTAssertEqual(session.requestedRequests.count, 1)
     }
 
     @MainActor
@@ -638,12 +663,30 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 }
 
+private final class SuspendedDownloadSession: PluginHTTPClientSession, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    var requestedRequests: [URLRequest] {
+        lock.withLock { requests }
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lock.withLock { requests.append(request) }
+        while true {
+            try await Task.sleep(for: .seconds(60))
+        }
+    }
+
+    func finishTasksAndInvalidate() {}
+}
+
 private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
     func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
     func unsubscribe(id: UUID) {}
 }
 
-private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
+private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
     // The plugin's load task and the test read and write the defaults at the same time.
     private let defaultsLock = NSLock()
     private var defaults: [String: Any]
@@ -655,39 +698,14 @@ private final class MockHostServices: HostServices, HostModelLifecyclePolicyProv
     let availableRuleNames: [String] = []
     let shouldRestoreLoadedModelsPassively: Bool
 
-    private let downloadLock = NSLock()
-    private var _modelDownloadRefusal: String?
-    private var _downloadStarts = 0
-    private var _heldDownloadStart: DispatchSemaphore?
-
-    /// 插件在开始下载前读取这个值，`heldDownloadStart` 让下载停在进行中的状态。
-    var modelDownloadRefusal: String? {
-        get {
-            let held = downloadLock.withLock {
-                _downloadStarts += 1
-                return _heldDownloadStart
-            }
-            _ = held?.wait(timeout: .now() + 10)
-            return downloadLock.withLock { _modelDownloadRefusal }
-        }
-        set { downloadLock.withLock { _modelDownloadRefusal = newValue } }
-    }
-    var downloadStarts: Int { downloadLock.withLock { _downloadStarts } }
-    var heldDownloadStart: DispatchSemaphore? {
-        get { downloadLock.withLock { _heldDownloadStart } }
-        set { downloadLock.withLock { _heldDownloadStart = newValue } }
-    }
-
     init(
         pluginDataDirectory: URL,
         defaults: [String: Any] = [:],
-        shouldRestoreLoadedModelsPassively: Bool = false,
-        modelDownloadRefusal: String? = nil
+        shouldRestoreLoadedModelsPassively: Bool = false
     ) {
         self.pluginDataDirectory = pluginDataDirectory
         self.defaults = defaults
         self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
-        _modelDownloadRefusal = modelDownloadRefusal
     }
 
     func storeSecret(key: String, value: String) throws {}

@@ -98,8 +98,6 @@ enum AutomaticRecoveryFallbackErrorPolicy {
             switch transcriptionError {
             case .noEngineSelected,
                  .engineUnavailable(_, _),
-                 // The recovery engine is checked against the managed settings in turn.
-                 .managedPolicyRefused(_, _),
                  .modelNotLoaded,
                  .appleSpeechModelNotLoaded,
                  .transcriptionFailed(_),
@@ -878,13 +876,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     nonisolated static func loadLiveFieldTranscriptEnabled(defaults: UserDefaults = .standard) -> Bool {
-        #if APPSTORE
-        // Needs Accessibility access to the target field, which the sandbox does
-        // not allow; a value restored from a backup must not turn it on.
-        return false
-        #else
         return defaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool ?? false
-        #endif
     }
 
     nonisolated static func persistLiveFieldTranscriptEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
@@ -1016,38 +1008,8 @@ final class DictationViewModel: ObservableObject {
 
     var needsAccessibilityPermission: Bool {
         if AppConstants.isScreenshotAutomation { return false }
-#if APPSTORE
-        // A clipboard-only build never asks for PostEvent access.
-        guard AppStoreInputAccess.isAutoPasteEnabled else { return false }
-#endif
         return !textInsertionService.isAccessibilityGranted
     }
-
-#if APPSTORE
-    /// Input Monitoring is only needed for shortcuts that Carbon cannot register.
-    var needsInputMonitoringPermission: Bool {
-        if AppConstants.isScreenshotAutomation { return false }
-        return hotkeyService.requiresEventObservation && !AppStoreInputAccess.canListenToEvents
-    }
-
-    var isInputMonitoringGranted: Bool {
-        AppStoreInputAccess.canListenToEvents
-    }
-
-    func requestInputMonitoringPermission() { settingsHandler.requestInputMonitoringPermission() }
-
-    /// Rechecks permissions, e.g. when the user returns from System Settings.
-    func refreshInputPermissions() { settingsHandler.pollPermissionStatus() }
-
-    private func showManualPasteFeedback() {
-        showNotchFeedback(
-            message: AppStoreInputAccess.manualPasteMessage,
-            icon: "doc.on.clipboard.fill",
-            duration: 4.0,
-            action: AppStoreInputAccess.isAutoPasteEnabled ? .openSettings(.home) : nil
-        )
-    }
-#endif
 
     // MARK: - HTTP API
 
@@ -3287,11 +3249,6 @@ final class DictationViewModel: ObservableObject {
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
                         }
-#if APPSTORE
-                        if insertionResult == .copiedToClipboard {
-                            showManualPasteFeedback()
-                        }
-#endif
                         if insertionResult?.missedTextField == true {
                             undeliveredTranscript = makeUndeliveredTranscript(.noTextField, resolvedOutputFormat)
                         } else {
@@ -3335,10 +3292,6 @@ final class DictationViewModel: ObservableObject {
                                 insertionIsVerifiable = true
                             case .pasted(.unverified), .pasted(.notAwaited):
                                 insertionIsVerifiable = false
-#if APPSTORE
-                            case .copiedToClipboard:
-                                insertionIsVerifiable = false
-#endif
                             }
                         } else {
                             insertionIsVerifiable = true
@@ -4073,18 +4026,6 @@ final class DictationViewModel: ObservableObject {
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
         applyEffectiveMicrophoneBoostToAudioService()
-        prewarmWorkflowLLMIfNeeded()
-    }
-
-    /// Loads the matched workflow's on-device LLM while recording, so post-processing does
-    /// not wait for the model after the stop.
-    private func prewarmWorkflowLLMIfNeeded() {
-        guard let workflow = matchedWorkflow,
-              !workflow.usesAppleTranslate,
-              workflowTextProcessingService.canProcess(workflow: workflow) else {
-            return
-        }
-        promptProcessingService.prewarmWorkflowLLMProvider(providerOverride: workflow.behavior.providerId)
     }
 
     private func forcedWorkflow(for id: UUID?) -> Workflow? {
@@ -4340,12 +4281,6 @@ final class DictationViewModel: ObservableObject {
             // A dictation started in the meantime owns the indicator.
             guard !startQueuedDictationAfterUndeliveredTranscriptInsertion(),
                   state == .idle || state == .inserting else { return }
-#if APPSTORE
-            if result == .copiedToClipboard {
-                showManualPasteFeedback()
-                return
-            }
-#endif
             if result.missedTextField {
                 showUndeliveredTranscriptFeedback(transcript.with(reason: .noTextField))
             } else if result.hasUnverifiableUnchangedField {
@@ -5306,9 +5241,6 @@ final class DictationViewModel: ObservableObject {
                 return .dictation
             case .engineUnavailable(_, _), .appleSpeechModelNotLoaded:
                 return engineSettingsTab(providerId: providerId)
-            case .managedPolicyRefused(_, _):
-                // Settings > Advanced lists what the organization manages.
-                return .advanced
             case .transcriptionFailed(_), .modelDownloadFailed(_):
                 return nil
             }

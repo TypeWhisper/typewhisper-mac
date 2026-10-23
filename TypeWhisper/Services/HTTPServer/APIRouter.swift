@@ -31,9 +31,6 @@ final class APIRouter: Sendable {
     }
 
     func route(_ request: HTTPRequest) async -> HTTPResponse {
-        // Only Remote Link may name a paired device; a local client that
-        // sends the header is treated like any other local client.
-        let request = Self.withoutRemoteDeviceHeader(request)
         if let rejection = Self.browserRequestRejection(request) {
             return .error(status: 403, message: rejection)
         }
@@ -58,33 +55,6 @@ final class APIRouter: Sendable {
         }
 
         return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
-    }
-
-    /// Routes a request from a paired device whose Remote Link channel is
-    /// already authenticated. The loopback browser checks and the local API
-    /// token do not apply; `RemoteLinkServer` restricts the reachable routes.
-    static func withoutRemoteDeviceHeader(_ request: HTTPRequest) -> HTTPRequest {
-        guard request.headers[RemoteLinkServer.remoteDeviceHeader] != nil else { return request }
-        var headers = request.headers
-        headers[RemoteLinkServer.remoteDeviceHeader] = nil
-        return HTTPRequest(
-            method: request.method,
-            path: request.path,
-            queryParams: request.queryParams,
-            headers: headers,
-            body: request.body
-        )
-    }
-
-    func routeTrusted(_ request: HTTPRequest) async -> HTTPResponse {
-        let registeredRoutes = routes.withLock { $0 }
-        guard let route = registeredRoutes.first(where: { $0.method == request.method && $0.path == request.path }) else {
-            return .error(status: 404, message: "Not found: \(request.method) \(request.path)")
-        }
-        guard !route.requiresToken else {
-            return .error(status: 403, message: "This operation requires the local API token")
-        }
-        return await route.handler(request)
     }
 
     private func isAuthorized(_ request: HTTPRequest, requiresToken: Bool) -> Bool {

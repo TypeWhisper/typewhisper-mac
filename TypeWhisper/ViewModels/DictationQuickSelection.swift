@@ -412,8 +412,7 @@ final class DictationQuickSelectionModel: ObservableObject {
     }
 
     func selectModel(_ choice: DictationModelChoice) {
-        // An enforced pair decides the engine and model; the menu cannot change them.
-        guard !isLockedNow, !PluginManager.shared.selectionPolicy.enforcesTranscription else { return }
+        guard !isLockedNow else { return }
         rebuild()
         let option = snapshot.modelGroups
             .first { $0.id == choice.providerId }?

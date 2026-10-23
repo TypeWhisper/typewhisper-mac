@@ -2,13 +2,8 @@ import AppKit
 import Foundation
 import os
 
-/// The active tab that a TypeWhisper browser extension reported through the local API.
-///
-/// Extensions report when their browser window gains or loses focus and when the active tab
-/// changes, and repeat the report while the browser stays in front. A report belongs to the
-/// app that was frontmost when it arrived, so it never describes a different browser. This
-/// gives the sandboxed App Store edition, which cannot ask browsers for their URL, a website
-/// context, and lets the direct build skip the AppleScript query.
+/// 浏览器扩展通过本地 API 报告活动标签页，浏览器保持前台时定期更新。
+/// 报告绑定接收时的前台应用，避免将网址用于其他浏览器，并省去 AppleScript 查询。
 final class BrowserExtensionContextStore: @unchecked Sendable {
     static let shared = BrowserExtensionContextStore()
 
@@ -94,7 +89,6 @@ final class BrowserExtensionContextStore: @unchecked Sendable {
             receivedAt: now()
         )
         state.withLock { $0 = report }
-        // Settings offer website triggers in the App Store edition once an extension reported.
         if !defaults.bool(forKey: UserDefaultsKeys.browserExtensionConnected) {
             defaults.set(true, forKey: UserDefaultsKeys.browserExtensionConnected)
         }

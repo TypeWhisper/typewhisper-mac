@@ -10,8 +10,7 @@ final class PremiumSettingsViewTests: XCTestCase {
             .calendarMeeting: .recorder,
             .correctionLearning: .dictionary,
             .cloudSync: .history,
-            .speakerWorkspace: .speakers,
-            .pairedDevices: .advanced
+            .speakerWorkspace: .speakers
         ]
         for feature in PremiumFeatureID.allCases {
             navigation.navigate(to: feature)

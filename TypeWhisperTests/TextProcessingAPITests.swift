@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import TypeWhisper
 
 @MainActor
@@ -16,24 +17,23 @@ final class TextProcessingAPITests: XCTestCase {
         processResult: Result<String, Error> = .success("Processed"),
         processDelay: Duration? = nil,
         workflowResult: Result<TextProcessingAPI.WorkflowResult, Error>? = nil,
-        writingAllowed: Bool = true,
-        captured: RemoteLinkLockedValue<Captured> = RemoteLinkLockedValue(Captured()),
-        cancelled: RemoteLinkLockedValue<Bool> = RemoteLinkLockedValue(false)
+        captured: OSAllocatedUnfairLock<Captured> = OSAllocatedUnfairLock(initialState: Captured()),
+        cancelled: OSAllocatedUnfairLock<Bool> = OSAllocatedUnfairLock(initialState: false)
     ) -> TextProcessingAPI {
         TextProcessingAPI(
             listModels: {
                 [
-                    .init(providerID: "appleIntelligence", providerName: "Apple Intelligence", modelID: nil, name: "Apple Intelligence", isReady: true),
+                    .init(providerID: "openai", providerName: "OpenAI", modelID: nil, name: "OpenAI", isReady: true),
                     .init(providerID: "groq", providerName: "Groq", modelID: "llama-3.3", name: "Llama 3.3", isReady: false),
                 ]
             },
             processPrompt: { systemPrompt, text, providerID, modelID in
-                captured.set(Captured(systemPrompt: systemPrompt, text: text, providerID: providerID, modelID: modelID))
+                captured.withLock { $0 = Captured(systemPrompt: systemPrompt, text: text, providerID: providerID, modelID: modelID) }
                 if let processDelay {
                     do {
                         try await Task.sleep(for: processDelay)
                     } catch {
-                        cancelled.set(true)
+                        cancelled.withLock { $0 = true }
                         throw error
                     }
                 }
@@ -47,16 +47,12 @@ final class TextProcessingAPITests: XCTestCase {
                     return try workflowResult.get()
                 }
                 return .init(text: text.uppercased(), workflowID: id, workflowName: "Clean up")
-            },
-            isRemoteWritingAllowed: { writingAllowed }
+            }
         )
     }
 
-    private func request(_ method: String, _ path: String, json: String = "", device: String? = nil) -> HTTPRequest {
-        var headers = ["content-type": "application/json"]
-        if let device {
-            headers[RemoteLinkServer.remoteDeviceHeader] = device
-        }
+    private func request(_ method: String, _ path: String, json: String = "") -> HTTPRequest {
+        let headers = ["content-type": "application/json"]
         return HTTPRequest(method: method, path: path, queryParams: [:], headers: headers, body: Data(json.utf8))
     }
 
@@ -75,24 +71,24 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertEqual(response.status, 200)
         let models = try XCTUnwrap(try json(response)["models"] as? [[String: Any]])
         XCTAssertEqual(models.count, 2)
-        XCTAssertEqual(models[0]["provider_id"] as? String, "appleIntelligence")
+        XCTAssertEqual(models[0]["provider_id"] as? String, "openai")
         XCTAssertNil(models[0]["model_id"])
         XCTAssertEqual(models[1]["model_id"] as? String, "llama-3.3")
         XCTAssertEqual(models[1]["ready"] as? Bool, false)
     }
 
     func testProcessForwardsPromptTextAndOverrides() async throws {
-        let captured = RemoteLinkLockedValue(Captured())
+        let captured = OSAllocatedUnfairLock(initialState: Captured())
         let response = await makeAPI(captured: captured).handleProcess(request(
             "POST", "/v1/llm/process",
             json: #"{"system_prompt":"Write an email.","text":"hallo welt","provider_id":"groq","model_id":"llama-3.3"}"#
         ))
         XCTAssertEqual(response.status, 200)
         XCTAssertEqual(try json(response)["text"] as? String, "Processed")
-        XCTAssertEqual(captured.get().systemPrompt, "Write an email.")
-        XCTAssertEqual(captured.get().text, "hallo welt")
-        XCTAssertEqual(captured.get().providerID, "groq")
-        XCTAssertEqual(captured.get().modelID, "llama-3.3")
+        XCTAssertEqual(captured.withLock { $0.systemPrompt }, "Write an email.")
+        XCTAssertEqual(captured.withLock { $0.text }, "hallo welt")
+        XCTAssertEqual(captured.withLock { $0.providerID }, "groq")
+        XCTAssertEqual(captured.withLock { $0.modelID }, "llama-3.3")
     }
 
     func testProcessRejectsInvalidAndOversizedInputBeforeProcessing() async {
@@ -144,20 +140,6 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertEqual(errorCode(exhausted), "llm_not_configured")
     }
 
-    func testPairedDevicesNeedThePermissionButLocalToolsDoNot() async {
-        let api = makeAPI(writingAllowed: false)
-        let remote = await api.handleProcess(request("POST", "/v1/llm/process", json: promptBody, device: "phone"))
-        let remoteModels = await api.handleModels(request("GET", "/v1/llm/models", device: "phone"))
-        let remoteWorkflows = await api.handleWorkflows(request("GET", "/v1/workflows", device: "phone"))
-        let local = await api.handleProcess(request("POST", "/v1/llm/process", json: promptBody))
-
-        XCTAssertEqual(remote.status, 403)
-        XCTAssertEqual(errorCode(remote), "writing_not_allowed")
-        XCTAssertEqual(remoteModels.status, 403)
-        XCTAssertEqual(remoteWorkflows.status, 403)
-        XCTAssertEqual(local.status, 200)
-    }
-
     func testOneRequestPerDeviceAtATimeAndAPerMinuteLimit() async {
         let limiter = TextProcessingLimiter(perClient: 1, overall: 2, perMinute: 3)
         let first = await limiter.acquire(client: "a")
@@ -181,7 +163,7 @@ final class TextProcessingAPITests: XCTestCase {
     }
 
     func testDeadlineCancelsTheProcessingAndAnswersWithTimeout() async {
-        let cancelled = RemoteLinkLockedValue(false)
+        let cancelled = OSAllocatedUnfairLock(initialState: false)
         var api = makeAPI(processDelay: .seconds(30), cancelled: cancelled)
         api.deadline = 0.2
         let started = Date()
@@ -190,10 +172,10 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertEqual(response.status, 504)
         XCTAssertEqual(errorCode(response), "timeout")
         XCTAssertLessThan(Date().timeIntervalSince(started), 5)
-        for _ in 0..<40 where !cancelled.get() {
+        for _ in 0..<40 where !cancelled.withLock({ $0 }) {
             try? await Task.sleep(for: .milliseconds(25))
         }
-        XCTAssertTrue(cancelled.get())
+        XCTAssertTrue(cancelled.withLock { $0 })
     }
 
     func testDeadlineAnswersEvenIfTheWorkIgnoresCancellationAndKeepsItsSlot() async {
@@ -208,8 +190,7 @@ final class TextProcessingAPITests: XCTestCase {
                 return "late"
             },
             listWorkflows: { [] },
-            runWorkflow: { id, text, _ in .init(text: text, workflowID: id, workflowName: "x") },
-            isRemoteWritingAllowed: { true }
+            runWorkflow: { id, text, _ in .init(text: text, workflowID: id, workflowName: "x") }
         )
         api.deadline = 0.2
         let started = Date()
@@ -227,7 +208,7 @@ final class TextProcessingAPITests: XCTestCase {
 
     func testContextErrorsSurviveTheFallbackList() {
         let viaFallback = TextProcessingAPI.errorResponse(for: LLMFallbackExhaustedError(failures: [
-            LLMFallbackAttemptFailure(providerId: "appleIntelligence", modelId: nil, effortId: nil, reason: "too long", exceededContext: true),
+            LLMFallbackAttemptFailure(providerId: "openai", modelId: nil, effortId: nil, reason: "too long", exceededContext: true),
             LLMFallbackAttemptFailure(providerId: "groq", modelId: nil, effortId: nil, reason: "no key"),
         ]))
         XCTAssertEqual(viaFallback.status, 413)
@@ -291,41 +272,4 @@ final class TextProcessingAPITests: XCTestCase {
         XCTAssertFalse(appleTranslate.processesTextHeadlessly)
     }
 
-    func testPairedDevicesReachTheTextProcessingRoutesTaggedWithTheirDevice() async throws {
-        let router = APIRouter(authenticationProvider: { .required(token: "local-token") })
-        let captured = RemoteLinkLockedValue(Captured())
-        makeAPI(captured: captured).register(on: router)
-
-        let models = await RemoteLinkServer.response(
-            for: Data("GET /v1/llm/models HTTP/1.1\r\n\r\n".utf8), router: router, deviceID: "phone"
-        )
-        let spoofed = "POST /v1/llm/process HTTP/1.1\r\n\(RemoteLinkServer.remoteDeviceHeader): other\r\nContent-Length: \(promptBody.utf8.count)\r\n\r\n\(promptBody)"
-        let process = await RemoteLinkServer.response(for: Data(spoofed.utf8), router: router, deviceID: "phone")
-
-        XCTAssertEqual(models.status, 200)
-        XCTAssertEqual(process.status, 200)
-        XCTAssertEqual(captured.get().text, "hello")
-    }
-
-    func testLocalClientsCannotClaimToBeAPairedDevice() async {
-        let router = APIRouter(authenticationProvider: { .disabled })
-        makeAPI(writingAllowed: false).register(on: router)
-        let spoofed = HTTPRequest(
-            method: "POST",
-            path: "/v1/llm/process",
-            queryParams: [:],
-            headers: [
-                "content-type": "application/json",
-                RemoteLinkServer.remoteDeviceHeader: "phone",
-            ],
-            body: Data(promptBody.utf8)
-        )
-
-        // The header is dropped, so the request is handled as a local one and
-        // the paired-device permission does not apply.
-        let response = await router.route(spoofed)
-
-        XCTAssertEqual(response.status, 200)
-        XCTAssertNil(APIRouter.withoutRemoteDeviceHeader(spoofed).headers[RemoteLinkServer.remoteDeviceHeader])
-    }
 }

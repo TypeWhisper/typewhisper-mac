@@ -1,1 +1,0 @@
-dictation,speech to text,transcription,voice typing,whisper,offline,meeting notes,AI writing

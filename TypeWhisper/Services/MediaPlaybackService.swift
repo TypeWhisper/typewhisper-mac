@@ -1,12 +1,9 @@
-#if !APPSTORE
 import MediaRemoteAdapter
-#endif
 import Foundation
 import os.log
 
 private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "MediaPlaybackService")
 
-#if !APPSTORE
 struct MediaPlaybackSnapshot: Equatable {
     let isApplicationPlaying: Bool?
     let playbackRate: Double?
@@ -124,13 +121,11 @@ extension MediaController: MediaPlaybackControlling {
         }
     }
 }
-#endif
 
 @MainActor
 class MediaPlaybackService {
     private var didPause = false
 
-    #if !APPSTORE
     typealias ResumeScheduler = @MainActor (_ delay: TimeInterval, _ action: @escaping @MainActor () -> Void) -> Void
 
     private let controllerFactory: () -> MediaPlaybackControlling
@@ -377,11 +372,4 @@ class MediaPlaybackService {
             }
         }
     }
-    #else
-    init(startListening: Bool = true) {}
-    func pauseIfPlaying() {}
-    @discardableResult
-    func pauseImmediatelyIfPlaying() async -> Bool { false }
-    func resumeIfWePaused() {}
-    #endif
 }

@@ -54,7 +54,7 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         func unsubscribe(id: UUID) {}
     }
 
-    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, HostManagedPolicyProviding, @unchecked Sendable {
+    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
         private var defaults: [String: Any]
         private var secrets: [String: String] = [:]
 
@@ -64,7 +64,6 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         var activeAppName: String?
         var availableRuleNames: [String] = []
         var shouldRestoreLoadedModelsPassively: Bool
-        var modelDownloadRefusal: String?
         private(set) var capabilitiesChangedCount = 0
 
         init(
@@ -816,60 +815,11 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
     }
 
-    func testRefusedDownloadReportsReasonBeforeStartingTheDownload() async throws {
-        let modelId = "openai_whisper-tiny"
-        let reason = "Your organization does not allow model downloads."
-        let host = try makeHost(defaults: ["loadedModel": modelId],
-                                shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
-        // Starting a download clears this cache of an interrupted one first.
-        let staleDownloadCache = host.pluginDataDirectory
-            .appendingPathComponent("models/models/argmaxinc/whisperkit-coreml/.cache/huggingface/download")
-            .appendingPathComponent(modelId, isDirectory: true)
-        try FileManager.default.createDirectory(at: staleDownloadCache, withIntermediateDirectories: true)
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        await plugin.restoreLoadedModel(allowDownloads: true)
-
-        XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(plugin.settingsModelState, .error(reason))
-        XCTAssertEqual(plugin.currentSettingsActivity?.message, reason)
-        XCTAssertEqual(plugin.currentSettingsActivity?.isError, true)
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: staleDownloadCache.path))
-        XCTAssertTrue(plugin.downloadedModels.isEmpty)
-    }
-
-    func testRefusedDownloadReportsReasonForDownloadedModelWithoutTokenizer() async throws {
-        let modelId = "openai_whisper-tiny"
-        let reason = "Your organization does not allow model downloads."
-        let host = try makeHost(defaults: ["loadedModel": modelId],
-                                shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
-        _ = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        // WhisperKit would fetch the tokenizer while loading, so the load stops before it starts.
-        await plugin.restoreLoadedModel(allowDownloads: true)
-
-        XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(plugin.settingsModelState, .error(reason))
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-    }
-
-    func testRefusedDownloadStillLoadsDownloadedModelWithLocalTokenizer() async throws {
+    func testDownloadedModelWithLocalTokenizerReachesNativeLoading() async throws {
         let modelId = "openai_whisper-large-v3_turbo"
-        let reason = "Your organization does not allow model downloads."
         let host = try makeHost(defaults: ["loadedModel": modelId],
                                 shouldRestoreLoadedModelsPassively: false)
         defer { TestSupport.remove(host.pluginDataDirectory) }
-        host.modelDownloadRefusal = reason
         _ = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
         // Where WhisperKit caches the tokenizer of every large-v3 variant on the first load.
         let tokenizerDirectory = host.pluginDataDirectory
@@ -882,11 +832,11 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
 
         await plugin.restoreLoadedModel(allowDownloads: true)
 
-        // The placeholder files reach Core ML, which rejects them; the refusal never applies.
+        // 本机文件直接进入 Core ML 的模型校验。
         guard case .error(let message) = plugin.settingsModelState else {
             return XCTFail("Expected Core ML to reject the placeholder model: \(plugin.settingsModelState)")
         }
-        XCTAssertNotEqual(message, reason)
+        XCTAssertFalse(message.isEmpty)
     }
 
     private func makeUsableWhisperModelDirectory(
@@ -927,165 +877,5 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         }
 
         return modelDirectory
-    }
-}
-
-// MARK: - Transient model selection
-
-/// A transient selection is how TypeWhisper applies a model that managed settings enforce:
-/// the model is used without being saved, and ending it returns to the user's selection.
-extension WhisperKitPluginLifecycleTests {
-    private var tiny: String { "openai_whisper-tiny" }
-    private var turbo: String { "openai_whisper-large-v3_turbo" }
-
-    private func savedState(_ host: MockHostServices) -> [String?] {
-        ["selectedModel", "loadedModel"].map { host.userDefault(forKey: $0) as? String }
-    }
-
-    func testTransientModelIsUsedWithoutBeingSavedAndEndsAtTheUsersModel() throws {
-        let host = try makeHost(
-            defaults: ["selectedModel": tiny, "loadedModel": tiny],
-            shouldRestoreLoadedModelsPassively: false
-        )
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-        plugin.setModelStateForTesting(.ready(tiny), loadedModelId: tiny)
-
-        plugin.beginTransientModelSelection(turbo)
-
-        XCTAssertEqual(plugin.selectedModelId, turbo)
-        XCTAssertEqual(plugin.transientModelId, turbo)
-        XCTAssertEqual(plugin.settingsModelState, .notLoaded, "The user's model is unloaded so it is not used")
-        #if DEBUG
-        XCTAssertEqual(plugin.restoreTargetModelIdForTesting(), turbo, "First use restores the transient model")
-        #endif
-        XCTAssertEqual(savedState(host), [tiny, tiny], "Nothing about the transient model is saved")
-
-        plugin.endTransientModelSelection()
-
-        XCTAssertNil(plugin.transientModelId)
-        XCTAssertEqual(plugin.selectedModelId, tiny)
-        #if DEBUG
-        XCTAssertEqual(plugin.restoreTargetModelIdForTesting(), tiny)
-        #endif
-        XCTAssertEqual(savedState(host), [tiny, tiny])
-    }
-
-    func testEndingTheTransientSelectionReturnsToNoSelection() throws {
-        let host = try makeHost(shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        plugin.beginTransientModelSelection(turbo)
-        plugin.setModelStateForTesting(.ready(turbo), loadedModelId: turbo)
-        plugin.endTransientModelSelection()
-
-        XCTAssertNil(plugin.selectedModelId)
-        XCTAssertEqual(plugin.settingsModelState, .notLoaded, "The transient model does not stay loaded")
-        XCTAssertEqual(savedState(host), [nil, nil])
-    }
-
-    func testChoicesDuringTheTransientSelectionAreSavedForLater() async throws {
-        let host = try makeHost(shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        _ = try makeUsableWhisperModelDirectory(host: host, modelId: tiny)
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-        plugin.beginTransientModelSelection(turbo)
-
-        plugin.selectModel(tiny)
-        plugin.triggerRestoreModel(forModel: tiny as NSString)
-
-        XCTAssertEqual(plugin.selectedModelId, turbo)
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, tiny)
-        #if DEBUG
-        XCTAssertNil(
-            plugin.restoreTargetModelIdForTesting(preferredModelId: tiny),
-            "Another model is not loaded while the transient one is in use"
-        )
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 0)
-        #endif
-
-        plugin.endTransientModelSelection()
-        XCTAssertEqual(plugin.selectedModelId, tiny)
-    }
-
-    func testBeginningAbortsALoadOfAnotherModel() throws {
-        let host = try makeHost(defaults: ["selectedModel": tiny], shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-        #if DEBUG
-        plugin.setLoadingModelForTesting(tiny)
-        let generation = plugin.modelLoadGenerationForTesting
-
-        plugin.beginTransientModelSelection(turbo)
-
-        XCTAssertGreaterThan(plugin.modelLoadGenerationForTesting, generation, "The load of the user's model is invalidated")
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-        #endif
-        XCTAssertEqual(plugin.selectedModelId, turbo)
-    }
-
-    func testPassiveRestoreOfTheTransientModelNeverDownloads() async throws {
-        let host = try makeHost(defaults: ["loadedModel": tiny], shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-        host.shouldRestoreLoadedModelsPassively = true
-
-        // The transient model is not downloaded, so the passive restore it requests finds nothing.
-        plugin.beginTransientModelSelection(turbo)
-
-        #if DEBUG
-        let deadline = ContinuousClock.now.advanced(by: .seconds(1))
-        while plugin.restoreLoadedModelInvocationCountForTesting == 0, ContinuousClock.now < deadline {
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 1)
-        XCTAssertNil(plugin.loadingModelIdForTesting)
-        #endif
-        XCTAssertFalse(plugin.isConfigured)
-        XCTAssertEqual(plugin.settingsModelState, .notLoaded)
-    }
-
-    func testUnloadDuringTheTransientSelectionKeepsTheUsersModelToRestore() throws {
-        let host = try makeHost(
-            defaults: ["selectedModel": tiny, "loadedModel": tiny],
-            shouldRestoreLoadedModelsPassively: false
-        )
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-        plugin.beginTransientModelSelection(turbo)
-        plugin.setModelStateForTesting(.ready(turbo), loadedModelId: turbo)
-
-        plugin.unloadModel(clearPersistence: true)
-
-        XCTAssertEqual(savedState(host), [tiny, tiny])
-    }
-
-    func testDeactivationDropsTheTransientSelection() throws {
-        let host = try makeHost(defaults: ["selectedModel": tiny], shouldRestoreLoadedModelsPassively: false)
-        defer { TestSupport.remove(host.pluginDataDirectory) }
-        let plugin = WhisperKitPlugin()
-        plugin.activate(host: host)
-        plugin.beginTransientModelSelection(turbo)
-
-        plugin.deactivate()
-        plugin.activate(host: host)
-        defer { plugin.deactivate() }
-
-        XCTAssertNil(plugin.transientModelId)
-        XCTAssertEqual(plugin.selectedModelId, tiny)
     }
 }

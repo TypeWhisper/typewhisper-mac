@@ -49,7 +49,7 @@ xcodebuild test -project TypeWhisper.xcodeproj -scheme TypeWhisper \
   -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO
 ```
 
-Build and launch Direct with the private `build-typewhisper-mac-dev.sh --run <checkout>` helper; build and launch the sandboxed edition with `scripts/appstore/build-dev.sh --run`.
+Build and launch with `scripts/dictum-verify.sh run`. Stop with `scripts/dictum-verify.sh stop`.
 
 The debug screenshot states `history-comparison-before`, `history-comparison-first`, `history-comparison`, and `history-comparison-after` use isolated fixture data to show the same entry before promotion, in the dialog before any run, in the comparison dialog with a result, and after promotion. The after fixture calls the production promotion method. These states check English/German layout; they do not demonstrate a real provider run or a UI-click test. Launch the built app with `--store-screenshots --screenshot-state <state> -AppleLanguages '(de)' -preferredAppLanguage de` (or `en`). For a provider smoke test, use known speech with a locally installed model, compare the results, promote and revert a version, and verify the default engine/model afterward. Cloud and synchronized-audio runs require explicit consent in the dialog.
 

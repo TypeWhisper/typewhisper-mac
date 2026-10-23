@@ -5,7 +5,6 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case correctionLearning
     case cloudSync
     case speakerWorkspace
-    case pairedDevices
 
     var id: String { rawValue }
 
@@ -15,7 +14,6 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
         case .correctionLearning: String(localized: "premium.hub.learning.title")
         case .cloudSync: String(localized: "premium.hub.sync.title")
         case .speakerWorkspace: String(localized: "speakers.page.title")
-        case .pairedDevices: PairedDevicesPremiumCopy.title
         }
     }
 
@@ -25,7 +23,6 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
         case .correctionLearning: "wand.and.sparkles"
         case .cloudSync: "cloud"
         case .speakerWorkspace: "person.wave.2"
-        case .pairedDevices: "iphone.and.ipad"
         }
     }
 }
@@ -90,28 +87,6 @@ enum PremiumCorrectionExamples {
             return [("因该", "应该"), ("在次", "再次")]
         }
         return [("teh", "the"), ("recieve", "receive")]
-    }
-}
-
-enum PairedDevicesPremiumCopy {
-    static var title: String {
-        localizedAppText("iPhone and iPad", de: "iPhone und iPad", ja: "iPhone と iPad", zh: "iPhone 和 iPad")
-    }
-
-    static var description: String {
-        localizedAppText(
-            "Transcribe and write on your iPhone or iPad with this Mac's models and workflows.",
-            de: "Transkribiere und schreibe auf deinem iPhone oder iPad mit den Modellen und Workflows dieses Macs.",
-            ja: "この Mac のモデルとワークフローを使って、iPhone や iPad で文字起こしや文章作成ができます。",
-            zh: "在 iPhone 或 iPad 上使用这台 Mac 的模型和工作流进行转写和写作。"
-        )
-    }
-
-    static func pairedCount(_ count: Int) -> String {
-        localizedAppText(
-            "\(count) paired", de: "\(count) gekoppelt",
-            ja: "\(count) 台ペアリング済み", zh: "已配对 \(count) 台"
-        )
     }
 }
 

@@ -415,7 +415,6 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     var effectiveProviderId: String? {
-        // An enforced pair replaces the chosen engine, as it does when the recording is transcribed.
         modelManager.effectiveEngineId(availableSelectedEngine)
     }
     var effectiveModelId: String? {

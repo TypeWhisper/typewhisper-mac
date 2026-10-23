@@ -499,14 +499,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         /// case the watchdog re-enables it once the backoff ends.
         func reenableAfterSystemDisable(byTimeout: Bool) -> EventTapReenableBackoff.Outcome {
             lock.withLock {
-#if APPSTORE
-                // A listen-only tap never holds input back, so re-arming it is always safe.
-                let outcome = EventTapReenableBackoff.Outcome.reenable
-#else
                 let outcome = byTimeout
                     ? reenableBackoff.recordTimeout(at: DispatchTime.now().uptimeNanoseconds)
                     : .reenable
-#endif
                 if let tap = port {
                     // Also switch the tap off when backing off: a watchdog tick may already have
                     // re-enabled it after this disable.
@@ -784,43 +779,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var recentEventTapDispatches: [HotkeyDispatchKey: Date] = [:]
     private var capsLockOriginSuppressionUntil: Date?
 
-#if APPSTORE
-    /// The App Store edition observes keys through a listen-only tap, which needs Input
-    /// Monitoring instead of Accessibility.
-    var accessibilityTrustedProvider: () -> Bool = { CGPreflightListenEventAccess() }
-#else
     var accessibilityTrustedProvider: () -> Bool = { AXIsProcessTrusted() }
-#endif
     var secureInputEnabledProvider: () -> Bool = { IsSecureEventInputEnabled() }
 
     var canSuppressExternalKeyEvents: Bool {
-#if APPSTORE
-        // A listen-only tap cannot hold back events from other apps.
-        return false
-#else
         guard !secureInputEnabledProvider() else { return false }
 #if DEBUG
         if let externalKeySuppressionAvailableOverride { return externalKeySuppressionAvailableOverride }
 #endif
         return eventTapHandle.isEnabled
-#endif
     }
 
 #if DEBUG
     var externalKeySuppressionAvailableOverride: Bool?
-#endif
-
-#if APPSTORE
-    /// Whether a configured hotkey needs the listen-only event tap because Carbon cannot
-    /// register it (modifier-only, Fn, double-tap and mouse-button hotkeys, or a shortcut
-    /// that another app already registered).
-    var requiresEventObservation: Bool {
-        if !failedCarbonHotkeyIDs.isEmpty { return true }
-        let hotkeys = slots.values.flatMap { $0.compactMap(\.hotkey) }
-            + profileSlots.values.map(\.hotkey)
-            + workflowSlots.values.flatMap { $0.map(\.hotkey) }
-        return hotkeys.contains { !Self.supportsCarbonHotkey($0) }
-    }
 #endif
 
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
@@ -1130,9 +1101,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 #endif
         tearDownMonitor()
         let includeMouse = needsMouseEventMonitoring
-#if !APPSTORE
         let suppressingMouse = needsSuppressingMouseEventTap
-#endif
         let accessibilityTrusted = accessibilityTrustedProvider()
         installCarbonHotkeys()
 
@@ -1146,17 +1115,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return
         }
 
-#if APPSTORE
-        // Global NSEvent key monitors need Accessibility, which the sandbox cannot get. The
-        // listen-only tap observes other apps; the local monitor covers TypeWhisper's windows.
-        if setupEventTap(includeMouse: includeMouse) {
-            logger.info("Using listen-only CGEventTap for hotkey monitoring")
-        } else {
-            logger.info("CGEventTap unavailable, installing local hotkey monitor only")
-        }
-        installLocalEventMonitor(includeMouse: includeMouse)
-        startEventTapWatchdog()
-#else
         // Try CGEventTap first - it can suppress hotkey events from reaching other apps
         if setupEventTap(includeMouse: suppressingMouse) {
             logger.info("Using head-inserted CGEventTap for hotkey monitoring with NSEvent compatibility fallback")
@@ -1170,7 +1128,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         logger.info("CGEventTap unavailable, falling back to NSEvent monitors (hotkey events will pass through)")
         installEventMonitors(includeMouse: includeMouse)
         startEventTapWatchdog()
-#endif
     }
 
     private var needsMouseEventMonitoring: Bool {
@@ -1640,13 +1597,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return shouldSuppress ? nil : Unmanaged.passUnretained(event)
         }
 
-#if APPSTORE
-        // Active taps are not available in the App Sandbox. A listen-only tap ignores the
-        // callback's result, so matched hotkeys, Escape and Return also reach the target app.
-        let tapOptions: CGEventTapOptions = .listenOnly
-#else
         let tapOptions: CGEventTapOptions = .defaultTap
-#endif
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: Self.hotkeyEventTapPlacement,
@@ -1703,14 +1654,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 // Preserve Carbon registrations, local monitoring, pending holds,
                 // deduplication, and press latches even during a permission upgrade.
                 self.tearDownEventTap()
-#if APPSTORE
-                _ = self.setupEventTap(includeMouse: self.needsMouseEventMonitoring)
-#else
                 _ = self.setupEventTap(includeMouse: self.needsSuppressingMouseEventTap)
                 if !self.hasEventMonitorFallback {
                     self.installGlobalEventMonitor(includeMouse: self.needsMouseEventMonitoring)
                 }
-#endif
                 self.resyncHotkeyStateAfterEventTapRecovery()
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             }
@@ -1872,16 +1819,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// main thread does not pick it up within `eventTapDecisionTimeout`.
     private nonisolated func decideEventTapEvent(_ event: CGEvent) -> Bool {
         nonisolated(unsafe) let event = event
-#if APPSTORE
-        // A listen-only tap ignores the result, so it never has to wait for the main thread.
-        let generation = eventTapHandle.generation
-        DispatchQueue.main.async { [self] in
-            // Monitoring may have been suspended, e.g. for the shortcut recorder, since this was queued.
-            guard eventTapHandle.generation == generation else { return }
-            _ = handleEventTapCallback(event)
-        }
-        return false
-#else
         guard let decision = eventTapMainThreadGate.makeDecision() else { return false }
         let requestedAt = DispatchTime.now().uptimeNanoseconds
         DispatchQueue.main.async { [self] in
@@ -1911,7 +1848,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
             return false
         }
-#endif
     }
 
     private func finishEventTapMainThreadStall(_ stall: EventTapMainThreadGate.Stall) {
@@ -1925,12 +1861,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// Processes event for CGEventTap: matches hotkeys synchronously, dispatches handling asynchronously.
     /// Returns true if the event should be suppressed (consumed by TypeWhisper).
     private func handleEventTapEvent(_ event: NSEvent) -> Bool {
-#if APPSTORE
-        // The listen-only tap cannot consume Return, so it must not act as a submit key.
-        handleEvent(event, source: .eventTap, canSuppressSubmit: false)
-#else
         handleEvent(event, source: .eventTap)
-#endif
     }
 
     // MARK: - NSEvent Fallback
@@ -2550,12 +2481,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private nonisolated static func supportsCarbonHotkey(_ hotkey: UnifiedHotkey) -> Bool {
-#if APPSTORE
-        // Carbon consumes the key, which a listen-only tap cannot, and needs no permission.
-        if hotkey.kind == .bareKey, !hotkey.isDoubleTap, hotkey.mouseButton == nil {
-            return true
-        }
-#endif
         return hotkey.kind == .keyWithModifiers
             && !hotkey.isDoubleTap
             && hotkey.mouseButton == nil

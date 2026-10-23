@@ -1159,7 +1159,6 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         let service = PromptProcessingService(userDefaults: defaults)
 
         // A workflow override decides.
-        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: PromptProcessingService.appleIntelligenceId))
         XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: " Local Gemma "))
         XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: "Cloud Groq"))
         XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: "Uninstalled Provider"))
@@ -1435,7 +1434,7 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         let changedModel = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
         XCTAssertNotEqual(changedModel, armed)
         resolution = WorkflowLLMProviderResolution(
-            attempts: [.init(providerId: PromptProcessingService.appleIntelligenceId, modelId: nil, effortId: nil)],
+            attempts: [.init(providerId: "Local Gemma", modelId: nil, effortId: nil)],
             isLocal: true
         )
         let changedLocality = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))

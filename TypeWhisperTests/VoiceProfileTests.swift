@@ -631,9 +631,6 @@ final class SpeakerProfileAPITests: XCTestCase {
         for action in ["name", "enroll", "confirm"] {
             assertStatus(try await call(action, record, token: nil), 401)
             assertStatus(try await call(action, record, token: "wrong"), 401)
-            let trusted = await router.routeTrusted(try request(action, record))
-            assertStatus(trusted, 403)
-            XCTAssertFalse(RemoteLinkServer.allowedRoutes.contains("\(action == "name" ? "PUT" : "POST") /v1/history/speakers/\(action)"))
         }
         router.register("GET", "/v1/history") { _ in .json(["ok": true]) }
         let legacy = await router.route(HTTPRequest(method: "GET", path: "/v1/history", queryParams: [:], headers: [:], body: Data()))

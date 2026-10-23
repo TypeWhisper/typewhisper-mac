@@ -41,12 +41,6 @@
 	<string>public.app-category.productivity</string>
 	<key>NSAccentColorName</key>
 	<string>AccentColor</string>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_typewhisper._tcp</string>
-	</array>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>dictum lets your paired iPhone and iPad use this Mac for transcription over the local network.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>dictum needs microphone access for speech-to-text transcription.</string>
 	<key>NSServices</key>

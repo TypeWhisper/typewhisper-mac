@@ -11,11 +11,7 @@ protocol PremiumICloudBridging: Sendable {
 
 enum PremiumICloudBridgeFactory {
     static func makeDefault() -> any PremiumICloudBridging {
-        #if APPSTORE
-        AppStoreICloudMirror()
-        #else
         PremiumICloudBridgeClient()
-        #endif
     }
 }
 

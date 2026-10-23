@@ -15,9 +15,7 @@ module DependencyCoverage
     TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
     TypeWhisperPluginSDK/Package.resolved
   ].freeze
-  # Last main commit without Gemfile.lock, so the dependency-graph compare lists every gem as added.
-  RUBY_GRAPH_BASE = "5701260345eee47d59508565a073e44911074e22"
-  MANIFESTS = (LOCKS + %w[Gemfile Gemfile.lock TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj .github/release-tools/requirements.txt]).freeze
+  MANIFESTS = (LOCKS + %w[TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj .github/release-tools/requirements.txt]).freeze
 
   def self.git(*args)
     output, status = Open3.capture2("git", "-C", ROOT, *args)
@@ -57,7 +55,7 @@ module DependencyCoverage
 
   def self.check
     tracked = git("ls-files", "-z").split("\0")
-    discovered = tracked.select { |p| %w[Package.swift Package.resolved Gemfile Gemfile.lock project.pbxproj requirements.txt].include?(File.basename(p)) }
+    discovered = tracked.select { |p| %w[Package.swift Package.resolved project.pbxproj requirements.txt].include?(File.basename(p)) }
     raise "Dependency inventory changed: #{(discovered.to_set ^ MANIFESTS.to_set).to_a.join(', ')}" unless discovered.to_set == MANIFESTS.to_set
     config = YAML.safe_load(read(".github/dependabot.yml"))
     raise "Expected Dependabot v2" unless config.fetch("version") == 2
@@ -65,7 +63,7 @@ module DependencyCoverage
     coverage = entries.flat_map do |entry|
       (entry["directories"] || [entry.fetch("directory")]).map { |dir| [entry.fetch("package-ecosystem"), dir] }
     end
-    expected = [["github-actions", "/"], ["swift", "/"], ["swift", "/TypeWhisperPluginSDK"], ["bundler", "/"], ["pip", "/.github/release-tools"]]
+    expected = [["github-actions", "/"], ["swift", "/"], ["swift", "/TypeWhisperPluginSDK"], ["pip", "/.github/release-tools"]]
     raise "Dependabot directory coverage changed: #{coverage.inspect}" unless coverage.sort == expected.sort
     entries.each do |entry|
       raise "Expected a limit of three open version-update PRs" unless entry["open-pull-requests-limit"] == 3
@@ -100,14 +98,6 @@ module DependencyCoverage
     purl.start_with?("pkg:swift/github.com/") ? purl.split("@", 2).then { |name, version| "#{name.downcase}@#{version}" } : purl
   end
 
-  # Bundler locks precompiled gems as "name (version-platform)" next to "name (version)".
-  # GitHub's dependency graph lists such a gem once, under its plain version.
-  def self.gems(sha)
-    gems = read("Gemfile.lock", sha).scan(/^    ([A-Za-z0-9_-]+) \(([^ )-]+)(?:-[^ )]+)?\)/).uniq
-    raise "No Ruby dependencies found" if gems.empty?
-    gems
-  end
-
   def self.check_sbom(sbom, sha)
     actual = sbom.fetch("sbom").fetch("packages").flat_map do |package|
       package.fetch("externalRefs", []).filter_map { |ref| normalize(ref.fetch("referenceLocator")) if ref["referenceType"] == "purl" }
@@ -118,17 +108,6 @@ module DependencyCoverage
     puts "GitHub SBOM covers all Swift pins from both locks at #{sha}."
   end
 
-  # The SBOM export can lag behind GitHub's Bundler parser, so Ruby coverage is
-  # read from the commit-specific dependency-graph compare against RUBY_GRAPH_BASE.
-  def self.check_ruby_graph(changes, sha)
-    actual = changes.filter_map do |change|
-      [change.fetch("name"), change.fetch("version")] if change["change_type"] == "added" && change["manifest"] == "Gemfile.lock"
-    end.to_set
-    expected = gems(sha)
-    missing = expected.to_set - actual
-    raise "Missing from GitHub dependency graph:\n#{missing.map { |name, version| "pkg:gem/#{name}@#{version}" }.sort.join("\n")}" unless missing.empty?
-    puts "GitHub dependency graph covers all #{expected.size} Ruby dependencies at #{sha}."
-  end
 end
 
 if $PROGRAM_NAME == __FILE__
@@ -137,10 +116,7 @@ if $PROGRAM_NAME == __FILE__
     when "check" then DependencyCoverage.check
     when "snapshot" then puts JSON.pretty_generate(DependencyCoverage.snapshot(ARGV.shift, ARGV.shift))
     when "sbom" then DependencyCoverage.check_sbom(JSON.parse(File.read(ARGV.fetch(0))), ARGV.fetch(1))
-    when "ruby-base" then puts DependencyCoverage::RUBY_GRAPH_BASE
-    # Accepts a single compare page or `gh api --paginate --slurp` output (an array of pages).
-    when "ruby-graph" then DependencyCoverage.check_ruby_graph(JSON.parse(File.read(ARGV.fetch(0))).flatten(1), ARGV.fetch(1))
-    else abort "Usage: ruby scripts/dependency_coverage.rb check | snapshot SHA refs/heads/BRANCH | sbom FILE SHA | ruby-base | ruby-graph FILE SHA"
+    else abort "Usage: ruby scripts/dependency_coverage.rb check | snapshot SHA refs/heads/BRANCH | sbom FILE SHA"
     end
   rescue StandardError => error
     abort error.message

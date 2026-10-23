@@ -62,40 +62,6 @@ public protocol HostModelAutoUnloadPolicyProviding: Sendable {
     var unloadsModelsImmediatelyAfterUse: Bool { get }
 }
 
-/// Hosts that apply an organization's managed settings report what a plugin may do on its own.
-public protocol HostManagedPolicyProviding: Sendable {
-    /// Why the organization does not allow this plugin to download models, runtimes or other assets
-    /// right now, localized for display; nil when downloads are allowed.
-    var modelDownloadRefusal: String? { get }
-}
-
-/// Thrown by `HostServices.requireModelDownloadAllowed()`; the description is the host's localized reason.
-public struct PluginModelDownloadRefusedError: LocalizedError, Equatable, Sendable {
-    public let reason: String
-
-    public init(reason: String) {
-        self.reason = reason
-    }
-
-    public var errorDescription: String? { reason }
-}
-
-public extension HostServices {
-    /// Why model downloads are refused, or nil when they are allowed. Hosts without managed settings
-    /// always allow them. Check it before every download the plugin starts itself, including assets
-    /// fetched while loading a model; the host checks the downloads it starts.
-    var modelDownloadRefusal: String? {
-        (self as? any HostManagedPolicyProviding)?.modelDownloadRefusal
-    }
-
-    /// Throws `PluginModelDownloadRefusedError` when the organization does not allow model downloads.
-    func requireModelDownloadAllowed() throws {
-        if let reason = modelDownloadRefusal {
-            throw PluginModelDownloadRefusedError(reason: reason)
-        }
-    }
-}
-
 public extension HostServices {
     var shouldRestoreLoadedModelsPassively: Bool {
         (self as? any HostModelLifecyclePolicyProviding)?.shouldRestoreLoadedModelsPassively ?? true
