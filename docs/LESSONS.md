@@ -7,10 +7,10 @@ Agents write, review, merge and release this project's code. Each time an agent 
   - Evidence:
   - Fix:
 
-- Pass value snapshots through polled SwiftUI builders (Seen x1: 2026-10-23)
-  - What went wrong: The Speech page polled a plugin reference inside nested view builders. The sidebar updated while the model row and precision picker retained old values.
-  - Evidence: During a real Qwen3 download, the sidebar showed 63% while the page still showed Download. A precision change updated the model size while the picker retained 6-bit.
-  - Fix: Read the activity and selected model into value snapshots in the timeline closure, pass them into row builders, and identify the precision picker by the selected model. Verify progress and selection changes in the running app.
+- 轮询的 SwiftUI 构建器读取值快照 (Seen x1: 2026-10-23)
+  - 问题：语音识别页面在嵌套视图构建器里轮询插件引用。侧栏已更新时，模型行和精度选择仍显示旧值。
+  - 证据：真实的 Qwen3 下载进行中，侧栏显示 63%，页面仍显示“下载”。修改精度后模型大小已更新，选择器仍显示 6-bit。
+  - 方法：在时间线闭包内把活动状态和所选模型读入值快照，再传给行构建器，并用所选模型标识精度选择器。在运行的应用里确认进度和选择的刷新。
 
 - 使用版本输出确认 Metal 组件已安装 (Seen x1: 2026-10-22)
   - 问题：系统可以在 Metal 组件安装完成前返回工具路径，提前运行的 SwiftPM 构建还会保留安装前的失败状态。
