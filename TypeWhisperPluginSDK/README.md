@@ -365,7 +365,7 @@ Plugins receive a `HostServices` instance on activation:
 func activate(host: HostServices) {
     self.host = host
 
-    // Secure storage (plugin-scoped keychain)
+    // Secure storage (plugin-scoped private file)
     try host.storeSecret(key: "apiKey", value: "sk-...")
     let key = host.loadSecret(key: "apiKey")
 
