@@ -172,6 +172,12 @@ final class TestHostDefaultsGuard: NSObject, XCTestObservation {
         }
     }
 
+    func testBundleWillStart(_ testBundle: Bundle) {
+        // ServiceContainer 首次创建时会替换 PluginManager.shared 和 EventBus.shared。
+        // 在任何测试之前创建，测试自己安装的实例才不会被中途替换。
+        MainActor.assumeIsolated { _ = ServiceContainer.shared }
+    }
+
     func testCaseDidFinish(_ testCase: XCTestCase) {
         restoreSavedValues()
     }
