@@ -17,6 +17,8 @@ struct DictumHistoryPage: View {
     @State private var deletionTask: Task<Void, Never>?
     @State private var player: AVAudioPlayer?
     @State private var message: String?
+    @State private var hovered: UUID?
+    @FocusState private var listFocused: Bool
 
     private var visible: [TranscriptionRecord] {
         records.filter { filter.includes($0) && $0.id != pendingDeletion?.id }
@@ -27,72 +29,49 @@ struct DictumHistoryPage: View {
     var body: some View {
         DictumPageFrame(page: .history) {
             if history.totalRecords > 0 {
-                Picker(selection: $filter) {
-                    Text("All", tableName: "DictumHistory").tag(HistoryRecordFilter.all)
-                    Text("Dictation", tableName: "DictumHistory").tag(HistoryRecordFilter.dictation)
-                    Text("Translation", tableName: "DictumHistory").tag(HistoryRecordFilter.translation)
-                } label: { Text("History", tableName: "DictumHistory") }
-                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(minWidth: 190)
-                NativeSearchField(text: $search, placeholder: String(localized: "Search", table: "DictumHistory")).frame(width: 200, height: 28)
+                DictumSegmentedControl(
+                    items: [
+                        .init(value: HistoryRecordFilter.all, title: "All"),
+                        .init(value: HistoryRecordFilter.dictation, title: "Dictation"),
+                        .init(value: HistoryRecordFilter.translation, title: "Translation")
+                    ],
+                    selection: $filter
+                )
+                NativeSearchField(text: $search, placeholder: String(localized: "Search", table: "DictumHistory"))
+                    .frame(width: 200, height: 28)
                 Menu {
                     Button { export() } label: { Text("Export as Markdown…", tableName: "DictumHistory") }
-                    Button { if let url = sync.selectedFolderURL { NSWorkspace.shared.open(url) } } label: { Text("Show Sync Folder in Finder", tableName: "DictumHistory") }
+                    Button { if let url = sync.selectedFolderURL { NSWorkspace.shared.open(url) } } label: {
+                        Text("Show Sync Folder in Finder", tableName: "DictumHistory")
+                    }
                     Divider()
                     Button(role: .destructive) { clearAll = true } label: { Text("Delete All History…", tableName: "DictumHistory") }
-                } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).frame(width: 28)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14))
+                        .foregroundStyle(DictumTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .accessibilityLabel(Text("More", tableName: "DictumHistory"))
             }
         } content: {
-            if history.totalRecords == 0 {
-                VStack(spacing: 12) {
-                    Image(systemName: "clock").font(.system(size: 36)).foregroundStyle(.secondary)
-                    Text("No dictations yet", tableName: "DictumHistory").font(.headline)
-                    Text("Press fn and start talking. Your dictations show up here.", tableName: "DictumHistory").foregroundStyle(.secondary)
-                }
-            } else {
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        List(selection: $selected) {
-                            ForEach(days, id: \.self) { day in
-                                Section(dayTitle(day)) {
-                                    ForEach(visible.filter { Calendar.current.isDate($0.timestamp, inSameDayAs: day) }) { record in
-                                        HStack(alignment: .top, spacing: 10) {
-                                            appIcon(record, size: 20)
-                                            VStack(alignment: .leading, spacing: 6) {
-                                                Text(record.finalText).lineLimit(2)
-                                                HStack {
-                                                    Text(record.timestamp, format: .dateTime.hour().minute()).font(.caption).foregroundStyle(.secondary)
-                                                    if record.processingFailureMessage != nil { Text("Not polished", tableName: "DictumHistory").font(.caption).foregroundStyle(.orange) }
-                                                }
-                                            }
-                                            }.padding(.vertical, 8).tag(record.id)
-                                            .listRowBackground(record.id == selected ? DictumTheme.accentSoft : Color.clear)
-                                            .listRowSeparator(.hidden)
-                                            .onAppear { if record.id == visible.last?.id && hasMore { loadMore() } }
-                                    }
-                                }
-                            }
-                        }.listStyle(.plain).scrollContentBackground(.hidden)
-                        if sync.mode != .off {
-                            Button { DictumNavigation.shared.open(.general) } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: sync.errorMessage == nil ? "icloud" : "exclamationmark.icloud")
-                                    Text(HistorySyncPresentation.status(sync))
-                                        .lineLimit(1).font(.caption)
-                                }.frame(maxWidth: .infinity).frame(height: 34)
-                            }.buttonStyle(.plain).foregroundStyle(sync.errorMessage == nil ? Color.secondary : Color.red)
-                        }
-                    }.frame(width: 316)
-                    Divider()
-                    if let record = current { detail(record) }
-                    else {
-                        VStack(spacing: 8) {
-                            if search.isEmpty { Text("No results", tableName: "DictumHistory") }
-                            else {
-                                Text(String(format: String(localized: "No results for “%@”", table: "DictumHistory"), search))
-                                Text("Try a different word.", tableName: "DictumHistory").foregroundStyle(.secondary)
-                            }
-                        }.frame(maxWidth: .infinity)
-                    }
+            VStack(spacing: 0) {
+                Rectangle().fill(DictumTheme.separator).frame(height: 0.5)
+                if history.totalRecords == 0 {
+                    EmptyState(
+                        title: "No dictations yet",
+                        message: "Press fn and start talking. Your dictations show up here.",
+                        symbol: "clock",
+                        tableName: "DictumHistory"
+                    ) {}
+                } else if visible.isEmpty {
+                    noResults
+                } else {
+                    split
                 }
             }
         }
@@ -104,9 +83,22 @@ struct DictumHistoryPage: View {
         .onCopyCommand { current.map { [NSItemProvider(object: (original ? $0.rawText : $0.finalText) as NSString)] } ?? [] }
         .overlay(alignment: .bottom) {
             if pendingDeletion != nil {
-                Button { undoDeletion() } label: { Text("Undo deletion", tableName: "DictumHistory") }
-                    .keyboardShortcut("z", modifiers: .command).padding(12).background(.regularMaterial, in: Capsule()).padding(20)
-            } else if let message = retry.message ?? message { Text(message).padding(12).background(.regularMaterial, in: Capsule()).padding(20) }
+                Button { undoDeletion() } label: {
+                    Text("Undo deletion", tableName: "DictumHistory").font(.system(size: 12.5))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DictumTheme.textPrimary)
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .background(DictumTheme.raised, in: Capsule())
+                .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+                .keyboardShortcut("z", modifiers: .command)
+                .padding(.bottom, 20)
+            } else if let message = retry.message ?? message {
+                Text(message).font(.system(size: 12.5)).foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                    .background(.black.opacity(0.92), in: Capsule())
+                    .padding(.bottom, 20)
+            }
         }
         .alert(String(localized: "Send this recording for reprocessing?", table: "DictumHistory"), isPresented: Binding(get: { retry.confirmation != nil }, set: { if !$0 { retry.cancelConfirmation() } })) {
             Button(role: .cancel) { retry.cancelConfirmation() } label: { Text("Cancel", tableName: "DictumHistory") }
@@ -115,7 +107,7 @@ struct DictumHistoryPage: View {
         .alert(String(localized: "Delete this record and its recording?", table: "DictumHistory"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { if let deleting { scheduleDeletion(deleting) }; deleting = nil } label: { Text("Delete", tableName: "DictumHistory") }
-        }
+        } message: { Text(deleting?.finalText ?? "") }
         .alert(String(localized: "Delete All History…", table: "DictumHistory"), isPresented: $clearAll) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { _ = history.clearAll(); reload() } label: { Text("Delete", tableName: "DictumHistory") }
@@ -123,53 +115,252 @@ struct DictumHistoryPage: View {
         .onDisappear { player?.stop(); commitDeletion() }
     }
 
-    private func detail(_ record: TranscriptionRecord) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                HStack {
-                    appIcon(record, size: 28)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(record.appName ?? "dictum").fontWeight(.semibold)
-                        Text(record.timestamp, format: .dateTime).font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Picker(selection: $original) {
-                        Text("Polished", tableName: "DictumHistory").tag(false)
-                        Text("Original", tableName: "DictumHistory").tag(true)
-                    } label: { Text("Text", tableName: "DictumHistory") }.pickerStyle(.segmented).labelsHidden().fixedSize().frame(minWidth: 145)
+    private var noResults: some View {
+        EmptyState(
+            title: search.isEmpty ? "No results" : LocalizedStringKey(String(format: String(localized: "No results for “%@”", table: "DictumHistory"), search)),
+            message: "Try a different word.",
+            symbol: "magnifyingglass",
+            tableName: "DictumHistory"
+        ) {}
+    }
+
+    private var split: some View {
+        HStack(spacing: 0) {
+            listPane.frame(width: 316)
+                .overlay(alignment: .trailing) {
+                    Rectangle().fill(DictumTheme.separator).frame(width: 0.5)
                 }
-                if let failure = record.processingFailureMessage { Text(failure).foregroundStyle(.orange) }
-                Text(highlight(original ? record.rawText : record.finalText))
-                    .font(.system(size: 15)).lineSpacing(10).textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(20)
-                    .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
-                HStack(spacing: 12) {
-                    Text(String(localized: "Duration", table: "DictumHistory") + " " + String(format: "%d:%02d", Int(record.durationSeconds) / 60, Int(record.durationSeconds) % 60))
-                    Text(String(localized: "Words", table: "DictumHistory") + " " + record.wordsCount.formatted())
-                    Text([record.engineUsed, record.modelUsed].compactMap { $0 }.joined(separator: " · "))
-                }.font(.caption).foregroundStyle(.secondary)
-                HStack {
-                    Button { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(original ? record.rawText : record.finalText, forType: .string) } label: { Text("Copy", tableName: "DictumHistory") }
-                    Button { retry.request(record) } label: { Text("Retry", tableName: "DictumHistory") }
-                        .disabled(history.audioFileURL(for: record) == nil || retry.isRunning)
-                    if let url = history.audioFileURL(for: record) {
-                        Button {
-                            do { player = try AVAudioPlayer(contentsOf: url); player?.play() }
-                            catch { message = error.localizedDescription }
-                        } label: { Text("Play Recording", tableName: "DictumHistory") }
-                    }
-                    Spacer()
-                    Button(role: .destructive) { requestDelete(record) } label: { Image(systemName: "trash") }
-                        .accessibilityLabel(Text("Delete", tableName: "DictumHistory"))
-                }.buttonStyle(DictumControlStyle(kind: .smallButton))
-            }.padding(.horizontal, 30).padding(.top, 22).padding(.bottom, 30)
+            detailPane
         }
     }
 
-    private func appIcon(_ record: TranscriptionRecord, size: CGFloat) -> some View {
-        let url = record.appBundleIdentifier.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
-        return Image(nsImage: url.map { NSWorkspace.shared.icon(forFile: $0.path) } ?? NSImage(systemSymbolName: "app", accessibilityDescription: nil)!)
-            .resizable().frame(width: size, height: size)
+    private var listPane: some View {
+        VStack(spacing: 0) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        ForEach(days, id: \.self) { day in
+                            Section {
+                                ForEach(visible.filter { Calendar.current.isDate($0.timestamp, inSameDayAs: day) }) { record in
+                                    row(record)
+                                        .id(record.id)
+                                        .onAppear { if record.id == visible.last?.id && hasMore { loadMore() } }
+                                }
+                            } header: {
+                                Text(dayTitle(day))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(DictumTheme.textTertiary)
+                                    .padding(.top, 12).padding(.bottom, 5).padding(.horizontal, 10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(DictumTheme.windowBackground)
+                            }
+                        }
+                    }
+                    .padding(.top, 4).padding(.horizontal, 8).padding(.bottom, 8)
+                }
+                .onChange(of: selected) { _, id in
+                    guard let id else { return }
+                    withAnimation(DictumTheme.Motion.base) { proxy.scrollTo(id) }
+                }
+            }
+            if sync.mode != .off { syncFooter }
+        }
+    }
+
+    private func row(_ record: TranscriptionRecord) -> some View {
+        let failed = record.processingFailureMessage != nil
+        return HStack(alignment: .top, spacing: 10) {
+            DictumAppIcon(bundleIdentifier: record.appBundleIdentifier, name: record.appName ?? "dictum", size: 20)
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(failed ? record.rawText : record.finalText)
+                    .font(.system(size: 13))
+                    .lineSpacing(3)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(DictumTheme.textPrimary)
+                HStack(spacing: 6) {
+                    Text(record.timestamp, format: .dateTime.hour().minute())
+                        .font(.system(size: 11)).monospacedDigit()
+                        .foregroundStyle(DictumTheme.textTertiary)
+                    if failed {
+                        Badge(text: "Not polished", tint: DictumTheme.warning, tableName: "DictumHistory")
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 9)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(record.id == selected ? DictumTheme.accentSoft : (record.id == hovered ? Color.primary.opacity(0.05) : Color.clear))
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 ? record.id : (hovered == record.id ? nil : hovered) }
+        .onTapGesture {
+            selected = record.id
+            original = false
+            listFocused = true
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(record.id == selected ? [.isButton, .isSelected] : .isButton)
+        .focusable()
+        .focusEffectDisabled()
+        .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
+        .onKeyPress(.downArrow) { moveSelection(1); return .handled }
+        .focused($listFocused)
+    }
+
+    private var syncFooter: some View {
+        Button { DictumNavigation.shared.open(.general) } label: {
+            HStack(spacing: 7) {
+                Image(systemName: sync.errorMessage == nil ? "icloud" : "exclamationmark.icloud")
+                    .font(.system(size: 14))
+                    .foregroundStyle(sync.errorMessage == nil ? DictumTheme.textTertiary : DictumTheme.danger)
+                Text(HistorySyncPresentation.status(sync))
+                    .font(.system(size: 11.5)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 34)
+            .frame(maxWidth: .infinity)
+            .overlay(alignment: .top) { Rectangle().fill(DictumTheme.separator).frame(height: 0.5) }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(sync.errorMessage == nil ? DictumTheme.textSecondary : DictumTheme.danger)
+    }
+
+    @ViewBuilder private var detailPane: some View {
+        if let record = current {
+            ScrollView {
+                detail(record)
+                    .padding(.top, 22).padding(.horizontal, 30).padding(.bottom, 30)
+            }
+        } else {
+            Color.clear
+        }
+    }
+
+    private func detail(_ record: TranscriptionRecord) -> some View {
+        let failed = record.processingFailureMessage != nil
+        let showsOriginalToggle = !failed && record.rawText != record.finalText
+        let shownText = original ? record.rawText : record.finalText
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                DictumAppIcon(bundleIdentifier: record.appBundleIdentifier, name: record.appName ?? "dictum", size: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(record.appName ?? "dictum").font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(DictumTheme.textPrimary)
+                    Text(detailDate(record)).font(.system(size: 12)).foregroundStyle(DictumTheme.textSecondary)
+                }
+                Spacer(minLength: 12)
+                if showsOriginalToggle {
+                    DictumSegmentedControl(
+                        items: [.init(value: false, title: "Polished"), .init(value: true, title: "Original")],
+                        selection: $original
+                    )
+                }
+            }
+            if let failure = record.processingFailureMessage {
+                failureBanner(failure)
+                    .padding(.top, 18)
+            }
+            Text(highlight(shownText))
+                .font(.system(size: 15))
+                .lineSpacing(DictumTheme.Typography.readingLineSpacing)
+                .foregroundStyle(failed || original ? DictumTheme.textSecondary : DictumTheme.textPrimary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 18).padding(.horizontal, 20)
+                .background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.top, 18)
+            HStack(spacing: 16) {
+                metaValue("Duration", "\(Int(record.durationSeconds) / 60):\(String(format: "%02d", Int(record.durationSeconds) % 60))")
+                metaValue("Words", record.wordsCount.formatted())
+                Text([record.engineUsed, record.modelUsed].compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(size: 12)).foregroundStyle(DictumTheme.textSecondary)
+            }
+            .padding(.top, 14)
+            HStack(spacing: 8) {
+                actionButton("Copy", symbol: "doc.on.doc") { copy(shownText) }
+                actionButton("Retry", symbol: "arrow.clockwise") { retry.request(record) }
+                    .disabled(history.audioFileURL(for: record) == nil || retry.isRunning)
+                if let url = history.audioFileURL(for: record) {
+                    actionButton("Play Recording", symbol: "play.fill") { play(url) }
+                }
+                Spacer(minLength: 0)
+                Button { requestDelete(record) } label: {
+                    Image(systemName: "trash").font(.system(size: 14))
+                        .foregroundStyle(DictumTheme.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Delete", tableName: "DictumHistory"))
+            }
+            .padding(.top, 16)
+        }
+    }
+
+    private func failureBanner(_ text: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 16))
+                .foregroundStyle(DictumTheme.warning)
+                .accessibilityHidden(true)
+            Text(text).font(.system(size: 12.5)).foregroundStyle(DictumTheme.textPrimary)
+            Spacer(minLength: 0)
+            if let record = current {
+                Button { retry.request(record) } label: { Text("Retry", tableName: "DictumHistory") }
+                    .buttonStyle(DictumActionButtonStyle())
+                    .controlSize(.small)
+            }
+        }
+        .padding(.vertical, 9).padding(.horizontal, 12)
+        .background(DictumTheme.warning.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func metaValue(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(String(localized: String.LocalizationValue(title), table: "DictumHistory"))
+                .foregroundStyle(DictumTheme.textSecondary)
+            Text(value).foregroundStyle(DictumTheme.textPrimary).monospacedDigit()
+        }
+        .font(.system(size: 12))
+    }
+
+    private func actionButton(_ title: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol).font(.system(size: 12))
+                Text(title, tableName: "DictumHistory")
+            }
+        }
+        .buttonStyle(DictumActionButtonStyle())
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        message = String(localized: "Copied", table: "DictumHistory")
+    }
+
+    private func play(_ url: URL) {
+        do { player = try AVAudioPlayer(contentsOf: url); player?.play() }
+        catch { message = error.localizedDescription }
+    }
+
+    private func moveSelection(_ delta: Int) {
+        guard !visible.isEmpty else { return }
+        let index = visible.firstIndex { $0.id == selected } ?? 0
+        let next = min(max(index + delta, 0), visible.count - 1)
+        selected = visible[next].id
+        original = false
+    }
+
+    private func detailDate(_ record: TranscriptionRecord) -> String {
+        let day = dayTitle(Calendar.current.startOfDay(for: record.timestamp))
+        return "\(day) \(record.timestamp.formatted(.dateTime.hour().minute()))"
     }
 
     private func dayTitle(_ day: Date) -> String {

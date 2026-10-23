@@ -222,7 +222,12 @@ private struct PendingCorrectionObservation: Codable, Equatable {
 
 @MainActor
 final class TargetAppCorrectionLearningService: ObservableObject {
-    private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
+    /// 用户经常先读完整段再改词，改完按 Return 时距插入已经过去半分钟以上；观察期过短会漏掉
+    /// 这类修正。前 20 秒每秒读一次输入框，之后逐渐放慢，两分钟内仍停留在同一输入框的修改
+    /// 都算同一次修正。插入后切换输入框或应用会立即结束观察，所以加长窗口不会学到别的插入。
+    private static let defaultPollSchedule: [Duration] =
+        (1...20).map { .seconds($0) }
+        + [30, 40, 50, 60, 75, 90, 105, 120].map { .seconds($0) }
     /// Choices offered for how often the same correction must be made before it is learned.
     static let requiredObservationChoices = [1, 2, 3, 5]
     private static let pendingObservationLifetime: TimeInterval = 30 * 24 * 60 * 60
