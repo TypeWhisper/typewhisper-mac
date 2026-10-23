@@ -1,10 +1,11 @@
 # Confucius4-R2T2 Plugin
 
-Transcription engine plugin that streams microphone audio to a local
+Transcription engine plugin that streams microphone audio to an
 [audio.cpp](https://github.com/0xShug0/audio.cpp) `audiocpp_server` running the
-[Confucius4-R2T2](https://github.com/netease-youdao/Confucius4-R2T2) GGUF on Metal, and returns
-its append-only transcript. Supports batch transcription, progress streaming, and TypeWhisper
-live sessions. Runs fully on-device; no GPU server needed.
+[Confucius4-R2T2](https://github.com/netease-youdao/Confucius4-R2T2) GGUF, and returns its
+append-only transcript. Supports batch transcription, progress streaming, and TypeWhisper live
+sessions. On Apple silicon the built-in server runs fully on-device on Metal; no GPU server needed.
+With an own server, audio goes to the host you configure, which may be another machine.
 
 ## Built-in server (default)
 
