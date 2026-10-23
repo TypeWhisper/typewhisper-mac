@@ -39,7 +39,8 @@ struct StylePage: View {
                                     }
                                 } header: { Text("Running", tableName: "DictumStyle") }
                                 Button { chooseApp() } label: { Text("Choose from Applications…", tableName: "DictumStyle") }
-                            } label: { Text("Add App", tableName: "DictumStyle") }.fixedSize()
+                            } label: { Label { Text("Add App", tableName: "DictumStyle") } icon: { Image(systemName: "plus") } }
+                                .menuIndicator(.hidden).buttonStyle(DictumControlStyle(kind: .smallButton)).fixedSize()
                         }
                         VStack(spacing: 1) {
                             ForEach($store.apps) { $app in
@@ -103,8 +104,8 @@ struct StylePage: View {
                         }.padding(4).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }.frame(maxWidth: 760).padding(.horizontal, 28).padding(.top, 4).padding(.bottom, 28).frame(maxWidth: .infinity)
-            }
-        }
+            }.scrollIndicators(.hidden)
+        }.font(DictumTheme.Typography.body)
     }
 
     private func controls(formality: Binding<StyleFormality>, tone: Binding<StyleTone>, emoji: Binding<StyleEmoji>, rowHeight: CGFloat = 46) -> some View {
@@ -121,10 +122,20 @@ struct StylePage: View {
         HStack(spacing: 12) {
             Text(title, tableName: "DictumStyle")
             Spacer(minLength: 8)
-            Picker(selection: selection) {
-                ForEach(values, id: \.self) { value in Text(LocalizedStringKey(value.rawValue), tableName: "DictumStyle").tag(value) }
-            } label: { Text(title, tableName: "DictumStyle") }
-                .labelsHidden().pickerStyle(.segmented).frame(width: 144)
+            HStack(spacing: 0) {
+                ForEach(values, id: \.self) { value in
+                    Button { selection.wrappedValue = value } label: {
+                        Text(LocalizedStringKey(value.rawValue), tableName: "DictumStyle")
+                            .font(.system(size: 11)).fixedSize().padding(.horizontal, 10)
+                            .frame(minWidth: 48, minHeight: 24)
+                            .foregroundStyle(selection.wrappedValue == value ? DictumTheme.textPrimary : DictumTheme.textSecondary)
+                            .background(selection.wrappedValue == value ? DictumTheme.control : .clear, in: RoundedRectangle(cornerRadius: 5))
+                    }.buttonStyle(.plain)
+                        .accessibilityAddTraits(selection.wrappedValue == value ? .isSelected : [])
+                }
+            }.background(DictumTheme.inset, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DictumTheme.controlBorder, lineWidth: 0.5))
+                .accessibilityElement(children: .contain).accessibilityLabel(Text(title, tableName: "DictumStyle"))
         }
     }
 
