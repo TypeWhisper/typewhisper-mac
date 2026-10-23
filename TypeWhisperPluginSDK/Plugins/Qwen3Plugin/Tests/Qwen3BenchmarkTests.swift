@@ -30,7 +30,7 @@ final class Qwen3BenchmarkTests: XCTestCase {
                 let loadSeconds = Date().timeIntervalSince(start)
                 XCTAssertTrue(plugin.isConfigured, plugin.currentSettingsActivity?.message ?? "Model unavailable")
                 guard plugin.isConfigured else { return }
-                for name in ["zh", "en", "mixed", "zh30"] {
+                for name in ["zh", "en", "mixed", "zh30", "regression"] {
                     let file = try AVAudioFile(forReading: root.appendingPathComponent("\(name).wav"))
                     XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
                     XCTAssertEqual(file.processingFormat.channelCount, 1)
