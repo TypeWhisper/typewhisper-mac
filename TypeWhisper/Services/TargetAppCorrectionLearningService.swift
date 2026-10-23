@@ -147,7 +147,7 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
     private var sleepTask: Task<Void, Never>?
     private var generation = 0
 
-    func wait(for duration: Duration) async {
+    func wait(for duration: Duration, sleep: @escaping @MainActor (Duration) async -> Void) async {
         guard duration > .seconds(0), !Task.isCancelled else { return }
 
         await withTaskCancellationHandler(operation: {
@@ -158,7 +158,7 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
                 }
                 let waitID = self.startWait(continuation)
                 let task = Task { [weak self] in
-                    try? await Task.sleep(for: duration)
+                    await sleep(duration)
                     self?.resume(waitID: waitID)
                 }
                 self.storeSleepTask(task, waitID: waitID)
@@ -340,6 +340,27 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         var latestNonConfidentOutcome: TargetAppCorrectionLearningOutcome = .unsupportedTextObservation
         var latestObservation: TargetAppCorrectionObservation?
         var elapsed: Duration = .seconds(0)
+
+        func record(editedText: String) {
+            latestObservation = correctionObservation(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: editedText,
+                commitSignal: commitSignal
+            )
+            let suggestions = highConfidenceCorrectionSuggestions(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: editedText
+            )
+            if !suggestions.isEmpty {
+                latestSuggestions = suggestions
+            } else {
+                latestSuggestions = []
+                latestNonConfidentOutcome = editedText == baseline.value ? .noEdit : .ambiguousEdit
+            }
+        }
+
         for pollOffset in pollSchedule {
             let waitDuration: Duration
             if pollOffset > elapsed {
@@ -350,7 +371,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             }
             if commitSignal == nil {
                 if waitDuration > .seconds(0) {
-                    await wakeCoordinator.wait(for: waitDuration)
+                    await wakeCoordinator.wait(for: waitDuration, sleep: sleep)
                 } else {
                     await sleep(.seconds(0))
                 }
@@ -364,6 +385,9 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             }
 
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
+                if let finalObservation = textInsertionService.observation(of: baseline.element, matching: baseline) {
+                    record(editedText: finalObservation.value)
+                }
                 switch textInsertionService.focusedTextElementMatch(baseline) {
                 case .same, .unavailable:
                     if let commitSignal {
@@ -394,24 +418,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
                 }
             }
 
-            latestObservation = correctionObservation(
-                insertedText: insertedText,
-                baselineText: baseline.value,
-                editedText: observation.value,
-                commitSignal: commitSignal
-            )
-
-            let suggestions = highConfidenceCorrectionSuggestions(
-                insertedText: insertedText,
-                baselineText: baseline.value,
-                editedText: observation.value
-            )
-            if !suggestions.isEmpty {
-                latestSuggestions = suggestions
-            } else {
-                latestSuggestions = []
-                latestNonConfidentOutcome = observation.value == baseline.value ? .noEdit : .ambiguousEdit
-            }
+            record(editedText: observation.value)
 
             if let commitSignal {
                 return completeCommittedAttempt(

@@ -676,8 +676,9 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
 
         let changedFocusInsertionService = TextInsertionService()
         changedFocusInsertionService.focusedTextElementOverride = { otherElement }
-        changedFocusInsertionService.focusedTextStateOverride = { _ in
-            (value: "the", selectedText: nil, selectedRange: NSRange(location: 3, length: 0))
+        changedFocusInsertionService.focusedTextStateOverride = { element in
+            guard element == otherElement else { return nil }
+            return (value: "the", selectedText: nil, selectedRange: NSRange(location: 3, length: 0))
         }
         let changedFocusDictionary = DictionaryService(appSupportDirectory: appSupportDirectory.appendingPathComponent("changed-focus"))
         let changedFocusService = TargetAppCorrectionLearningService(
