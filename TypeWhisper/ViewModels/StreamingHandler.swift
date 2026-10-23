@@ -5,6 +5,16 @@ import TypeWhisperPluginSDK
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "StreamingHandler")
 
 final class StreamingHandler: @unchecked Sendable {
+    struct Preview: Equatable, Sendable {
+        let confirmedPrefix: String
+        let tentativeTail: String
+
+        static func comparing(previous: String, current: String) -> Self {
+            let prefix = String(zip(previous, current).prefix { $0 == $1 }.map { $0.0 })
+            return Self(confirmedPrefix: prefix, tentativeTail: String(current.dropFirst(prefix.count)))
+        }
+    }
+
     enum FinishOutcome {
         /// No live session ran.
         case noLiveSession
@@ -40,8 +50,20 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
-    private static let fallbackPollInterval: Duration = .seconds(3)
-    private static let fallbackPreviewWindowDuration: TimeInterval = 10
+    private static var fallbackPollInterval: Duration {
+        .seconds(previewParameter("--speech-preview-interval", default: 3, range: 0.5...10))
+    }
+    private static var fallbackPreviewWindowDuration: TimeInterval {
+        previewParameter("--speech-preview-window", default: 10, range: 2...30)
+    }
+    private static func previewParameter(_ name: String, default value: Double, range: ClosedRange<Double>) -> Double {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1),
+           let number = Double(arguments[index + 1]), number.isFinite, range.contains(number) { return number }
+        #endif
+        return value
+    }
     private static let livePreviewSampleRate: Double = 16_000
     private static let livePreviewAnalysisFrameDuration: TimeInterval = 0.1
     private static let livePreviewSpeechRMSFloor: Float = 0.004
@@ -94,6 +116,8 @@ final class StreamingHandler: @unchecked Sendable {
     @MainActor private var pendingStreamingStopTask: Task<Void, Never>?
     @MainActor private var streamingStopGeneration: UInt64 = 0
     private let progressText = OSAllocatedUnfairLock(initialState: "")
+    private let previewState = OSAllocatedUnfairLock(initialState: Preview(confirmedPrefix: "", tentativeTail: ""))
+    var preview: Preview { previewState.withLock { $0 } }
     private let sharedState = OSAllocatedUnfairLock(initialState: SharedState())
 
     private let modelManager: ModelManagerService
@@ -103,6 +127,7 @@ final class StreamingHandler: @unchecked Sendable {
     private let bufferedDurationProvider: () -> Double
 
     var onPartialTextUpdate: ((String) -> Void)?
+    var onPreviewUpdate: ((Preview) -> Void)?
     var onStreamingStateChange: ((Bool) -> Void)?
 
     init(
@@ -477,6 +502,7 @@ final class StreamingHandler: @unchecked Sendable {
 
             if bufferDuration > 0.5, Self.shouldRunFallbackPreview(for: audioActivity) {
                 do {
+                    let previewStart = ContinuousClock.now
                     let result = try await modelManager.transcribe(
                         audioSamples: buffer,
                         languageSelection: languageSelection,
@@ -494,6 +520,7 @@ final class StreamingHandler: @unchecked Sendable {
                     )
                     guard !Task.isCancelled else { return }
                     _ = processPreviewUpdate(result.text, audioGate: nil, persist: true)
+                    logger.info("Preview completed windowSeconds=\(bufferDuration, privacy: .public) inferenceDuration=\(String(describing: previewStart.duration(to: .now)), privacy: .public) textLength=\(result.text.count, privacy: .public)")
                 } catch {
                     guard !Task.isCancelled else { return }
                     logger.warning("Streaming preview error: \(error.localizedDescription)")
@@ -519,6 +546,7 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     private func resetStreamingState() {
+        previewState.withLock { $0 = Preview(confirmedPrefix: "", tentativeTail: "") }
         sharedState.withLock { state in
             state.confirmedStreamingText = ""
             state.liveSessionHandle = nil
@@ -618,7 +646,10 @@ final class StreamingHandler: @unchecked Sendable {
             sharedState.withLock { $0.confirmedStreamingText = stable }
         }
 
+        let split = Preview.comparing(previous: confirmed, current: stable)
+        previewState.withLock { $0 = split }
         Task { @MainActor [weak self] in
+            self?.onPreviewUpdate?(split)
             self?.onPartialTextUpdate?(stable)
         }
         return stable

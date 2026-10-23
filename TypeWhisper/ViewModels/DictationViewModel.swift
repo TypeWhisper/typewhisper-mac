@@ -300,6 +300,7 @@ final class DictationViewModel: ObservableObject {
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
+    @Published private(set) var modelNotice: DictationModelNotice?
     @Published var isStreaming: Bool = false
     @Published private(set) var externalStreamingDisplayCount: Int = 0
     @Published var audioDuckingEnabled: Bool {
@@ -1943,6 +1944,30 @@ final class DictationViewModel: ObservableObject {
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
         guard canDictate else {
+            if let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId) {
+                modelNotice = notice
+                storeDictationSession(DictationSessionSnapshot(id: sessionID, status: .failed, transcription: nil, error: nil))
+                updateLatencyTrace(sessionID: sessionID) { $0.failed = true }
+                finishLatencyTrace(sessionID: sessionID)
+                hotkeyService.cancelDictation()
+                Task { @MainActor [weak self] in
+                    let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+                    while let self {
+                        let current = DictationModelNotice.current(providerId: self.modelManager.selectedProviderId)
+                        if current == nil { self.modelNotice = nil }
+                        guard self.activeDictationSessionID == sessionID else { return }
+                        guard ContinuousClock.now < deadline, let current else {
+                            self.modelNotice = nil
+                            self.activeDictationSessionID = nil
+                            return
+                        }
+                        self.modelNotice = current
+                        try? await Task.sleep(for: .milliseconds(100))
+                    }
+                }
+                return
+            }
+            modelNotice = nil
             let readinessError = modelManager.transcriptionReadinessError(providerId: modelManager.selectedProviderId)
                 ?? .noEngineSelected
             let errorMessage = readinessError.localizedDescription

@@ -672,6 +672,27 @@ final class ModelManagerService: ObservableObject {
         defer { reconcilePassiveModelRestore() }
         let savedProviderId = UserDefaults.standard.string(forKey: providerKey)
 
+        if savedProviderId == nil,
+           let engine = PluginManager.shared.transcriptionEngine(for: SetupWizardQwen3Recommendation.providerId) {
+            selectProvider(engine.providerId)
+            if let modelId = engine.selectedModelId ?? SetupWizardQwen3Recommendation.preferredModelId(from: engine.modelCatalog) {
+                engine.selectModel(modelId)
+                let selector = NSSelectorFromString("triggerRestoreModelForModel:")
+                if !engine.isConfigured, let object = engine as? NSObject, object.responds(to: selector) {
+                    object.perform(selector, with: modelId as NSString)
+                }
+            }
+            return
+        }
+
+        if let savedProviderId,
+           savedProviderId == SetupWizardQwen3Recommendation.providerId,
+           PluginManager.shared.transcriptionEngine(for: savedProviderId) != nil {
+            PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
+            if selectedProviderId != savedProviderId { selectedProviderId = savedProviderId }
+            return
+        }
+
         if let savedProviderId, isUsableForTranscription(savedProviderId) {
             PluginManager.temporaryFallbackEngine.withLock { $0 = nil }
             if selectedProviderId != savedProviderId {
