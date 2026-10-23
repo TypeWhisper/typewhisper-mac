@@ -2299,7 +2299,7 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
-    func testControllerAutomaticallyInstallsVerifiedSynchronizedAudio() async throws {
+    func testControllerKeepsSynchronizedAudioRemote() async throws {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncAutomaticAudio")
         defer { TestSupport.remove(folder) }
         let historyDirectory = folder.appendingPathComponent("history", isDirectory: true)
@@ -2354,8 +2354,8 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertTrue(diagnostics.isEmpty)
         let record = try XCTUnwrap(historyService.recentRecords.first { $0.id == recordID })
-        let installedURL = try XCTUnwrap(historyService.audioFileURL(for: record))
-        XCTAssertEqual(try Data(contentsOf: installedURL), try Data(contentsOf: sourceURL))
+        XCTAssertNil(historyService.audioFileURL(for: record))
+        XCTAssertFalse(preferences.isAudioEnabled)
     }
 
     @MainActor

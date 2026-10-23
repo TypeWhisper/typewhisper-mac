@@ -267,6 +267,12 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         self.sleep = sleep
         self.makeCommitObserver = makeCommitObserver
         self.defaults = defaults
+        let persistedPreference = Bundle.main.bundleIdentifier.flatMap {
+            defaults.persistentDomain(forName: $0)?[UserDefaultsKeys.targetAppCorrectionLearningEnabled]
+        }
+        if defaults === UserDefaults.standard && persistedPreference == nil {
+            defaults.set(true, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
+        }
         self.shouldPersistLatestAttempt = persistLatestAttempt
         self.now = now
         self.pendingObservations = Self.loadPendingObservations(from: defaults)

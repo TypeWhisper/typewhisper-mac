@@ -1200,8 +1200,26 @@ final class HistoryService: ObservableObject {
         return counts.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
     }
 
-    func purgeOldRecords(retentionDays: Int = 90) {
-        let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
+    func retentionDeletionCount(_ retention: HistoryRetention, now: Date = Date()) -> Int {
+        if retention == .never { return recordCount() }
+        guard let cutoff = retention.cutoff(now: now) else { return 0 }
+        return allRecords().filter { $0.timestamp < cutoff }.count
+    }
+
+    func applyRetention(_ retention: HistoryRetention, now: Date = Date()) {
+        if retention == .never { purgeRecords(before: .distantFuture); return }
+        guard let cutoff = retention.cutoff(now: now) else { return }
+        purgeRecords(before: cutoff)
+    }
+
+    func purgeOldRecords(retentionDays: Int = 365) {
+        guard retentionDays > 0 else { return }
+        let cutoff = HistoryRetention(rawValue: retentionDays)?.cutoff()
+            ?? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
+        purgeRecords(before: cutoff)
+    }
+
+    private func purgeRecords(before cutoff: Date) {
         let descriptor = FetchDescriptor<TranscriptionRecord>(
             predicate: #Predicate { $0.timestamp < cutoff }
         )
