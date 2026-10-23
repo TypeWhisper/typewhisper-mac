@@ -71,6 +71,7 @@ final class SpeechPunctuationServiceTests: XCTestCase {
             "follow #swift and #ios"
         )
         XCTAssertEqual(service.normalize(text: "follow #hashtag", language: "en"), "follow #hashtag")
+        XCTAssertEqual(service.normalize(text: "follow @hashtag", language: "en"), "follow @hashtag")
         XCTAssertEqual(
             service.normalize(text: "C# is \"fine\" open quotes ok end quote", language: "en"),
             "C# is \"fine\" \"ok\""
