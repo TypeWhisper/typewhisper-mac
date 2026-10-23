@@ -121,6 +121,15 @@ final class MLXPluginModelStorageTests: XCTestCase {
         runningTask.cancel()
         await runningTask.value
         XCTAssertEqual(session.requestedRequests.count, 1)
+        XCTAssertEqual(try Data(contentsOf: partialFile), Data("partial".utf8))
+        qwen.triggerRestoreModel(forModel: modelDef.id as NSString)
+        for _ in 0..<500 where session.requestedRequests.count < 2 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(session.requestedRequests.count, 2)
+        XCTAssertEqual(try Data(contentsOf: partialFile), Data("partial".utf8))
+        qwen.explicitModelLoadTask?.cancel()
+        await qwen.explicitModelLoadTask?.value
     }
 
     @MainActor

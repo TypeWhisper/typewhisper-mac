@@ -10,7 +10,7 @@ import os
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -29,7 +29,31 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // Observable state for settings UI
     fileprivate var modelState: Qwen3ModelState = .notLoaded
-    fileprivate var downloadProgress: Double?
+    private struct DownloadStatus: Sendable {
+        var progress: Double?
+        var completed: Int64 = 0
+        var total: Int64 = 0
+        var started: Date?
+        var initialCompleted: Int64 = 0
+    }
+    private let downloadStatus = OSAllocatedUnfairLock(initialState: DownloadStatus())
+    fileprivate var downloadProgress: Double? {
+        get { downloadStatus.withLock { $0.progress } }
+        set { downloadStatus.withLock { $0.progress = newValue } }
+    }
+
+    @objc var speechDownloadDetails: NSDictionary {
+        let status = downloadStatus.withLock { $0 }
+        var details: [String: Any] = ["completedBytes": status.completed, "totalBytes": status.total]
+        if let started = status.started {
+            let elapsed = Date().timeIntervalSince(started)
+            let transferred = status.completed - status.initialCompleted
+            if elapsed >= 2, transferred > 0, status.total > status.completed {
+                details["remainingSeconds"] = elapsed * Double(status.total - status.completed) / Double(transferred)
+            }
+        }
+        return details as NSDictionary
+    }
 
     private static let primaryParams = STTGenerateParameters(
         maxTokens: 2048,
@@ -293,7 +317,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     var supportsTranslation: Bool { false }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        Qwen3ContextBiasFormatter.budget
+    }
 
     func transcribe(
         audio: AudioData,
@@ -403,7 +430,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 guard !modelDef.id.hasPrefix("custom-") else {
                     throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
-                removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                downloadStatus.withLock { $0 = DownloadStatus() }
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
                         domain: "Qwen3Plugin",
@@ -434,7 +461,15 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                         of: repoID,
                         matching: Self.modelDownloadPatterns,
                         progressHandler: { [weak self] progress in
-                            self?.downloadProgress = progress.fractionCompleted
+                            self?.downloadStatus.withLock { status in
+                                if status.started == nil {
+                                    status.started = Date()
+                                    status.initialCompleted = progress.completedUnitCount
+                                }
+                                status.progress = progress.fractionCompleted
+                                status.completed = progress.completedUnitCount
+                                status.total = progress.totalUnitCount
+                            }
                         }
                     )
                     guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
@@ -447,9 +482,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                             userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
                         )
                     }
-                } catch {
-                    removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
-                    throw error
                 }
             }
             // Release the previous runtime before constructing its replacement.
@@ -541,6 +573,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, expectedGeneration: generation)
             }
         }
+    }
+
+    @objc func cancelModelDownload() {
+        unloadModel(clearPersistence: false)
     }
 
     func unloadModel(clearPersistence: Bool = true, clearRuntimeCache: Bool = true) {
@@ -678,16 +714,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         modelsDirectory
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
-    }
-
-    private func removeIncompleteModelIfNeeded(_ modelDef: Qwen3ModelDef, modelsDirectory: URL) {
-        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
-        let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
-        guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
-              store.hasCachedModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories) else {
-            return
-        }
-        try? store.deleteModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories)
     }
 
     private func cleanupRedundantModelCopies() {

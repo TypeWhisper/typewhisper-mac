@@ -163,8 +163,12 @@ final class Qwen3PluginTests: XCTestCase {
         )
     }
 
-    func testDictionaryTermsAreNotAdvertisedForQwen3Prompting() {
-        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .unsupported)
+    func testDictionaryTermsReachQwen3ContextWithABoundedBudget() {
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsSupport, .supported)
+        XCTAssertEqual(Qwen3Plugin().dictionaryTermsBudget.maxTerms, 64)
+        XCTAssertTrue(Qwen3Plugin.contextBiasString(from: "dictum, 星阙科技").contains("星阙科技"))
+        let context = Qwen3Plugin.contextBiasString(from: String(repeating: "星阙科技", count: 400))
+        XCTAssertLessThanOrEqual(context.count, Qwen3ContextBiasFormatter.baseInstruction.count + 1100)
     }
 
     func testFrenchTrailingOuiArtifactIsRemovedOnlyAfterSentencePunctuation() {
