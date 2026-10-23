@@ -82,7 +82,7 @@ private struct SpeechSettingsForm: View {
                     }
                     GroupedFormSection(title: "Cloud", footer: "With cloud recognition, audio is sent to the provider you choose.", tableName: "DictumSpeech") {
                         ForEach(cloudEngines, id: \.providerId) { engine in
-                            cloudRow(engine).opacity(network.isOnline ? 1 : 0.45)
+                            cloudRow(engine)
                         }
                     }
                     if !network.isOnline {
@@ -179,7 +179,8 @@ private struct SpeechSettingsForm: View {
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
         } else {
             if let activity, activity.isError {
-                Text(verbatim: activity.message).font(.system(size: 12)).lineLimit(2)
+                Text("Download failed. Check the network and try again.", tableName: "DictumSpeech")
+                    .font(.system(size: 12)).lineLimit(2)
                     .foregroundStyle(DictumTheme.danger).help(activity.message)
             }
             Button { download(engine) } label: {

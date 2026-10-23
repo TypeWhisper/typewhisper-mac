@@ -14,6 +14,7 @@
     "Downloaded": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Downloaded" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "已下载" } } } },
     "Download": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Download" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "下载" } } } },
     "Resume": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Resume" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "继续下载" } } } },
+    "Download failed. Check the network and try again.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Download failed. Check the network and try again." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "下载中断，请检查网络后继续。" } } } },
     "Preparing model": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Preparing model" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在加载模型" } } } },
     "Cancel": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } } } },
     "Show in Finder": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Show in Finder" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "在 Finder 中显示" } } } },
