@@ -71,6 +71,9 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "models"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "api-discovery.json"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "api-port"))
+        XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "secrets.json"))
+        XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "secrets.json.corrupt-20261023T100000Z"))
+        XCTAssertFalse(UserDataExportService.shouldExport(relativePath: ".secrets.json.0F3A.tmp"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "VoiceProfiles/voice-profiles.json"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "PluginData/com.test/models"))
         XCTAssertFalse(UserDataExportService.shouldExport(relativePath: "PluginData/com.test/Models/a.gguf"))
@@ -260,21 +263,21 @@ final class UserDataExportAndEraseTests: XCTestCase {
 
     // MARK: - Erase
 
-    func testEraseAllRemovesFilesPreferencesAndKeychainItems() throws {
+    func testEraseAllRemovesFilesPreferencesAndSecrets() throws {
         let fixture = try makeFixture()
         defer { teardown(fixture) }
 
-        var keychainDeleted = false
+        var secretsDeleted = false
         var systemReset = false
         let failures = UserDataEraser.eraseAll(
             locations: fixture.locations,
             userDefaults: fixture.userDefaults,
-            deleteKeychainItems: { keychainDeleted = true },
+            deleteSecrets: { secretsDeleted = true },
             resetSystemRegistrations: { systemReset = true; return [] }
         )
 
         XCTAssertEqual(failures, [])
-        XCTAssertTrue(keychainDeleted)
+        XCTAssertTrue(secretsDeleted)
         XCTAssertTrue(systemReset)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.locations.appSupportDirectory.path))
         for item in fixture.locations.auxiliaryItems {
@@ -284,18 +287,18 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertNil(fixture.userDefaults.persistentDomain(forName: fixture.suiteName)?["selectedLanguage"])
     }
 
-    func testEraseAllContinuesAfterKeychainFailure() throws {
+    func testEraseAllContinuesAfterSecretsFailure() throws {
         let fixture = try makeFixture()
         defer { teardown(fixture) }
 
         let failures = UserDataEraser.eraseAll(
             locations: fixture.locations,
             userDefaults: fixture.userDefaults,
-            deleteKeychainItems: { throw KeychainError.deleteFailed(errSecInteractionNotAllowed) },
+            deleteSecrets: { throw SecretStoreError.writeFailed(underlying: CocoaError(.fileWriteNoPermission)) },
             resetSystemRegistrations: { [] }
         )
 
-        XCTAssertEqual(failures.map(\.item), ["Keychain"])
+        XCTAssertEqual(failures.map(\.item), ["Secrets"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.locations.appSupportDirectory.path))
         XCTAssertNil(fixture.userDefaults.string(forKey: "selectedLanguage"))
     }
