@@ -75,7 +75,7 @@ The release fails before signing and publication when a required SDK symbol is a
 
 Each plugin receives a `HostServices` object providing:
 
-- **Keychain**: `storeSecret(key:value:)`, `loadSecret(key:)`
+- **Secrets**: `storeSecret(key:value:)`, `loadSecret(key:)`
 - **UserDefaults** (plugin-scoped): `userDefault(forKey:)`, `setUserDefault(_:forKey:)`
 - **Data directory**: `pluginDataDirectory` - persistent storage at `~/Library/Application Support/TypeWhisper/PluginData/<pluginId>/`
 - **App context**: `activeAppBundleId`, `activeAppName`
@@ -112,7 +112,7 @@ responsibility for audio loading, transcription-engine selection, progress,
 subtitles, and batch processing. The host returns temporary imports to the
 plugin for cleanup when a queue item is removed.
 
-Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional HuggingFace token via the same plugin-scoped keychain helpers.
+Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional HuggingFace token via the same plugin-scoped secret helpers.
 
 Bundled experimental local TTS plugins such as Supertonic store optional HuggingFace tokens the same way, but model weights are not bundled in the plugin ZIP. Supertonic downloads `Supertone/supertonic-3` assets only after the user accepts the OpenRAIL-M model license in plugin settings. That model-license confirmation is scoped to the model download and does not change TypeWhisper app licensing.
 
