@@ -254,7 +254,7 @@ struct DictumHistoryPage: View {
         return VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 10) {
                 DictumAppIcon(bundleIdentifier: record.appBundleIdentifier, name: record.appName ?? "dictum", size: 28)
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(record.appName ?? "dictum").font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(DictumTheme.textPrimary)
                     Text(detailDate(record)).font(.system(size: 12)).foregroundStyle(DictumTheme.textSecondary)
