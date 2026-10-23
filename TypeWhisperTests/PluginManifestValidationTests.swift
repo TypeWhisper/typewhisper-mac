@@ -520,7 +520,7 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertTrue(manifest.supportsCapability(.liveDictation))
     }
 
-    func testWhisperKitPlugin130RequiresHost18ForTheTransientModelSelection() throws {
+    func testWhisperKitPlugin130RequiresHost18() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
         )

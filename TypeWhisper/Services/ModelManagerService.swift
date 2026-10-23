@@ -633,13 +633,11 @@ final class ModelManagerService: ObservableObject {
         let hasPersistedRestorableModel = pluginId.map {
             TranscriptionEngineReadiness.hasPersistedRestorableModel(pluginId: $0)
         } ?? false
-        // A transient model is not persisted; the plugin restores it on first use all the same.
-        let hasTransientModel = (engine as? any TransientModelSelectionProviding)?.transientModelId != nil
 
         return TranscriptionEngineReadiness.engineIsReadyOrRestorable(
             authAvailable: canUseForTranscription(engine),
             isConfigured: engine.isConfigured,
-            hasPersistedRestorableModel: hasPersistedRestorableModel || hasTransientModel,
+            hasPersistedRestorableModel: hasPersistedRestorableModel,
             hasPreparationFallback: hasPreparationFallback
         )
     }

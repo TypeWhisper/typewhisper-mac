@@ -4026,17 +4026,6 @@ final class DictationViewModel: ObservableObject {
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
         applyEffectiveMicrophoneBoostToAudioService()
-        prewarmWorkflowLLMIfNeeded()
-    }
-
-    /// Loads the matched workflow's on-device LLM while recording, so post-processing does
-    /// not wait for the model after the stop.
-    private func prewarmWorkflowLLMIfNeeded() {
-        guard let workflow = matchedWorkflow,
-              !workflow.usesAppleTranslate,
-              workflowTextProcessingService.canProcess(workflow: workflow) else {
-            return
-        }
     }
 
     private func forcedWorkflow(for id: UUID?) -> Workflow? {

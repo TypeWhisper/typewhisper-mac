@@ -314,7 +314,6 @@ final class DeadlineWaiter<T: Sendable>: @unchecked Sendable {
     }
 }
 
-/// In-flight and per-minute limits for text processing, keyed by paired device.
 actor TextProcessingLimiter {
     enum Rejection: Equatable {
         case busy
@@ -411,10 +410,6 @@ extension TextProcessingAPI {
 }
 
 extension Workflow {
-    /// Runnable without this Mac's text field: inline commands or a prompt.
-    /// Action plugins and auto-enter only act on this Mac. Apple Translate
-    /// stays local: its shared session falls back to the source text and
-    /// skips output formats, and paired devices translate on their own.
     var processesTextHeadlessly: Bool {
         guard !usesAppleTranslate else { return false }
         return usesInlineCommands || systemPrompt() != nil
