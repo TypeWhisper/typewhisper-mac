@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""执行真实听写，并核对 TextEdit 正文与听写回执。"""
+"""执行真实听写，并核对临时文稿正文与听写回执。"""
 
 import argparse
 import ctypes
@@ -84,7 +84,7 @@ def exercise(args, output_directory, readback):
     output = json.dumps(proof, ensure_ascii=False, indent=2)
     (output_directory / "proof.json").write_text(output + "\n")
     print(output)
-    expected_bundle = {"TextEdit": "com.apple.TextEdit", "Notes": "com.apple.Notes"}[args.app]
+    expected_bundle = {"TextEdit": "com.apple.TextEdit", "Google Chrome": "com.google.Chrome"}[args.app]
     passed = process.returncode == 0 and before == "" and proof["matchesOneTranscript"] and proof["transcriptContainsExpected"] and proof["target"] == expected_bundle and (args.engine is None or proof["engine"] == args.engine)
     print("PASS" if passed else "FAIL")
     return (0 if passed else 1), after
@@ -96,7 +96,7 @@ def main():
     parser.add_argument("output", type=Path)
     parser.add_argument("--contains", action="append", default=[])
     parser.add_argument("--engine", help="要求回执中的实际引擎与此值一致")
-    parser.add_argument("--app", choices=["TextEdit", "Notes"], default="TextEdit")
+    parser.add_argument("--app", choices=["TextEdit", "Google Chrome"], default="TextEdit")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--hotkey", action="store_true")
     mode.add_argument("--paste-receipt", action="store_true")
@@ -105,21 +105,42 @@ def main():
     args = parser.parse_args()
     if args.repeat < 1:
         parser.error("repeat 必须大于 0")
-    subprocess.run(["open", "-a", args.app], check=True)
-    apple_script(f'tell application "System Events" to tell process "{args.app}"\nset frontmost to true\nkeystroke "n" using command down\nend tell')
+    if not str(args.output.resolve()).startswith(("/private/tmp/dictum-", "/tmp/dictum-")):
+        parser.error("测试文稿必须放在 /tmp/dictum- 目录下")
     readback = f'''tell application "System Events" to tell process "{args.app}"
 set bodyText to value of (value of attribute "AXFocusedUIElement")
 if bodyText is missing value then return ""
 return bodyText
 end tell'''
-    previous = None
     for index in range(args.repeat):
-        if index:
-            if apple_script(readback) != previous:
-                raise RuntimeError("目标文稿已发生变化")
-            apple_script(f'tell application "System Events" to tell process "{args.app}"\nset frontmost to true\nkeystroke "a" using command down\nkey code 51\nend tell')
         directory = args.output if args.repeat == 1 else args.output / f"run-{index + 1:03}"
-        status, previous = exercise(args, directory, readback)
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / ("target.txt" if args.app == "TextEdit" else "target.html")
+        if target.exists():
+            raise RuntimeError(f"测试文稿已经存在：{target}")
+        target.write_text("" if args.app == "TextEdit" else '<textarea autofocus style="position:fixed;inset:0;width:100%;height:100%;box-sizing:border-box"></textarea>')
+        subprocess.run(["open", "-a", args.app, str(target.resolve())], check=True)
+        time.sleep(0.6)
+        apple_script(f'tell application "System Events" to tell process "{args.app}" to set frontmost to true\ndelay 0.5')
+        if apple_script('tell application "System Events" to get name of first application process whose frontmost is true') != args.app:
+            raise RuntimeError("目标应用没有获得前台焦点")
+        try:
+            status, _ = exercise(args, directory, readback)
+        finally:
+            if args.app == "Google Chrome":
+                url = json.dumps(target.resolve().as_uri())
+                apple_script(f'tell application "Google Chrome"\nrepeat with w in windows\nrepeat with t in tabs of w\nif URL of t is {url} then close t\nend repeat\nend repeat\nend tell')
+            else:
+                apple_script(f'tell application "System Events" to tell process "{args.app}" to set frontmost to true\ndelay 0.5')
+                if apple_script('tell application "System Events" to get name of first application process whose frontmost is true') != args.app:
+                    raise RuntimeError("目标应用没有获得前台焦点，停止关闭操作")
+                document = apple_script('tell application "System Events" to tell process "TextEdit" to get value of attribute "AXDocument" of front window')
+                if document != target.resolve().as_uri():
+                    raise RuntimeError("目标文稿路径已经变化，停止关闭操作")
+                apple_script('tell application "System Events" to tell process "TextEdit" to keystroke "w" using command down')
+                time.sleep(0.2)
+                apple_script('tell application "System Events" to tell process "TextEdit"\nif exists sheet 1 of front window then\nif exists button "不存储" of sheet 1 of front window then\nclick button "不存储" of sheet 1 of front window\nelse if exists button "Don’t Save" of sheet 1 of front window then\nclick button "Don’t Save" of sheet 1 of front window\nelse\nerror "无法确认关闭测试文稿"\nend if\nend if\nend tell')
+            (directory / "closed.json").write_text(json.dumps({"target": str(target), "closedWithoutSaving": True}, ensure_ascii=False))
         if status:
             return status
     return 0

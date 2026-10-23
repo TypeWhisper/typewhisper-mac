@@ -137,6 +137,14 @@ acquire_lock() {
   lock_token="$$-$(date +%s)"
   if ! mkdir "$run_lock" 2>/dev/null; then
     holder_pid="$(cat "$run_lock/pid" 2>/dev/null || true)"
+    if [[ "$(cat "$run_lock/worktree" 2>/dev/null || true)" == "$repo_root" &&
+          -n "$holder_pid" && "$holder_pid" == "$(running_pids | awk 'NR == 1 { print }')" ]]; then
+      lock_token="$(cat "$run_lock/token")"
+      printf '%s\n' "$$" >"$run_lock/pid"
+      printf 'building\n' >"$run_lock/state"
+      trap 'release_owned_lock' EXIT
+      return 0
+    fi
     if [[ "$holder_pid" =~ ^[0-9]+$ ]] && ! kill -0 "$holder_pid" 2>/dev/null; then
       rm -rf "$run_lock"
       mkdir "$run_lock" || return 1
