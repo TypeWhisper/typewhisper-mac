@@ -1,6 +1,11 @@
 import AppKit
 import Combine
 import SwiftUI
+import os
+
+#if DEBUG
+private let voiceBarTimingLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "VoiceBarTiming")
+#endif
 
 @MainActor
 final class VoiceBarPresentation: ObservableObject {
@@ -26,6 +31,15 @@ final class VoiceBarPresentation: ObservableObject {
 #endif
 
     var contentSize: NSSize {
+#if DEBUG
+        let started = ContinuousClock.now
+        defer {
+            let elapsed = started.duration(to: .now)
+            if elapsed > .milliseconds(100) {
+                voiceBarTimingLogger.warning("Layout took \(elapsed.description, privacy: .public)")
+            }
+        }
+#endif
         guard state.showsTranscript, !text.isEmpty else { return NSSize(width: state.collapsedWidth, height: 44) }
         let paragraph = NSMutableParagraphStyle()
         paragraph.minimumLineHeight = 22
@@ -51,6 +65,15 @@ final class VoiceBarPresentation: ObservableObject {
     }
 
     func refresh(_ vm: DictationViewModel) {
+#if DEBUG
+        let started = ContinuousClock.now
+        defer {
+            let elapsed = started.duration(to: .now)
+            if elapsed > .milliseconds(100) {
+                voiceBarTimingLogger.warning("Refresh took \(elapsed.description, privacy: .public)")
+            }
+        }
+#endif
         if lastActivity == .recording && vm.state == .processing && vm.cancelledRecordingDeadline == nil {
             ServiceContainer.shared.soundService.play(.recordingStopped, enabled: vm.soundFeedbackEnabled)
         }
@@ -201,7 +224,16 @@ final class VoiceBarPanel: NSPanel {
             }
             self.hideTask?.cancel()
             let size = NSSize(width: 460, height: 126)
+#if DEBUG
+            let started = ContinuousClock.now
+#endif
             let screen = self.resolver.resolveScreen(for: .activeScreen)
+#if DEBUG
+            let elapsed = started.duration(to: .now)
+            if elapsed > .milliseconds(100) {
+                voiceBarTimingLogger.warning("Screen lookup took \(elapsed.description, privacy: .public)")
+            }
+#endif
             let frame = NSRect(x: screen.visibleFrame.midX - size.width / 2, y: screen.visibleFrame.minY + 72, width: size.width, height: size.height)
             if self.frame != frame { self.setFrame(frame, display: true) }
             if !self.isVisible { self.orderFrontRegardless() }
