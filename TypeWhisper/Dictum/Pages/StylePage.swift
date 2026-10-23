@@ -104,7 +104,7 @@ struct StylePage: View {
                         }.padding(4).background(DictumTheme.card, in: RoundedRectangle(cornerRadius: 12))
                     }
                 }.frame(maxWidth: 760).padding(.horizontal, 28).padding(.top, 4).padding(.bottom, 28).frame(maxWidth: .infinity)
-            }.scrollIndicators(.hidden)
+            }.scrollIndicators(.never)
         }.font(DictumTheme.Typography.body)
     }
 

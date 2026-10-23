@@ -179,14 +179,28 @@ struct AIModelsPage: View {
                 TextField("", text: $customModel).onSubmit { saveModel(item, model: customModel) }
                     .accessibilityLabel(Text("Model", tableName: "DictumStyle"))
             } else {
-                Picker(selection: Binding(get: { item.modelId ?? processing.defaultModelId(for: item.providerId) ?? models.first?.id ?? "" },
-                                          set: { saveModel(item, model: $0) })) {
-                    ForEach(models, id: \.id) { model in Text(verbatim: model.displayName).tag(model.id) }
-                } label: { Text("Model", tableName: "DictumStyle") }
-                    .labelsHidden().pickerStyle(.menu).buttonStyle(.borderless).tint(.primary)
-                    .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28)
+                let current = item.modelId ?? processing.defaultModelId(for: item.providerId) ?? models.first?.id ?? ""
+                Menu {
+                    ForEach(models, id: \.id) { model in
+                        Button { saveModel(item, model: model.id) } label: {
+                            if model.id == current { Label(model.displayName, systemImage: "checkmark") }
+                            else { Text(verbatim: model.displayName) }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(verbatim: models.first { $0.id == current }?.displayName ?? current).lineLimit(1)
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                     .background(DictumTheme.control, in: RoundedRectangle(cornerRadius: 5))
                     .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(DictumTheme.controlBorder, lineWidth: 0.5))
+                    .contentShape(Rectangle())
+                }
+                .menuIndicator(.hidden).menuStyle(.borderlessButton).buttonStyle(.plain).tint(.primary)
+                .accessibilityLabel(Text("Model", tableName: "DictumStyle"))
             }
         }
     }

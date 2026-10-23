@@ -5,10 +5,13 @@ struct PolishStrengthSection: View {
     var body: some View {
         GroupedFormSection(title: "Polish strength", tableName: "DictumStyle") {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 8) {
-                    ForEach(PolishLevel.allCases, id: \.self) { level in
-                        OptionCard(title: LocalizedStringKey(level.rawValue), detail: LocalizedStringKey("polish." + level.rawValue),
-                                   isSelected: store.level == level, tableName: "DictumStyle") { store.level = level }
+                Grid(horizontalSpacing: 8) {
+                    GridRow {
+                        ForEach(PolishLevel.allCases, id: \.self) { level in
+                            OptionCard(title: LocalizedStringKey(level.rawValue), detail: LocalizedStringKey("polish." + level.rawValue),
+                                       isSelected: store.level == level, tableName: "DictumStyle") { store.level = level }
+                                .frame(maxHeight: .infinity, alignment: .top)
+                        }
                     }
                 }
                 VStack(alignment: .leading, spacing: 0) {
