@@ -3,12 +3,15 @@
   "rules": [
     { "phrase": "question mark", "replacement": "?", "category": "punctuation" },
     { "phrase": "exclamation mark", "replacement": "!", "category": "punctuation" },
+    { "phrase": "exclamation point", "replacement": "!", "category": "punctuation" },
     { "phrase": "colon", "replacement": ":", "category": "punctuation" },
     { "phrase": "semicolon", "replacement": ";", "category": "punctuation" },
     { "phrase": "open parenthesis", "replacement": "(", "category": "brackets" },
     { "phrase": "close parenthesis", "replacement": ")", "category": "brackets" },
     { "phrase": "open bracket", "replacement": "(", "category": "brackets" },
     { "phrase": "close bracket", "replacement": ")", "category": "brackets" },
+    { "phrase": "open square bracket", "replacement": "[", "category": "brackets" },
+    { "phrase": "close square bracket", "replacement": "]", "category": "brackets" },
     { "phrase": "comma", "replacement": ",", "category": "punctuation" },
     { "phrase": "period", "replacement": ".", "category": "punctuation" },
     { "phrase": "full stop", "replacement": ".", "category": "punctuation" }
@@ -18,6 +21,8 @@
     { "spoken": "how are you question mark", "expected": "how are you?" },
     { "spoken": "hello open parenthesis test close parenthesis", "expected": "hello (test)" },
     { "spoken": "warning exclamation mark", "expected": "warning!" },
+    { "spoken": "warning exclamation point", "expected": "warning!" },
+    { "spoken": "see open square bracket note close square bracket", "expected": "see [note]" },
     { "spoken": "title colon example", "expected": "title: example" }
   ]
 }

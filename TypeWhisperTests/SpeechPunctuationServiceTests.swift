@@ -41,6 +41,22 @@ final class SpeechPunctuationServiceTests: XCTestCase {
         XCTAssertEqual(service.normalize(text: "確認？\(spaces)next", language: "ja"), "確認？ next")
     }
 
+    @MainActor
+    func testBundledEnglishRulesAcceptUSAndUKTerms() {
+        let service = SpeechPunctuationService(
+            rulesLoader: PunctuationRulesLoader(bundle: Bundle(for: SpeechPunctuationService.self))
+        )
+        XCTAssertEqual(service.normalize(text: "warning exclamation point", language: "en"), "warning!")
+        XCTAssertEqual(service.normalize(text: "warning exclamation mark", language: "en"), "warning!")
+        XCTAssertEqual(service.normalize(text: "done period", language: "en"), "done.")
+        XCTAssertEqual(service.normalize(text: "done full stop", language: "en"), "done.")
+        XCTAssertEqual(
+            service.normalize(text: "see open square bracket note close square bracket", language: "en"),
+            "see [note]"
+        )
+        XCTAssertEqual(service.normalize(text: "see open bracket note close bracket", language: "en"), "see (note)")
+    }
+
     private func makeRulesLoader() -> PunctuationRulesLoader {
         PunctuationRulesLoader { languageCode in
             switch languageCode {
