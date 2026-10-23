@@ -39,12 +39,13 @@ final class InstalledAppsViewModel: ObservableObject {
             ) else { continue }
 
             for url in contents where url.pathExtension == "app" {
-                guard let bundle = Bundle(url: url),
-                      let bundleId = bundle.bundleIdentifier,
-                      let name = bundle.infoDictionary?["CFBundleName"] as? String
-                        ?? bundle.infoDictionary?["CFBundleDisplayName"] as? String
-                        ?? url.deletingPathExtension().lastPathComponent as String?
+                // 创建 Bundle 会将外部应用注册到 MLX 也会遍历的全局资源列表。
+                guard let info = CFBundleCopyInfoDictionaryForURL(url as CFURL) as? [String: Any],
+                      let bundleId = info["CFBundleIdentifier"] as? String
                 else { continue }
+                let name = info["CFBundleName"] as? String
+                    ?? info["CFBundleDisplayName"] as? String
+                    ?? url.deletingPathExtension().lastPathComponent
 
                 if apps[bundleId] == nil {
                     let icon = NSWorkspace.shared.icon(forFile: url.path)
