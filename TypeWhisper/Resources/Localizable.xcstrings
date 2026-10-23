@@ -29138,50 +29138,6 @@
         }
       }
     },
-    "Read Back Last Transcription" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Letzte Transkription vorlesen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最後のテキストを読み上げ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "朗读上次转录"
-          }
-        }
-      }
-    },
-    "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Liest den finalen transkribierten Text nach jeder Diktation über den ausgewählten Sprachprovider vor. Aufnahme-, Fehler- und Prompt-Ansagen werden nur über die VoiceOver-Bedienungshilfen gesprochen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選択した音声プロバイダーを使用して、各音声認識後の最終テキストを読み上げます。録音、エラー、プロンプトのアナウンスはVoiceOverのみで読み上げられます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每次听写后使用所选的语音提供商朗读最终转录文本。录音通知、错误提示和提示词公告仅通过 VoiceOver 辅助功能语音播报。"
-          }
-        }
-      }
-    },
     "Ready" : {
       "localizations" : {
         "de" : {

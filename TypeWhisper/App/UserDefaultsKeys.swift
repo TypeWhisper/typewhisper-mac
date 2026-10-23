@@ -142,10 +142,6 @@ enum UserDefaultsKeys {
     static let transcriptionNumberNormalizationMinimumValue = "transcriptionNumberNormalizationMinimumValue"
     static let dictationPunctuationProfiles = "dictationPunctuationProfiles"
 
-    // MARK: - Accessibility
-    static let spokenFeedbackEnabled = "spokenFeedbackEnabled"
-    static let spokenFeedbackProviderId = "spokenFeedbackProviderId"
-
     // MARK: - Plugin Registry
     static let improveTypeWhisperCaptureEnabled = "plugin.com.typewhisper.improve.collectCorrections"
 

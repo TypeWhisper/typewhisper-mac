@@ -372,11 +372,6 @@ final class DictationViewModel: ObservableObject {
             applyEffectiveMicrophoneBoostToAudioService()
         }
     }
-    @Published var spokenFeedbackEnabled: Bool {
-        didSet { speechFeedbackService.spokenFeedbackEnabled = spokenFeedbackEnabled }
-    }
-    @Published private(set) var lastTranscribedText: String?
-    @Published private(set) var lastTranscriptionLanguage: String?
     /// Updated only by the completed text-insertion path, never by indicator feedback.
     @Published private(set) var lastSuccessfulDictationInsertion: DictationInsertionCompletion?
     @Published var hotkeyLabelsVersion = 0
@@ -463,7 +458,6 @@ final class DictationViewModel: ObservableObject {
     private let promptActionService: PromptActionService
     private let promptProcessingService: PromptProcessingService
     private let workflowTextProcessingService: WorkflowTextProcessingService
-    private let speechFeedbackService: SpeechFeedbackService
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
@@ -655,7 +649,6 @@ final class DictationViewModel: ObservableObject {
         appFormatterService: AppFormatterService,
         punctuationStrategyResolver: PunctuationStrategyResolver,
         speechPunctuationService: SpeechPunctuationService,
-        speechFeedbackService: SpeechFeedbackService,
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
         mediaPlaybackService: MediaPlaybackService,
@@ -697,7 +690,6 @@ final class DictationViewModel: ObservableObject {
                 workflowService: workflowService,
                 vocabularyProvider: { [dictionaryService] in dictionaryService.vocabularyForPrompt() }
             )
-        self.speechFeedbackService = speechFeedbackService
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
@@ -787,7 +779,6 @@ final class DictationViewModel: ObservableObject {
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
         self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
-        self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
         self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
@@ -3389,9 +3380,6 @@ final class DictationViewModel: ObservableObject {
                 if let actionResultAnnouncement {
                     accessibilityAnnouncementService.announce(actionResultAnnouncement)
                 }
-                speechFeedbackService.speakAutomaticTranscription(text: text, language: detectedLang)
-                lastTranscribedText = text
-                lastTranscriptionLanguage = detectedLang
 
                 if postProcessingFallback != nil {
                     let fallbackMessage = localizedAppText(
@@ -4892,11 +4880,6 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionPaletteHandler.insertLatest(currentState: state)
     }
 
-    func readBackLastTranscription() {
-        guard let text = lastTranscribedText else { return }
-        speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
-    }
-
     // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
 
     /// Deletes the text inserted by the most recent successful dictation.
@@ -4973,7 +4956,6 @@ final class DictationViewModel: ObservableObject {
                 id: session.id, status: session.status, transcription: transcription, error: session.error
             ))
         }
-        lastTranscribedText = rawText
     }
 
     var canRecoverLastRecording: Bool {

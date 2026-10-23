@@ -311,12 +311,6 @@ final class PluginManager: ObservableObject {
             }
     }
 
-    var ttsProviders: [TTSProviderPlugin] {
-        loadedPlugins
-            .filter { $0.isEnabled && permitsText($0) }
-            .compactMap { $0.instance as? TTSProviderPlugin }
-    }
-
     /// Engines the managed settings refuse are left out, so pickers and fallbacks never offer them;
     /// `transcriptionPolicyRefusal(forProviderId:)` names the reason for a refused selection.
     var transcriptionEngines: [TranscriptionEnginePlugin] {
@@ -695,17 +689,6 @@ final class PluginManager: ObservableObject {
             return true
         }
         return false
-    }
-
-    func ttsProvider(for providerId: String) -> TTSProviderPlugin? {
-        ttsProviders.first { $0.providerId == providerId }
-    }
-
-    func loadedTTSPlugin(for providerId: String) -> LoadedPlugin? {
-        loadedPlugins.first {
-            guard let provider = $0.instance as? TTSProviderPlugin else { return false }
-            return $0.isEnabled && provider.providerId == providerId
-        }
     }
 
     func actionPlugin(for actionId: String) -> ActionPlugin? {
