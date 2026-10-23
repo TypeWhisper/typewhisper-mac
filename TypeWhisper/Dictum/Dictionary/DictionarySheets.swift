@@ -145,8 +145,16 @@ struct DictionaryImportSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Import CSV", tableName: "DictumHistory")
-                .font(.system(size: 15, weight: .semibold))
+            HStack(spacing: 8) {
+                Text("Import CSV", tableName: "DictumHistory")
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer(minLength: 0)
+                Button { dismiss(); onExport() } label: {
+                    Text("Export CSV…", tableName: "DictumHistory").font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(DictumTheme.textSecondary)
+            }
             dropZone.padding(.top, 14)
             if let preview {
                 HStack(alignment: .top, spacing: 0) {
@@ -171,15 +179,9 @@ struct DictionaryImportSheet: View {
             }
             HStack(spacing: 8) {
                 DictumPopup(title: "Format", selection: $format, tableName: "DictumHistory", value: Text(formatName(format))) {
-                    Text("Wispr Flow (heard as, word)", tableName: "DictumHistory").tag(DictionaryCSVFormat.wisprFlow)
+                    Text("Heard as, word (Wispr Flow)", tableName: "DictumHistory").tag(DictionaryCSVFormat.wisprFlow)
                     Text("Word, heard as", tableName: "DictumHistory").tag(DictionaryCSVFormat.wordFirst)
                 }
-                Button { dismiss(); onExport() } label: {
-                    Text("Export CSV…", tableName: "DictumHistory").font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(DictumTheme.textSecondary)
-                .padding(.horizontal, 8).frame(height: 24)
                 Spacer(minLength: 12)
                 Button { dismiss() } label: { Text("Cancel", tableName: "DictumHistory") }
                     .buttonStyle(DictumActionButtonStyle())
@@ -243,12 +245,13 @@ struct DictionaryImportSheet: View {
 
     private func previewCaption(_ preview: DictionaryCSVResult) -> String {
         let words = preview.items.prefix(4).map(\.word).joined(separator: "、")
-        return [fileName, words.isEmpty ? nil : words + "…"].compactMap { $0 }.joined(separator: " · ")
+        let first = String(localized: "First few:", table: "DictumHistory")
+        return [fileName, words.isEmpty ? nil : first + words + "…"].compactMap { $0 }.joined(separator: " · ")
     }
 
     private func formatName(_ format: DictionaryCSVFormat) -> String {
         switch format {
-        case .wisprFlow: String(localized: "Wispr Flow (heard as, word)", table: "DictumHistory")
+        case .wisprFlow: String(localized: "Heard as, word", table: "DictumHistory")
         case .wordFirst: String(localized: "Word, heard as", table: "DictumHistory")
         }
     }

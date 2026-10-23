@@ -16,7 +16,8 @@ struct DictumHistoryPage: View {
     @State private var pendingDeletion: TranscriptionRecord?
     @State private var deletionTask: Task<Void, Never>?
     @State private var player: AVAudioPlayer?
-    @State private var message: String?
+    @State private var toast: String?
+    @State private var toastTask: Task<Void, Never>?
     @State private var hovered: UUID?
     @FocusState private var listFocused: Bool
 
@@ -93,13 +94,15 @@ struct DictumHistoryPage: View {
                 .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
                 .keyboardShortcut("z", modifiers: .command)
                 .padding(.bottom, 20)
-            } else if let message = retry.message ?? message {
-                Text(message).font(.system(size: 12.5)).foregroundStyle(.white)
+            } else if let toast {
+                Text(toast).font(.system(size: 12.5)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 9)
                     .background(.black.opacity(0.92), in: Capsule())
                     .padding(.bottom, 20)
+                    .transition(.opacity)
             }
         }
+        .onChange(of: retry.message) { _, value in if let value { showToast(value); retry.message = nil } }
         .alert(String(localized: "Send this recording for reprocessing?", table: "DictumHistory"), isPresented: Binding(get: { retry.confirmation != nil }, set: { if !$0 { retry.cancelConfirmation() } })) {
             Button(role: .cancel) { retry.cancelConfirmation() } label: { Text("Cancel", tableName: "DictumHistory") }
             Button { retry.start() } label: { Text("Retry", tableName: "DictumHistory") }
@@ -342,12 +345,21 @@ struct DictumHistoryPage: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
-        message = String(localized: "Copied", table: "DictumHistory")
+        showToast(String(localized: "Copied", table: "DictumHistory"))
+    }
+
+    private func showToast(_ text: String) {
+        toastTask?.cancel()
+        withAnimation(DictumTheme.Motion.base) { toast = text }
+        toastTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(1600)) } catch { return }
+            withAnimation(DictumTheme.Motion.exit) { toast = nil }
+        }
     }
 
     private func play(_ url: URL) {
         do { player = try AVAudioPlayer(contentsOf: url); player?.play() }
-        catch { message = error.localizedDescription }
+        catch { showToast(error.localizedDescription) }
     }
 
     private func moveSelection(_ delta: Int) {
@@ -428,6 +440,6 @@ struct DictumHistoryPage: View {
             "## \($0.timestamp.formatted(.iso8601))\n\n\($0.finalText)\n"
         }.joined(separator: "\n")
         do { try text.write(to: url, atomically: true, encoding: .utf8) }
-        catch { message = error.localizedDescription }
+        catch { showToast(error.localizedDescription) }
     }
 }

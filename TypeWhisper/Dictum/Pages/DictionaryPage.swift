@@ -151,7 +151,7 @@ struct DictionaryPage: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Deselect", tableName: "DictumHistory"))
+            .accessibilityLabel(Text("Remove", tableName: "DictumHistory"))
         }
         .padding(.leading, 9).padding(.trailing, 4).frame(height: 24)
         .background(DictumTheme.raised, in: RoundedRectangle(cornerRadius: 6))
