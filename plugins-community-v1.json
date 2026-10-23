@@ -7,8 +7,8 @@
       "author": "TypeWhisper",
       "description": "On-device speech recognition using Apple's Speech framework. Requires macOS 26+, streaming support.",
       "descriptions": {
-        "de": "Ger\u00e4tebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterst\u00fctzung.",
-        "ja": "Apple Speech\u30d5\u30ec\u30fc\u30e0\u30ef\u30fc\u30af\u3092\u4f7f\u3046\u30aa\u30f3\u30c7\u30d0\u30a4\u30b9\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002macOS 26\u4ee5\u964d\u304c\u5fc5\u8981\u3067\u3001\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Gerätebasierte Spracherkennung mit Apples Speech-Framework. Erfordert macOS 26+, Streaming-Unterstützung.",
+        "ja": "Apple Speechフレームワークを使うオンデバイス音声認識です。macOS 26以降が必要で、ストリーミングに対応します。"
       },
       "category": "transcription",
       "downloadCount": 9448,
@@ -68,8 +68,8 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgr\u00f6\u00dfen, 99 Sprachen, Streaming-Unterst\u00fctzung.",
-        "ja": "WhisperKit\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u30028\u7a2e\u985e\u306e\u30e2\u30c7\u30eb\u30b5\u30a4\u30ba\u300199\u8a00\u8a9e\u3001\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung.",
+        "ja": "WhisperKitによるローカル音声認識です。8種類のモデルサイズ、99言語、ストリーミングに対応します。"
       },
       "category": "transcription",
       "downloadCount": 15851,
@@ -277,8 +277,8 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und pr\u00e4zise, 25 Sprachen.",
-        "ja": "NVIDIA Parakeet TDT\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u300125\u8a00\u8a9e\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen.",
+        "ja": "NVIDIA Parakeet TDTによるローカル音声認識です。高速かつ高精度で、25言語に対応します。"
       },
       "category": "transcription",
       "downloadCount": 40005,
@@ -522,8 +522,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Groq API. Fast inference, requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription und LLM \u00fcber die Groq-API. Schnelle Inferenz, erfordert API-Key.",
-        "ja": "Groq API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3068LLM\u3067\u3059\u3002\u9ad8\u901f\u63a8\u8ad6\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription und LLM über die Groq-API. Schnelle Inferenz, erfordert API-Key.",
+        "ja": "Groq APIによるクラウド文字起こしとLLMです。高速推論に対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 9467,
@@ -636,7 +636,7 @@
       "description": "Cloud transcription, OpenAI/ChatGPT prompts, and text-to-speech. Use an API key for STT/TTS or ChatGPT login for prompts.",
       "descriptions": {
         "de": "Cloud-Transkription, OpenAI-/ChatGPT-Prompts und Text-to-Speech. STT/TTS brauchen einen API-Key, Prompts funktionieren auch per ChatGPT-Login.",
-        "ja": "\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3001OpenAI/ChatGPT\u30d7\u30ed\u30f3\u30d7\u30c8\u3001\u97f3\u58f0\u5408\u6210\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002\u97f3\u58f0\u8a8d\u8b58/\u97f3\u58f0\u5408\u6210\u306b\u306fAPI\u30ad\u30fc\u3001\u30d7\u30ed\u30f3\u30d7\u30c8\u306b\u306fChatGPT\u30ed\u30b0\u30a4\u30f3\u3092\u4f7f\u7528\u3067\u304d\u307e\u3059\u3002"
+        "ja": "クラウド文字起こし、OpenAI/ChatGPTプロンプト、音声合成に対応します。音声認識/音声合成にはAPIキー、プロンプトにはChatGPTログインを使用できます。"
       },
       "category": "transcription",
       "downloadCount": 3355,
@@ -778,8 +778,8 @@
       "author": "TypeWhisper",
       "description": "Connect to any OpenAI-compatible API server for transcription and LLM. Works with Ollama, LM Studio, vLLM, and more.",
       "descriptions": {
-        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server f\u00fcr Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr.",
-        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u3068LLM\u7528\u306b\u4efb\u610f\u306eOpenAI\u4e92\u63dbAPI\u30b5\u30fc\u30d0\u30fc\u3078\u63a5\u7d9a\u3057\u307e\u3059\u3002Ollama\u3001LM Studio\u3001vLLM\u306a\u3069\u3067\u52d5\u4f5c\u3057\u307e\u3059\u3002"
+        "de": "Verbindung zu jedem OpenAI-kompatiblen API-Server für Transkription und LLM. Funktioniert mit Ollama, LM Studio, vLLM und mehr.",
+        "ja": "文字起こしとLLM用に任意のOpenAI互換APIサーバーへ接続します。Ollama、LM Studio、vLLMなどで動作します。"
       },
       "category": "transcription",
       "downloadCount": 3355,
@@ -950,8 +950,8 @@
       "author": "TypeWhisper",
       "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
       "descriptions": {
-        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig.",
-        "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebQwen3-ASR\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u300230\u8a00\u8a9e\u3068\u4e2d\u56fd\u8a9e\u65b9\u8a00\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
+        "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key nötig.",
+        "ja": "Apple Silicon上のMLXで動作するローカルQwen3-ASR音声認識です。30言語と中国語方言に対応し、APIキーは不要です。"
       },
       "category": "transcription",
       "downloadCount": 5149,
@@ -1171,8 +1171,8 @@
       "author": "TypeWhisper",
       "description": "LLM provider via Anthropic Claude API. Requires API key.",
       "descriptions": {
-        "de": "LLM-Anbieter \u00fcber die Anthropic Claude API. Erfordert API-Key.",
-        "ja": "Anthropic Claude API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "LLM-Anbieter über die Anthropic Claude API. Erfordert API-Key.",
+        "ja": "Anthropic Claude APIによるLLMプロバイダーです。APIキーが必要です。"
       },
       "category": "llm",
       "downloadCount": 1377,
@@ -1235,8 +1235,8 @@
       "author": "TypeWhisper",
       "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
       "descriptions": {
-        "de": "Ultra-schnelle LLM-Inferenz \u00fcber die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key.",
-        "ja": "Cerebras API\u306b\u3088\u308b\u8d85\u9ad8\u901fLLM\u63a8\u8ad6\u3067\u3059\u3002\u6700\u59273,000\u30c8\u30fc\u30af\u30f3/\u79d2\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Ultra-schnelle LLM-Inferenz über die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key.",
+        "ja": "Cerebras APIによる超高速LLM推論です。最大3,000トークン/秒に対応し、APIキーが必要です。"
       },
       "category": "llm",
       "downloadCount": 279,
@@ -1289,8 +1289,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via AssemblyAI API with real-time WebSocket streaming. Requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die AssemblyAI-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "AssemblyAI API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die AssemblyAI-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "ja": "AssemblyAI APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 190,
@@ -1396,8 +1396,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Cohere Transcribe API. State-of-the-art accuracy across 14 languages. Requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Cohere Transcribe API. Beste Genauigkeit f\u00fcr 14 Sprachen. Erfordert API-Key.",
-        "ja": "Cohere Transcribe API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u300214\u8a00\u8a9e\u3067\u9ad8\u7cbe\u5ea6\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Cohere Transcribe API. Beste Genauigkeit für 14 Sprachen. Erfordert API-Key.",
+        "ja": "Cohere Transcribe APIによるクラウド文字起こしです。14言語で高精度に対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 154,
@@ -1451,8 +1451,8 @@
       "author": "yunluyl",
       "description": "OpenAI-compatible transcription through a Cloudflare tunnel with service token authentication. Credentials stored in macOS Keychain.",
       "descriptions": {
-        "de": "OpenAI-kompatible Transkription \u00fcber einen Cloudflare-Tunnel mit Service-Token-Authentifizierung. Zugangsdaten werden im macOS-Schl\u00fcsselbund gespeichert.",
-        "ja": "\u30b5\u30fc\u30d3\u30b9\u30c8\u30fc\u30af\u30f3\u8a8d\u8a3c\u4ed8\u304d\u306eCloudflare\u30c8\u30f3\u30cd\u30eb\u7d4c\u7531\u3067OpenAI\u4e92\u63db\u306e\u6587\u5b57\u8d77\u3053\u3057\u3092\u884c\u3044\u307e\u3059\u3002\u8a8d\u8a3c\u60c5\u5831\u306fmacOS\u30ad\u30fc\u30c1\u30a7\u30fc\u30f3\u306b\u4fdd\u5b58\u3055\u308c\u307e\u3059\u3002"
+        "de": "OpenAI-kompatible Transkription über einen Cloudflare-Tunnel mit Service-Token-Authentifizierung. Zugangsdaten werden im macOS-Schlüsselbund gespeichert.",
+        "ja": "サービストークン認証付きのCloudflareトンネル経由でOpenAI互換の文字起こしを行います。認証情報はmacOSキーチェーンに保存されます。"
       },
       "category": "transcription",
       "downloadCount": 263,
@@ -1522,8 +1522,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via ElevenLabs Scribe API with real-time WebSocket streaming.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming.",
-        "ja": "ElevenLabs Scribe API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Cloud-Transkription über die ElevenLabs-Scribe-API mit Echtzeit-WebSocket-Streaming.",
+        "ja": "ElevenLabs Scribe APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応します。"
       },
       "category": "transcription",
       "downloadCount": 595,
@@ -1639,8 +1639,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Deepgram API with real-time WebSocket streaming. Requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "Deepgram API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Deepgram-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "ja": "Deepgram APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 273,
@@ -1765,8 +1765,8 @@
       "author": "TypeWhisper",
       "description": "LLM provider and cloud speech transcription via Google Gemini API. Requires API key.",
       "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Google Gemini API. Erfordert API-Key.",
-        "ja": "Google Gemini API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Google Gemini API. Erfordert API-Key.",
+        "ja": "Google Gemini APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 1981,
@@ -1923,8 +1923,8 @@
       "author": "TypeWhisper",
       "description": "Store memories as local JSON files with text-based search. Fully offline, no API key required.",
       "descriptions": {
-        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key n\u00f6tig.",
-        "ja": "\u30e1\u30e2\u30ea\u3092Mac\u5185\u306eJSON\u30d5\u30a1\u30a4\u30eb\u306b\u4fdd\u5b58\u3057\u3001\u6587\u5b57\u3067\u691c\u7d22\u3067\u304d\u307e\u3059\u3002\u5b8c\u5168\u30aa\u30d5\u30e9\u30a4\u30f3\u3067\u4f7f\u3048\u3001API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
+        "de": "Speichert Erinnerungen als lokale JSON-Dateien mit textbasierter Suche. Komplett offline, kein API-Key nötig.",
+        "ja": "メモリをMac内のJSONファイルに保存し、文字で検索できます。完全オフラインで使え、APIキーは不要です。"
       },
       "category": "memory",
       "downloadCount": 0,
@@ -1964,8 +1964,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription and LLM via Fireworks AI. Streaming transcription, fast inference, requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription und LLM \u00fcber Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key.",
-        "ja": "Fireworks AI\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3068LLM\u3067\u3059\u3002\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u6587\u5b57\u8d77\u3053\u3057\u3068\u9ad8\u901f\u63a8\u8ad6\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription und LLM über Fireworks AI. Streaming-Transkription, schnelle Inferenz, erfordert API-Key.",
+        "ja": "Fireworks AIによるクラウド文字起こしとLLMです。ストリーミング文字起こしと高速推論に対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 109,
@@ -2022,8 +2022,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Gladia Solaria API with real-time WebSocket streaming.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming.",
-        "ja": "Gladia Solaria API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Cloud-Transkription über die Gladia-Solaria-API mit Echtzeit-WebSocket-Streaming.",
+        "ja": "Gladia Solaria APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応します。"
       },
       "category": "transcription",
       "downloadCount": 86,
@@ -2102,8 +2102,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Google Cloud Speech-to-Text using a service-account JSON key. Handles long recordings by chunking audio into multiple recognize requests.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schl\u00fcssel. Zerlegt l\u00e4ngere Aufnahmen automatisch in mehrere Recognize-Requests.",
-        "ja": "\u30b5\u30fc\u30d3\u30b9\u30a2\u30ab\u30a6\u30f3\u30c8JSON\u30ad\u30fc\u3092\u4f7f\u3046Google Cloud Speech-to-Text\u306e\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u9577\u6642\u9593\u9332\u97f3\u306f\u97f3\u58f0\u3092\u5206\u5272\u3057\u3066\u8907\u6570\u306e\u8a8d\u8b58\u30ea\u30af\u30a8\u30b9\u30c8\u3067\u51e6\u7406\u3057\u307e\u3059\u3002"
+        "de": "Cloud-Transkription über Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schlüssel. Zerlegt längere Aufnahmen automatisch in mehrere Recognize-Requests.",
+        "ja": "サービスアカウントJSONキーを使うGoogle Cloud Speech-to-Textのクラウド文字起こしです。長時間録音は音声を分割して複数の認識リクエストで処理します。"
       },
       "category": "transcription",
       "downloadCount": 472,
@@ -2148,8 +2148,8 @@
       "author": "TypeWhisper",
       "description": "Show a floating live transcript window during recording.",
       "descriptions": {
-        "de": "Zeigt ein schwebendes Live-Transkript-Fenster w\u00e4hrend der Aufnahme.",
-        "ja": "\u9332\u97f3\u4e2d\u306e\u6587\u5b57\u8d77\u3053\u3057\u3092\u3001\u4ed6\u306e\u30a6\u30a3\u30f3\u30c9\u30a6\u306b\u91cd\u306d\u3066\u8868\u793a\u3057\u307e\u3059\u3002"
+        "de": "Zeigt ein schwebendes Live-Transkript-Fenster während der Aufnahme.",
+        "ja": "録音中の文字起こしを、他のウィンドウに重ねて表示します。"
       },
       "category": "utility",
       "downloadCount": 1011,
@@ -2246,7 +2246,7 @@
       "description": "Create Linear issues from transcribed or processed text. Requires a Linear API key.",
       "descriptions": {
         "de": "Linear-Issues aus transkribiertem oder verarbeitetem Text erstellen. Erfordert einen Linear-API-Key.",
-        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u6e08\u307f\u307e\u305f\u306f\u51e6\u7406\u6e08\u307f\u306e\u30c6\u30ad\u30b9\u30c8\u304b\u3089Linear\u306eIssue\u3092\u4f5c\u6210\u3057\u307e\u3059\u3002Linear API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "ja": "文字起こし済みまたは処理済みのテキストからLinearのIssueを作成します。Linear APIキーが必要です。"
       },
       "category": "action",
       "downloadCount": 439,
@@ -2300,9 +2300,9 @@
       "author": "TypeWhisper",
       "description": "Save transcriptions to your Obsidian vault as Markdown notes. Supports templates, YAML frontmatter, auto-export, and live sync.",
       "descriptions": {
-        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterst\u00fctzt Vorlagen, YAML-Frontmatter, Auto-Export und Live-Sync.",
-        "es": "Guarda las transcripciones en tu b\u00f3veda de Obsidian como notas Markdown. Admite plantillas, frontmatter YAML, exportaci\u00f3n autom\u00e1tica y sincronizaci\u00f3n en vivo.",
-        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u3092Markdown\u30ce\u30fc\u30c8\u3068\u3057\u3066Obsidian Vault\u306b\u4fdd\u5b58\u3057\u307e\u3059\u3002\u30c6\u30f3\u30d7\u30ec\u30fc\u30c8\u3001YAML\u30d5\u30ed\u30f3\u30c8\u30de\u30bf\u30fc\u3001\u81ea\u52d5\u30a8\u30af\u30b9\u30dd\u30fc\u30c8\u3001\u30e9\u30a4\u30d6\u540c\u671f\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Transkriptionen als Markdown-Notizen in deinem Obsidian-Vault speichern. Unterstützt Vorlagen, YAML-Frontmatter, Auto-Export und Live-Sync.",
+        "es": "Guarda las transcripciones en tu bóveda de Obsidian como notas Markdown. Admite plantillas, frontmatter YAML, exportación automática y sincronización en vivo.",
+        "ja": "文字起こしをMarkdownノートとしてObsidian Vaultに保存します。テンプレート、YAMLフロントマター、自動エクスポート、ライブ同期に対応します。"
       },
       "category": "action",
       "downloadCount": 2344,
@@ -2391,8 +2391,8 @@
       "author": "TypeWhisper",
       "description": "Access OpenRouter speech-to-text models and 300+ LLMs from OpenAI, Anthropic, Meta, Google and more. Shows model pricing and account balance. Requires API key.",
       "descriptions": {
-        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und \u00fcber 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key.",
-        "ja": "OpenAI\u3001Anthropic\u3001Meta\u3001Google\u306a\u3069\u306eOpenRouter\u97f3\u58f0\u8a8d\u8b58\u30e2\u30c7\u30eb\u3068300\u4ee5\u4e0a\u306eLLM\u306b\u30a2\u30af\u30bb\u30b9\u3067\u304d\u307e\u3059\u3002\u30e2\u30c7\u30eb\u6599\u91d1\u3068\u30a2\u30ab\u30a6\u30f3\u30c8\u6b8b\u9ad8\u3092\u8868\u793a\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Zugriff auf OpenRouter-Spracherkennungsmodelle und über 300 LLMs von OpenAI, Anthropic, Meta, Google und mehr. Zeigt Modellpreise und Kontoguthaben. Erfordert API-Key.",
+        "ja": "OpenAI、Anthropic、Meta、GoogleなどのOpenRouter音声認識モデルと300以上のLLMにアクセスできます。モデル料金とアカウント残高を表示し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 1208,
@@ -2523,8 +2523,8 @@
       "author": "TypeWhisper",
       "description": "Store and search memories using the OpenAI Vector Store API with semantic embeddings.",
       "descriptions": {
-        "de": "Speichert und durchsucht Erinnerungen \u00fcber die OpenAI Vector Store API mit semantischen Embeddings.",
-        "ja": "OpenAI Vector Store API\u3068\u30bb\u30de\u30f3\u30c6\u30a3\u30c3\u30af\u57cb\u3081\u8fbc\u307f\u3092\u4f7f\u3063\u3066\u30e1\u30e2\u30ea\u3092\u4fdd\u5b58\u30fb\u691c\u7d22\u3057\u307e\u3059\u3002"
+        "de": "Speichert und durchsucht Erinnerungen über die OpenAI Vector Store API mit semantischen Embeddings.",
+        "ja": "OpenAI Vector Store APIとセマンティック埋め込みを使ってメモリを保存・検索します。"
       },
       "category": "memory",
       "downloadCount": 3355,
@@ -2565,8 +2565,8 @@
       "author": "TypeWhisper",
       "description": "Post-process transcribed text through custom shell scripts. Pass text via stdin, get results via stdout.",
       "descriptions": {
-        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin \u00fcbergeben, Ergebnis per stdout zur\u00fcckgegeben.",
-        "ja": "\u30ab\u30b9\u30bf\u30e0\u30b7\u30a7\u30eb\u30b9\u30af\u30ea\u30d7\u30c8\u3067\u6587\u5b57\u8d77\u3053\u3057\u30c6\u30ad\u30b9\u30c8\u3092\u5f8c\u51e6\u7406\u3057\u307e\u3059\u3002stdin\u3067\u30c6\u30ad\u30b9\u30c8\u3092\u6e21\u3057\u3001stdout\u304b\u3089\u7d50\u679c\u3092\u53d7\u3051\u53d6\u308a\u307e\u3059\u3002"
+        "de": "Transkribierten Text durch eigene Shell-Skripte nachbearbeiten. Text wird per stdin übergeben, Ergebnis per stdout zurückgegeben.",
+        "ja": "カスタムシェルスクリプトで文字起こしテキストを後処理します。stdinでテキストを渡し、stdoutから結果を受け取ります。"
       },
       "category": "post-processor",
       "downloadCount": 1011,
@@ -2636,8 +2636,8 @@
       "author": "TypeWhisper",
       "description": "Cloud speech-to-text and text-to-speech via Soniox APIs with regional endpoint support. Requires API key.",
       "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key.",
-        "ja": "Soniox API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u8a8d\u8b58\u3068\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002\u30ea\u30fc\u30b8\u30e7\u30f3\u5225\u30a8\u30f3\u30c9\u30dd\u30a4\u30f3\u30c8\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Soniox APIs mit regionaler Endpunkt-Auswahl. Erfordert API-Key.",
+        "ja": "Soniox APIによるクラウド音声認識と音声合成です。リージョン別エンドポイントに対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 283,
@@ -2802,8 +2802,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via Speechmatics API with real-time WebSocket streaming. Requires API key.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "Speechmatics API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Speechmatics-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "ja": "Speechmatics APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 114,
@@ -2893,7 +2893,7 @@
       "description": "Send transcribed or processed text to any webhook URL via HTTP POST.",
       "descriptions": {
         "de": "Transkribierten oder verarbeiteten Text per HTTP POST an eine beliebige Webhook-URL senden.",
-        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u6e08\u307f\u307e\u305f\u306f\u51e6\u7406\u6e08\u307f\u306e\u30c6\u30ad\u30b9\u30c8\u3092HTTP POST\u3067\u4efb\u610f\u306eWebhook URL\u3078\u9001\u4fe1\u3057\u307e\u3059\u3002"
+        "ja": "文字起こし済みまたは処理済みのテキストをHTTP POSTで任意のWebhook URLへ送信します。"
       },
       "category": "post-processor",
       "downloadCount": 985,
@@ -2972,8 +2972,8 @@
       "author": "TypeWhisper",
       "description": "Text-to-speech via the built-in macOS AVSpeechSynthesizer voices for spoken feedback.",
       "descriptions": {
-        "de": "Text-zu-Sprache \u00fcber die integrierten macOS-AVSpeechSynthesizer-Stimmen f\u00fcr gesprochenes Feedback.",
-        "ja": "macOS\u6a19\u6e96\u306e\u97f3\u58f0\uff08AVSpeechSynthesizer\uff09\u3067\u3001\u6587\u5b57\u8d77\u3053\u3057\u7d50\u679c\u306a\u3069\u3092\u8aad\u307f\u4e0a\u3052\u307e\u3059\u3002"
+        "de": "Text-zu-Sprache über die integrierten macOS-AVSpeechSynthesizer-Stimmen für gesprochenes Feedback.",
+        "ja": "macOS標準の音声（AVSpeechSynthesizer）で、文字起こし結果などを読み上げます。"
       },
       "category": "tts",
       "downloadCount": 0,
@@ -3013,8 +3013,8 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
       "descriptions": {
-        "de": "Lokale Spracherkennung und \u00dcbersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler \u00dcbersetzung.",
-        "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308bIBM\u306e\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3068\u7ffb\u8a33\u3067\u3059\u30026\u8a00\u8a9e\u306e\u53cc\u65b9\u5411\u7ffb\u8a33\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Lokale Spracherkennung und Übersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Übersetzung.",
+        "ja": "Apple Silicon上のMLXで動作するIBMのローカル音声認識と翻訳です。6言語の双方向翻訳に対応します。"
       },
       "category": "transcription",
       "downloadCount": 1052,
@@ -3137,8 +3137,8 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
       "descriptions": {
-        "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und pr\u00e4zise.",
-        "ja": "Apple Silicon\u4e0a\u306eVoxtral MLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u3059\u3002"
+        "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und präzise.",
+        "ja": "Apple Silicon上のVoxtral MLXで動作するローカル音声認識です。高速かつ高精度です。"
       },
       "category": "transcription",
       "downloadCount": 2150,
@@ -3262,8 +3262,8 @@
       "author": "TypeWhisper",
       "description": "Removes filler words like \"um\" and \"uh\" from transcribed text.",
       "descriptions": {
-        "de": "Entfernt F\u00fcllw\u00f6rter wie \u201e\u00e4hm\u201c und \u201e\u00e4h\u201c aus transkribiertem Text.",
-        "ja": "\u6587\u5b57\u8d77\u3053\u3057\u7d50\u679c\u304b\u3089\u300cum\u300d\u300cuh\u300d\u306a\u3069\u306e\u3064\u306a\u304e\u8a00\u8449\u3092\u53d6\u308a\u9664\u304d\u307e\u3059\u3002"
+        "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text.",
+        "ja": "文字起こし結果から「um」「uh」などのつなぎ言葉を取り除きます。"
       },
       "category": "post-processor",
       "downloadCount": 4650,
@@ -3317,7 +3317,7 @@
       "description": "Experimental local text-to-speech with Supertonic 3 ONNX models. Requires accepting the OpenRAIL-M model license before downloading model assets.",
       "descriptions": {
         "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden.",
-        "ja": "Supertonic 3 ONNX\u30e2\u30c7\u30eb\u306b\u3088\u308b\u5b9f\u9a13\u7684\u306a\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002\u30e2\u30c7\u30eb\u30a2\u30bb\u30c3\u30c8\u306e\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u524d\u306bOpenRAIL-M\u30e2\u30c7\u30eb\u30e9\u30a4\u30bb\u30f3\u30b9\u3078\u306e\u540c\u610f\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "ja": "Supertonic 3 ONNXモデルによる実験的なローカル音声合成です。モデルアセットのダウンロード前にOpenRAIL-Mモデルライセンスへの同意が必要です。"
       },
       "category": "tts",
       "downloadCount": 234,
@@ -3374,8 +3374,8 @@
       "author": "TypeWhisper",
       "description": "Cloud LLM, speech-to-text, and text-to-speech via xAI Grok APIs. Requires an xAI API key.",
       "descriptions": {
-        "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech \u00fcber xAI-Grok-APIs. Erfordert einen xAI API-Key.",
-        "ja": "xAI Grok API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9LLM\u3001\u97f3\u58f0\u8a8d\u8b58\u3001\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002xAI API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-LLM, Speech-to-Text und Text-to-Speech über xAI-Grok-APIs. Erfordert einen xAI API-Key.",
+        "ja": "xAI Grok APIによるクラウドLLM、音声認識、音声合成です。xAI APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 130,
@@ -3445,8 +3445,8 @@
       "author": "TypeWhisper",
       "description": "Cloud transcription via the Smallest AI Pulse STT API. Requires a Smallest API key.",
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Smallest AI Pulse STT API. Erfordert einen Smallest API-Key.",
-        "ja": "Smallest AI Pulse STT API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002Smallest API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Smallest AI Pulse STT API. Erfordert einen Smallest API-Key.",
+        "ja": "Smallest AI Pulse STT APIによるクラウド文字起こしです。Smallest APIキーが必要です。"
       },
       "category": "transcription",
       "downloadCount": 23,
@@ -3494,8 +3494,8 @@
       "category": "transcription",
       "downloadCount": 71,
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
-        "ja": "Reson8\u97f3\u58f0\u8a8d\u8b58API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key.",
+        "ja": "Reson8音声認識APIによるクラウド文字起こしです。リアルタイムWebSocketストリーミングに対応し、APIキーが必要です。"
       },
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
@@ -3572,8 +3572,8 @@
         }
       ],
       "descriptions": {
-        "de": "Cloud-Transkription \u00fcber die Sber SaluteSpeech REST API. Erfordert einen SaluteSpeech Authorization Key.",
-        "ja": "Sber SaluteSpeech REST API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002SaluteSpeech Authorization Key\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud-Transkription über die Sber SaluteSpeech REST API. Erfordert einen SaluteSpeech Authorization Key.",
+        "ja": "Sber SaluteSpeech REST APIによるクラウド文字起こしです。SaluteSpeech Authorization Keyが必要です。"
       },
       "locality": "cloud"
     },
@@ -3585,8 +3585,8 @@
       "category": "transcription",
       "downloadCount": 35,
       "descriptions": {
-        "de": "Cloud Speech-to-Text und Text-to-Speech \u00fcber Cartesia APIs. Erfordert einen Cartesia API-Key.",
-        "ja": "Cartesia API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u8a8d\u8b58\u3068\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002Cartesia API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Cloud Speech-to-Text und Text-to-Speech über Cartesia APIs. Erfordert einen Cartesia API-Key.",
+        "ja": "Cartesia APIによるクラウド音声認識と音声合成です。Cartesia APIキーが必要です。"
       },
       "categories": [
         "transcription",
@@ -3672,8 +3672,8 @@
       "category": "transcription",
       "downloadCount": 80,
       "descriptions": {
-        "de": "LLM-Anbieter und Cloud-Spracherkennung \u00fcber die Mistral AI API. Erfordert API-Key.",
-        "ja": "Mistral AI API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "LLM-Anbieter und Cloud-Spracherkennung über die Mistral AI API. Erfordert API-Key.",
+        "ja": "Mistral AI APIによるLLMプロバイダーとクラウド音声文字起こしです。APIキーが必要です。"
       },
       "categories": [
         "transcription",
@@ -3766,8 +3766,8 @@
       "category": "utility",
       "downloadCount": 0,
       "descriptions": {
-        "de": "Korrigierte Diktattexte pr\u00fcfen und manuell zur Verbesserung von TypeWhisper beitragen.",
-        "ja": "\u4fee\u6b63\u6e08\u307f\u306e\u97f3\u58f0\u5165\u529b\u30c6\u30ad\u30b9\u30c8\u3092\u78ba\u8a8d\u3057\u3001TypeWhisper\u306e\u6539\u5584\u306b\u624b\u52d5\u3067\u63d0\u4f9b\u3057\u307e\u3059\u3002"
+        "de": "Korrigierte Diktattexte prüfen und manuell zur Verbesserung von TypeWhisper beitragen.",
+        "ja": "修正済みの音声入力テキストを確認し、TypeWhisperの改善に手動で提供します。"
       },
       "iconSystemName": "checkmark.bubble",
       "requiresAPIKey": false,
@@ -3801,8 +3801,8 @@
       "category": "transcription",
       "downloadCount": 154,
       "descriptions": {
-        "de": "Lokale GGUF- und Metal-Spracherkennung mit Cohere Transcribe 03-2026. Q4_K-, Q5_0-, Q6_K- und Q8_0-Modelle f\u00fcr 14 explizit ausgew\u00e4hlte Sprachen.",
-        "ja": "Cohere Transcribe 03-2026\u3092\u4f7f\u7528\u3059\u308b\u30ed\u30fc\u30ab\u30ebGGUF\u30fbMetal\u97f3\u58f0\u8a8d\u8b58\u3002Q4_K\u3001Q5_0\u3001Q6_K\u3001Q8_0\u30e2\u30c7\u30eb\u3068\u660e\u793a\u7684\u306b\u9078\u629e\u3057\u305f14\u8a00\u8a9e\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+        "de": "Lokale GGUF- und Metal-Spracherkennung mit Cohere Transcribe 03-2026. Q4_K-, Q5_0-, Q6_K- und Q8_0-Modelle für 14 explizit ausgewählte Sprachen.",
+        "ja": "Cohere Transcribe 03-2026を使用するローカルGGUF・Metal音声認識。Q4_K、Q5_0、Q6_K、Q8_0モデルと明示的に選択した14言語に対応します。"
       },
       "iconSystemName": "waveform.badge.mic",
       "detailsURL": "https://github.com/TypeWhisper/typewhisper-mac/issues/1031",
@@ -3902,9 +3902,9 @@
       "category": "action",
       "downloadCount": 94,
       "descriptions": {
-        "de": "TypeWhisper-Workflows \u00fcber stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
-        "ja": "TypeWhisper\u306e\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u3092stdio\u307e\u305f\u306fStreamable HTTP\u7d4c\u7531\u3067\u30ed\u30fc\u30ab\u30eb\u307e\u305f\u306f\u30ea\u30e2\u30fc\u30c8\u306eMCP\u30c4\u30fc\u30eb\u306b\u63a5\u7d9a\u3057\u307e\u3059\u3002",
-        "zh-Hans": "\u901a\u8fc7 stdio \u6216 Streamable HTTP \u5c06 TypeWhisper \u5de5\u4f5c\u6d41\u8fde\u63a5\u5230\u672c\u5730\u6216\u8fdc\u7a0b MCP \u5de5\u5177\u3002"
+        "de": "TypeWhisper-Workflows über stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
+        "ja": "TypeWhisperのワークフローをstdioまたはStreamable HTTP経由でローカルまたはリモートのMCPツールに接続します。",
+        "zh-Hans": "通过 stdio 或 Streamable HTTP 将 TypeWhisper 工作流连接到本地或远程 MCP 工具。"
       },
       "iconSystemName": "point.3.connected.trianglepath.dotted",
       "requiresAPIKey": false,
@@ -3956,8 +3956,8 @@
       "category": "utility",
       "downloadCount": 29,
       "descriptions": {
-        "de": "L\u00e4dt Audio aus unterst\u00fctzten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter.",
-        "ja": "\u5bfe\u5fdc\u3059\u308bWeb\u30ea\u30f3\u30af\u304b\u3089yt-dlp\u3068ffmpeg\u3067\u97f3\u58f0\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3001TypeWhisper\u3067\u6587\u5b57\u8d77\u3053\u3057\u3057\u307e\u3059\u3002"
+        "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter.",
+        "ja": "対応するWebリンクからyt-dlpとffmpegで音声をダウンロードし、TypeWhisperで文字起こしします。"
       },
       "iconSystemName": "link.badge.plus",
       "requiresAPIKey": false,
@@ -3991,8 +3991,8 @@
       "category": "transcription",
       "downloadCount": 18,
       "descriptions": {
-        "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schl\u00fcssel.",
-        "ja": "Muse Voice Transcribe\u306b\u3088\u308b\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0\u30fb\u30d5\u30a1\u30a4\u30eb\u6587\u5b57\u8d77\u3053\u3057\u3001\u30aa\u30d7\u30b7\u30e7\u30f3\u306e\u8a71\u8005\u5206\u96e2\u3001Muse Spark\u306b\u3088\u308b\u30d7\u30ed\u30f3\u30d7\u30c8\u51e6\u7406\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002Meta Model API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schlüssel.",
+        "ja": "Muse Voice Transcribeによるリアルタイム・ファイル文字起こし、オプションの話者分離、Muse Sparkによるプロンプト処理に対応します。Meta Model APIキーが必要です。"
       },
       "categories": [
         "transcription",
@@ -4041,7 +4041,7 @@
       "downloadCount": 57,
       "descriptions": {
         "de": "Bereits angemeldete Codex-, Claude-, OpenCode- und Antigravity-CLIs ohne separate API-Keys als LLM-Anbieter verwenden.",
-        "ja": "\u30b5\u30a4\u30f3\u30a4\u30f3\u6e08\u307f\u306eCodex\u3001Claude\u3001OpenCode\u3001Antigravity CLI\u3092\u3001\u5225\u306eAPI\u30ad\u30fc\u306a\u3057\u3067LLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u3057\u3066\u4f7f\u7528\u3057\u307e\u3059\u3002"
+        "ja": "サインイン済みのCodex、Claude、OpenCode、Antigravity CLIを、別のAPIキーなしでLLMプロバイダーとして使用します。"
       },
       "iconSystemName": "terminal",
       "requiresAPIKey": false,
@@ -4086,8 +4086,8 @@
       "category": "transcription",
       "downloadCount": 25,
       "descriptions": {
-        "de": "Schnelle Cloud-Transkription mit Microsoft MAI Transcribe, Spracherkennung, Fachbegriffs-Biasing, Transkriptionsstilen und optionaler Sprechererkennung. Erfordert Azure-Speech-Endpunkt und API-Schl\u00fcssel.",
-        "ja": "Microsoft MAI Transcribe\u306b\u3088\u308b\u9ad8\u901f\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u8a00\u8a9e\u691c\u51fa\u3001\u7528\u8a9e\u30d0\u30a4\u30a2\u30b9\u3001\u6587\u5b57\u8d77\u3053\u3057\u30b9\u30bf\u30a4\u30eb\u3001\u30aa\u30d7\u30b7\u30e7\u30f3\u306e\u8a71\u8005\u5206\u96e2\u306b\u5bfe\u5fdc\u3057\u3001Azure Speech\u30a8\u30f3\u30c9\u30dd\u30a4\u30f3\u30c8\u3068API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
+        "de": "Schnelle Cloud-Transkription mit Microsoft MAI Transcribe, Spracherkennung, Fachbegriffs-Biasing, Transkriptionsstilen und optionaler Sprechererkennung. Erfordert Azure-Speech-Endpunkt und API-Schlüssel.",
+        "ja": "Microsoft MAI Transcribeによる高速クラウド文字起こしです。言語検出、用語バイアス、文字起こしスタイル、オプションの話者分離に対応し、Azure SpeechエンドポイントとAPIキーが必要です。"
       },
       "iconSystemName": "waveform.and.mic",
       "requiresAPIKey": true,
@@ -4132,8 +4132,8 @@
       "category": "transcription",
       "downloadCount": 18,
       "descriptions": {
-        "de": "Zugriff auf Spracherkennungsmodelle und Hunderte LLMs von OpenAI, Anthropic, Google, xAI und mehr \u00fcber Vercel AI Gateway mit einem einzigen API-Schl\u00fcssel. Zeigt Modellpreise und Guthaben.",
-        "ja": "Vercel AI Gateway\u7d4c\u7531\u3067\u3001OpenAI\u3001Anthropic\u3001Google\u3001xAI\u306a\u3069\u306e\u97f3\u58f0\u8a8d\u8b58\u30e2\u30c7\u30eb\u3068\u6570\u767e\u306eLLM\u306b1\u3064\u306eAPI\u30ad\u30fc\u3067\u30a2\u30af\u30bb\u30b9\u3067\u304d\u307e\u3059\u3002\u30e2\u30c7\u30eb\u6599\u91d1\u3068\u30af\u30ec\u30b8\u30c3\u30c8\u6b8b\u9ad8\u3092\u8868\u793a\u3057\u307e\u3059\u3002"
+        "de": "Zugriff auf Spracherkennungsmodelle und Hunderte LLMs von OpenAI, Anthropic, Google, xAI und mehr über Vercel AI Gateway mit einem einzigen API-Schlüssel. Zeigt Modellpreise und Guthaben.",
+        "ja": "Vercel AI Gateway経由で、OpenAI、Anthropic、Google、xAIなどの音声認識モデルと数百のLLMに1つのAPIキーでアクセスできます。モデル料金とクレジット残高を表示します。"
       },
       "categories": [
         "transcription",
@@ -4200,8 +4200,8 @@
       "category": "transcription",
       "downloadCount": 20,
       "descriptions": {
-        "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterst\u00fctzt Sophea f\u00fcr Griechisch und Englisch sowie kompatible importierte Modelle.",
-        "ja": "Apple Silicon\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebCanary\u97f3\u58f0\u8a8d\u8b58\u3002\u30ae\u30ea\u30b7\u30e3\u8a9e\u3068\u82f1\u8a9e\u306eSophea\u3084\u4e92\u63db\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002"
+        "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterstützt Sophea für Griechisch und Englisch sowie kompatible importierte Modelle.",
+        "ja": "Apple Siliconで動作するローカルCanary音声認識。ギリシャ語と英語のSopheaや互換モデルに対応。"
       },
       "iconSystemName": "cpu",
       "releases": [
@@ -4264,7 +4264,7 @@
       "downloadCount": 170,
       "descriptions": {
         "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
-        "ja": "Apple Silicon\u4e0a\u3067MLX\u7d4c\u7531\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebLLM\u3002Gemma 4\u3001Qwen3.5\u3001LFM2.5\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
+        "ja": "Apple Silicon上でMLX経由で動作するローカルLLM。Gemma 4、Qwen3.5、LFM2.5モデルに対応。APIキーは不要です。"
       },
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/",
@@ -4321,13 +4321,43 @@
       "locality": "local"
     },
     {
+      "id": "com.typewhisper.gigaam",
+      "name": "GigaAM",
+      "author": "TypeWhisper",
+      "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization. Russian only.",
+      "category": "transcription",
+      "downloadCount": 3,
+      "descriptions": {
+        "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Großschreibung. Nur Russisch.",
+        "ja": "SberのGigaAM v3によるロシア語のローカル音声認識です。句読点と大文字を付けます。ロシア語専用です。"
+      },
+      "iconSystemName": "waveform.badge.mic",
+      "detailsURL": "https://www.typewhisper.com/addons/gigaam/",
+      "iconURL": "https://www.typewhisper.com/brand-logos/sber/logo.svg",
+      "locality": "local",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.8.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 9538683,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gigaam-v1.0.0/GigaAMPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ],
+          "downloadCount": 3
+        }
+      ]
+    },
+    {
       "id": "com.scriptease.r2t2",
       "name": "Confucius4-R2T2",
       "author": "scriptease",
-      "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao). Downloads the audio.cpp server and a model of your choice (Q4_K_M, Q8_0 or F16) and runs them locally on Metal, or connects to your own audio.cpp server. Append-only output, Chinese and English optimized.",
+      "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao). Downloads the audio.cpp server and a model of your choice (Q4_K_M, Q8_0 or F16) and runs them locally on Metal (Apple silicon only), or connects to your own audio.cpp server, which Intel Macs need. Append-only output, Chinese and English optimized.",
       "descriptions": {
-        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). L\u00e4dt den audio.cpp-Server und ein Modell deiner Wahl (Q4_K_M, Q8_0 oder F16) herunter und f\u00fchrt sie lokal mit Metal aus, oder verbindet sich mit deinem eigenen audio.cpp-Server. Append-only-Ausgabe, optimiert f\u00fcr Chinesisch und Englisch.",
-        "ja": "Confucius4-R2T2\uff08NetEase Youdao\uff09\u306b\u3088\u308b\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0\u306e\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002audio.cpp\u30b5\u30fc\u30d0\u30fc\u3068\u9078\u629e\u3057\u305f\u30e2\u30c7\u30eb\uff08Q4_K_M\u3001Q8_0\u3001F16\uff09\u3092\u30c0\u30a6\u30f3\u30ed\u30fc\u30c9\u3057\u3066Mac\u4e0a\u306eMetal\u3067\u5b9f\u884c\u3059\u308b\u304b\u3001\u81ea\u5206\u306eaudio.cpp\u30b5\u30fc\u30d0\u30fc\u306b\u63a5\u7d9a\u3057\u307e\u3059\u3002\u8a8d\u8b58\u7d50\u679c\u306f\u672b\u5c3e\u306b\u8ffd\u8a18\u3055\u308c\u3001\u4e2d\u56fd\u8a9e\u3068\u82f1\u8a9e\u306b\u6700\u9069\u5316\u3055\u308c\u3066\u3044\u307e\u3059\u3002"
+        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). Lädt den audio.cpp-Server und ein Modell deiner Wahl (Q4_K_M, Q8_0 oder F16) herunter und führt sie lokal mit Metal aus (nur Apple Silicon), oder verbindet sich mit deinem eigenen audio.cpp-Server, den Intel-Macs brauchen. Append-only-Ausgabe, optimiert für Chinesisch und Englisch.",
+        "ja": "Confucius4-R2T2（NetEase Youdao）によるリアルタイムの文字起こしです。audio.cppサーバーと選択したモデル（Q4_K_M、Q8_0、F16）をダウンロードしてMac上のMetalで実行するか（Appleシリコンのみ）、自分のaudio.cppサーバーに接続します（Intel搭載Macではこちらが必要です）。認識結果は末尾に追記され、中国語と英語に最適化されています。"
       },
       "source": "community",
       "category": "transcription",
@@ -4354,8 +4384,7 @@
           "minOSVersion": "14.0",
           "downloadCount": 0
         }
-      ],
-      "downloadCount": 1011
+      ]
     },
     {
       "id": "com.mempalace.memory",
@@ -4364,7 +4393,7 @@
       "description": "Store and search memories in MemPalace Cloud or a self-hosted MemPalace instance. Memories are filed into a user-chosen wing and room, with shared knowledge-graph tunneling on the server.",
       "descriptions": {
         "de": "Speichert und durchsucht Erinnerungen in MemPalace Cloud oder einer selbstgehosteten MemPalace-Instanz. Memories werden in einen ausgewaehlten Wing und Room einsortiert, mit Knowledge-Graph-Tunneling auf dem Server.",
-        "ja": "MemPalace Cloud\u307e\u305f\u306f\u81ea\u5206\u3067\u904b\u7528\u3059\u308bMemPalace\u30b5\u30fc\u30d0\u30fc\u306b\u30e1\u30e2\u30ea\u3092\u4fdd\u5b58\u30fb\u691c\u7d22\u3057\u307e\u3059\u3002\u30e1\u30e2\u30ea\u306f\u6307\u5b9a\u3057\u305fWing\u3068Room\u306b\u5206\u985e\u3055\u308c\u3001\u30b5\u30fc\u30d0\u30fc\u4e0a\u306e\u5171\u6709\u30ca\u30ec\u30c3\u30b8\u30b0\u30e9\u30d5\u3092\u901a\u3058\u3066\u95a2\u9023\u60c5\u5831\u3092\u305f\u3069\u308c\u307e\u3059\u3002"
+        "ja": "MemPalace Cloudまたは自分で運用するMemPalaceサーバーにメモリを保存・検索します。メモリは指定したWingとRoomに分類され、サーバー上の共有ナレッジグラフを通じて関連情報をたどれます。"
       },
       "source": "community",
       "category": "memory",
@@ -4384,37 +4413,6 @@
             "arm64"
           ],
           "downloadCount": 66
-        }
-      ],
-      "downloadCount": 66
-    },
-    {
-      "id": "com.typewhisper.gigaam",
-      "name": "GigaAM",
-      "author": "TypeWhisper",
-      "description": "Local Russian speech-to-text with GigaAM v3 by Sber. Adds punctuation and capitalization. Russian only.",
-      "category": "transcription",
-      "downloadCount": 3,
-      "descriptions": {
-        "de": "Lokale russische Spracherkennung mit GigaAM v3 von Sber. Setzt Satzzeichen und Gro\u00dfschreibung. Nur Russisch.",
-        "ja": "Sber\u306eGigaAM v3\u306b\u3088\u308b\u30ed\u30b7\u30a2\u8a9e\u306e\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u53e5\u8aad\u70b9\u3068\u5927\u6587\u5b57\u3092\u4ed8\u3051\u307e\u3059\u3002\u30ed\u30b7\u30a2\u8a9e\u5c02\u7528\u3067\u3059\u3002"
-      },
-      "iconSystemName": "waveform.badge.mic",
-      "detailsURL": "https://www.typewhisper.com/addons/gigaam/",
-      "iconURL": "https://www.typewhisper.com/brand-logos/sber/logo.svg",
-      "locality": "local",
-      "releases": [
-        {
-          "version": "1.0.0",
-          "minHostVersion": "1.8.0",
-          "sdkCompatibilityVersion": "v1",
-          "size": 9538683,
-          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gigaam-v1.0.0/GigaAMPlugin.zip",
-          "minOSVersion": "14.0",
-          "supportedArchitectures": [
-            "arm64"
-          ],
-          "downloadCount": 3
         }
       ]
     }
