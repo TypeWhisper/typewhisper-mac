@@ -673,6 +673,7 @@ final class ModelManagerService: ObservableObject {
         let savedProviderId = UserDefaults.standard.string(forKey: providerKey)
 
         if savedProviderId == nil,
+           !UserDefaults.standard.bool(forKey: UserDefaultsKeys.setupWizardCompleted),
            let engine = PluginManager.shared.transcriptionEngine(for: SetupWizardQwen3Recommendation.providerId) {
             selectProvider(engine.providerId)
             if let modelId = engine.selectedModelId ?? SetupWizardQwen3Recommendation.preferredModelId(from: engine.modelCatalog) {
