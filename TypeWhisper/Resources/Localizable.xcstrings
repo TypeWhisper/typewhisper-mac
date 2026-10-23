@@ -15929,22 +15929,6 @@
         }
       }
     },
-    "Configure Voice & Speed…" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice & Speedの設定…"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置语音和语速…"
-          }
-        }
-      }
-    },
     "Configured" : {
       "localizations" : {
         "ja" : {
@@ -18622,28 +18606,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在“系统设置”中启用"
-          }
-        }
-      }
-    },
-    "Enable Memory" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Memory aktivieren"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メモリを有効にする"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "启用记忆"
           }
         }
       }
@@ -23558,50 +23520,6 @@
         }
       }
     },
-    "Memory extraction runs for every eligible transcription after the minimum text length and cooldown checks." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Memory-Extraktion läuft für jede geeignete Transkription nach Mindestlänge und Cooldown."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メモリ抽出は、最小文字数とクールダウンなどの条件を満たしたすべての適切な文字起こしに対して実行されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在满足最小文本长度和冷却时间检查后，会对每个合格的转录运行记忆提取。"
-          }
-        }
-      }
-    },
-    "Memory extraction runs only when the transcription was produced by a known workflow." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Memory-Extraktion läuft nur, wenn die Transkription von einem bekannten Workflow erzeugt wurde."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メモリ抽出は、文字起こしが既知のワークフローによって生成された場合にのみ実行されます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "仅当转录内容由已知工作流生成时，才会提取记忆。"
-          }
-        }
-      }
-    },
     "Menu bar icon" : {
       "localizations" : {
         "de" : {
@@ -25128,28 +25046,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没有匹配的工作流"
-          }
-        }
-      }
-    },
-    "No memory storage plugins active. Enable one in Integrations." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Memory-Speicher-Plugins aktiv. Aktiviere eins unter Integrationen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "メモリ保存用のプラグインが有効になっていません。「プラグイン」で有効にしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有启用的记忆存储插件。请在“集成”中启用一个。"
           }
         }
       }
@@ -26732,6 +26628,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Parakeet"
+          }
+        }
+      }
+    },
+    "Qwen3 could not be set up. %@" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qwen3 未能完成设置。%@"
           }
         }
       }
@@ -29138,50 +29044,6 @@
         }
       }
     },
-    "Read Back Last Transcription" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Letzte Transkription vorlesen"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最後のテキストを読み上げ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "朗读上次转录"
-          }
-        }
-      }
-    },
-    "Reads back the final transcribed text after each dictation using the selected speech provider. Recording, error, and prompt announcements are only spoken through VoiceOver accessibility announcements." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Liest den finalen transkribierten Text nach jeder Diktation über den ausgewählten Sprachprovider vor. Aufnahme-, Fehler- und Prompt-Ansagen werden nur über die VoiceOver-Bedienungshilfen gesprochen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "選択した音声プロバイダーを使用して、各音声認識後の最終テキストを読み上げます。録音、エラー、プロンプトのアナウンスはVoiceOverのみで読み上げられます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每次听写后使用所选的语音提供商朗读最终转录文本。录音通知、错误提示和提示词公告仅通过 VoiceOver 辅助功能语音播报。"
-          }
-        }
-      }
-    },
     "Ready" : {
       "localizations" : {
         "de" : {
@@ -29990,62 +29852,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "实时转录"
-          }
-        }
-      }
-    },
-    "recorder.liveTranscriptActive" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live-Transkript-Fenster ist aktiv"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Live transcript window is active"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ライブテキストウィンドウがアクティブです"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "实时转录窗口已启用"
-          }
-        }
-      }
-    },
-    "recorder.liveTranscriptHint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Installiere das Live Transcript Plugin unter Integrations für ein Live-Transkript-Fenster."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Install the Live Transcript plugin from Integrations for a live transcript window."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "録音中の文字起こしを表示するには、「プラグイン」でLive Transcriptをインストールしてください。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请从“集成”中安装 Live Transcript 插件，以显示实时转录窗口。"
           }
         }
       }
@@ -33947,28 +33753,6 @@
         }
       }
     },
-    "Spoken feedback" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprachfeedback"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "音声フィードバック"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语音反馈"
-          }
-        }
-      }
-    },
     "Spoken language" : {
       "comment" : "A label for the picker that selects the spoken language.",
       "extractionState" : "stale",
@@ -37510,28 +37294,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "转录"
-          }
-        }
-      }
-    },
-    "Transcriptions shorter than this are skipped for memory extraction." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Transkriptionen kürzer als dieser Wert werden für die Memory-Extraktion übersprungen."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "この値より短い文字起こしはメモリ抽出時にスキップされます。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "短于此时长的转录不会用于提取记忆。"
           }
         }
       }

@@ -13,7 +13,6 @@ private final class MenuBarState: ObservableObject {
     @Published var canCopyLastTranscription: Bool
     @Published var canUndoLastDictation: Bool
     @Published var canRestoreRawTranscript: Bool
-    @Published var hasLastTranscribedText: Bool
     @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
@@ -47,7 +46,6 @@ private final class MenuBarState: ObservableObject {
         self.canCopyLastTranscription = hasRecentTranscriptions
         self.canUndoLastDictation = dictation.dictationUndoService.canUndo
         self.canRestoreRawTranscript = dictation.dictationUndoService.canRestoreRaw
-        self.hasLastTranscribedText = dictation.lastTranscribedText != nil
         self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
@@ -118,15 +116,6 @@ private final class MenuBarState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] url in
                 self?.hasRecoverableRecording = url != nil
-            }
-            .store(in: &cancellables)
-
-        dictation.$lastTranscribedText
-            .map { $0 != nil }
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] hasText in
-                self?.hasLastTranscribedText = hasText
             }
             .store(in: &cancellables)
 
@@ -309,7 +298,6 @@ enum MenuBarMenuItem: Hashable {
     case recentTranscriptions
     case copyLastTranscription
     case pasteLastTranscription
-    case readBackLastTranscription
     case undoLastDictation
     case restoreRawTranscript
 }
@@ -360,7 +348,6 @@ enum MenuBarActionDispatcher {
     }
 }
 
-
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
@@ -401,7 +388,6 @@ struct MenuBarView: View {
                     }
                 }
             }
-
 
             Divider()
 
@@ -523,7 +509,6 @@ struct MenuBarView: View {
                 recentTranscriptionsButton
                 copyLastTranscriptionButton
                 pasteLastTranscriptionButton
-                readBackLastTranscriptionButton
                 // Undo needs to read the target field through Accessibility,
                 // which the App Sandbox does not allow.
                 #if !APPSTORE
@@ -540,7 +525,6 @@ struct MenuBarView: View {
             .disabled(
                 !status.hasRecentTranscriptions
                     && !status.canCopyLastTranscription
-                    && !status.hasLastTranscribedText
                     && !status.canUndoLastDictation
             )
 
@@ -552,9 +536,6 @@ struct MenuBarView: View {
 
         case .pasteLastTranscription:
             pasteLastTranscriptionButton
-
-        case .readBackLastTranscription:
-            readBackLastTranscriptionButton
 
         case .undoLastDictation:
             undoLastDictationButton
@@ -719,17 +700,6 @@ struct MenuBarView: View {
         }
         .keyboardShortcut(keyboardShortcut(from: status.pasteLastTranscriptionMenuShortcut))
         .disabled(!status.canCopyLastTranscription)
-    }
-
-    @ViewBuilder
-    private var readBackLastTranscriptionButton: some View {
-        Button {
-            DictationViewModel.shared.readBackLastTranscription()
-        } label: {
-            Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
-        }
-        .keyboardShortcut("r", modifiers: [.command, .shift])
-        .disabled(!status.hasLastTranscribedText)
     }
 
     @ViewBuilder

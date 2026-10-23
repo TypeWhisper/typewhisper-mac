@@ -311,22 +311,6 @@ struct AudioRecorderView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     }
-
-                    if isLiveTranscriptPluginActive {
-                        Label(
-                            String(localized: "recorder.liveTranscriptActive"),
-                            systemImage: "text.quote"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                    } else {
-                        Label(
-                            String(localized: "recorder.liveTranscriptHint"),
-                            systemImage: "info.circle"
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
                 }
             }
             .onAppear {
@@ -392,10 +376,6 @@ struct AudioRecorderView: View {
         case .finalizing:
             String(localized: "recorder.transcribing")
         }
-    }
-
-    private var isLiveTranscriptPluginActive: Bool {
-        pluginManager.loadedPlugins.contains { $0.manifest.id == "com.typewhisper.livetranscript" && $0.isEnabled }
     }
 
     private func recorderSummaryRow(title: String, value: String) -> some View {

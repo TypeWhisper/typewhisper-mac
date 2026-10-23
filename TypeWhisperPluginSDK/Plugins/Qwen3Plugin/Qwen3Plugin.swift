@@ -29,6 +29,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // Observable state for settings UI
     fileprivate var modelState: Qwen3ModelState = .notLoaded
+    fileprivate var downloadProgress: Double?
 
     private static let primaryParams = STTGenerateParameters(
         maxTokens: 2048,
@@ -431,9 +432,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                     cache: HubCache(cacheDirectory: modelsDir)
                 )
                 do {
+                    defer { downloadProgress = nil }
                     modelDirectory = try await client.downloadSnapshot(
                         of: repoID,
-                        matching: Self.modelDownloadPatterns
+                        matching: Self.modelDownloadPatterns,
+                        progressHandler: { [weak self] progress in
+                            self?.downloadProgress = progress.fractionCompleted
+                        }
                     )
                     guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
                         modelDirectory,
@@ -526,6 +531,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 // Superseding an import can keep this already-loaded runtime.
                 modelState = .ready(preferredModelId)
             }
+            // 新任务设置 .loading 之前，调用方不能读到上一次失败的错误。
+            if case .error = modelState { modelState = .notLoaded }
             let generation = activationID
             explicitModelLoadTask = Task {
                 defer {
@@ -706,7 +713,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         case .notLoaded, .ready:
             return nil
         case .loading:
-            return PluginSettingsActivity(message: "Preparing model")
+            return PluginSettingsActivity(message: "Preparing model", progress: downloadProgress)
         case .error(let message):
             return PluginSettingsActivity(message: message, isError: true)
         }

@@ -16,6 +16,89 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testSetupWizardActivationDownloadsMissingQwen3Model() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let refusal = "Downloads are turned off by your organization."
+        let host = MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: refusal)
+        let qwen = Qwen3Plugin()
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+
+        do {
+            try await SetupWizardQwen3Recommendation.activate(qwen) { _ in }
+            XCTFail("Activation must try to download the missing model")
+        } catch TranscriptionEngineError.modelLoadFailed(let message) {
+            XCTAssertEqual(message, refusal)
+        }
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
+        XCTAssertFalse(qwen.isConfigured)
+    }
+
+    @MainActor
+    func testSetupWizardRetryReportsTheNewAttemptsFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        let qwen = Qwen3Plugin()
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+
+        for refusal in ["A", "B"] {
+            host.modelDownloadRefusal = refusal
+            do {
+                try await SetupWizardQwen3Recommendation.activate(qwen) { _ in }
+                XCTFail("Activation must try to download the missing model")
+            } catch TranscriptionEngineError.modelLoadFailed(let message) {
+                XCTAssertEqual(message, refusal)
+            }
+        }
+        XCTAssertEqual(host.downloadStarts, 2)
+    }
+
+    @MainActor
+    func testSetupWizardFollowsRunningDownloadInsteadOfRestartingIt() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let modelDef = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-6bit" })
+        let partialFile = fixture.repositoryDirectory(repositoryID: modelDef.repoId)
+            .appendingPathComponent("blobs/partial")
+        try FileManager.default.createDirectory(at: partialFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: partialFile)
+        let hold = DispatchSemaphore(value: 0)
+        let host = MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: "A")
+        host.heldDownloadStart = hold
+        let qwen = Qwen3Plugin()
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+
+        let first = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
+        for _ in 0..<500 where host.downloadStarts == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(host.downloadStarts, 1)
+        let runningTask = try XCTUnwrap(qwen.explicitModelLoadTask)
+
+        let second = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertFalse(runningTask.isCancelled)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partialFile.path))
+
+        host.heldDownloadStart = nil
+        hold.signal()
+        for activation in [first, second] {
+            do {
+                try await activation.value
+                XCTFail("Both activations must report the running download's failure")
+            } catch TranscriptionEngineError.modelLoadFailed(let message) {
+                XCTAssertEqual(message, "A")
+            }
+        }
+        XCTAssertEqual(host.downloadStarts, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: partialFile.path))
+    }
+
+    @MainActor
     func testNewExplicitRequestCancelsPreviousRequestBeforeTasksStart() async throws {
         try await assertSupersededExplicitRequests(allowFirstTaskToStart: false)
     }
@@ -571,7 +654,29 @@ private final class MockHostServices: HostServices, HostModelLifecyclePolicyProv
     let activeAppName: String? = nil
     let availableRuleNames: [String] = []
     let shouldRestoreLoadedModelsPassively: Bool
-    let modelDownloadRefusal: String?
+
+    private let downloadLock = NSLock()
+    private var _modelDownloadRefusal: String?
+    private var _downloadStarts = 0
+    private var _heldDownloadStart: DispatchSemaphore?
+
+    /// 插件在开始下载前读取这个值，`heldDownloadStart` 让下载停在进行中的状态。
+    var modelDownloadRefusal: String? {
+        get {
+            let held = downloadLock.withLock {
+                _downloadStarts += 1
+                return _heldDownloadStart
+            }
+            _ = held?.wait(timeout: .now() + 10)
+            return downloadLock.withLock { _modelDownloadRefusal }
+        }
+        set { downloadLock.withLock { _modelDownloadRefusal = newValue } }
+    }
+    var downloadStarts: Int { downloadLock.withLock { _downloadStarts } }
+    var heldDownloadStart: DispatchSemaphore? {
+        get { downloadLock.withLock { _heldDownloadStart } }
+        set { downloadLock.withLock { _heldDownloadStart = newValue } }
+    }
 
     init(
         pluginDataDirectory: URL,
@@ -582,7 +687,7 @@ private final class MockHostServices: HostServices, HostModelLifecyclePolicyProv
         self.pluginDataDirectory = pluginDataDirectory
         self.defaults = defaults
         self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
-        self.modelDownloadRefusal = modelDownloadRefusal
+        _modelDownloadRefusal = modelDownloadRefusal
     }
 
     func storeSecret(key: String, value: String) throws {}

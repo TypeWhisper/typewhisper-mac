@@ -1642,52 +1642,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
-    @objc(APIRouterMockTTSPlugin)
-    private final class MockTTSProviderPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
-        static var pluginId: String { "com.typewhisper.mock.tts" }
-        static var pluginName: String { "Mock TTS" }
-
-        private let requestsLock = NSLock()
-        private var requests: [TTSSpeakRequest] = []
-        var onSpeak: ((TTSSpeakRequest) -> Void)?
-
-        required override init() {}
-
-        func activate(host: HostServices) {}
-        func deactivate() {}
-
-        var providerId: String { "mock-tts" }
-        var providerDisplayName: String { "Mock TTS" }
-        var isConfigured: Bool { true }
-        var availableVoices: [PluginVoiceInfo] { [] }
-        var selectedVoiceId: String? { nil }
-        var settingsSummary: String? { "Mock Summary" }
-        var recordedRequests: [TTSSpeakRequest] {
-            requestsLock.withLock { requests }
-        }
-
-        func selectVoice(_ voiceId: String?) {}
-
-        func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
-            requestsLock.withLock {
-                requests.append(request)
-            }
-            onSpeak?(request)
-            return MockTTSPlaybackSession()
-        }
-    }
-
-    private final class MockTTSPlaybackSession: TTSPlaybackSession, @unchecked Sendable {
-        var isActive: Bool = true
-        var onFinish: (@Sendable () -> Void)?
-
-        func stop() {
-            guard isActive else { return }
-            isActive = false
-            onFinish?()
-        }
-    }
-
     private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
         @discardableResult
         func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
@@ -1759,7 +1713,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let audioRecorderViewModel: AudioRecorderViewModel
         let audioRecorderService: AudioRecorderService
         let textInsertionService: TextInsertionService
-        let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
         init(
@@ -1775,7 +1728,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioRecorderViewModel: AudioRecorderViewModel,
             audioRecorderService: AudioRecorderService,
             textInsertionService: TextInsertionService,
-            ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
             self.router = router
@@ -1790,7 +1742,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             self.audioRecorderViewModel = audioRecorderViewModel
             self.audioRecorderService = audioRecorderService
             self.textInsertionService = textInsertionService
-            self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
     }
@@ -5150,86 +5101,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(stopToInsertion, stopToTranscript)
         // Latency measurements never carry transcript content.
         XCTAssertFalse(completedLatency.values.contains { $0 as? String == "transcribed" })
-    }
-
-    func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var context: APIContext?
-        defer {
-            context = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        context = await MainActor.run {
-            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
-        }
-        let apiContext = try XCTUnwrap(context)
-        let router = apiContext.router
-        let ttsExpectation = expectation(description: "tts speak called")
-
-        await MainActor.run {
-            apiContext.ttsProvider.onSpeak = { request in
-                if request.purpose == .transcription {
-                    ttsExpectation.fulfill()
-                }
-            }
-            apiContext.dictationViewModel.spokenFeedbackEnabled = true
-            apiContext.audioRecordingService.hasMicrophonePermissionOverride = true
-            apiContext.audioRecordingService.inputAvailabilityOverride = { _ in true }
-            apiContext.audioRecordingService.startRecordingOverride = {}
-            apiContext.audioRecordingService.stopRecordingOverride = { _ in
-                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-            }
-            apiContext.textInsertionService.accessibilityGrantedOverride = true
-            apiContext.textInsertionService.captureActiveAppOverride = {
-                ("Notes", "com.apple.Notes", nil)
-            }
-            apiContext.textInsertionService.selectedTextOverride = { nil }
-            apiContext.textInsertionService.pasteSimulatorOverride = {}
-        }
-
-        let start = try Self.jsonObject(
-            await router.route(HTTPRequest(method: "POST", path: "/v1/dictation/start", queryParams: [:], headers: [:], body: Data()))
-        )
-        let startID = try XCTUnwrap(start["id"] as? String)
-        let initialRequestsAreEmpty = await MainActor.run { apiContext.ttsProvider.recordedRequests.isEmpty }
-        XCTAssertTrue(initialRequestsAreEmpty)
-
-        await MainActor.run {
-            apiContext.dictationViewModel.partialText = "transcribed"
-        }
-
-        _ = try Self.jsonObject(
-            await router.route(HTTPRequest(method: "POST", path: "/v1/dictation/stop", queryParams: [:], headers: [:], body: Data()))
-        )
-
-        var completedResponse: [String: Any]?
-        for _ in 0..<40 {
-            let response = try Self.jsonObject(
-                await router.route(
-                    HTTPRequest(
-                        method: "GET",
-                        path: "/v1/dictation/transcription",
-                        queryParams: ["id": startID],
-                        headers: [:],
-                        body: Data()
-                    )
-                )
-            )
-            if response["status"] as? String == "completed" {
-                completedResponse = response
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(50))
-        }
-
-        _ = try XCTUnwrap(completedResponse)
-        await fulfillment(of: [ttsExpectation], timeout: 1.0)
-
-        let requests = await MainActor.run { apiContext.ttsProvider.recordedRequests }
-        XCTAssertEqual(requests.count, 1)
-        XCTAssertEqual(requests.first?.purpose, .transcription)
-        XCTAssertEqual(requests.first?.text, "transcribed")
     }
 
     @MainActor
@@ -10402,8 +10273,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let defaults = UserDefaults.standard
         let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
                     UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard,
-                    UserDefaultsKeys.targetAppCorrectionLearningEnabled,
-                    UserDefaultsKeys.improveTypeWhisperCaptureEnabled]
+                    UserDefaultsKeys.targetAppCorrectionLearningEnabled]
         let originals = keys.map { defaults.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
@@ -10414,7 +10284,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
         defaults.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         defaults.set(false, forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled)
-        defaults.set(false, forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
         MockTranscriptionPlugin.reset()
         let raw = "  hello world \n"
         MockTranscriptionPlugin.setResponseText(raw)
@@ -10497,7 +10366,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(restoredSession?.transcription?.text, value)
         XCTAssertEqual(restoredSession?.transcription?.wordsCount, value.split(whereSeparator: \.isWhitespace).count)
         XCTAssertEqual(context.recentTranscriptionStore.latestEntry(historyRecords: [])?.finalText, value)
-        XCTAssertEqual(context.dictationViewModel.lastTranscribedText, value)
         if historyEnabled {
             XCTAssertEqual(context.historyService.record(withID: snapshot.transcriptionID)?.finalText, value)
         } else {
@@ -11459,7 +11327,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let context = try XCTUnwrap(dictationContext)
         context.dictationViewModel.preserveClipboard = false
         context.dictationViewModel.soundFeedbackEnabled = false
-        context.dictationViewModel.spokenFeedbackEnabled = false
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
         var isTextFieldFocused = false
@@ -11579,7 +11446,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             let viewModel = context.dictationViewModel
             viewModel.preserveClipboard = false
             viewModel.soundFeedbackEnabled = false
-            viewModel.spokenFeedbackEnabled = false
             let pasteboard = NSPasteboard.withUniqueName()
             let field = AXUIElementCreateApplication(1)
             let webArea = AXUIElementCreateApplication(2)
@@ -11677,7 +11543,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let viewModel = context.dictationViewModel
         viewModel.preserveClipboard = false
         viewModel.soundFeedbackEnabled = false
-        viewModel.spokenFeedbackEnabled = false
         let pasteboard = NSPasteboard.withUniqueName()
         var statesAtPaste: [DictationViewModel.State] = []
         context.textInsertionService.pasteboardProvider = { pasteboard }
@@ -11748,7 +11613,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let context = try XCTUnwrap(dictationContext)
         context.dictationViewModel.preserveClipboard = false
         context.dictationViewModel.soundFeedbackEnabled = false
-        context.dictationViewModel.spokenFeedbackEnabled = false
         let pasteboard = NSPasteboard.withUniqueName()
         let element = AXUIElementCreateSystemWide()
         var pasteCount = 0
@@ -11866,89 +11730,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(context.targetAppCorrectionLearningService.latestAttempt?.learnedCorrectionCount, 0)
         XCTAssertEqual(context.dictionaryService.correctionsCount, 0)
-        XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
-        XCTAssertEqual(accessibilityObservationEndCount, 1)
-    }
-
-    @MainActor
-    func testContributionOnlyDictationBeginsChromiumAccessibilityObservation() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
-        let improveCaptureKey = UserDefaultsKeys.improveTypeWhisperCaptureEnabled
-        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
-        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
-        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
-        let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
-        let originalImproveCapture = UserDefaults.standard.object(forKey: improveCaptureKey)
-        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
-        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
-        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
-            Self.restoreUserDefault(originalImproveCapture, forKey: improveCaptureKey)
-            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
-            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
-            Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        UserDefaults.standard.set(false, forKey: learningEnabledKey)
-        UserDefaults.standard.set(true, forKey: improveCaptureKey)
-        UserDefaults.standard.set(false, forKey: liveFieldKey)
-        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
-        UserDefaults.standard.set(false, forKey: saveAudioKey)
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.preserveClipboard = false
-        let pasteboard = NSPasteboard.withUniqueName()
-        context.textInsertionService.pasteboardProvider = { pasteboard }
-        context.textInsertionService.captureActiveAppOverride = {
-            ("Electron Target", "com.example.electron", nil)
-        }
-        context.textInsertionService.accessibilityGrantedOverride = true
-        context.textInsertionService.selectedTextOverride = { nil }
-        // An unreadable field: TypeWhisper cannot observe the text, but the paste may have landed.
-        let unreadableElement = AXUIElementCreateSystemWide()
-        context.textInsertionService.focusedTextElementOverride = { unreadableElement }
-        context.textInsertionService.focusedTextStateOverride = { _ in
-            (value: nil, selectedText: nil, selectedRange: nil)
-        }
-        context.textInsertionService.pasteSimulatorOverride = {}
-        var accessibilityObservationBundleIdentifiers: [String?] = []
-        var accessibilityObservationEndCount = 0
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier, _ in
-            accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
-            return TargetAppAccessibilityObservationLease {
-                accessibilityObservationEndCount += 1
-            }
-        }
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-        }
-
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
-        _ = context.dictationViewModel.apiStopRecording()
-
-        for _ in 0..<80 {
-            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed,
-               context.targetAppCorrectionLearningService.latestAttempt != nil,
-               accessibilityObservationEndCount == 1 {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-
-        XCTAssertEqual(
-            context.targetAppCorrectionLearningService.latestAttempt?.outcome,
-            .unsupportedTextObservation
-        )
         XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
         XCTAssertEqual(accessibilityObservationEndCount, 1)
     }
@@ -13664,7 +13445,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let punctuationRulesLoader = PunctuationRulesLoader()
         let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
-        let speechFeedbackService = SpeechFeedbackService()
         let accessibilityAnnouncementService = AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
@@ -13706,13 +13486,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: MediaPlaybackService(startListening: false)
         )
         dictationViewModel.soundFeedbackEnabled = false
-        dictationViewModel.spokenFeedbackEnabled = false
 
         _ = dictationViewModel.apiStartRecording()
 
@@ -13780,7 +13558,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "No mic detected.")
         )
-        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
     }
 
     @MainActor
@@ -13803,7 +13580,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             context.dictationViewModel.actionFeedbackMessage,
             String(localized: "Microphone permission required.")
         )
-        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
 
         // The menu bar keeps the error after the indicator feedback is gone.
         XCTAssertEqual(
@@ -13816,51 +13592,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         // Taking the indicator's action (here: Open Settings) clears it as well.
         context.dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
         XCTAssertNil(context.dictationViewModel.lastDictationError)
-    }
-
-    @MainActor
-    func testApiStartRecording_doesNotSpeakStatusFeedback() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.spokenFeedbackEnabled = true
-        context.audioRecordingService.hasMicrophonePermissionOverride = true
-        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = {}
-        context.textInsertionService.captureActiveAppOverride = { ("Notes", nil, nil) }
-        context.textInsertionService.selectedTextOverride = { nil }
-
-        _ = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
-
-        XCTAssertEqual(context.dictationViewModel.state, .recording)
-        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
-    }
-
-    @MainActor
-    func testApiStartRecordingError_doesNotSpeakStatusFeedback() async throws {
-        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
-        var dictationContext: DictationContext?
-        defer {
-            dictationContext = nil
-            TestSupport.remove(appSupportDirectory)
-        }
-
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
-        let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.spokenFeedbackEnabled = true
-        context.audioRecordingService.hasMicrophonePermissionOverride = false
-
-        _ = context.dictationViewModel.apiStartRecording()
-
-        XCTAssertEqual(context.dictationViewModel.state, .inserting)
-        XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
     }
 
     @MainActor
@@ -14434,24 +14165,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     ) -> APIContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
-        let ttsProvider = MockTTSProviderPlugin()
-        let ttsManifest = PluginManifest(
-            id: "com.typewhisper.mock.tts",
-            name: "Mock TTS",
-            version: "1.0.0",
-            principalClass: "APIRouterMockTTSPlugin",
-            category: "tts"
-        )
-
-        PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: ttsManifest,
-                instance: ttsProvider,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            )
-        ]
 
         let modelManager = ModelManagerService()
         if withMockTranscriptionPlugin {
@@ -14506,7 +14219,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let punctuationRulesLoader = PunctuationRulesLoader()
         let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
-        let speechFeedbackService = SpeechFeedbackService()
         let accessibilityAnnouncementService = AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
@@ -14548,7 +14260,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: MediaPlaybackService(startListening: false)
@@ -14602,10 +14313,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioRecorderViewModel: audioRecorderViewModel,
             audioRecorderService: audioRecorderService,
             textInsertionService: textInsertionService,
-            ttsProvider: ttsProvider,
             retainedObjects: [
                 PluginManager.shared,
-                ttsProvider,
                 modelManager,
                 audioFileService,
                 audioRecordingService,
@@ -14622,7 +14331,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 promptActionService,
                 promptProcessingService,
                 appFormatterService,
-                speechFeedbackService,
                 accessibilityAnnouncementService,
                 errorLogService,
                 settingsViewModel,
@@ -14736,7 +14444,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let workflowService: WorkflowService
         let dictionaryService: DictionaryService
         let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
-        let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
         init(
@@ -14753,7 +14460,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             workflowService: WorkflowService,
             dictionaryService: DictionaryService,
             targetAppCorrectionLearningService: TargetAppCorrectionLearningService,
-            ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
             self.dictationViewModel = dictationViewModel
@@ -14769,7 +14475,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             self.workflowService = workflowService
             self.dictionaryService = dictionaryService
             self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
-            self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
     }
@@ -14796,28 +14501,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let mockPlugin = MockTranscriptionPlugin()
-        let ttsProvider = MockTTSProviderPlugin()
         let manifest = PluginManifest(
             id: "com.typewhisper.mock.transcription",
             name: "Mock Transcription",
             version: "1.0.0",
             principalClass: "APIRouterMockTranscriptionPlugin"
         )
-        let ttsManifest = PluginManifest(
-            id: "com.typewhisper.mock.tts",
-            name: "Mock TTS",
-            version: "1.0.0",
-            principalClass: "APIRouterMockTTSPlugin",
-            category: "tts"
-        )
         PluginManager.shared.loadedPlugins = [
-            LoadedPlugin(
-                manifest: ttsManifest,
-                instance: ttsProvider,
-                bundle: Bundle.main,
-                sourceURL: appSupportDirectory,
-                isEnabled: true
-            ),
             LoadedPlugin(
                 manifest: manifest,
                 instance: mockPlugin,
@@ -14871,7 +14561,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let punctuationRulesLoader = PunctuationRulesLoader()
         let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
-        let speechFeedbackService = SpeechFeedbackService()
         let accessibilityAnnouncementService = accessibilityAnnouncementService ?? AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
@@ -14916,7 +14605,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: mediaPlaybackService,
@@ -14925,7 +14613,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             }
         )
         dictationViewModel.soundFeedbackEnabled = false
-        dictationViewModel.spokenFeedbackEnabled = false
         dictationViewModel.audioDuckingEnabled = false
         dictationViewModel.mediaPauseEnabled = false
 
@@ -14943,7 +14630,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             targetAppCorrectionLearningService: targetAppCorrectionLearningService,
-            ttsProvider: ttsProvider,
             retainedObjects: [
                 EventBus.shared,
                 PluginManager.shared,
@@ -14963,8 +14649,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 promptActionService,
                 promptProcessingService,
                 appFormatterService,
-                speechFeedbackService,
-                ttsProvider,
                 accessibilityAnnouncementService,
                 errorLogService,
                 settingsViewModel,
@@ -19349,7 +19033,6 @@ extension TypeWhisperIntegrationTests {
         )
         let punctuationRulesLoader = PunctuationRulesLoader()
         let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
-        let speechFeedbackService = SpeechFeedbackService()
         let accessibilityAnnouncementService = AccessibilityAnnouncementService()
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
@@ -19375,7 +19058,6 @@ extension TypeWhisperIntegrationTests {
             appFormatterService: appFormatterService,
             punctuationStrategyResolver: punctuationStrategyResolver,
             speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
-            speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
             mediaPlaybackService: MediaPlaybackService(startListening: false),
