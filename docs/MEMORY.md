@@ -27,4 +27,4 @@
 * 选择 TypeWhisper 作为基础项目：它已有 Qwen3 ASR 插件、流式预览、词典、历史与同步、工作流翻译和几十个供应商插件。Handy、FluidVoice 星数更高，但缺少大部分 V0.1.0 功能。
 * 品牌只改用户可见部分，Swift 模块名和文件夹名保持不变，方便合并上游更新。
 * 云端历史使用文件夹同步，默认指向 iCloud Drive，不需要付费苹果开发者账号。
-* 功能开发使用 gpt-6.1-sol，UI/UX 设计和每阶段代码审查使用 Claude，实机测试使用 gpt-6-astra。
+* 功能开发使用 gpt-6-astra（推理强度 low，阶段 0、5A 和 0B 使用 gpt-6.1-sol），UI/UX 设计和每阶段代码审查使用 Claude，实机测试使用 gpt-6-astra。
