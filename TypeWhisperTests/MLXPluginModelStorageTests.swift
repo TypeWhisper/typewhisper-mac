@@ -4,7 +4,7 @@ import os
 import SwiftUI
 import XCTest
 @testable import TypeWhisper
-import TypeWhisperPluginSDK
+@_spi(Testing) import TypeWhisperPluginSDK
 
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
@@ -17,6 +17,10 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
     @MainActor
     func testSetupWizardActivationDownloadsMissingQwen3Model() async throws {
+        let session = SuspendedDownloadSession()
+        PluginHTTPClient.configureForTesting { _ in session }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        defer { PluginHTTPClient.resetTestingHooks() }
         let fixture = try Fixture()
         defer { fixture.remove() }
         let host = MockHostServices(pluginDataDirectory: fixture.root)
@@ -26,15 +30,24 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
         let activation = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
         defer { activation.cancel() }
-        for _ in 0..<500 where qwen.currentSettingsActivity == nil {
+        for _ in 0..<500 where session.requestedRequests.isEmpty {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertNotNil(qwen.explicitModelLoadTask)
         XCTAssertEqual(qwen.currentSettingsActivity?.isError, false)
         XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
         XCTAssertFalse(qwen.isConfigured)
+        XCTAssertEqual(session.requestedRequests.count, 1)
+        XCTAssertEqual(session.requestedRequests.first?.url?.host, "huggingface.co")
+        XCTAssertEqual(session.requestedRequests.map { $0.url?.path }, [
+            "/api/models/mlx-community/Qwen3-ASR-1.7B-6bit/tree/main",
+        ])
         activation.cancel()
         try await activation.value
+        let download = qwen.explicitModelLoadTask
+        download?.cancel()
+        await download?.value
+        XCTAssertEqual(session.requestedRequests.count, 1)
     }
 
     @MainActor
@@ -66,6 +79,10 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
     @MainActor
     func testSetupWizardFollowsRunningDownloadInsteadOfRestartingIt() async throws {
+        let session = SuspendedDownloadSession()
+        PluginHTTPClient.configureForTesting { _ in session }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        defer { PluginHTTPClient.resetTestingHooks() }
         let fixture = try Fixture()
         defer { fixture.remove() }
         let modelDef = try XCTUnwrap(Qwen3Plugin.availableModels.first { $0.id == "qwen3-asr-1.7b-6bit" })
@@ -78,11 +95,14 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
         let first = Task { try await SetupWizardQwen3Recommendation.activate(qwen) { _ in } }
         defer { first.cancel() }
-        for _ in 0..<500 where qwen.currentSettingsActivity == nil {
+        for _ in 0..<500 where session.requestedRequests.isEmpty {
             try await Task.sleep(for: .milliseconds(10))
         }
         let runningTask = try XCTUnwrap(qwen.explicitModelLoadTask)
-        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(session.requestedRequests.count, 1)
+        XCTAssertEqual(session.requestedRequests.map { $0.url?.path }, [
+            "/api/models/\(modelDef.repoId)/tree/main",
+        ])
         try FileManager.default.createDirectory(at: partialFile.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("partial".utf8).write(to: partialFile)
 
@@ -91,11 +111,16 @@ final class MLXPluginModelStorageTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(300))
         XCTAssertFalse(runningTask.isCancelled)
         XCTAssertTrue(FileManager.default.fileExists(atPath: partialFile.path))
+        XCTAssertEqual(try Data(contentsOf: partialFile), Data("partial".utf8))
+        XCTAssertEqual(session.requestedRequests.count, 1)
 
         first.cancel()
         second.cancel()
         try await first.value
         try await second.value
+        runningTask.cancel()
+        await runningTask.value
+        XCTAssertEqual(session.requestedRequests.count, 1)
     }
 
     @MainActor
@@ -636,6 +661,24 @@ final class MLXPluginModelStorageTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: locks.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.modelsDirectory.path))
     }
+}
+
+private final class SuspendedDownloadSession: PluginHTTPClientSession, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    var requestedRequests: [URLRequest] {
+        lock.withLock { requests }
+    }
+
+    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        lock.withLock { requests.append(request) }
+        while true {
+            try await Task.sleep(for: .seconds(60))
+        }
+    }
+
+    func finishTasksAndInvalidate() {}
 }
 
 private final class MockEventBus: EventBusProtocol, @unchecked Sendable {
