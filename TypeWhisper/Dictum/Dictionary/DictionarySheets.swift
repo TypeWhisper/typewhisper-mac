@@ -149,7 +149,7 @@ struct DictionaryImportSheet: View {
                 Text("Import CSV", tableName: "DictumHistory")
                     .font(.system(size: 15, weight: .semibold))
                 Spacer(minLength: 0)
-                Button { dismiss(); onExport() } label: {
+                Button { dismiss(); DispatchQueue.main.async { onExport() } } label: {
                     Text("Export CSV…", tableName: "DictumHistory").font(.system(size: 12))
                 }
                 .buttonStyle(.plain)

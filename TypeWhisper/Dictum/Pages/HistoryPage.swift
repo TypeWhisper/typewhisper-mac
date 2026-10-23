@@ -19,6 +19,7 @@ struct DictumHistoryPage: View {
     @State private var toast: String?
     @State private var toastTask: Task<Void, Never>?
     @State private var hovered: UUID?
+    @State private var searchTask: Task<Void, Never>?
     @FocusState private var listFocused: Bool
 
     private var visible: [TranscriptionRecord] {
@@ -77,32 +78,34 @@ struct DictumHistoryPage: View {
             }
         }
         .onAppear { reload() }
-        .onChange(of: search) { _, _ in reload() }
+        .onChange(of: search) { _, _ in scheduleSearch() }
         .onChange(of: filter) { _, _ in selected = visible.first?.id }
         .onReceive(history.$recentRecords) { _ in reload() }
         .onDeleteCommand { if let current { requestDelete(current) } }
         .onCopyCommand { current.map { [NSItemProvider(object: (original ? $0.rawText : $0.finalText) as NSString)] } ?? [] }
         .overlay(alignment: .bottom) {
-            if pendingDeletion != nil {
-                Button { undoDeletion() } label: {
-                    Text("Undo deletion", tableName: "DictumHistory").font(.system(size: 12.5))
+            VStack(spacing: 8) {
+                if let toast {
+                    Text(toast).font(.system(size: 12.5)).foregroundStyle(.white)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(.black.opacity(0.92), in: Capsule())
+                        .transition(.opacity)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(DictumTheme.textPrimary)
-                .padding(.horizontal, 16).padding(.vertical, 9)
-                .background(DictumTheme.raised, in: Capsule())
-                .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
-                .keyboardShortcut("z", modifiers: .command)
-                .padding(.bottom, 20)
-            } else if let toast {
-                Text(toast).font(.system(size: 12.5)).foregroundStyle(.white)
+                if pendingDeletion != nil {
+                    Button { undoDeletion() } label: {
+                        Text("Undo deletion", tableName: "DictumHistory").font(.system(size: 12.5))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(DictumTheme.textPrimary)
                     .padding(.horizontal, 16).padding(.vertical, 9)
-                    .background(.black.opacity(0.92), in: Capsule())
-                    .padding(.bottom, 20)
-                    .transition(.opacity)
+                    .background(DictumTheme.raised, in: Capsule())
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 4)
+                    .keyboardShortcut("z", modifiers: .command)
+                }
             }
+            .padding(.bottom, 20)
         }
-        .onChange(of: retry.message) { _, value in if let value { showToast(value); retry.message = nil } }
+        .onReceive(retry.$message.compactMap { $0 }) { showToast($0) }
         .alert(String(localized: "Send this recording for reprocessing?", table: "DictumHistory"), isPresented: Binding(get: { retry.confirmation != nil }, set: { if !$0 { retry.cancelConfirmation() } })) {
             Button(role: .cancel) { retry.cancelConfirmation() } label: { Text("Cancel", tableName: "DictumHistory") }
             Button { retry.start() } label: { Text("Retry", tableName: "DictumHistory") }
@@ -115,7 +118,7 @@ struct DictumHistoryPage: View {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { _ = history.clearAll(); reload() } label: { Text("Delete", tableName: "DictumHistory") }
         }
-        .onDisappear { player?.stop(); commitDeletion() }
+        .onDisappear { player?.stop(); commitDeletion(); searchTask?.cancel() }
     }
 
     private var noResults: some View {
@@ -161,6 +164,11 @@ struct DictumHistoryPage: View {
                     }
                     .padding(.top, 4).padding(.horizontal, 8).padding(.bottom, 8)
                 }
+                .focusable()
+                .focusEffectDisabled()
+                .focused($listFocused)
+                .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
+                .onKeyPress(.downArrow) { moveSelection(1); return .handled }
                 .onChange(of: selected) { _, id in
                     guard let id else { return }
                     withAnimation(DictumTheme.Motion.base) { proxy.scrollTo(id) }
@@ -207,11 +215,6 @@ struct DictumHistoryPage: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(record.id == selected ? [.isButton, .isSelected] : .isButton)
-        .focusable()
-        .focusEffectDisabled()
-        .onKeyPress(.upArrow) { moveSelection(-1); return .handled }
-        .onKeyPress(.downArrow) { moveSelection(1); return .handled }
-        .focused($listFocused)
     }
 
     private var syncFooter: some View {
@@ -399,6 +402,19 @@ struct DictumHistoryPage: View {
         records = page.records
         hasMore = page.hasMore
         if !visible.contains(where: { $0.id == selected }) { selected = visible.first?.id }
+    }
+
+    private func scheduleSearch() {
+        searchTask?.cancel()
+        searchTask = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(220)) } catch { return }
+            let limit = max(200, records.count)
+            let page = await history.fetchPageInBackground(query: HistoryQuery(searchText: search), offset: 0, limit: limit)
+            guard let page, !Task.isCancelled else { return }
+            records = page.records
+            hasMore = page.hasMore
+            if !visible.contains(where: { $0.id == selected }) { selected = visible.first?.id }
+        }
     }
 
     private func loadMore() {

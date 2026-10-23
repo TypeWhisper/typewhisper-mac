@@ -92,9 +92,21 @@ struct DictumAppIcon: View {
     let name: String
     let size: CGFloat
 
+    @MainActor private static var iconCache: [String: NSImage] = [:]
+
+    private static func cachedIcon(for bundleIdentifier: String) -> NSImage? {
+        if let cached = iconCache[bundleIdentifier] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleIdentifier) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        iconCache[bundleIdentifier] = icon
+        return icon
+    }
+
     var body: some View {
-        if let url = bundleIdentifier.flatMap({ NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+        if let icon = bundleIdentifier.flatMap({ Self.cachedIcon(for: $0) }) {
+            Image(nsImage: icon)
                 .resizable()
                 .frame(width: size, height: size)
                 .overlay {
@@ -155,16 +167,25 @@ struct DictumColumnsLayout: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard !subviews.isEmpty else { return }
-        let gaps = spacing * CGFloat(subviews.count - 1)
-        let fixedTotal = columns.compactMap(\.fixed).reduce(0, +)
-        let weightTotal = columns.filter { $0.fixed == nil }.reduce(0) { $0 + $1.weight }
-        let flexibleTotal = max(0, bounds.width - padding * 2 - gaps - fixedTotal)
+        guard !subviews.isEmpty, !columns.isEmpty else { return }
+        let count = min(subviews.count, columns.count)
+        let used = columns.prefix(count)
+        let gaps = spacing * CGFloat(count - 1)
+        let available = max(0, bounds.width - padding * 2 - gaps)
+        let fixedTotal = used.compactMap(\.fixed).reduce(0, +)
+        let flexibleCount = used.filter { $0.fixed == nil }.count
+        let weightTotal = used.filter { $0.fixed == nil }.reduce(0) { $0 + $1.weight }
+        let reserved = CGFloat(flexibleCount) * Self.minimumFlexibleWidth
+        let fixedScale = fixedTotal > available - reserved && fixedTotal > 0
+            ? max(0, available - reserved) / fixedTotal
+            : 1
+        let flexibleTotal = max(0, available - fixedTotal * fixedScale)
         var x = bounds.minX + padding
-        for (index, subview) in subviews.enumerated() {
-            let column = columns[min(index, columns.count - 1)]
-            let width = column.fixed ?? (weightTotal > 0 ? flexibleTotal * column.weight / weightTotal : 0)
-            subview.place(
+        for index in 0..<count {
+            let column = used[index]
+            let width = column.fixed.map { $0 * fixedScale }
+                ?? (weightTotal > 0 ? flexibleTotal * column.weight / weightTotal : 0)
+            subviews[index].place(
                 at: CGPoint(x: x, y: bounds.midY),
                 anchor: .leading,
                 proposal: ProposedViewSize(width: width, height: bounds.height)
@@ -172,4 +193,6 @@ struct DictumColumnsLayout: Layout {
             x += width + spacing
         }
     }
+
+    private static let minimumFlexibleWidth: CGFloat = 40
 }

@@ -8,7 +8,7 @@ struct DictionaryPage: View {
     @State private var selection: Set<UUID> = []
     @State private var adding = false
     @State private var importing = false
-    @State private var confirmDelete = false
+    @State private var pendingDelete: [DictionaryEntry] = []
     @State private var error: String?
     @State private var hovered: UUID?
     @State private var editing: DictionaryEntry?
@@ -55,13 +55,12 @@ struct DictionaryPage: View {
         .sheet(isPresented: $adding) { DictionaryAddSheet(service: service, word: search) }
         .sheet(item: $editing) { DictionaryEditSheet(service: service, entry: $0) }
         .sheet(isPresented: $importing) { DictionaryImportSheet(service: service, onExport: export) }
-        .alert(String(localized: "Delete selected words? This can't be undone.", table: "DictumHistory"), isPresented: $confirmDelete) {
+        .alert(deleteTitle, isPresented: Binding(get: { !pendingDelete.isEmpty }, set: { if !$0 { pendingDelete = [] } })) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
-            Button(role: .destructive) {
-                service.deleteEntries(service.entries.filter { selection.contains($0.id) })
-                selection.removeAll()
-            } label: { Text("Delete", tableName: "DictumHistory") }
+            Button(role: .destructive) { deletePending() } label: { Text("Delete", tableName: "DictumHistory") }
         }
+        .onChange(of: search) { _, _ in pruneSelection() }
+        .onChange(of: filter) { _, _ in pruneSelection() }
         .alert(String(localized: "Export failed", table: "DictumHistory"), isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button { error = nil } label: { Text("OK", tableName: "DictumHistory") }
         } message: { Text(error ?? "") }
@@ -174,7 +173,11 @@ struct DictionaryPage: View {
 
     private var headerRow: some View {
         DictumColumnsLayout(columns: Self.columns) {
-            checkbox(isOn: !visible.isEmpty && visible.allSatisfy { selection.contains($0.id) }, visible: hoveredHeader || !selection.isEmpty) {
+            checkbox(
+                isOn: !visible.isEmpty && visible.allSatisfy { selection.contains($0.id) },
+                visible: hoveredHeader || !selection.isEmpty,
+                label: String(localized: "Select all words", table: "DictumHistory")
+            ) {
                 toggleAll()
             }
             headerText("Word", alignment: .leading)
@@ -199,7 +202,14 @@ struct DictionaryPage: View {
         let isSelected = selection.contains(entry.id)
         let isHovered = hovered == entry.id
         return DictumColumnsLayout(columns: Self.columns) {
-            checkbox(isOn: isSelected, visible: isHovered || !selection.isEmpty) { toggle(entry) }
+            checkbox(
+                isOn: isSelected,
+                visible: isHovered || !selection.isEmpty,
+                label: String(
+                    format: String(localized: "Select %@", table: "DictumHistory"),
+                    entry.replacement ?? entry.original
+                )
+            ) { toggle(entry) }
             Text(entry.replacement ?? entry.original)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(DictumTheme.textPrimary)
@@ -241,10 +251,9 @@ struct DictionaryPage: View {
                 .font(.system(size: 12)).foregroundStyle(DictumTheme.textTertiary)
                 .opacity(hovered ? 0 : 1)
             HStack(spacing: 2) {
-                iconButton("pencil", label: "Edit Word") { editing = entry }
-                iconButton("trash", label: "Delete") {
-                    service.deleteEntry(entry)
-                    selection.remove(entry.id)
+                iconButton("pencil", label: "Edit Word %@", word: entry.replacement ?? entry.original) { editing = entry }
+                iconButton("trash", label: "Delete %@", word: entry.replacement ?? entry.original) {
+                    pendingDelete = [entry]
                 }
             }
             .opacity(hovered ? 1 : 0)
@@ -252,7 +261,12 @@ struct DictionaryPage: View {
         .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
-    private func iconButton(_ symbol: String, label: LocalizedStringKey, action: @escaping () -> Void) -> some View {
+    private func iconButton(
+        _ symbol: String,
+        label: String.LocalizationValue,
+        word: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12))
                 .foregroundStyle(DictumTheme.textSecondary)
@@ -260,10 +274,10 @@ struct DictionaryPage: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(label, tableName: "DictumHistory"))
+        .accessibilityLabel(Text(String(format: String(localized: label, table: "DictumHistory"), word)))
     }
 
-    private func checkbox(isOn: Bool, visible: Bool, action: @escaping () -> Void) -> some View {
+    private func checkbox(isOn: Bool, visible: Bool, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(isOn ? DictumTheme.accent : DictumTheme.control)
@@ -279,7 +293,32 @@ struct DictionaryPage: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Select", tableName: "DictumHistory"))
+        .accessibilityLabel(Text(label))
+    }
+
+    private var deleteTitle: String {
+        if pendingDelete.count == 1, let entry = pendingDelete.first {
+            let word = entry.replacement ?? entry.original
+            return String(
+                format: String(localized: "Remove %@ from the dictionary? This can't be undone.", table: "DictumHistory"),
+                word
+            )
+        }
+        return String(
+            format: String(localized: "Delete %lld words? This can't be undone.", table: "DictumHistory"),
+            Int64(pendingDelete.count)
+        )
+    }
+
+    private func deletePending() {
+        let entries = pendingDelete
+        pendingDelete = []
+        service.deleteEntries(entries)
+        selection.subtract(entries.map(\.id))
+    }
+
+    private func pruneSelection() {
+        selection.formIntersection(Set(visible.map(\.id)))
     }
 
     private var selectionBar: some View {
@@ -292,7 +331,7 @@ struct DictionaryPage: View {
             .buttonStyle(.plain)
             .foregroundStyle(DictumTheme.textSecondary)
             .padding(.horizontal, 8).frame(height: 24)
-            Button { confirmDelete = true } label: {
+            Button { pendingDelete = visible.filter { selection.contains($0.id) } } label: {
                 HStack(spacing: 5) {
                     Image(systemName: "trash").font(.system(size: 12))
                     Text("Delete", tableName: "DictumHistory")
@@ -342,9 +381,11 @@ struct DictionaryPage: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.nameFieldStringValue = "dictum-dictionary.csv"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try DictionaryCSV.export(service.csvItems).write(to: url, options: .atomic) }
-        catch { self.error = error.localizedDescription }
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do { try DictionaryCSV.export(service.csvItems).write(to: url, options: .atomic) }
+            catch { self.error = error.localizedDescription }
+        }
     }
 
     private static let columns: [DictumColumnsLayout.Column] = [
