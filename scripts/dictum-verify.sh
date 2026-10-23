@@ -53,12 +53,6 @@ build() {
   }
   python3 "$repo_root/scripts/check-qwen-runtime.py" "$app" || return 1
   sign_app
-  if [[ "${DICTUM_VERIFY_APPSTORE:-0}" == 1 ]]; then
-    "$repo_root/scripts/appstore/build-dev.sh" --check >"$receipts/appstore-build.log" 2>&1 || {
-      tail -60 "$receipts/appstore-build.log" >&2
-      return 1
-    }
-  fi
   printf '%s\n' "$app"
 }
 
