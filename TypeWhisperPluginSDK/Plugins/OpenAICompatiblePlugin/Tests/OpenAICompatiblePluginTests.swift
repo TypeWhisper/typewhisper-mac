@@ -26,6 +26,26 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(plugin.profileSnapshots.count, 6)
     }
 
+    func testRemovingPresetProfileDeletesItsKeyAndLeavesNoOrphan() throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let first = try XCTUnwrap(plugin.dictumConfigure(["preset": "deepseek"])["id"] as? String)
+        _ = plugin.dictumConfigure(["id": first, "key": "sk-test"])
+        XCTAssertEqual(host.loadSecret(key: "api-key.\(first)"), "sk-test")
+
+        plugin.dictumRemoveProfile(first)
+        XCTAssertNil(plugin.profileSnapshot(for: first))
+        XCTAssertEqual(host.loadSecret(key: "api-key.\(first)") ?? "", "")
+        XCTAssertEqual(plugin.profileSnapshots.count, 1)
+
+        let second = try XCTUnwrap(plugin.dictumConfigure(["preset": "deepseek"])["id"] as? String)
+        XCTAssertNotEqual(first, second)
+        XCTAssertEqual(plugin.profileSnapshots.count, 2)
+        XCTAssertEqual(plugin.profileSnapshot(for: second)?.name, "DeepSeek")
+        XCTAssertFalse(plugin.dictumHasCredentials(second).boolValue)
+    }
+
     override func tearDown() {
         PluginHTTPClientTestHarness.reset()
         super.tearDown()

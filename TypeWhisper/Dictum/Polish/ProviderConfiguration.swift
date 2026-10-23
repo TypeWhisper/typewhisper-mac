@@ -57,6 +57,12 @@ enum ProviderConfiguration {
             PluginManager.shared.setPluginEnabled(pluginID, enabled: true)
         }
     }
+    static func removeProfile(_ providerID: String) {
+        let selector = NSSelectorFromString("dictumRemoveProfile:")
+        if providerID.hasPrefix("openai-compatible:"), compatiblePlugin?.responds(to: selector) == true {
+            compatiblePlugin?.perform(selector, with: providerID)
+        }
+    }
     static func refreshModels(_ providerID: String) {
         let selector = NSSelectorFromString("dictumRefreshModels:")
         if compatiblePlugin?.responds(to: selector) == true {

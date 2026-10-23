@@ -125,7 +125,7 @@ struct AIModelsPage: View {
                         Button { showEndpoint = true } label: { Text("Custom Endpoint…", tableName: "DictumStyle") }
                     }
                     Divider()
-                    Button(role: .destructive) { processing.removeLLMFallback(item) } label: { Text("Remove", tableName: "DictumStyle") }
+                    Button(role: .destructive) { remove(item) } label: { Text("Remove", tableName: "DictumStyle") }
                 } label: { Image(systemName: "ellipsis") }
                     .menuIndicator(.hidden).buttonStyle(.borderless).tint(DictumTheme.textSecondary).fixedSize()
             }
@@ -180,27 +180,25 @@ struct AIModelsPage: View {
                     .accessibilityLabel(Text("Model", tableName: "DictumStyle"))
             } else {
                 let current = item.modelId ?? processing.defaultModelId(for: item.providerId) ?? models.first?.id ?? ""
-                Menu {
-                    ForEach(models, id: \.id) { model in
-                        Button { saveModel(item, model: model.id) } label: {
-                            if model.id == current { Label(model.displayName, systemImage: "checkmark") }
-                            else { Text(verbatim: model.displayName) }
-                        }
+                Picker(selection: Binding(get: { current }, set: { saveModel(item, model: $0) })) {
+                    if !models.contains(where: { $0.id == current }) { Text(verbatim: current).tag(current) }
+                    ForEach(models, id: \.id) { Text(verbatim: $0.displayName).tag($0.id) }
+                } label: { Text("Model", tableName: "DictumStyle") }
+                    .pickerStyle(.menu).labelsHidden().buttonStyle(.borderless).tint(.primary)
+                    .font(.system(size: 13)).padding(.leading, 10).padding(.trailing, 9)
+                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                    .background {
+                        RoundedRectangle(cornerRadius: 6).fill(DictumTheme.control)
+                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DictumTheme.controlBorder, lineWidth: 0.5))
+                            .shadow(color: DictumTheme.controlShadow, radius: 1.5, y: 1)
                     }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(verbatim: models.first { $0.id == current }?.displayName ?? current).lineLimit(1)
-                        Spacer(minLength: 4)
+                    .overlay(alignment: .trailing) {
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+                            .font(.system(size: 8, weight: .semibold)).foregroundStyle(DictumTheme.textPrimary.opacity(0.55))
+                            .frame(width: 20, height: 14, alignment: .trailing)
+                            .background(DictumTheme.control).padding(.trailing, 6)
+                            .accessibilityHidden(true).allowsHitTesting(false)
                     }
-                    .padding(.horizontal, 10).frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-                    .background(DictumTheme.control, in: RoundedRectangle(cornerRadius: 5))
-                    .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(DictumTheme.controlBorder, lineWidth: 0.5))
-                    .contentShape(Rectangle())
-                }
-                .menuIndicator(.hidden).menuStyle(.borderlessButton).buttonStyle(.plain).tint(.primary)
-                .accessibilityLabel(Text("Model", tableName: "DictumStyle"))
             }
         }
     }
@@ -235,6 +233,10 @@ struct AIModelsPage: View {
             selection = processing.fallbackPriorityList.last { $0.providerId == providerID }?.id
             keyFocused = true
         } catch { testResult = .failed("provider.configurationError") }
+    }
+    private func remove(_ item: LLMFallbackPriorityItem) {
+        processing.removeLLMFallback(item)
+        ProviderConfiguration.removeProfile(item.providerId)
     }
     private func configuredItem(_ choice: ProviderConfiguration.Choice) -> LLMFallbackPriorityItem? {
         guard choice.id != "custom" else { return nil }

@@ -668,6 +668,12 @@ final class OpenAICompatiblePlugin: NSObject,
                 "model": snapshot.selectedLLMModelId, "hasKey": hasApiKey(for: id), "modelsKnown": !snapshot.fetchedModels.isEmpty]
     }
 
+    // 移除供应商行时一并删除它的配置和密钥，重新添加不会留下旧配置。
+    @objc func dictumRemoveProfile(_ profileId: String) {
+        deleteProfile(profileId)
+        host?.notifyCapabilitiesChanged()
+    }
+
     @objc func dictumRefreshModels(_ profileId: String) {
         Task { @MainActor in
             let models = await fetchModels(for: profileId)
