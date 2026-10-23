@@ -45,6 +45,12 @@ build() {
     tail -60 "$receipts/build.log" >&2
     return 1
   }
+  local plugin="$app/Contents/PlugIns/Qwen3Plugin.bundle/Contents"
+  if ! cmp -s "$plugin/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
+    "$plugin/MacOS/mlx.metallib"; then
+    printf 'Qwen3 的同目录计算库缺失或与插件资源不一致；MLX 可能加载其他应用的同名资源。\n' >&2
+    return 1
+  fi
   sign_app
   if [[ "${DICTUM_VERIFY_APPSTORE:-0}" == 1 ]]; then
     "$repo_root/scripts/appstore/build-dev.sh" --check >"$receipts/appstore-build.log" 2>&1 || {
@@ -214,7 +220,7 @@ print_lock_holder() {
 
 dictate() {
   local audio_file="${1:-}" mode="${2:-live}" result_file url attempt
-  [[ "$mode" == live || "$mode" == file || "$mode" == plugin ]] || return 2
+  [[ "$mode" == live || "$mode" == file || "$mode" == plugin || "$mode" == hotkey || "$mode" == paste ]] || return 2
   [[ -n "$audio_file" && -r "$audio_file" ]] || { printf '请提供可读取的音频文件。\n' >&2; return 2; }
   if [[ ! -d "$run_lock" ]]; then
     printf '请先运行 scripts/dictum-verify.sh run --audio-file <音频文件>，再将光标放进目标输入框。\n' >&2
@@ -230,7 +236,7 @@ dictate() {
   for ((attempt=0; attempt<1900; attempt++)); do
     if [[ -s "$result_file" ]]; then
       cp "$result_file" "$receipts/dictation-result.json"
-      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and (sys.argv[2]!="live" or r.get("inserted")) else 1)' "$result_file" "$mode"
+      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and (sys.argv[2] in ["file","plugin"] or r.get("inserted")) else 1)' "$result_file" "$mode"
       return $?
     fi
     [[ -n "$(running_pids)" ]] || { printf '听写过程中应用退出。\n' >&2; return 1; }
