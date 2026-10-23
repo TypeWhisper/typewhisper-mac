@@ -12,8 +12,11 @@ final class DictationModelNoticeTests: XCTestCase {
         let plugin = Qwen3Plugin()
         let host = NoticeHost(directory: root)
         let session = NoticeDownloadSession()
+        let savedWizardCompleted = UserDefaults.standard.object(forKey: UserDefaultsKeys.setupWizardCompleted)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
         PluginHTTPClient.configureForTesting { _ in session }
         defer {
+            UserDefaults.standard.set(savedWizardCompleted, forKey: UserDefaultsKeys.setupWizardCompleted)
             plugin.deactivate()
             PluginHTTPClient.resetTestingHooks()
             PluginManager.shared = savedManager

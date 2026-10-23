@@ -301,6 +301,7 @@ final class DictationViewModel: ObservableObject {
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
     @Published private(set) var modelNotice: DictationModelNotice?
+    private var modelNoticeTask: Task<Void, Never>?
     @Published var isStreaming: Bool = false
     @Published private(set) var externalStreamingDisplayCount: Int = 0
     @Published var audioDuckingEnabled: Bool {
@@ -1943,14 +1944,16 @@ final class DictationViewModel: ObservableObject {
         beginDictationSession(id: sessionID)
         dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
-        guard canDictate, DictationModelNotice.current(providerId: modelManager.selectedProviderId) == nil else {
-            if let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId) {
+        let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId)
+        guard canDictate, notice == nil else {
+            if let notice {
                 modelNotice = notice
                 failDictationSession(id: sessionID, error: notice.errorMessage)
                 hotkeyService.cancelDictation()
-                Task { @MainActor [weak self] in
+                modelNoticeTask?.cancel()
+                modelNoticeTask = Task { @MainActor [weak self] in
                     let deadline = ContinuousClock.now.advanced(by: .seconds(3))
-                    while let self {
+                    while let self, !Task.isCancelled {
                         let current = DictationModelNotice.current(providerId: self.modelManager.selectedProviderId)
                         guard ContinuousClock.now < deadline, let current else {
                             self.modelNotice = nil

@@ -16,7 +16,6 @@
     "Resume": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Resume" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "继续下载" } } } },
     "Connection lost, %@ downloaded": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Connection lost, %@ downloaded" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "网络中断，已下载 %@" } } } },
     "The speech model is downloading.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The speech model is downloading." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "语音模型正在下载。" } } } },
-    "The speech model is loading.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The speech model is loading." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "语音模型正在加载。" } } } },
     "The speech model is not downloaded.": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "The speech model is not downloaded." } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "语音模型尚未下载。" } } } },
     "Preparing model": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Preparing model" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "正在加载模型" } } } },
     "Cancel": { "localizations": { "en": { "stringUnit": { "state": "translated", "value": "Cancel" } }, "zh-Hans": { "stringUnit": { "state": "translated", "value": "取消" } } } },

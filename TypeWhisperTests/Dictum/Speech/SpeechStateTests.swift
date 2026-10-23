@@ -18,12 +18,17 @@ final class SpeechStateTests: XCTestCase {
         XCTAssertNil(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: true, activity: nil))
     }
 
-    func testMissingLoadingAndFailedModelsRemainDistinct() {
+    func testMissingAndFailedDownloadsRemainDistinct() {
         XCTAssertEqual(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: false, activity: nil), .notDownloaded)
-        XCTAssertEqual(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: true,
-            activity: PluginSettingsActivity(message: "Preparing model")), .loading)
         XCTAssertEqual(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: false,
             activity: PluginSettingsActivity(message: "Connection lost", isError: true)), .failed(message: "Connection lost"))
+    }
+
+    func testDownloadedModelNeverBlocksDictationWhileLoadingOrAfterLoadFailure() {
+        XCTAssertNil(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: true,
+            activity: PluginSettingsActivity(message: "Preparing model")))
+        XCTAssertNil(DictationModelNotice.resolve(isLocal: true, isReady: false, hasDownloadedModel: true,
+            activity: PluginSettingsActivity(message: "Out of memory", isError: true)))
     }
 
     func testAnotherDownloadedPrecisionDoesNotMakeTheSelectedModelReady() {
