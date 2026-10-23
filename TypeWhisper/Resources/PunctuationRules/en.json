@@ -12,6 +12,14 @@
     { "phrase": "close bracket", "replacement": ")", "category": "brackets" },
     { "phrase": "open square bracket", "replacement": "[", "category": "brackets" },
     { "phrase": "close square bracket", "replacement": "]", "category": "brackets" },
+    { "phrase": "open quote", "replacement": "\"", "category": "quotes", "spacing": "opening" },
+    { "phrase": "open quotes", "replacement": "\"", "category": "quotes", "spacing": "opening" },
+    { "phrase": "close quote", "replacement": "\"", "category": "quotes", "spacing": "closing" },
+    { "phrase": "close quotes", "replacement": "\"", "category": "quotes", "spacing": "closing" },
+    { "phrase": "end quote", "replacement": "\"", "category": "quotes", "spacing": "closing" },
+    { "phrase": "hashtag", "replacement": "#", "category": "structural", "spacing": "opening" },
+    { "phrase": "hash sign", "replacement": "#", "category": "structural", "spacing": "opening" },
+    { "phrase": "number sign", "replacement": "#", "category": "structural", "spacing": "opening" },
     { "phrase": "comma", "replacement": ",", "category": "punctuation" },
     { "phrase": "period", "replacement": ".", "category": "punctuation" },
     { "phrase": "full stop", "replacement": ".", "category": "punctuation" }
@@ -23,6 +31,8 @@
     { "spoken": "warning exclamation mark", "expected": "warning!" },
     { "spoken": "warning exclamation point", "expected": "warning!" },
     { "spoken": "see open square bracket note close square bracket", "expected": "see [note]" },
+    { "spoken": "she said open quote hello close quote period", "expected": "she said \"hello\"." },
+    { "spoken": "follow hashtag typewhisper", "expected": "follow #typewhisper" },
     { "spoken": "title colon example", "expected": "title: example" }
   ]
 }
