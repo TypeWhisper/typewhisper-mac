@@ -26,6 +26,30 @@ final class SpeechStateTests: XCTestCase {
             activity: PluginSettingsActivity(message: "Connection lost", isError: true)), .failed(message: "Connection lost"))
     }
 
+    func testAnotherDownloadedPrecisionDoesNotMakeTheSelectedModelReady() {
+        let engine = DownloadedModelsTestEngine(downloaded: ["6bit"], selected: "8bit")
+        XCTAssertFalse(DictationModelNotice.hasDownloadedSelectedModel(engine))
+        XCTAssertEqual(SidebarStatus.Speech.current(activity: nil, readinessError: nil,
+            hasMissingModel: !DictationModelNotice.hasDownloadedSelectedModel(engine), engine: "Qwen3"), .missing)
+
+        engine.selectModel("6bit")
+        XCTAssertTrue(DictationModelNotice.hasDownloadedSelectedModel(engine))
+        XCTAssertEqual(SidebarStatus.Speech.current(activity: nil, readinessError: nil,
+            hasMissingModel: !DictationModelNotice.hasDownloadedSelectedModel(engine), engine: "Qwen3"), .ready(engine: "Qwen3"))
+    }
+
+    @MainActor
+    func testFailedDownloadShowsDownloadedBytesInBothLanguages() {
+        let engine = DownloadedModelsTestEngine(downloaded: [], selected: "8bit", completedBytes: 1_288_490_188)
+        let size = ByteCountFormatter.string(fromByteCount: 1_288_490_188, countStyle: .file)
+        XCTAssertEqual(SpeechDownloadProgress.interruptedCopy(engine: engine, locale: Locale(identifier: "zh-Hans")),
+                       "网络中断，已下载 \(size)")
+        XCTAssertEqual(SpeechDownloadProgress.interruptedCopy(engine: engine, locale: Locale(identifier: "en")),
+                       "Connection lost, \(size) downloaded")
+        XCTAssertEqual(SidebarStatus.Speech.current(activity: PluginSettingsActivity(message: "x", isError: true),
+            readinessError: nil, hasMissingModel: true, engine: "Qwen3"), .downloadFailed)
+    }
+
     func testPreviewConfirmsOnlyTheSharedPrefixIncludingChineseAndCorrections() {
         XCTAssertEqual(StreamingHandler.Preview.comparing(previous: "", current: "明天下午"),
                        .init(confirmedPrefix: "", tentativeTail: "明天下午"))

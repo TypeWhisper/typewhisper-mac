@@ -1946,19 +1946,14 @@ final class DictationViewModel: ObservableObject {
         guard canDictate, DictationModelNotice.current(providerId: modelManager.selectedProviderId) == nil else {
             if let notice = DictationModelNotice.current(providerId: modelManager.selectedProviderId) {
                 modelNotice = notice
-                storeDictationSession(DictationSessionSnapshot(id: sessionID, status: .failed, transcription: nil, error: nil))
-                updateLatencyTrace(sessionID: sessionID) { $0.failed = true }
-                finishLatencyTrace(sessionID: sessionID)
+                failDictationSession(id: sessionID, error: notice.errorMessage)
                 hotkeyService.cancelDictation()
                 Task { @MainActor [weak self] in
                     let deadline = ContinuousClock.now.advanced(by: .seconds(3))
                     while let self {
                         let current = DictationModelNotice.current(providerId: self.modelManager.selectedProviderId)
-                        if current == nil { self.modelNotice = nil }
-                        guard self.activeDictationSessionID == sessionID else { return }
                         guard ContinuousClock.now < deadline, let current else {
                             self.modelNotice = nil
-                            self.activeDictationSessionID = nil
                             return
                         }
                         self.modelNotice = current

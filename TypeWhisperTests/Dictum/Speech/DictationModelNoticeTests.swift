@@ -37,9 +37,14 @@ final class DictationModelNoticeTests: XCTestCase {
         let dictation = services.dictationViewModel
         let oldError = dictation.lastDictationError
         let start = ContinuousClock.now
-        _ = dictation.apiStartRecording()
+        let sessionID = dictation.apiStartRecording()
         XCTAssertEqual(dictation.modelNotice, .downloading(progress: nil))
         XCTAssertEqual(dictation.state, .idle)
+        XCTAssertEqual(dictation.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(
+            dictation.apiDictationSession(id: sessionID)?.error,
+            String(localized: "The speech model is downloading.", table: "DictumSpeech")
+        )
         XCTAssertEqual(dictation.lastDictationError?.message, oldError?.message)
         try await Task.sleep(for: .seconds(2))
         XCTAssertNotNil(dictation.modelNotice)

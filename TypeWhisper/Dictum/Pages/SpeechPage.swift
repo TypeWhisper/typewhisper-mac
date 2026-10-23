@@ -27,7 +27,10 @@ private struct SpeechSettingsForm: View {
         engines.filter { plugins.loadedTranscriptionPlugin(for: $0.providerId)?.manifest.resolvedLocality == .local }
     }
     private var cloudEngines: [any TranscriptionEnginePlugin] {
-        engines.filter { plugins.loadedTranscriptionPlugin(for: $0.providerId)?.manifest.resolvedLocality != .local }
+        engines.filter {
+            plugins.loadedTranscriptionPlugin(for: $0.providerId)?.manifest.resolvedLocality != .local
+                && !$0.transcriptionModels.isEmpty
+        }
     }
     private var spokenLanguages: [String] {
         engines.first(where: { $0.providerId == models.selectedProviderId })?.supportedLanguages ?? []
@@ -43,7 +46,8 @@ private struct SpeechSettingsForm: View {
             TimelineView(.periodic(from: .now, by: 0.25)) { _ in
                 let qwen = engines.first { $0.providerId == "qwen3" }
                 let qwenActivity = qwen?.speechActivity
-                let qwenModel = qwen?.modelCatalog.first { $0.id == qwen?.selectedModelId }
+                let qwenCatalog = qwen?.modelCatalog ?? []
+                let qwenModel = qwenCatalog.first { $0.id == qwen?.selectedModelId }
                 VStack(spacing: 22) {
                     GroupedFormSection(title: "On this Mac", tableName: "DictumSpeech") {
                         if let qwen {
@@ -51,11 +55,11 @@ private struct SpeechSettingsForm: View {
                             GroupedFormRow(separated: true) {
                                 Text("Precision", tableName: "DictumSpeech")
                                 Spacer()
-                                DictumPopup(title: "Precision", selection: Binding(get: { qwen.selectedModelId ?? SetupWizardQwen3Recommendation.preferredModelId(from: qwen.modelCatalog) ?? "" }, set: { qwen.selectModel($0) }), tableName: "DictumSpeech",
+                                DictumPopup(title: "Precision", selection: Binding(get: { qwen.selectedModelId ?? SetupWizardQwen3Recommendation.preferredModelId(from: qwenCatalog) ?? "" }, set: { qwen.selectModel($0) }), tableName: "DictumSpeech",
                                             value: precisionLabel(qwenModel)) {
                                     Text("8-bit · Faster", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-8bit")
                                     Text("bf16 · More accurate", tableName: "DictumSpeech").tag("qwen3-asr-1.7b-bf16")
-                                    ForEach(qwen.modelCatalog.filter {
+                                    ForEach(qwenCatalog.filter {
                                         ($0.downloaded == true || $0.id == qwen.selectedModelId)
                                             && !["qwen3-asr-1.7b-8bit", "qwen3-asr-1.7b-bf16"].contains($0.id)
                                     }, id: \.id) { model in
@@ -179,7 +183,7 @@ private struct SpeechSettingsForm: View {
             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton).fixedSize()
         } else {
             if let activity, activity.isError {
-                Text("Download failed. Check the network and try again.", tableName: "DictumSpeech")
+                Text(verbatim: SpeechDownloadProgress.interruptedCopy(engine: engine))
                     .font(.system(size: 12)).lineLimit(2)
                     .foregroundStyle(DictumTheme.danger).help(activity.message)
             }

@@ -17,6 +17,12 @@ struct SpeechDownloadProgress {
         remainingSeconds = (values["remainingSeconds"] as? NSNumber)?.doubleValue
     }
 
+    /// 下载失败后按设计显示已下载的大小；失败后插件仍保留字节计数。
+    static func interruptedCopy(engine: any TranscriptionEnginePlugin, locale: Locale = .current) -> String {
+        let size = ByteCountFormatter.string(fromByteCount: Self(engine: engine)?.completedBytes ?? 0, countStyle: .file)
+        return String(localized: LocalizedStringResource("Connection lost, \(size) downloaded", table: "DictumSpeech", locale: locale))
+    }
+
     var byteCounts: String {
         let completed = ByteCountFormatter.string(fromByteCount: completedBytes, countStyle: .file)
         let total = ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
