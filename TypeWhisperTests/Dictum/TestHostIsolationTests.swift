@@ -30,6 +30,25 @@ final class TestHostIsolationTests: XCTestCase {
         XCTAssertTrue(TestHostIsolation.createdSuiteNames.withLock { $0.contains(suiteName) })
     }
 
+    func testRemovingADomainDeletesItsPreferencesFile() throws {
+        let suiteName = "TestHostIsolationTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.set("value", forKey: "key")
+        CFPreferencesAppSynchronize(suiteName as CFString)
+        let file = TestHostIsolation.preferencesDirectory.appendingPathComponent(suiteName + ".plist")
+        let deadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: file.path), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: file.path))
+
+        TestHostIsolation.removeDomain(suiteName)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        XCTAssertNil(UserDefaults(suiteName: suiteName)?.object(forKey: "key"))
+        TestHostIsolation.removeDomain(suiteName)
+    }
+
     func testAppDomainIsNeverRecordedForRemoval() throws {
         let appDomain = try XCTUnwrap(Bundle.main.bundleIdentifier)
         _ = UserDefaults(suiteName: appDomain)

@@ -35,7 +35,7 @@ enum TestHostIsolation {
 
         // A reused process ID must not inherit values from a run that crashed.
         defaults.removePersistentDomain(forName: defaultsSuiteName)
-        removeDomainsOfEndedRuns(using: defaults)
+        removeDomainsOfEndedRuns()
 
         replaceStandardDefaults(with: defaults)
         isolatedDefaults = defaults
@@ -46,11 +46,22 @@ enum TestHostIsolation {
     /// Deletes the run's preferences domain and every suite the tests created.
     /// Called when the test bundle finishes.
     static func removeIsolatedDefaults() {
-        isolatedDefaults?.removePersistentDomain(forName: defaultsSuiteName)
         for name in createdSuiteNames.withLock({ $0 }) {
-            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+            removeDomain(name)
         }
+        removeDomain(defaultsSuiteName)
         isolatedPasteboard?.releaseGlobally()
+    }
+
+    /// 清空偏好设置域后，系统仍会在偏好设置文件夹里留下一个空文件，所以文件也一并删除。
+    static func removeDomain(_ name: String) {
+        UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        CFPreferencesAppSynchronize(name as CFString)
+        try? FileManager.default.removeItem(at: preferencesDirectory.appendingPathComponent(name + ".plist"))
+    }
+
+    static var preferencesDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences", isDirectory: true)
     }
 
     /// 测试用例创建的偏好设置套件只在运行结束时才能知道哪些需要删除，所以创建时记录下来。
@@ -97,17 +108,15 @@ enum TestHostIsolation {
     }
 
     /// 崩溃或被终止的测试运行来不及删除自己的偏好设置域，下一次启动时按进程号清理。
-    private static func removeDomainsOfEndedRuns(using defaults: UserDefaults) {
+    private static func removeDomainsOfEndedRuns() {
         let prefix = defaultsSuiteName.split(separator: ".").dropLast().joined(separator: ".") + "."
-        let preferences = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences", isDirectory: true)
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: preferences.path)) ?? []
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: preferencesDirectory.path)) ?? []
         for fileName in names where fileName.hasPrefix(prefix) && fileName.hasSuffix(".plist") {
             let domain = String(fileName.dropLast(".plist".count))
             guard let processID = pid_t(domain.dropFirst(prefix.count)),
                   processID != ProcessInfo.processInfo.processIdentifier,
                   kill(processID, 0) != 0, errno == ESRCH else { continue }
-            defaults.removePersistentDomain(forName: domain)
+            removeDomain(domain)
         }
     }
 }
