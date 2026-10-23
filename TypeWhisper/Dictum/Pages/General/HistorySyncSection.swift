@@ -12,7 +12,7 @@ struct HistorySyncSection: View {
             GroupedFormRow {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Sync to iCloud Drive", tableName: "DictumHistory")
-                    Text(HistorySyncPresentation.status(controller))
+                    Text(HistorySyncPresentation.settingsStatus(controller))
                     .font(.caption).foregroundStyle(controller.errorMessage == nil ? .secondary : Color.red)
                 }
                 Spacer()

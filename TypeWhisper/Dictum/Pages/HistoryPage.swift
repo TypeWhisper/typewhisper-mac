@@ -117,17 +117,41 @@ struct DictumHistoryPage: View {
         .alert(String(localized: "Delete All History…", table: "DictumHistory"), isPresented: $clearAll) {
             Button(role: .cancel) {} label: { Text("Cancel", tableName: "DictumHistory") }
             Button(role: .destructive) { _ = history.clearAll(); reload() } label: { Text("Delete", tableName: "DictumHistory") }
+        } message: {
+            Text(deleteAllHistoryMessage)
         }
         .onDisappear { player?.stop(); commitDeletion(); searchTask?.cancel() }
     }
 
     private var noResults: some View {
         EmptyState(
-            title: search.isEmpty ? "No results" : LocalizedStringKey(String(format: String(localized: "No results for “%@”", table: "DictumHistory"), search)),
-            message: "Try a different word.",
+            title: noResultsTitle,
+            message: noResultsMessageKey,
             symbol: "magnifyingglass",
             tableName: "DictumHistory"
         ) {}
+    }
+
+    private var noResultsMessageKey: LocalizedStringKey {
+        filter == .translation && search.isEmpty
+            ? "Translation records appear here once translation is available."
+            : "Try a different word."
+    }
+
+    private var noResultsTitle: LocalizedStringKey {
+        if search.isEmpty {
+            return filter == .translation ? "No translation records yet" : "No results"
+        }
+        return LocalizedStringKey(String(format: String(localized: "No results for “%@”", table: "DictumHistory"), search))
+    }
+
+    private var deleteAllHistoryMessage: String {
+        let count = history.totalRecords
+        let countText = String.localizedStringWithFormat(
+            String(localized: "This deletes %lld records.", table: "DictumHistory"), Int64(count)
+        )
+        guard sync.mode != .off else { return countText }
+        return countText + " " + String(localized: "This deletes history on every synced device.", table: "DictumHistory")
     }
 
     private var split: some View {
