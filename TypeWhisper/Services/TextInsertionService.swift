@@ -244,6 +244,9 @@ final class TextInsertionService {
     var terminalPasteFallbackRestoreDelay: Duration = .milliseconds(900)
     var verifiedRestoreGraceDelay: Duration = .milliseconds(150)
     var autoEnterDelay: Duration = .milliseconds(50)
+#if DEBUG
+    private var pasteEventSequence: UInt64 = 0
+#endif
     /// How long after posting a synthetic paste the clipboard may be replaced even though the
     /// paste was not verified yet. Bounds the wait of a following insertion and of the flush
     /// at termination, see `settlePendingPaste()`.
@@ -1708,7 +1711,7 @@ final class TextInsertionService {
         keyUp?.post(tap: tapLocation)
     }
 
-    private func simulatePaste() {
+    private func simulatePaste(source: StaticString = #function) {
         if let pasteSimulatorOverride {
             pasteSimulatorOverride()
             return
@@ -1717,15 +1720,25 @@ final class TextInsertionService {
         guard isAccessibilityGranted else { return }
 #endif
         let vKeyCode = virtualKeyCode(for: "v") ?? 0x09 // Fallback to QWERTY
+#if DEBUG
+        pasteEventSequence += 1
+        let sequence = pasteEventSequence
+#endif
         // Use nil source + .cgSessionEventTap for App Sandbox compatibility
         let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: true)
         keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyDown?.flags = .maskCommand
+#if DEBUG
+        logger.notice("Paste event posted sequence=\(sequence, privacy: .public) source=\(String(describing: source), privacy: .public) type=\(keyDown?.type.rawValue ?? 0, privacy: .public) key=\(vKeyCode, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) timestamp=\(keyDown?.timestamp ?? 0, privacy: .public)")
+#endif
         keyDown?.post(tap: .cgSessionEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: vKeyCode, keyDown: false)
         keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedClipboardShortcutEventMarker)
         keyUp?.flags = .maskCommand
+#if DEBUG
+        logger.notice("Paste event posted sequence=\(sequence, privacy: .public) source=\(String(describing: source), privacy: .public) type=\(keyUp?.type.rawValue ?? 0, privacy: .public) key=\(vKeyCode, privacy: .public) pid=\(ProcessInfo.processInfo.processIdentifier, privacy: .public) timestamp=\(keyUp?.timestamp ?? 0, privacy: .public)")
+#endif
         keyUp?.post(tap: .cgSessionEventTap)
     }
 

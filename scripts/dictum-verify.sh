@@ -4,7 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data="$repo_root/.build/DerivedData"
 receipts="$repo_root/.build/verification"
-app="$derived_data/Build/Products/Debug/dictum Dev.app"
+configuration="${DICTUM_VERIFY_CONFIGURATION:-Debug}"
+case "$configuration" in
+  Debug) product_name='dictum Dev' ;;
+  Release) product_name='dictum' ;;
+  *) printf '不支持的构建配置：%s\n' "$configuration" >&2; exit 2 ;;
+esac
+app="$derived_data/Build/Products/$configuration/$product_name.app"
 installed_app="$HOME/Applications/dictum Dev.app"
 run_lock="/tmp/dictum-run.lock"
 keychain="$HOME/Library/Keychains/login.keychain-db"
@@ -30,7 +36,7 @@ sign_app() {
 
 xcode() {
   xcodebuild "$@" -project "$repo_root/TypeWhisper.xcodeproj" \
-    -scheme TypeWhisper -configuration Debug \
+    -scheme TypeWhisper -configuration "$configuration" \
     -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$derived_data" -skipPackagePluginValidation \
     CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
@@ -45,6 +51,7 @@ build() {
     tail -60 "$receipts/build.log" >&2
     return 1
   }
+  python3 "$repo_root/scripts/check-qwen-runtime.py" "$app" || return 1
   sign_app
   if [[ "${DICTUM_VERIFY_APPSTORE:-0}" == 1 ]]; then
     "$repo_root/scripts/appstore/build-dev.sh" --check >"$receipts/appstore-build.log" 2>&1 || {
@@ -63,6 +70,7 @@ test_all() {
   if xcode build-for-testing >"$receipts/test-build.log" 2>&1; then
     sign_app
     xcode test-without-building -parallel-testing-enabled NO \
+      "$@" \
       -resultBundlePath "$receipts/tests.xcresult" >"$receipts/test.log" 2>&1 || xcode_status=$?
   else
     xcode_status=$?
@@ -129,6 +137,14 @@ acquire_lock() {
   lock_token="$$-$(date +%s)"
   if ! mkdir "$run_lock" 2>/dev/null; then
     holder_pid="$(cat "$run_lock/pid" 2>/dev/null || true)"
+    if [[ "$(cat "$run_lock/worktree" 2>/dev/null || true)" == "$repo_root" &&
+          -n "$holder_pid" && "$holder_pid" == "$(running_pids | awk 'NR == 1 { print }')" ]]; then
+      lock_token="$(cat "$run_lock/token")"
+      printf '%s\n' "$$" >"$run_lock/pid"
+      printf 'building\n' >"$run_lock/state"
+      trap 'release_owned_lock' EXIT
+      return 0
+    fi
     if [[ "$holder_pid" =~ ^[0-9]+$ ]] && ! kill -0 "$holder_pid" 2>/dev/null; then
       rm -rf "$run_lock"
       mkdir "$run_lock" || return 1
@@ -147,6 +163,7 @@ acquire_lock() {
 
 run() {
   local app_pid attempt login_item=0
+  [[ "$configuration" == Debug ]] || { printf '实机验证请使用 Debug 配置。\n' >&2; return 2; }
   if [[ "${1:-}" == --login-item ]]; then login_item=1; shift; fi
   if [[ "${1:-}" == --audio-file ]]; then
     [[ -n "${2:-}" && -r "$2" ]] || { printf '音频文件不可读取。\n' >&2; return 2; }
@@ -213,7 +230,8 @@ print_lock_holder() {
 }
 
 dictate() {
-  local audio_file="${1:-}" result_file url attempt
+  local audio_file="${1:-}" mode="${2:-live}" result_file url attempt
+  [[ "$mode" == live || "$mode" == hotkey || "$mode" == paste ]] || return 2
   [[ -n "$audio_file" && -r "$audio_file" ]] || { printf '请提供可读取的音频文件。\n' >&2; return 2; }
   if [[ ! -d "$run_lock" ]]; then
     printf '请先运行 scripts/dictum-verify.sh run --audio-file <音频文件>，再将光标放进目标输入框。\n' >&2
@@ -224,7 +242,7 @@ dictate() {
     return 1
   }
   result_file="$(mktemp /tmp/dictum-dictate-XXXXXXXX)"
-  url="$(python3 -c 'import pathlib,sys,urllib.parse; print("dictum://dictate?" + urllib.parse.urlencode({"file":str(pathlib.Path(sys.argv[1]).resolve()),"result":sys.argv[2]}))' "$audio_file" "$result_file")"
+  url="$(python3 -c 'import pathlib,sys,urllib.parse; q={"file":str(pathlib.Path(sys.argv[1]).resolve()),"result":sys.argv[2]}; q.update({"mode":sys.argv[3]} if sys.argv[3]!="live" else {}); print("dictum://dictate?"+urllib.parse.urlencode(q))' "$audio_file" "$result_file" "$mode")"
   open -g -a "$installed_app" "$url"
   for ((attempt=0; attempt<1900; attempt++)); do
     if [[ -s "$result_file" ]]; then
@@ -241,7 +259,7 @@ dictate() {
 
 case "${1:-}" in
   build) build ;;
-  test) test_all ;;
+  test) shift; test_all "$@" ;;
   dictate) shift; dictate "$@" ;;
   run|stop)
     command="$1"
@@ -255,5 +273,5 @@ case "${1:-}" in
   locked-run) shift; run "$@" ;;
   locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 音频文件|stop [--force]}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 文件 [live|hotkey|paste]|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac
