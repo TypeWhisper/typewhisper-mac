@@ -39,7 +39,14 @@ def check(app):
         return Path(path.replace("@loader_path", str(loader.parent))
                     .replace("@executable_path", str(executable.parent))).resolve()
 
-    queue, seen, mlx_dependencies = [binary], set(), set()
+    mlx_name = re.compile(r"(?:^|/)(?:lib)?c?mlx[^/]*(?:/|$)", re.IGNORECASE)
+    for path in contents.rglob("*"):
+        if path.is_file() and mlx_name.search(str(path)):
+            kind = subprocess.check_output(["file", "-b", str(path.resolve())], text=True)
+            if "dynamically linked shared library" in kind:
+                raise ValueError(f"当前 Qwen 资源布局只支持静态 MLX，发现动态库：{path}")
+
+    queue, seen = [binary, executable], set()
     while queue:
         loader = queue.pop().resolve()
         if loader in seen:
@@ -47,6 +54,8 @@ def check(app):
         seen.add(loader)
         libraries, rpaths = inspect(loader)
         for library in libraries:
+            if mlx_name.search(library):
+                raise ValueError(f"当前 Qwen 资源布局只支持静态 MLX，发现动态依赖：{loader} → {library}")
             if library.startswith(("/System/Library/", "/usr/lib/")):
                 continue
             if library.startswith("@rpath/"):
@@ -56,12 +65,8 @@ def check(app):
             else:
                 candidates = [expand(library, loader)]
             existing = [path.resolve() for path in candidates if path.is_file()]
-            if re.search(r"(?:^|/)(?:lib)?c?mlx[^/]*(?:/|$)", library, re.IGNORECASE):
-                mlx_dependencies.add(library)
-                if not existing or any(not path.is_relative_to(app) for path in existing):
-                    raise ValueError(f"MLX 动态库无法限定在应用内部：{loader} → {library} → {existing}")
             queue.extend(existing)
-    print(f"Qwen runtime PASS: metallib={kernel}; sha256={digest}; dynamicMLXDependencies={len(mlx_dependencies)}")
+    print(f"Qwen runtime PASS: metallib={kernel}; sha256={digest}; dynamicMLXDependencies=0")
 
 
 if __name__ == "__main__":
