@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 
-/// 分段控件按设计稿绘制：浅灰底槽内放一个抬起的白色选中块，用于历史过滤和润色前后切换。
 struct DictumSegmentedControl<Value: Hashable>: View {
     struct Item {
         let value: Value
@@ -61,7 +60,6 @@ struct DictumSegmentedControl<Value: Hashable>: View {
     }
 }
 
-/// 历史详情和词典工具条上的普通按钮：28 高、圆角 6、白色控件底加半像素描边。
 struct DictumActionButtonStyle: ButtonStyle {
     var prominent = false
     @Environment(\.isEnabled) private var isEnabled
@@ -86,7 +84,6 @@ struct DictumActionButtonStyle: ButtonStyle {
     }
 }
 
-/// 历史列表和详情里的来源应用图标；找不到应用图标时用名称首字画一枚圆角色块。
 struct DictumAppIcon: View {
     let bundleIdentifier: String?
     let name: String
@@ -147,7 +144,6 @@ struct DictumAppIcon: View {
     }
 }
 
-/// 词典表格的列布局：固定宽度列和按权重分配剩余宽度的列，间距和左右内边距与设计稿一致。
 struct DictumColumnsLayout: Layout {
     struct Column {
         var fixed: CGFloat?

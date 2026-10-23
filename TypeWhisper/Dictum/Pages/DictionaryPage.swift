@@ -13,8 +13,11 @@ struct DictionaryPage: View {
     @State private var hovered: UUID?
     @State private var editing: DictionaryEntry?
     @State private var dismissedLearned: Set<UUID> = []
-    @State private var learnedStripVisible = true
     @State private var hoveredHeader = false
+
+    init() {
+        _dismissedLearned = State(initialValue: DictionaryPage.loadDismissed())
+    }
 
     private var visible: [DictionaryEntry] {
         service.entries.filter {
@@ -25,7 +28,7 @@ struct DictionaryPage: View {
     }
 
     private var learned: [DictionaryEntry] {
-        guard learnedStripVisible, search.isEmpty, filter == .all else { return [] }
+        guard search.isEmpty, filter == .all else { return [] }
         return service.learnedSinceLastSeen().filter { !dismissedLearned.contains($0.id) }
     }
 
@@ -124,7 +127,8 @@ struct DictionaryPage: View {
             Spacer(minLength: 0)
             Button {
                 service.markLearnedWordsSeen()
-                learnedStripVisible = false
+                dismissedLearned.formUnion(learned.map(\.id))
+                DictionaryPage.storeDismissed(learned.map(\.id))
             } label: {
                 Text("OK", tableName: "DictumHistory").font(.system(size: 12))
             }
@@ -143,7 +147,7 @@ struct DictionaryPage: View {
             if entry.type == .correction {
                 Text(verbatim: "← " + entry.original).font(.system(size: 11.5)).foregroundStyle(DictumTheme.textTertiary)
             }
-            Button { dismissedLearned.insert(entry.id) } label: {
+            Button { dismissLearned(entry.id) } label: {
                 Image(systemName: "xmark").font(.system(size: 10))
                     .foregroundStyle(DictumTheme.textTertiary)
                     .frame(width: 18, height: 18)
@@ -345,6 +349,26 @@ struct DictionaryPage: View {
         .padding(.leading, 16).padding(.trailing, 6).padding(.vertical, 6)
         .background(DictumTheme.raised, in: RoundedRectangle(cornerRadius: 12))
         .shadow(color: .black.opacity(0.18), radius: 16, y: 6)
+    }
+
+    private static let dismissedLearnedKey = "dictum.dictionary.dismissedLearned"
+
+    private static func storeDismissed(_ ids: [UUID]) {
+        let data = try? JSONEncoder().encode(ids)
+        UserDefaults.standard.set(data, forKey: dismissedLearnedKey)
+    }
+
+    private static func loadDismissed() -> Set<UUID> {
+        guard let data = UserDefaults.standard.data(forKey: dismissedLearnedKey),
+              let ids = try? JSONDecoder().decode([UUID].self, from: data) else {
+            return []
+        }
+        return Set(ids)
+    }
+
+    private func dismissLearned(_ id: UUID) {
+        dismissedLearned.insert(id)
+        DictionaryPage.storeDismissed(Array(dismissedLearned))
     }
 
     private var noResults: some View {
