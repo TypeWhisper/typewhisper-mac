@@ -231,7 +231,7 @@ print_lock_holder() {
 
 dictate() {
   local audio_file="${1:-}" mode="${2:-live}" result_file url attempt
-  [[ "$mode" == live || "$mode" == file || "$mode" == plugin || "$mode" == hotkey || "$mode" == paste ]] || return 2
+  [[ "$mode" == live || "$mode" == hotkey || "$mode" == paste ]] || return 2
   [[ -n "$audio_file" && -r "$audio_file" ]] || { printf '请提供可读取的音频文件。\n' >&2; return 2; }
   if [[ ! -d "$run_lock" ]]; then
     printf '请先运行 scripts/dictum-verify.sh run --audio-file <音频文件>，再将光标放进目标输入框。\n' >&2
@@ -247,7 +247,7 @@ dictate() {
   for ((attempt=0; attempt<1900; attempt++)); do
     if [[ -s "$result_file" ]]; then
       cp "$result_file" "$receipts/dictation-result.json"
-      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and (sys.argv[2] in ["file","plugin"] or r.get("inserted")) else 1)' "$result_file" "$mode"
+      python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(json.dumps(r,ensure_ascii=False,indent=2)); sys.exit(0 if r["status"]=="completed" and r.get("inserted") else 1)' "$result_file"
       return $?
     fi
     [[ -n "$(running_pids)" ]] || { printf '听写过程中应用退出。\n' >&2; return 1; }
@@ -273,5 +273,5 @@ case "${1:-}" in
   locked-run) shift; run "$@" ;;
   locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 文件 [live|file|plugin|hotkey|paste]|stop [--force]}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 文件 [live|hotkey|paste]|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac

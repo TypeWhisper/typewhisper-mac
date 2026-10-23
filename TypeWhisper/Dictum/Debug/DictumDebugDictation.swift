@@ -2,7 +2,6 @@
 import AppKit
 import Foundation
 import os
-import TypeWhisperPluginSDK
 
 @MainActor final class DictumDebugDictation {
     static let shared = DictumDebugDictation()
@@ -12,10 +11,12 @@ import TypeWhisperPluginSDK
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "DebugDictation")
 
     func handle(_ url: URL) {
-        if eventMonitor == nil, ProcessInfo.processInfo.arguments.contains("--audio-diagnostics") {
+        if eventMonitor == nil, ProcessInfo.processInfo.arguments.contains("--paste-diagnostics") {
             let counter = pasteEventCounter
             eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .keyUp]) { event in
-                guard let cgEvent = event.cgEvent, event.keyCode == 9, event.modifierFlags.contains(.command) else { return }
+                guard let cgEvent = event.cgEvent, event.modifierFlags.contains(.command),
+                      event.charactersIgnoringModifiers?.lowercased() == "v"
+                        || cgEvent.getIntegerValueField(.eventSourceUserData) == TextInsertionService.simulatedClipboardShortcutEventMarker else { return }
                 let sequence = counter.withLock { count in
                     if event.type == .keyDown { count += 1 }
                     return count
@@ -83,25 +84,7 @@ import TypeWhisperPluginSDK
                         }
                         throw CocoaError(.coderValueNotFound)
                     }
-                    let samples = try await services.audioFileService.loadAudioSamples(from: audioURL)
-                    let text: String
-                    switch mode {
-                    case "file":
-                        text = try await services.modelManagerService.transcribe(
-                            audioSamples: samples, language: nil, task: .transcribe, engineOverrideId: "qwen3"
-                        ).text
-                    case "plugin":
-                        guard let plugin = services.pluginManager.transcriptionEngine(for: "qwen3") else {
-                            throw CocoaError(.featureUnsupported)
-                        }
-                        text = try await plugin.transcribe(
-                            audio: AudioData(samples: samples, wavData: WavEncoder.encode(samples), duration: Double(samples.count) / 16_000),
-                            language: nil, translate: false, prompt: nil
-                        ).text
-                    default: throw CocoaError(.featureUnsupported)
-                    }
-                    try writeResult(status: "completed", text: text, error: nil, to: resultURL)
-                    return
+                    throw CocoaError(.featureUnsupported)
                 }
                 DictumDebugAudioConfiguration.select(audioURL)
                 let sessionID = await dictation.apiStartRecordingAwaitingReadiness()
