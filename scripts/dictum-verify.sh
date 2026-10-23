@@ -4,7 +4,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 derived_data="$repo_root/.build/DerivedData"
 receipts="$repo_root/.build/verification"
-app="$derived_data/Build/Products/Debug/dictum Dev.app"
+configuration="${DICTUM_VERIFY_CONFIGURATION:-Debug}"
+case "$configuration" in
+  Debug) product_name='dictum Dev' ;;
+  Release) product_name='dictum' ;;
+  *) printf '不支持的构建配置：%s\n' "$configuration" >&2; exit 2 ;;
+esac
+app="$derived_data/Build/Products/$configuration/$product_name.app"
 installed_app="$HOME/Applications/dictum Dev.app"
 run_lock="/tmp/dictum-run.lock"
 keychain="$HOME/Library/Keychains/login.keychain-db"
@@ -30,7 +36,7 @@ sign_app() {
 
 xcode() {
   xcodebuild "$@" -project "$repo_root/TypeWhisper.xcodeproj" \
-    -scheme TypeWhisper -configuration Debug \
+    -scheme TypeWhisper -configuration "$configuration" \
     -destination 'platform=macOS,arch=arm64' \
     -derivedDataPath "$derived_data" -skipPackagePluginValidation \
     CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
@@ -45,12 +51,7 @@ build() {
     tail -60 "$receipts/build.log" >&2
     return 1
   }
-  local plugin="$app/Contents/PlugIns/Qwen3Plugin.bundle/Contents"
-  if ! cmp -s "$plugin/Resources/mlx-swift_Cmlx.bundle/Contents/Resources/default.metallib" \
-    "$plugin/MacOS/mlx.metallib"; then
-    printf 'Qwen3 的同目录计算库缺失或与插件资源不一致；MLX 可能加载其他应用的同名资源。\n' >&2
-    return 1
-  fi
+  python3 "$repo_root/scripts/check-qwen-runtime.py" "$app" || return 1
   sign_app
   if [[ "${DICTUM_VERIFY_APPSTORE:-0}" == 1 ]]; then
     "$repo_root/scripts/appstore/build-dev.sh" --check >"$receipts/appstore-build.log" 2>&1 || {
@@ -153,6 +154,7 @@ acquire_lock() {
 
 run() {
   local app_pid attempt login_item=0
+  [[ "$configuration" == Debug ]] || { printf '实机验证请使用 Debug 配置。\n' >&2; return 2; }
   if [[ "${1:-}" == --login-item ]]; then login_item=1; shift; fi
   if [[ "${1:-}" == --audio-file ]]; then
     [[ -n "${2:-}" && -r "$2" ]] || { printf '音频文件不可读取。\n' >&2; return 2; }
@@ -262,5 +264,5 @@ case "${1:-}" in
   locked-run) shift; run "$@" ;;
   locked-stop) shift; stop "$@" ;;
   all) build; test_all ;;
-  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 音频文件|stop [--force]}\n' "$0" >&2; exit 2 ;;
+  *) printf '用法：%s {build|test|all|run [--login-item] [--audio-file 路径] [应用参数...]|dictate 文件 [live|file|plugin|hotkey|paste]|stop [--force]}\n' "$0" >&2; exit 2 ;;
 esac
