@@ -11,7 +11,7 @@ struct AdvancedSettingsView: View {
     @ObservedObject private var errorLogService = ServiceContainer.shared.errorLogService
     @State private var cliInstalled = false
     @State private var cliSymlinkTarget = ""
-    @State private var raycastInstalled = false
+    @State private var raycastExtensionInstalled = false
     @AppStorage(UserDefaultsKeys.browserExtensionConnected) private var browserExtensionConnected = false
     @State private var showClearUsageStatisticsConfirmation = false
     @State private var showDiagnosticsExportError = false
@@ -440,21 +440,21 @@ struct AdvancedSettingsView: View {
                 Section(String(localized: "Integrations")) {
                 let raycastTitle = String(localized: "Raycast Extension")
                 integrationRow(systemImage: "command.square", title: raycastTitle) {
-                    if raycastInstalled {
+                    if raycastExtensionInstalled {
                         HStack {
                             Button(String(localized: "Open in Raycast")) {
-                                NSWorkspace.shared.open(URL(string: "raycast://extensions/schneidervvv/dictum")!)
+                                NSWorkspace.shared.open(DictumRaycastExtension.openURL)
                             }
 
                             SettingsInfoButton(
-                                text: String(localized: "Start dictation, search history and switch profiles directly from Raycast. Requires the API server to be running."),
+                                text: DictumRaycastExtension.infoText,
                                 topic: raycastTitle
                             )
                         }
                     } else {
                         HStack {
                             Button(String(localized: "Learn More")) {
-                                NSWorkspace.shared.open(URL(string: "https://github.com/schneidervvv/dictum-raycast")!)
+                                NSWorkspace.shared.open(DictumRaycastExtension.repositoryURL)
                             }
                             .accessibilityLabel(learnMoreAccessibilityLabel(about: raycastTitle))
 
@@ -481,9 +481,9 @@ struct AdvancedSettingsView: View {
         }
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
-            raycastInstalled = NSWorkspace.shared.urlForApplication(
+            raycastExtensionInstalled = NSWorkspace.shared.urlForApplication(
                 withBundleIdentifier: "com.raycast.macos"
-            ) != nil
+            ) != nil && DictumRaycastExtension.isInstalled()
             checkCLIInstallation()
         }
         .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
