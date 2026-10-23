@@ -1509,7 +1509,11 @@ final class AudioRecorderViewModelTests: XCTestCase {
         )
         try viewModel.stopCalendarMeetingRecording(handle: handle)
 
-        try await waitForRecordingsToLoad(viewModel, count: 1) { $0.transcript != nil }
+        // A load that runs while the transcript files are installed can see the
+        // .txt before the calendar transcript document.
+        try await waitForRecordingsToLoad(viewModel, count: 1) {
+            $0.transcript != nil && $0.calendarEvent != nil
+        }
 
         XCTAssertEqual(loadedURL?.standardizedFileURL, handle.outputURL.standardizedFileURL)
         let plugin = try XCTUnwrap(
