@@ -1277,6 +1277,159 @@ final class PluginDownloadedModelManagementTests: XCTestCase {
     }
 }
 
+final class LocalModelPluginTokenTests: XCTestCase {
+    private actor RequestRecorder {
+        private var request: URLRequest?
+
+        func set(_ request: URLRequest) {
+            self.request = request
+        }
+
+        func get() -> URLRequest? {
+            request
+        }
+    }
+
+    private final class MockEventBus: EventBusProtocol {
+        @discardableResult
+        func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID { UUID() }
+        func unsubscribe(id: UUID) {}
+    }
+
+    private final class MockHostServices: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+        private var defaults: [String: Any]
+        private var secrets: [String: String]
+
+        let pluginDataDirectory: URL
+        let eventBus: EventBusProtocol = MockEventBus()
+        var activeAppBundleId: String?
+        var activeAppName: String?
+        var availableRuleNames: [String] = []
+        var shouldRestoreLoadedModelsPassively: Bool
+        private(set) var capabilitiesChangedCount = 0
+        private(set) var streamingDisplayActiveValues: [Bool] = []
+
+        init(
+            pluginDataDirectory: URL,
+            defaults: [String: Any] = [:],
+            secrets: [String: String] = [:],
+            shouldRestoreLoadedModelsPassively: Bool = true
+        ) {
+            self.pluginDataDirectory = pluginDataDirectory
+            self.defaults = defaults
+            self.secrets = secrets
+            self.shouldRestoreLoadedModelsPassively = shouldRestoreLoadedModelsPassively
+        }
+
+        func storeSecret(key: String, value: String) throws { secrets[key] = value }
+        func loadSecret(key: String) -> String? { secrets[key] }
+        func userDefault(forKey key: String) -> Any? { defaults[key] }
+        func setUserDefault(_ value: Any?, forKey key: String) { defaults[key] = value }
+        func notifyCapabilitiesChanged() { capabilitiesChangedCount += 1 }
+        func setStreamingDisplayActive(_ active: Bool) { streamingDisplayActiveValues.append(active) }
+    }
+
+    func testQwen3ValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = Qwen3Plugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_qwen3_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","auth":{"type":"access_token"}}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_qwen3_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testQwen3RejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = Qwen3Plugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testWhisperKitValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = WhisperKitPlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_whisperkit_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            let data = Data(#"{"name":"typewhisper","type":"user"}"#.utf8)
+            return (data, response)
+        }
+
+        XCTAssertTrue(isValid)
+        let maybeRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(maybeRequest)
+        XCTAssertEqual(request.url?.absoluteString, "https://huggingface.co/api/whoami-v2")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer hf_whisperkit_test")
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+
+    func testWhisperKitRejectsInvalidHuggingFaceTokenResponses() async {
+        let plugin = WhisperKitPlugin()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_invalid") { request in
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: 401,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(), response)
+        }
+
+        XCTAssertFalse(isValid)
+    }
+
+    func testWhisperKitActivationKeepsPersistedLoadedModelForAutoRestore() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(
+            pluginDataDirectory: appSupportDirectory,
+            defaults: [
+                "selectedModel": "openai_whisper-tiny",
+                "loadedModel": "openai_whisper-tiny",
+            ]
+        )
+        let plugin = WhisperKitPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "openai_whisper-tiny")
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-tiny")
+    }
+}
+
 final class PluginDictionaryGuardTests: XCTestCase {
     func testWhisperKitConditioningPromptClampsPlainTermListsTo500Characters() {
         let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 80, length: 18), maxLength: 10_000)
