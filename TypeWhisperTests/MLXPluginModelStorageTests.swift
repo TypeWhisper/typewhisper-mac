@@ -16,6 +16,26 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testSetupWizardActivationDownloadsMissingQwen3Model() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let refusal = "Downloads are turned off by your organization."
+        let host = MockHostServices(pluginDataDirectory: fixture.root, modelDownloadRefusal: refusal)
+        let qwen = Qwen3Plugin()
+        qwen.activate(host: host)
+        defer { qwen.deactivate() }
+
+        do {
+            try await SetupWizardQwen3Recommendation.activate(qwen) { _ in }
+            XCTFail("Activation must try to download the missing model")
+        } catch TranscriptionEngineError.modelLoadFailed(let message) {
+            XCTAssertEqual(message, refusal)
+        }
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "qwen3-asr-1.7b-6bit")
+        XCTAssertFalse(qwen.isConfigured)
+    }
+
+    @MainActor
     func testNewExplicitRequestCancelsPreviousRequestBeforeTasksStart() async throws {
         try await assertSupersededExplicitRequests(allowFirstTaskToStart: false)
     }

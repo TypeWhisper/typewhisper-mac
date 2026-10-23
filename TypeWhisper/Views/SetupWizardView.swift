@@ -1,5 +1,8 @@
+import os
 import SwiftUI
 import TypeWhisperPluginSDK
+
+private let setupWizardLogger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SetupWizard")
 
 struct SetupWizardView: View {
     @Environment(\.dismiss) private var dismiss
@@ -1108,23 +1111,10 @@ struct SetupWizardView: View {
 
         modelManager.selectProvider(engine.providerId)
 
-        if !engine.isConfigured {
-            let modelId = engine.selectedModelId
-                ?? SetupWizardQwen3Recommendation.preferredModelId(from: engine.modelCatalog)
-            if let modelId {
-                engine.selectModel(modelId)
-            }
-        }
-
-        // Idle polls time out after 2 minutes; an active model download may take up to 30 minutes.
-        var idlePolls = 0
-        for _ in 0..<3_600 {
-            if Task.isCancelled || engine.isConfigured || idlePolls >= 240 { return }
-            let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
-            if activity?.isError == true { return }
-            qwen3ModelProgress = activity?.progress
-            if activity == nil { idlePolls += 1 }
-            try? await Task.sleep(for: .milliseconds(500))
+        do {
+            try await SetupWizardQwen3Recommendation.activate(engine) { qwen3ModelProgress = $0 }
+        } catch {
+            setupWizardLogger.error("Qwen3 activation failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -1944,6 +1934,32 @@ enum SetupWizardQwen3Recommendation {
     static func preferredModelId(from models: [PluginModelInfo]) -> String? {
         models.first { $0.id == "qwen3-asr-1.7b-6bit" }?.id
             ?? models.first?.id
+    }
+
+    @MainActor
+    static func activate(
+        _ engine: TranscriptionEnginePlugin,
+        onProgress: @MainActor (Double?) -> Void
+    ) async throws {
+        guard !engine.isConfigured,
+              let modelId = engine.selectedModelId ?? preferredModelId(from: engine.modelCatalog),
+              let plugin = engine as? NSObject else { return }
+        // selectModel 只恢复本机已有的模型，这个请求在模型缺失时会下载。
+        let downloadSelector = NSSelectorFromString("triggerRestoreModelForModel:")
+        guard plugin.responds(to: downloadSelector) else { return }
+        _ = plugin.perform(downloadSelector, with: modelId as NSString)
+
+        // 插件报告下载或加载时一直等待；连续 2 分钟没有活动才放弃。
+        var idlePolls = 0
+        while !Task.isCancelled, !engine.isConfigured, idlePolls < 240 {
+            let activity = (engine as? any PluginSettingsActivityReporting)?.currentSettingsActivity
+            if let activity, activity.isError {
+                throw TranscriptionEngineError.modelLoadFailed(activity.message)
+            }
+            onProgress(activity?.progress)
+            idlePolls = activity == nil ? idlePolls + 1 : 0
+            try? await Task.sleep(for: .milliseconds(500))
+        }
     }
 }
 
