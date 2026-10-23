@@ -289,7 +289,6 @@ final class Qwen3PluginTests: XCTestCase {
             Qwen3Plugin.availableModels.filter { $0.recommendation != nil }.map(\.id),
             [
                 "qwen3-asr-0.6b-6bit",
-                "qwen3-asr-1.7b-6bit",
                 "qwen3-asr-1.7b-8bit",
             ]
         )
