@@ -184,7 +184,7 @@ struct AIModelsPage: View {
                     if !models.contains(where: { $0.id == current }) { Text(verbatim: current).tag(current) }
                     ForEach(models, id: \.id) { Text(verbatim: $0.displayName).tag($0.id) }
                 } label: { Text("Model", tableName: "DictumStyle") }
-                    .pickerStyle(.menu).labelsHidden().buttonStyle(.borderless).tint(.primary)
+                    .pickerStyle(.menu).labelsHidden().menuIndicator(.hidden).buttonStyle(.borderless).tint(.primary)
                     .font(.system(size: 13)).padding(.leading, 10).padding(.trailing, 9)
                     .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
                     .background {
